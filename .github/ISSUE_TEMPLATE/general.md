@@ -8,24 +8,22 @@ assignees: ''
 ---
 
 ## 📝 Description
-A clear summary of what this issue is about.
+Brief summary of the task; what needs to be done.
 
 ## 🎯 Goal
-What should be achieved when this issue is resolved?
+Expected outcome; desired final state.
 
 ## 💡 Motivation / Context
-Why does this issue exist? What problem does it solve or what value does it add?
+Why this task exists; requirement or background.
 
 ## 📦 Deliverables
-- [ ] ...
-- [ ] ...
+List of outputs; pages, features, or artifacts to create.
 
 ## ✅ Acceptance Criteria
-- [ ] ...
-- [ ] ...
+Conditions for completion; how success will be verified.
 
 ## 🔗 References
-Links to related issues, PRs, documentation, or external resources.
+Related docs, wiki pages, issues, or instructions.
 
 ## 📌 Notes
-Any assumptions, open questions, risks, or follow-ups.
+Extra constraints, reminders, or implementation details.
