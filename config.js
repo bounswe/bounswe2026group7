@@ -1,3 +1,4 @@
+
 /**
  * GLOBAL CONFIGURATION
  *
@@ -7,7 +8,7 @@
 const NUM_BUTTONS = 7;
 const BUTTON_LABELS = [
   "Weather Forecast TR",
-  "Button 2",
+  "Grubun Beyni",
   "Button 3",
   "Random Joke Generator",
   "Ibrahim's Button",

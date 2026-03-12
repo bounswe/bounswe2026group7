@@ -1,4 +1,37 @@
-function onButton6Click() {
+
+
+/**
+ * BUTTON CLICK HANDLERS
+ *
+ * Each button on the homepage has its own handler function below.
+ * Replace the placeholder console.log with your own implementation.
+ */
+
+function onButton1Click() {
+  window.open("weather.html", "_blank");
+} 
+
+function onButton4Click() {
+  window.open("joke.html", "_blank");
+}
+
+
+
+// b 2
+let img = document.getElementById("manifestImage");
+
+  if (!img) {
+    img = document.createElement("img");
+    img.id = "manifestImage";
+    img.style.marginTop = "20px";
+    img.style.maxWidth = "400px";
+    document.body.appendChild(img);
+  }
+
+  // Her basışta yeni foto
+  img.src = "https://picsum.photos/400?random=" + new Date().getTime();
+
+function onButton2Click() {
   fetch("https://dog.ceo/api/breeds/image/random")
     .then(function (response) {
       return response.json();
@@ -22,32 +55,7 @@ function onButton6Click() {
       alert("Failed to fetch dog photo. Please try again.");
     });
 }
-/**
- * BUTTON CLICK HANDLERS
- *
- * Each button on the homepage has its own handler function below.
- * Replace the placeholder console.log with your own implementation.
- */
 
-function onButton1Click() {
-  window.open("weather.html", "_blank");
-}
-
-function onButton2Click() {
-  console.log("Button 2 clicked -- implement me!");
-}
-
-function onButton3Click() {
-  console.log("Button 3 clicked -- implement me!");
-}
-
-function onButton4Click() {
-  window.open("joke.html", "_blank");
-}
-
-function onButton5Click() {
-  console.log("Button 5 clicked -- implement me!");
-}
 
 function onButton6Click() {
   console.log("Button 6 clicked -- implement me!");
