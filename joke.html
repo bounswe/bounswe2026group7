@@ -32,9 +32,6 @@
             border-radius: 16px;
             box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
             padding: 48px 40px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
         }
 
         .card h1 {
@@ -45,50 +42,19 @@
             margin-bottom: 8px;
         }
 
-        .card .description {
+        .card p {
             color: #64748b;
             text-align: center;
-            margin-bottom: 32px;
-            font-size: 0.95rem;
-            line-height: 1.5;
+            margin-bottom: 40px;
         }
 
-        .joke-container {
-            width: 100%;
-            background-color: #f1f5f9;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 32px;
-            text-align: center;
-            min-height: 120px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
+        #button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
         }
 
-        .joke-setup {
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: #334155;
-            margin-bottom: 12px;
-        }
-
-        .joke-punchline {
-            font-size: 1.125rem;
-            color: #4f46e5;
-            font-weight: 500;
-        }
-
-        .loading {
-            color: #64748b;
-            font-style: italic;
-        }
-
-        .error {
-            color: #ef4444;
-        }
-
-        .back-btn {
+        #button-grid button {
             padding: 12px 24px;
             border: none;
             border-radius: 12px;
@@ -99,16 +65,14 @@
             cursor: pointer;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             transition: background-color 150ms, box-shadow 150ms;
-            text-decoration: none;
-            display: inline-block;
         }
 
-        .back-btn:hover {
+        #button-grid button:hover {
             background-color: #4338ca;
             box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
         }
 
-        .back-btn:active {
+        #button-grid button:active {
             background-color: #3730a3;
         }
     </style>
@@ -116,19 +80,17 @@
 
 <body>
     <div class="card">
-        <h1>Random Joke Generator</h1>
-        <p class="description">
-            This page fetches data from the <strong>Official Joke API</strong>
-            (<code>https://official-joke-api.appspot.com/random_joke</code>). <br />
-            The API returns a random joke in JSON format, consisting of a `setup` and a `punchline`. These fields are
-            displayed below.
-        </p>
+        <h1>Random Joke</h1>
+        <p>This page fetches data from the Official Joke API (`https://official-joke-api.appspot.com/random_joke`). It
+            returns a random joke in JSON format, consisting of a `setup` and a `punchline`.</p>
 
-        <div class="joke-container" id="joke-container">
-            <div class="loading">Loading a funny joke...</div>
+        <div id="joke-container" style="text-align: center;">
+            <p id="loading-message">Loading a funny joke...</p>
         </div>
 
-        <a href="index.html" class="back-btn">Back to Home</a>
+        <div id="button-grid">
+            <button onclick="window.close()">Close Tab</button>
+        </div>
     </div>
 
     <script src="joke.js"></script>

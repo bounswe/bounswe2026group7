@@ -14,12 +14,14 @@ document.addEventListener("DOMContentLoaded", function () {
             container.innerHTML = "";
 
             // Create elements
-            const setup = document.createElement("div");
-            setup.className = "joke-setup";
+            const setup = document.createElement("p");
+            setup.style.fontWeight = "600";
+            setup.style.color = "#334155";
             setup.textContent = data.setup;
 
-            const punchline = document.createElement("div");
-            punchline.className = "joke-punchline";
+            const punchline = document.createElement("p");
+            punchline.style.fontWeight = "500";
+            punchline.style.color = "#4f46e5";
             punchline.textContent = data.punchline;
 
             // Append elements to container
@@ -27,7 +29,7 @@ document.addEventListener("DOMContentLoaded", function () {
             container.appendChild(punchline);
         })
         .catch((error) => {
-            container.innerHTML = '<div class="error">Failed to load a joke. Please try again later.</div>';
+            container.innerHTML = '<p style="color: #ef4444;">Failed to load a joke. Please try again later.</p>';
             console.error("Error fetching joke:", error);
         });
 });

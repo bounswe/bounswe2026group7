@@ -18,7 +18,7 @@ function onButton3Click() {
 }
 
 function onButton4Click() {
-  window.location.href = "joke.html";
+  window.open("joke.html", "_blank");
 }
 
 function onButton5Click() {
