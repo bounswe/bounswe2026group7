@@ -22,3 +22,29 @@ function onButton6Click() {
       alert("Failed to fetch dog photo. Please try again.");
     });
 }
+/**
+ * BUTTON CLICK HANDLERS
+ *
+ * Each button on the homepage has its own handler function below.
+ * Replace the placeholder console.log with your own implementation.
+ */
+
+function onButton1Click() {
+  window.open("weather.html", "_blank");
+}
+
+function onButton2Click() {
+  console.log("Button 2 clicked -- implement me!");
+}
+
+function onButton3Click() {
+  console.log("Button 3 clicked -- implement me!");
+}
+
+function onButton4Click() {
+  console.log("Button 4 clicked -- implement me!");
+}
+
+function onButton5Click() {
+  console.log("Button 5 clicked -- implement me!");
+}

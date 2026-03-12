@@ -6,7 +6,7 @@
  */
 const NUM_BUTTONS = 7;
 const BUTTON_LABELS = [
-  "Button 1",
+  "Weather Forecast TR",
   "Button 2",
   "Button 3",
   "Button 4",
