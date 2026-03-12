@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turkey Weather Portal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+      padding: 24px;
+    }
+
+    .container { max-width: 960px; margin: 0 auto; }
+
+    h1 {
+      font-size: 1.875rem;
+      font-weight: 700;
+      color: #1e293b;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #64748b;
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-bottom: 16px;
+      color: #4f46e5;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    #status {
+      text-align: center;
+      padding: 16px;
+      color: #64748b;
+      font-size: 1.1rem;
+    }
+
+    .error { color: #dc2626 !important; }
+
+    /* Province grid */
+    #province-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .province-card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      cursor: pointer;
+      transition: box-shadow 150ms, transform 150ms;
+    }
+    .province-card:hover {
+      box-shadow: 0 4px 16px rgba(79,70,229,0.2);
+      transform: translateY(-2px);
+    }
+
+    .province-card .name {
+      font-weight: 600;
+      color: #1e293b;
+      font-size: 1.05rem;
+    }
+    .province-card .region {
+      color: #64748b;
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+    .province-card .population {
+      color: #94a3b8;
+      font-size: 0.8rem;
+      margin-top: 2px;
+    }
+    .province-card .plate {
+      display: inline-block;
+      background: #4f46e5;
+      color: #fff;
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    /* Weather detail panel */
+    #weather-detail {
+      display: none;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+
+    #weather-detail h2 { color: #1e293b; margin-bottom: 16px; }
+
+    .weather-current {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .weather-stat {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+    .weather-stat .label { color: #64748b; font-size: 0.8rem; }
+    .weather-stat .value { font-size: 1.3rem; font-weight: 700; color: #1e293b; }
+
+    .forecast-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .forecast-card {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+    .forecast-card .day { font-weight: 600; color: #1e293b; }
+    .forecast-card .date { font-size: 0.8rem; color: #94a3b8; }
+    .forecast-card .temp { font-size: 1.1rem; font-weight: 700; color: #4f46e5; margin: 4px 0; }
+    .forecast-card .condition { font-size: 0.85rem; color: #64748b; }
+
+    .close-btn {
+      background: #e2e8f0;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 20px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #475569;
+      margin-top: 16px;
+    }
+    .close-btn:hover { background: #cbd5e1; }
+
+    /* Debug / raw JSON section */
+    #raw-data {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      font-family: monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 24px;
+      display: none;
+    }
+
+    .toggle-raw {
+      background: none;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 6px 16px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-top: 16px;
+    }
+    .toggle-raw:hover { background: #f1f5f9; }
+
+    /* Search bar */
+    .search-wrapper {
+      position: relative;
+      max-width: 480px;
+      margin: 0 auto 24px;
+    }
+    .search-wrapper svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      color: #94a3b8;
+      pointer-events: none;
+    }
+    #city-search {
+      width: 100%;
+      padding: 12px 16px 12px 42px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      font-size: 1rem;
+      color: #1e293b;
+      background: #fff;
+      outline: none;
+      transition: border-color 150ms;
+    }
+    #city-search:focus { border-color: #4f46e5; }
+    #city-search::placeholder { color: #94a3b8; }
+    .search-count {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      margin-top: -16px;
+      margin-bottom: 16px;
+    }
+
+    /* Weather icons */
+    .weather-icon {
+      font-size: 2rem;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .province-card .weather-icon {
+      font-size: 1.4rem;
+      float: right;
+      margin-top: -2px;
+    }
+    .forecast-card .weather-icon {
+      font-size: 1.6rem;
+      margin: 4px 0;
+    }
+    .weather-stat .weather-icon {
+      font-size: 1.6rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a class="back-link" href="index.html">&larr; Back to Stub App</a>
+    <h1>Turkey Weather Portal</h1>
+    <p class="subtitle">Click on a province to see its weather. Data from havaportal.com</p>
+
+    <div id="weather-detail"></div>
+
+    <div class="search-wrapper">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="city-search" placeholder="Search cities..." autocomplete="off" />
+    </div>
+    <div class="search-count" id="search-count"></div>
+
+    <div id="status">Loading provinces...</div>
+    <div id="province-grid"></div>
+
+    <button class="toggle-raw" id="toggle-raw-btn" style="display:none;">Show Raw API Response</button>
+    <div id="raw-data"></div>
+  </div>
+
+  <script>
+    var API_BASE = "https://havaportal.com/api/v1";
+
+    var statusEl = document.getElementById("status");
+    var gridEl = document.getElementById("province-grid");
+    var rawEl = document.getElementById("raw-data");
+    var toggleBtn = document.getElementById("toggle-raw-btn");
+    var detailEl = document.getElementById("weather-detail");
+    var searchInput = document.getElementById("city-search");
+    var searchCountEl = document.getElementById("search-count");
+    var allProvinceCards = [];
+
+    // Weather condition to icon mapping
+    function getWeatherIcon(condition) {
+      if (!condition) return '<span class="weather-icon">&#9729;</span>'; // cloud
+      var c = condition.toLowerCase();
+      if (c.indexOf("gunesli") > -1 || c.indexOf("acik") > -1 || c.indexOf("sunny") > -1 || c.indexOf("clear") > -1)
+        return '<span class="weather-icon">&#9728;</span>';          // sun
+      if (c.indexOf("parcali") > -1 || c.indexOf("partly") > -1 || c.indexOf("az bulutlu") > -1)
+        return '<span class="weather-icon">&#9925;</span>';          // sun behind cloud
+      if (c.indexOf("bulutlu") > -1 || c.indexOf("cloud") > -1 || c.indexOf("kapali") > -1 || c.indexOf("overcast") > -1)
+        return '<span class="weather-icon">&#9729;</span>';          // cloud
+      if (c.indexOf("sagnak") > -1 || c.indexOf("yagmur") > -1 || c.indexOf("rain") > -1 || c.indexOf("showers") > -1)
+        return '<span class="weather-icon">&#127783;</span>';        // rain
+      if (c.indexOf("gok gurultusu") > -1 || c.indexOf("firtina") > -1 || c.indexOf("thunder") > -1 || c.indexOf("storm") > -1)
+        return '<span class="weather-icon">&#9928;</span>';          // thunderstorm
+      if (c.indexOf("kar") > -1 || c.indexOf("snow") > -1)
+        return '<span class="weather-icon">&#10052;</span>';         // snowflake
+      if (c.indexOf("sis") > -1 || c.indexOf("fog") > -1 || c.indexOf("mist") > -1 || c.indexOf("pus") > -1)
+        return '<span class="weather-icon">&#127787;</span>';        // fog
+      return '<span class="weather-icon">&#9729;</span>';            // default cloud
+    }
+
+    // Search / filter logic
+    searchInput.addEventListener("input", function () {
+      var query = searchInput.value.toLowerCase();
+      var visible = 0;
+      allProvinceCards.forEach(function (item) {
+        var match = item.name.toLowerCase().indexOf(query) === 0 || query === "";
+        item.el.style.display = match ? "" : "none";
+        if (match) visible++;
+      });
+      if (query) {
+        searchCountEl.textContent = visible + " of " + allProvinceCards.length + " cities";
+      } else {
+        searchCountEl.textContent = "";
+      }
+    });
+
+    // Fetch and display all provinces
+    fetch(API_BASE + "/iller")
+      .then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (json) {
+        if (!json.success || !Array.isArray(json.data)) {
+          throw new Error("Unexpected response format: missing success or data array");
+        }
+
+        statusEl.textContent = "Showing " + json.data.length + " provinces. Click one for weather.";
+        toggleBtn.style.display = "inline-block";
+        rawEl.textContent = JSON.stringify(json, null, 2);
+
+        json.data.forEach(function (il) {
+          var card = document.createElement("div");
+          card.className = "province-card";
+          card.innerHTML =
+            '<div class="name">' + escapeHtml(il.ad) + '</div>' +
+            '<div class="region">' + escapeHtml(il.bolge) + '</div>' +
+            '<div class="population">Pop: ' + (il.nufus ? il.nufus.toLocaleString() : "N/A") + '</div>' +
+            '<span class="plate">' + il.plaka_kodu + '</span>';
+          card.addEventListener("click", function () {
+            loadWeather(il.slug, il.ad);
+          });
+          gridEl.appendChild(card);
+          allProvinceCards.push({ name: il.ad, el: card });
+        });
+      })
+      .catch(function (err) {
+        statusEl.textContent = "Failed to load provinces: " + err.message;
+        statusEl.className = "error";
+      });
+
+    function loadWeather(slug, name) {
+      detailEl.style.display = "block";
+      detailEl.innerHTML = "<h2>Loading weather for " + escapeHtml(name) + "...</h2>";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      fetch(API_BASE + "/weather/il/" + encodeURIComponent(slug))
+        .then(function (res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .then(function (json) {
+          if (!json.success || !json.data) {
+            throw new Error("Unexpected weather response: missing success or data");
+          }
+
+          var cur = json.data.current;
+          var forecasts = json.data.forecast;
+
+          if (!cur) {
+            throw new Error("No current weather data in response");
+          }
+
+          var condIcon = getWeatherIcon(cur.durum);
+          var html = "<h2>" + condIcon + " Weather for " + escapeHtml(name) + "</h2>";
+
+          // Current weather
+          html += '<div class="weather-current">';
+          html += weatherStat("Temperature", cur.sicaklik + "\u00B0C");
+          html += weatherStat("Feels Like", cur.hissedilen + "\u00B0C");
+          html += weatherStat("Min / Max", cur.min + "\u00B0 / " + cur.max + "\u00B0");
+          html += weatherStat("Humidity", cur.nem + "%");
+          html += weatherStat("Pressure", cur.basinc + " hPa");
+          html += weatherStat("Wind", cur.ruzgar_hiz + " km/h " + escapeHtml(cur.ruzgar_yon || ""));
+          html += weatherStat("Condition", condIcon + " " + escapeHtml(cur.durum || ""));
+          html += weatherStat("Cloudiness", cur.bulutluluk + "%");
+          html += "</div>";
+
+          // Forecast
+          if (Array.isArray(forecasts) && forecasts.length > 0) {
+            html += "<h3 style='margin-bottom:12px;color:#475569;'>Forecast</h3>";
+            html += '<div class="forecast-grid">';
+            forecasts.forEach(function (f) {
+              html += '<div class="forecast-card">';
+              html += '<div class="day">' + escapeHtml(f.gun) + '</div>';
+              html += '<div class="date">' + escapeHtml(f.tarih) + '</div>';
+              html += getWeatherIcon(f.durum);
+              html += '<div class="temp">' + f.min + "\u00B0 / " + f.max + "\u00B0</div>";
+              html += '<div class="condition">' + escapeHtml(f.durum) + '</div>';
+              html += "</div>";
+            });
+            html += "</div>";
+          }
+
+          html += '<button class="close-btn" onclick="closeWeather()">Close</button>';
+
+          // Show raw weather JSON
+          html += '<div style="margin-top:16px;background:#1e293b;color:#e2e8f0;border-radius:8px;padding:16px;font-family:monospace;font-size:0.75rem;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;">';
+          html += escapeHtml(JSON.stringify(json, null, 2));
+          html += "</div>";
+
+          detailEl.innerHTML = html;
+        })
+        .catch(function (err) {
+          detailEl.innerHTML =
+            "<h2>Weather for " + escapeHtml(name) + "</h2>" +
+            '<p class="error">Failed to load weather: ' + escapeHtml(err.message) + "</p>" +
+            '<button class="close-btn" onclick="closeWeather()">Close</button>';
+        });
+    }
+
+    function closeWeather() {
+      detailEl.style.display = "none";
+    }
+
+    function weatherStat(label, value) {
+      return '<div class="weather-stat"><div class="label">' + escapeHtml(label) + '</div><div class="value">' + value + "</div></div>";
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement("div");
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    // Toggle raw JSON visibility
+    toggleBtn.addEventListener("click", function () {
+      if (rawEl.style.display === "none" || rawEl.style.display === "") {
+        rawEl.style.display = "block";
+        toggleBtn.textContent = "Hide Raw API Response";
+      } else {
+        rawEl.style.display = "none";
+        toggleBtn.textContent = "Show Raw API Response";
+      }
+    });
+  </script>
+</body>
+</html>
