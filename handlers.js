@@ -6,7 +6,7 @@
  */
 
 function onButton1Click() {
-  console.log("Button 1 clicked -- implement me!");
+  window.open("weather.html", "_blank");
 }
 
 function onButton2Click() {
