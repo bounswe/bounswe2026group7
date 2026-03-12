@@ -24,3 +24,21 @@ function onButton4Click() {
 function onButton5Click() {
   console.log("Button 5 clicked -- implement me!");
 }
+
+function onButton6Click() {
+  fetch("https://opentdb.com/api.php?amount=1&type=multiple")
+    .then(function (response) {
+      return response.json();
+    })
+    .then(function (data) {
+      var q = data.results[0];
+      var message =
+        "Category: " + q.category + "\n\n" +
+        "Question: " + q.question + "\n\n" +
+        "Correct Answer: " + q.correct_answer;
+      alert(message);
+    })
+    .catch(function (error) {
+      alert("Failed to fetch trivia question. Please try again.");
+    });
+}
