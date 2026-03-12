@@ -9,7 +9,7 @@ const BUTTON_LABELS = [
   "Weather Forecast TR",
   "Button 2",
   "Button 3",
-  "Button 4",
+  "Random Joke Generator",
   "Button 5",
   "Random Dog Photo API",
   "Button 7",
