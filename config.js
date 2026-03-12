@@ -9,10 +9,9 @@ const NUM_BUTTONS = 7;
 const BUTTON_LABELS = [
   "Weather Forecast TR",
   "Grubun Beyni",
-  "Button 3",
+  "Fetch Post Details",
   "Random Joke Generator",
   "Ibrahim's Button",
   "Random Dog Photo API",
   "Mehmet Bora Sarioglu - Monkey Button",
 ];
-

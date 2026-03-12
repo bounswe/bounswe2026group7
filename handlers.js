@@ -36,6 +36,9 @@ function onButton2Click() {
     });
 }
 
+function onButton3Click() {
+  window.open("post.html", "_blank");
+}
 
 function onButton4Click() {
   window.open("joke.html", "_blank");
@@ -103,5 +106,3 @@ function onButton6Click() {
 function onButton7Click() {
   window.location.href = "monkeys.html";
 }
-
-
