@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Blog Post</title>
+    <style>
+        body { font-family: sans-serif; padding: 50px; line-height: 1.6; }
+        .container { max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="title">Loading...</h1>
+        <p id="body"></p>
+    </div>
+
+    <script>
+        fetch('https://jsonplaceholder.typicode.com/posts/3')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('title').innerText = data.title;
+                document.getElementById('body').innerText = data.body;
+            });
+    </script>
+</body>
+</html>

@@ -38,30 +38,7 @@ function onButton2Click() {
 }
 
 function onButton3Click() {
-  console.log("Button 3 clicked: Fetching data from public API...");
-
-  // Fetching a sample post from JSONPlaceholder API
-  fetch('https://jsonplaceholder.typicode.com/posts/3')
-    .then(response => {
-      if (!response.ok) {
-        throw new Error("Network response was not ok");
-      }
-      return response.json();
-    })
-    .then(data => {
-      console.log("Data received:", data);
-      // Showing the result in an alert box as required for the task
-      alert(
-        "Individual Task - Button 3\n" +
-        "--------------------------\n" +
-        "Title: " + data.title + "\n" +
-        "Body: " + data.body
-      );
-    })
-    .catch(error => {
-      console.error("Fetch error:", error);
-      alert("Error: Could not retrieve data from API.");
-    });
+  window.open("post.html", "_blank");
 }
 
 function onButton4Click() {

@@ -8,7 +8,7 @@ const NUM_BUTTONS = 7;
 const BUTTON_LABELS = [
   "Weather Forecast TR",
   "Button 2",
-  "Button 3",
+  "Fetch Post Details",
   "Random Joke Generator",
   "Button 5",
   "Random Dog Photo API",
