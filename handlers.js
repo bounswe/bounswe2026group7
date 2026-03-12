@@ -1,26 +1,24 @@
-/**
- * BUTTON CLICK HANDLERS
- *
- * Each button on the homepage has its own handler function below.
- * Replace the placeholder console.log with your own implementation.
- */
-
 function onButton1Click() {
-  console.log("Button 1 clicked -- implement me!");
+
+  let img = document.getElementById("manifestImage");
+
+  if (!img) {
+    img = document.createElement("img");
+    img.id = "manifestImage";
+    img.style.marginTop = "20px";
+    img.style.maxWidth = "400px";
+    document.body.appendChild(img);
+  }
+
+  // Her basışta yeni foto
+  img.src = "https://picsum.photos/400?random=" + new Date().getTime();
+
 }
 
 function onButton2Click() {
-  console.log("Button 2 clicked -- implement me!");
+  alert("2. buton çalıştı");
 }
 
 function onButton3Click() {
-  console.log("Button 3 clicked -- implement me!");
-}
-
-function onButton4Click() {
-  console.log("Button 4 clicked -- implement me!");
-}
-
-function onButton5Click() {
-  console.log("Button 5 clicked -- implement me!");
+  alert("3. buton çalıştı");
 }
