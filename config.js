@@ -12,6 +12,6 @@ const BUTTON_LABELS = [
   "Random Joke Generator",
   "Ibrahim's Button",
   "Random Dog Photo API",
-  "Button 7",
+  "Mehmet Bora Sarioglu - Monkey Button",
 ];
 
