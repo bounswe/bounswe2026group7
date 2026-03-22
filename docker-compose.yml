@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: group7db
+      POSTGRES_USER: group7
+      POSTGRES_PASSWORD: group7pass
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U group7 -d group7db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/group7db
+      SPRING_DATASOURCE_USERNAME: group7
+      SPRING_DATASOURCE_PASSWORD: group7pass
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5174:5173"
+    environment:
+      VITE_BACKEND_URL: http://backend:8080
+    depends_on:
+      - backend
