@@ -1,1 +1,22 @@
 uml-diagrams/
+
+# Backend - Spring Boot
+backend/target/
+backend/*.class
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
