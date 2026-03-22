@@ -32,10 +32,6 @@ public class UserService {
         return userRepository.findById(id);
     }
 
-    public Optional<User> getUserByUsername(String username) {
-        return userRepository.findByUsername(username);
-    }
-
     public Mentor createMentor(Mentor mentor) {
         return mentorRepository.save(mentor);
     }
