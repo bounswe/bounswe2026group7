@@ -11,17 +11,17 @@ import com.group7.backend.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.UUID;
-
 @Service
 public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     public UserResponse register(RegisterRequest request) {
@@ -34,7 +34,7 @@ public class AuthService {
 
         if (Boolean.TRUE.equals(request.getIsMentor())) {
             Mentor mentor = new Mentor();
-            mentor.setMaxMenteeCapacity(0);
+            mentor.setMaxMenteeCapacity(3);
             mentor.setCurrentMenteeCount(0);
             user = mentor;
             role = "MENTOR";
@@ -76,8 +76,8 @@ public class AuthService {
         }
 
         String role = (user instanceof Mentor) ? "MENTOR" : "MENTEE";
-        String sessionToken = UUID.randomUUID().toString();
+        String token = jwtService.generateToken(user.getId(), user.getEmail(), role);
 
-        return new AuthResponse(sessionToken, role, user.getId());
+        return new AuthResponse(token, role, user.getId());
     }
 }
