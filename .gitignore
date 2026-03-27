@@ -20,3 +20,6 @@ backend/mvnw.cmd
 # OS
 .DS_Store
 Thumbs.db
+
+# notes folder (amin's folder to learn unknown things - please don't touch [-_-]  )
+notes/*
