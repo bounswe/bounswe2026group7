@@ -1,0 +1,60 @@
+name: Web CI Pipeline  # Workflow name shown in GitHub Actions UI
+
+# When this workflow runs
+on:
+  push:
+    branches: [ main, dev ]         # Runs on pushes to these branches
+  pull_request:
+    branches: [ main, dev ]         # Runs on PRs targeting these branches
+
+jobs:
+  web-test-and-build:
+    runs-on: ubuntu-latest      # Use latest Ubuntu runner
+
+    defaults:
+      run:
+        working-directory: frontend   # web is in /frontend
+
+    steps:
+      # Step 1: Checkout repository
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        # Why: CI runners start empty, we need the repo files to work with
+
+      # Step 2: Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+        # Why: Install Node.js so npm, Vite, and Vitest work consistently
+
+      # Step 3: Cache npm dependencies (optional, speeds up CI)
+      - name: Cache Node modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+        # Why: Reuse installed packages if package-lock.json hasn’t changed
+
+      # Step 4: Install dependencies
+      - name: Install Dependencies
+        run: npm ci
+        # Why: Install exact versions from package-lock.json for reproducible builds
+
+      # Step 5: Run Unit Tests
+      - name: Run Tests
+        run: npm test
+        # Why: Check logic correctness of functions/components with Vitest
+        # If any test fails, pipeline stops here
+
+      # Step 6: Run Build
+      - name: Build Project
+        run: npm run build
+        # Why: Verify project compiles and bundles correctly for production
+
+      # Optional Step 7: Run Tests with Coverage (if you want coverage report)
+      # - name: Run Tests with Coverage
+      #   run: npm test -- --coverage
+      # Why: Generates code coverage report to track which lines are tested
