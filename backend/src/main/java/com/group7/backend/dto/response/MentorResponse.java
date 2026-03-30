@@ -1,5 +1,6 @@
 package com.group7.backend.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -9,7 +10,9 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "Mentor profile response")
 public class MentorResponse {
+    @Schema(description = "Mentor id", example = "1")
     private Long id;
     private String firstName;
     private String lastName;
