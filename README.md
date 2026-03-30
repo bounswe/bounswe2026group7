@@ -4,6 +4,16 @@
 
 Make sure you have [Docker](https://docs.docker.com/get-docker/) and Docker Compose installed.
 
+### Environment variables
+
+Create a `.env` file in the project root (see `.env.example`):
+
+```bash
+cp .env.example .env
+```
+
+You can keep defaults for local development.
+
 ### Start all services
 
 ```bash
@@ -17,6 +27,7 @@ This starts three containers:
 | Frontend | http://localhost:5174        | React + Vite dev server  |
 | Backend  | http://localhost:8080        | Spring Boot REST API     |
 | Swagger  | http://localhost:8080/swagger-ui.html | API docs        |
+| MailHog  | http://localhost:8025        | Local email inbox (dev)  |
 | Database | localhost:5433               | PostgreSQL               |
 
 > **Note:** Port 5174 is used for the Docker frontend. If you run the frontend locally (`npm run dev`), it runs on 5173.

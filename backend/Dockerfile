@@ -8,5 +8,16 @@ RUN mvn package -DskipTests -B
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
+
+# Install a minimal HTTP client for container healthchecks
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends curl \
+	&& rm -rf /var/lib/apt/lists/*
+
+# Run as non-root
+RUN useradd -r -u 10001 -g root appuser \
+	&& chown -R appuser:root /app
+USER appuser
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
