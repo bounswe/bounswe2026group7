@@ -1,0 +1,9 @@
+.git/
+.github/
+**/target/
+**/node_modules/
+**/dist/
+**/.idea/
+**/*.iml
+**/*.log
+**/.DS_Store

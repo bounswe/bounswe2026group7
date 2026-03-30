@@ -2,34 +2,72 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: group7db
-      POSTGRES_USER: group7
-      POSTGRES_PASSWORD: group7pass
+      POSTGRES_DB: ${POSTGRES_DB:-group7db}
+      POSTGRES_USER: ${POSTGRES_USER:-group7}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-group7pass}
     ports:
-      - "5433:5432"
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U group7 -d group7db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-group7} -d ${POSTGRES_DB:-group7db}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+    networks:
+      - group7_net
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "${MAILHOG_UI_PORT:-8025}:8025"
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"
+    networks:
+      - group7_net
 
   backend:
     build: ./backend
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/group7db
-      SPRING_DATASOURCE_USERNAME: group7
-      SPRING_DATASOURCE_PASSWORD: group7pass
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-group7db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-group7}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-group7pass}
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-mailhog}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-1025}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:-false}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:-false}
     depends_on:
       db:
         condition: service_healthy
+      mailhog:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - group7_net
 
   frontend:
     build: ./frontend
     ports:
-      - "5174:5173"
+      - "${FRONTEND_PORT:-5174}:5173"
     environment:
       VITE_BACKEND_URL: http://backend:8080
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - group7_net
+
+volumes:
+  db_data:
+
+networks:
+  group7_net:

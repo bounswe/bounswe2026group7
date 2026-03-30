@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.git/
+.gitignore
+.idea/
+*.iml
+*.log
+**/.DS_Store
