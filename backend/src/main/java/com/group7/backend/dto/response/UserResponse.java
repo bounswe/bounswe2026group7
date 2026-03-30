@@ -1,5 +1,6 @@
 package com.group7.backend.dto.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -8,13 +9,22 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "Basic user response")
 public class UserResponse {
+    @Schema(description = "User id", example = "1")
     private Long id;
+    @Schema(description = "First name")
     private String firstName;
+    @Schema(description = "Last name")
     private String lastName;
+    @Schema(description = "Email address")
     private String email;
+    @Schema(description = "Profile photo URL")
     private String profilePhoto;
+    @Schema(description = "Whether email is verified")
     private Boolean isEmailVerified;
+    @Schema(description = "Creation timestamp")
     private LocalDateTime createdAt;
+    @Schema(description = "Role", example = "MENTEE")
     private String role;
 }

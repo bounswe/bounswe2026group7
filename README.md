@@ -1,5 +1,7 @@
 # BounSWE 2026 - Group 7
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+
 ## Running with Docker
 
 Make sure you have [Docker](https://docs.docker.com/get-docker/) and Docker Compose installed.
