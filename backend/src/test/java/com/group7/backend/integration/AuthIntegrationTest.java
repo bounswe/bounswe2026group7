@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
+import com.group7.backend.entity.User;
 import com.group7.backend.repository.UserRepository;
+import com.group7.backend.repository.VerificationTokenRepository;
+import com.group7.backend.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,10 +15,16 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -33,9 +42,17 @@ class AuthIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private VerificationTokenRepository verificationTokenRepository;
+
+    @MockitoBean
+    private EmailService emailService;
+
     @BeforeEach
     void cleanDb() {
+        verificationTokenRepository.deleteAll();
         userRepository.deleteAll();
+        doNothing().when(emailService).sendVerificationEmail(any(User.class), anyString());
     }
 
     // --- Register (1.2.3.1) ---
@@ -49,7 +66,7 @@ class AuthIntegrationTest {
         request.setPassword("Password1");
         request.setIsMentor(false);
 
-        MvcResult result = mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -57,8 +74,7 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.lastName").value("Yilmaz"))
                 .andExpect(jsonPath("$.email").value("ali@example.com"))
                 .andExpect(jsonPath("$.role").value("MENTEE"))
-                .andExpect(jsonPath("$.id").isNumber())
-                .andReturn();
+                .andExpect(jsonPath("$.id").isNumber());
 
         assertTrue(userRepository.existsByEmail("ali@example.com"));
     }
@@ -122,21 +138,71 @@ class AuthIntegrationTest {
         assertFalse(userRepository.existsByEmail("ali@example.com"));
     }
 
+    // --- Email Verification Flow (1.2.3.4) ---
+
+    @Test
+    void loginBeforeVerificationFails() throws Exception {
+        registerUser("ali@example.com", false);
+
+        LoginRequest loginRequest = new LoginRequest();
+        loginRequest.setEmail("ali@example.com");
+        loginRequest.setPassword("Password1");
+
+        assertThrows(Exception.class, () ->
+                mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest))));
+    }
+
+    @Test
+    void verifyEmailAndLoginSucceeds() throws Exception {
+        registerUser("ali@example.com", false);
+
+        String token = verificationTokenRepository
+                .findByUserIdAndUsedFalse(userRepository.findByEmail("ali@example.com").orElseThrow().getId())
+                .get(0).getToken();
+
+        mockMvc.perform(get("/api/auth/verify-email").param("token", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").isString());
+
+        LoginRequest loginRequest = new LoginRequest();
+        loginRequest.setEmail("ali@example.com");
+        loginRequest.setPassword("Password1");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionToken").isString());
+    }
+
+    @Test
+    void verifyEmailWithInvalidTokenFails() throws Exception {
+        assertThrows(Exception.class, () ->
+                mockMvc.perform(get("/api/auth/verify-email").param("token", "invalid-token")));
+    }
+
+    @Test
+    void resendVerificationSendsNewToken() throws Exception {
+        registerUser("ali@example.com", false);
+
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", "ali@example.com"))))
+                .andExpect(status().isOk());
+
+        long tokenCount = verificationTokenRepository
+                .findByUserIdAndUsedFalse(userRepository.findByEmail("ali@example.com").orElseThrow().getId())
+                .size();
+        assertEquals(2, tokenCount);
+    }
+
     // --- Login (1.2.3.5, 1.2.3.6) ---
 
     @Test
     void loginAfterRegisterReturnsToken() throws Exception {
-        RegisterRequest regRequest = new RegisterRequest();
-        regRequest.setFirstName("Ali");
-        regRequest.setLastName("Yilmaz");
-        regRequest.setEmail("ali@example.com");
-        regRequest.setPassword("Password1");
-        regRequest.setIsMentor(false);
-
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(regRequest)))
-                .andExpect(status().isCreated());
+        registerAndVerify("ali@example.com", false);
 
         LoginRequest loginRequest = new LoginRequest();
         loginRequest.setEmail("ali@example.com");
@@ -152,23 +218,12 @@ class AuthIntegrationTest {
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertNotNull(body.get("sessionToken").asText());
         assertFalse(body.get("sessionToken").asText().isEmpty());
     }
 
     @Test
     void loginMentorReturnsCorrectRole() throws Exception {
-        RegisterRequest regRequest = new RegisterRequest();
-        regRequest.setFirstName("Ayse");
-        regRequest.setLastName("Demir");
-        regRequest.setEmail("ayse@example.com");
-        regRequest.setPassword("Password1");
-        regRequest.setIsMentor(true);
-
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(regRequest)))
-                .andExpect(status().isCreated());
+        registerAndVerify("ayse@example.com", true);
 
         LoginRequest loginRequest = new LoginRequest();
         loginRequest.setEmail("ayse@example.com");
@@ -185,17 +240,7 @@ class AuthIntegrationTest {
 
     @Test
     void loginWithWrongPasswordFails() throws Exception {
-        RegisterRequest regRequest = new RegisterRequest();
-        regRequest.setFirstName("Ali");
-        regRequest.setLastName("Yilmaz");
-        regRequest.setEmail("ali@example.com");
-        regRequest.setPassword("Password1");
-        regRequest.setIsMentor(false);
-
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(regRequest)))
-                .andExpect(status().isCreated());
+        registerAndVerify("ali@example.com", false);
 
         LoginRequest loginRequest = new LoginRequest();
         loginRequest.setEmail("ali@example.com");
@@ -223,17 +268,7 @@ class AuthIntegrationTest {
 
     @Test
     void passwordIsStoredHashed() throws Exception {
-        RegisterRequest request = new RegisterRequest();
-        request.setFirstName("Ali");
-        request.setLastName("Yilmaz");
-        request.setEmail("ali@example.com");
-        request.setPassword("Password1");
-        request.setIsMentor(false);
-
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated());
+        registerUser("ali@example.com", false);
 
         var user = userRepository.findByEmail("ali@example.com").orElseThrow();
         assertNotEquals("Password1", user.getPasswordHash());
@@ -250,17 +285,7 @@ class AuthIntegrationTest {
 
     @Test
     void protectedEndpointWorksWithValidToken() throws Exception {
-        RegisterRequest regRequest = new RegisterRequest();
-        regRequest.setFirstName("Ali");
-        regRequest.setLastName("Yilmaz");
-        regRequest.setEmail("ali@example.com");
-        regRequest.setPassword("Password1");
-        regRequest.setIsMentor(false);
-
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(regRequest)))
-                .andExpect(status().isCreated());
+        registerAndVerify("ali@example.com", false);
 
         LoginRequest loginRequest = new LoginRequest();
         loginRequest.setEmail("ali@example.com");
@@ -277,6 +302,33 @@ class AuthIntegrationTest {
 
         mockMvc.perform(get("/api/users")
                         .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    // --- Helpers ---
+
+    private void registerUser(String email, boolean isMentor) throws Exception {
+        RegisterRequest request = new RegisterRequest();
+        request.setFirstName("Ali");
+        request.setLastName("Yilmaz");
+        request.setEmail(email);
+        request.setPassword("Password1");
+        request.setIsMentor(isMentor);
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
+    }
+
+    private void registerAndVerify(String email, boolean isMentor) throws Exception {
+        registerUser(email, isMentor);
+
+        String token = verificationTokenRepository
+                .findByUserIdAndUsedFalse(userRepository.findByEmail(email).orElseThrow().getId())
+                .get(0).getToken();
+
+        mockMvc.perform(get("/api/auth/verify-email").param("token", token))
                 .andExpect(status().isOk());
     }
 }
