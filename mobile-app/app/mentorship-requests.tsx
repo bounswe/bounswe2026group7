@@ -106,9 +106,15 @@ export default function MentorshipRequestsScreen() {
 
             <Text style={styles.message}>{item.message}</Text>
 
-            <TouchableOpacity style={styles.viewProfileButton}>
-              <Text style={styles.viewProfileButtonText}>View Profile</Text>
-            </TouchableOpacity>
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity style={[styles.actionButton, styles.acceptButton]}>
+                <Text style={styles.acceptButtonText}>Accept</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={[styles.actionButton, styles.rejectButton]}>
+                <Text style={styles.rejectButtonText}>Reject</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ))}
 
@@ -153,6 +159,10 @@ export default function MentorshipRequestsScreen() {
             </View>
 
             <Text style={styles.progressText}>Progress: {item.progress}%</Text>
+
+            <TouchableOpacity style={styles.endMentorshipButton}>
+              <Text style={styles.endMentorshipText}>End Mentorship</Text>
+            </TouchableOpacity>
           </View>
         ))}
       </ScrollView>
@@ -297,14 +307,29 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 18,
   },
-  viewProfileButton: {
-    backgroundColor: '#D7E8DA',
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionButton: {
+    flex: 1,
     borderRadius: 18,
     paddingVertical: 16,
     alignItems: 'center',
   },
-  viewProfileButtonText: {
+  acceptButton: {
+    backgroundColor: '#D7E8DA',
+  },
+  acceptButtonText: {
     color: '#2F563C',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  rejectButton: {
+    backgroundColor: '#FDF0EF',
+  },
+  rejectButtonText: {
+    color: '#D9534F',
     fontSize: 15,
     fontWeight: '700',
   },
@@ -336,5 +361,15 @@ const styles = StyleSheet.create({
     color: '#8B8176',
     fontSize: 13,
     fontWeight: '500',
+  },
+  endMentorshipButton: {
+    marginTop: 16,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  endMentorshipText: {
+    color: '#D9534F',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });

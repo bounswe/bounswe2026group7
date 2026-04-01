@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
   View,
@@ -71,7 +72,15 @@ export default function TaskTrackerScreen() {
         </View>
 
         <View style={styles.headerRow}>
-          <Text style={styles.title}>My Tasks</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity 
+              onPress={() => router.back()} 
+              style={{ marginRight: 12, padding: 5 }}
+            >
+              <Text style={{ fontSize: 24, color: '#1D1D38', fontWeight: 'bold' }}>←</Text>
+            </TouchableOpacity>
+            <Text style={styles.title}>My Tasks</Text>
+          </View>
           <TouchableOpacity>
             <Text style={styles.addText}>+ Add</Text>
           </TouchableOpacity>

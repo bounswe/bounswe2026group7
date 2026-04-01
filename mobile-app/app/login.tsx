@@ -7,7 +7,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -16,6 +18,16 @@ export default function LoginScreen() {
   const isFormValid = useMemo(() => {
     return email.trim().length > 0 && password.trim().length > 0;
   }, [email, password]);
+
+  const handleLogin = async () => {
+    try {
+      const fakeToken = "jwt_dummy_token_12345";
+      await SecureStore.setItemAsync('userToken', fakeToken);
+      router.replace('/(tabs)/profile');
+    } catch (error) {
+      Alert.alert("Error", "Failed to securely store the login token.");
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -70,7 +82,7 @@ export default function LoginScreen() {
               !isFormValid && styles.primaryButtonDisabled,
             ]}
             disabled={!isFormValid}
-            onPress={() => router.replace('/profile')}
+            onPress={handleLogin}
           >
             <Text
               style={[

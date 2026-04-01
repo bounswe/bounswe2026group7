@@ -1,60 +1,69 @@
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import { router } from 'expo-router';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 
-export default function OnboardingScreen() {
+export default function SplashScreen() {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const initializeApp = async () => {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        
+        const token = await SecureStore.getItemAsync('userToken');
+
+        if (token) {
+          router.replace('/(tabs)/profile');
+        } else {
+          router.replace('/onboarding');
+        }
+      } catch (error) {
+        router.replace('/onboarding');
+      }
+    };
+
+    initializeApp();
+  }, [fadeAnim, scaleAnim]);
+
   return (
     <View style={styles.container}>
       <View style={styles.topCircle} />
       <View style={styles.bottomLeftCircle} />
       <View style={styles.bottomRightCircle} />
 
-      <View style={styles.statusRow}>
-        <Text style={styles.statusText}>9:41</Text>
-        <Text style={styles.statusIcons}>◔ ▮</Text>
-      </View>
-
-      <View style={styles.centerContent}>
-        <View style={styles.iconBox}>
-          <View style={styles.playCircle}>
-            <Text style={styles.playIcon}>▶</Text>
-          </View>
+      <Animated.View 
+        style={[
+          styles.content, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
+      >
+        <View style={styles.logoContainer}>
+          <Text style={styles.logoLetter}>M</Text>
         </View>
-
-        <Text style={styles.title}>
-          Grow with{'\n'}
-          <Text style={styles.titleItalic}>purpose.</Text>
-        </Text>
-
+        <Text style={styles.title}>MentorNet</Text>
         <Text style={styles.subtitle}>
-          Connect with mentors who've walked{'\n'}
-          your path. Build something{'\n'}
-          meaningful together.
+          Grow with <Text style={styles.subtitleItalic}>purpose.</Text>
         </Text>
-
-        <View style={styles.dotsRow}>
-          <View style={[styles.dot, styles.activeDot]} />
-          <View style={styles.dot} />
-          <View style={styles.dot} />
-        </View>
-      </View>
-
-      <View style={styles.bottomArea}>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => router.push('/register')}
-        >
-          <Text style={styles.primaryButtonText}>Get Started</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={() => router.push('/login')}
-        >
-          <Text style={styles.secondaryButtonText}>I already have an account</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.versionText}>MentorNet v1.0.0</Text>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -62,151 +71,80 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#5F8465',
-    paddingHorizontal: 28,
-    paddingTop: 54,
-    paddingBottom: 36,
-    justifyContent: 'space-between',
+    backgroundColor: '#456B50',
+    justifyContent: 'center',
+    alignItems: 'center',
     overflow: 'hidden',
   },
   topCircle: {
     position: 'absolute',
-    width: 340,
-    height: 340,
-    borderRadius: 170,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    top: -20,
-    right: -90,
+    width: 400,
+    height: 400,
+    borderRadius: 200,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    top: -100,
+    right: -100,
   },
   bottomLeftCircle: {
     position: 'absolute',
-    width: 230,
-    height: 230,
-    borderRadius: 115,
+    width: 250,
+    height: 250,
+    borderRadius: 125,
     backgroundColor: 'rgba(255,255,255,0.05)',
-    bottom: 120,
-    left: -60,
+    bottom: -50,
+    left: -80,
   },
   bottomRightCircle: {
     position: 'absolute',
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    bottom: 210,
-    right: 25,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    bottom: 150,
+    right: -40,
   },
-  statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  content: {
     alignItems: 'center',
+    zIndex: 10,
   },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  statusIcons: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  centerContent: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  iconBox: {
-    width: 138,
-    height: 138,
-    borderRadius: 34,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+  logoContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 32,
+    backgroundColor: '#F8F8F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 46,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  playCircle: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#F5F4F1',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  playIcon: {
-    fontSize: 28,
-    color: '#5F8465',
-    marginLeft: 3,
+  logoLetter: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#456B50',
   },
   title: {
+    fontSize: 42,
+    fontWeight: '800',
     color: '#F7F4EE',
-    fontSize: 34,
-    lineHeight: 42,
-    textAlign: 'center',
-    fontWeight: '700',
-    marginBottom: 18,
-  },
-  titleItalic: {
-    fontStyle: 'italic',
-    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 12,
   },
   subtitle: {
+    fontSize: 18,
     color: 'rgba(247,244,238,0.85)',
-    fontSize: 14,
-    lineHeight: 23,
-    textAlign: 'center',
-    marginBottom: 34,
     fontWeight: '500',
+    letterSpacing: 0.5,
   },
-  dotsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-  },
-  activeDot: {
-    width: 32,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  bottomArea: {
-    marginBottom: 8,
-  },
-  primaryButton: {
-    backgroundColor: '#F8F8F6',
-    borderRadius: 22,
-    paddingVertical: 20,
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  primaryButtonText: {
-    color: '#5F8465',
-    fontSize: 17,
+  subtitleItalic: {
+    fontStyle: 'italic',
     fontWeight: '700',
-  },
-  secondaryButton: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.22)',
-    borderRadius: 22,
-    paddingVertical: 20,
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-  secondaryButtonText: {
-    color: '#F3F3EF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  versionText: {
-    textAlign: 'center',
-    color: 'rgba(255,255,255,0.25)',
-    fontSize: 13,
-    fontWeight: '600',
+    color: '#F7F4EE',
   },
 });

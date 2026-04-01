@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 
 type DayItem = {
@@ -88,6 +89,26 @@ export default function AvailabilitySchedulingScreen() {
     );
   };
 
+  const handleUpdateAvailability = () => {
+    const invalidDay = days.find((day) => {
+      if (!day.active || !day.start || !day.end) return false;
+      const startIndex = TIME_OPTIONS.indexOf(day.start);
+      const endIndex = TIME_OPTIONS.indexOf(day.end);
+      return startIndex >= endIndex;
+    });
+
+    if (invalidDay) {
+      Alert.alert(
+        "Invalid Time Slot",
+        `For ${invalidDay.short}, the end time must be after the start time.`
+      );
+      return;
+    }
+
+    Alert.alert("Success", "Availability successfully updated!");
+    // API call to save the schedule goes here
+  };
+
   const durations = ['30 min', '45 min', '60 min', '90 min'];
 
   return (
@@ -108,7 +129,7 @@ export default function AvailabilitySchedulingScreen() {
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity>
+          <TouchableOpacity onPress={handleUpdateAvailability}>
             <Text style={styles.saveText}>Save</Text>
           </TouchableOpacity>
         </View>
@@ -232,7 +253,7 @@ export default function AvailabilitySchedulingScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.updateButton}>
+        <TouchableOpacity style={styles.updateButton} onPress={handleUpdateAvailability}>
           <Text style={styles.updateButtonText}>Update Availability</Text>
         </TouchableOpacity>
       </ScrollView>

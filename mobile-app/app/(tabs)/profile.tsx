@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { router } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
 import {
   View,
@@ -8,20 +9,30 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 
 export default function ProfileScreen() {
   const { role } = useRole();
   const isMentor = role === 'mentor';
 
+  const handleLogout = async () => {
+    try {
+      await SecureStore.deleteItemAsync('userToken');
+      router.replace('/login');
+    } catch (error) {
+      Alert.alert('Error', 'An error occurred while logging out.');
+    }
+  };
+
   if (isMentor) {
-    return <MentorProfileContent />;
+    return <MentorProfileContent onLogout={handleLogout} />;
   }
 
-  return <MenteeProfileContent />;
+  return <MenteeProfileContent onLogout={handleLogout} />;
 }
 
-function MenteeProfileContent() {
+function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   const [fullName, setFullName] = useState('Övgü Su Afşar');
   const [department, setDepartment] = useState('Computer Engineering');
   const [aboutMe, setAboutMe] = useState('');
@@ -109,14 +120,18 @@ function MenteeProfileContent() {
           </View>
 
           <TouchableOpacity
-          style={styles.myTasksButton}
-          onPress={() => router.push('/task-tracker')}
+            style={styles.myTasksButton}
+            onPress={() => router.push('/task-tracker')}
           >
             <Text style={styles.myTasksButtonText}>My Tasks</Text>
-            </TouchableOpacity>
+          </TouchableOpacity>
 
           <TouchableOpacity style={styles.saveButtonMentee}>
             <Text style={styles.saveButtonText}>Save Changes</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+            <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -124,7 +139,7 @@ function MenteeProfileContent() {
   );
 }
 
-function MentorProfileContent() {
+function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
   const [displayName, setDisplayName] = useState('Burak Afşar');
   const [title, setTitle] = useState('Senior iOS Developer · Apple');
   const [bio, setBio] = useState(
@@ -282,44 +297,59 @@ function MentorProfileContent() {
         <TouchableOpacity style={styles.saveButtonMentor}>
           <Text style={styles.saveButtonText}>Save Profile</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+          <Text style={styles.logoutButtonText}>Log Out</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-   myTasksButton: {
+  logoutButton: {
+    marginTop: 12,
+    marginBottom: 40,
+    backgroundColor: '#FDF0EF',
+    borderWidth: 1,
+    borderColor: '#FAD4D4',
+    borderRadius: 24,
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: '#D9534F',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  myTasksButton: {
     backgroundColor: '#D7E8DA',
     borderRadius: 24,
     paddingVertical: 20,
     alignItems: 'center',
     marginBottom: 14,
-    },
+  },
   myTasksButtonText: {
     color: '#2F563C',
     fontSize: 17,
     fontWeight: '700',
-    },
+  },
   container: {
     flex: 1,
     backgroundColor: '#ECE8E1',
   },
-
   scrollContent: {
     paddingBottom: 32,
   },
-
   scrollArea: {
     flex: 1,
     backgroundColor: '#ECE8E1',
   },
-
   scrollContentMentor: {
     paddingHorizontal: 24,
     paddingTop: 14,
     paddingBottom: 36,
   },
-
   header: {
     backgroundColor: '#456B50',
     paddingTop: 54,
@@ -328,7 +358,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
-
   fixedHeader: {
     backgroundColor: '#456B50',
     paddingTop: 54,
@@ -337,7 +366,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
-
   topCircle: {
     position: 'absolute',
     width: 300,
@@ -347,7 +375,6 @@ const styles = StyleSheet.create({
     top: -30,
     right: -70,
   },
-
   leftCircle: {
     position: 'absolute',
     width: 200,
@@ -357,7 +384,6 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: -50,
   },
-
   leftCircleMentor: {
     position: 'absolute',
     width: 220,
@@ -367,31 +393,26 @@ const styles = StyleSheet.create({
     bottom: 30,
     left: -50,
   },
-
   statusRow: {
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-
   statusText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
-
   statusIcons: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
-
   avatarWrapper: {
     marginTop: 22,
     marginBottom: 16,
   },
-
   avatarCircle: {
     width: 118,
     height: 118,
@@ -403,7 +424,6 @@ const styles = StyleSheet.create({
     marginTop: 26,
     marginBottom: 18,
   },
-
   avatarCircleMentor: {
     width: 118,
     height: 118,
@@ -413,13 +433,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
   avatarText: {
     color: '#F5F1E9',
     fontSize: 34,
     fontWeight: '700',
   },
-
   onlineDot: {
     width: 24,
     height: 24,
@@ -431,7 +449,6 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#456B50',
   },
-
   name: {
     color: '#F5F1E9',
     fontSize: 24,
@@ -439,7 +456,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     textAlign: 'center',
   },
-
   roleText: {
     color: 'rgba(245,241,233,0.75)',
     fontSize: 14,
@@ -447,25 +463,21 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     textAlign: 'center',
   },
-
   badgeMentee: {
     backgroundColor: 'rgba(255,255,255,0.12)',
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 20,
   },
-
   badgeMenteeText: {
     color: '#F5F1E9',
     fontSize: 13,
     fontWeight: '600',
   },
-
   tagsRow: {
     flexDirection: 'row',
     gap: 10,
   },
-
   tag: {
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.18)',
@@ -474,13 +486,11 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 16,
   },
-
   tagText: {
     color: '#F5F1E9',
     fontSize: 13,
     fontWeight: '600',
   },
-
   statsCardMentee: {
     marginTop: -36,
     marginHorizontal: 24,
@@ -497,7 +507,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-
   statsCardMentor: {
     backgroundColor: '#F8F6F2',
     borderRadius: 26,
@@ -506,42 +515,35 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     marginTop: 2,
   },
-
   statItem: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 22,
   },
-
   statNumber: {
     color: '#2F563C',
     fontSize: 22,
     fontWeight: '700',
     marginBottom: 4,
   },
-
   statLabel: {
     color: '#8B8176',
     fontSize: 13,
     fontWeight: '500',
   },
-
   statDividerTall: {
     width: 1,
     height: 54,
     backgroundColor: '#DDD5CA',
   },
-
   statDivider: {
     width: 1,
     backgroundColor: '#DDD5CA',
   },
-
   body: {
     paddingHorizontal: 24,
     paddingTop: 26,
   },
-
   sectionTitleMentee: {
     color: '#8B8176',
     fontSize: 13,
@@ -549,7 +551,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: 18,
   },
-
   sectionTitle: {
     color: '#8B8176',
     fontSize: 13,
@@ -557,7 +558,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: 16,
   },
-
   formCardMentee: {
     backgroundColor: '#F8F6F2',
     borderRadius: 26,
@@ -569,21 +569,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-
   formCardMentor: {
     backgroundColor: '#F8F6F2',
     borderRadius: 26,
     padding: 22,
     marginBottom: 22,
   },
-
   inputLabel: {
     color: '#7E7368',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 10,
   },
-
   input: {
     height: 64,
     borderRadius: 20,
@@ -595,19 +592,16 @@ const styles = StyleSheet.create({
     color: '#4A4138',
     marginBottom: 22,
   },
-
   aboutInput: {
     height: 110,
     paddingTop: 18,
     marginBottom: 0,
   },
-
   bigInput: {
     height: 110,
     paddingTop: 18,
     marginBottom: 0,
   },
-
   saveButtonMentee: {
     backgroundColor: '#4B7B57',
     borderRadius: 24,
@@ -615,20 +609,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-
   saveButtonMentor: {
     backgroundColor: '#467853',
     borderRadius: 24,
     paddingVertical: 20,
     alignItems: 'center',
   },
-
   saveButtonText: {
     color: '#F8F6F2',
     fontSize: 17,
     fontWeight: '700',
   },
-
   actionCard: {
     backgroundColor: '#F8F6F2',
     borderRadius: 24,
@@ -637,7 +628,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-
   cardIconBox: {
     width: 68,
     height: 68,
@@ -646,28 +636,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
   },
-
   cardIcon: {
     fontSize: 30,
   },
-
   cardTextArea: {
     flex: 1,
   },
-
   cardTitle: {
     color: '#23372B',
     fontSize: 17,
     fontWeight: '700',
     marginBottom: 4,
   },
-
   cardSubtitle: {
     color: '#9A8F82',
     fontSize: 13,
     lineHeight: 20,
   },
-
   badgeRed: {
     minWidth: 34,
     height: 34,
@@ -678,13 +663,11 @@ const styles = StyleSheet.create({
     marginRight: 10,
     paddingHorizontal: 8,
   },
-
   badgeRedText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
   },
-
   chevron: {
     fontSize: 28,
     color: '#B9B0A5',
