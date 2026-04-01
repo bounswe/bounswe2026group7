@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.dto.request.UpdateProfileRequest;
+import com.group7.backend.entity.User;
 import com.group7.backend.repository.UserRepository;
+import com.group7.backend.repository.VerificationTokenRepository;
+import com.group7.backend.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,12 +16,16 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -36,9 +43,17 @@ class ProfileIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private VerificationTokenRepository verificationTokenRepository;
+
+    @MockitoBean
+    private EmailService emailService;
+
     @BeforeEach
     void cleanDb() {
+        verificationTokenRepository.deleteAll();
         userRepository.deleteAll();
+        doNothing().when(emailService).sendVerificationEmail(any(User.class), anyString());
     }
 
     // ── Helpers ─────────────────────────────────────────────
@@ -59,6 +74,13 @@ class ProfileIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(regRequest)))
                 .andExpect(status().isCreated());
+
+        // Verify email (required after email verification feature)
+        String verificationToken = verificationTokenRepository
+                .findByUserIdAndUsedFalse(userRepository.findByEmail(email).orElseThrow().getId())
+                .get(0).getToken();
+        mockMvc.perform(get("/api/auth/verify-email").param("token", verificationToken))
+                .andExpect(status().isOk());
 
         LoginRequest loginRequest = new LoginRequest();
         loginRequest.setEmail(email);
@@ -99,7 +121,7 @@ class ProfileIntegrationTest {
                 .andExpect(jsonPath("$.firstName").value("Ayse"))
                 .andExpect(jsonPath("$.lastName").value("Demir"))
                 .andExpect(jsonPath("$.email").value("mentor@test.com"))
-                .andExpect(jsonPath("$.isEmailVerified").value(false))
+                .andExpect(jsonPath("$.isEmailVerified").value(true))
                 .andExpect(jsonPath("$.createdAt").exists())
                 .andExpect(jsonPath("$.maxMenteeCapacity").value(3))
                 .andExpect(jsonPath("$.currentMenteeCount").value(0))
@@ -133,7 +155,7 @@ class ProfileIntegrationTest {
                 .andExpect(jsonPath("$.firstName").value("Ali"))
                 .andExpect(jsonPath("$.lastName").value("Yilmaz"))
                 .andExpect(jsonPath("$.email").value("mentee@test.com"))
-                .andExpect(jsonPath("$.isEmailVerified").value(false))
+                .andExpect(jsonPath("$.isEmailVerified").value(true))
                 .andExpect(jsonPath("$.createdAt").exists())
                 .andExpect(jsonPath("$.profileVisibility").value(true))
                 .andExpect(jsonPath("$.cancelCount").value(0))
