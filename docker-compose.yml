@@ -35,6 +35,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-group7pass}
       JWT_SECRET: ${JWT_SECRET:-bXlTdXBlclNlY3JldEtleUZvckdyb3VwN0JhY2tlbmRBcHBsaWNhdGlvbjIwMjY=}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:5173}
       APP_MAIL_FROM: ${APP_MAIL_FROM:-noreply@group7.com}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
       SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-mailhog}

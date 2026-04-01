@@ -7,7 +7,9 @@ import com.group7.backend.dto.response.UserResponse;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.User;
+import com.group7.backend.entity.PasswordResetToken;
 import com.group7.backend.entity.VerificationToken;
+import com.group7.backend.repository.PasswordResetTokenRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.VerificationTokenRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +46,9 @@ class AuthServiceTest {
     private VerificationTokenRepository verificationTokenRepository;
 
     @Mock
+    private PasswordResetTokenRepository passwordResetTokenRepository;
+
+    @Mock
     private EmailService emailService;
 
     @InjectMocks
@@ -56,6 +61,8 @@ class AuthServiceTest {
     void setUp() {
         ReflectionTestUtils.setField(authService, "tokenExpiryHours", 24);
         ReflectionTestUtils.setField(authService, "resendMaxPerHour", 3);
+        ReflectionTestUtils.setField(authService, "resetTokenExpiryHours", 1);
+        ReflectionTestUtils.setField(authService, "resetMaxRequestsPerHour", 5);
 
         registerRequest = new RegisterRequest();
         registerRequest.setFirstName("John");
@@ -358,5 +365,115 @@ class AuthServiceTest {
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> authService.resendVerification("john@example.com"));
         assertTrue(ex.getMessage().contains("already verified"));
+    }
+
+    // --- Request Password Reset ---
+
+    @Test
+    void requestPasswordResetSendsEmail() {
+        Mentee user = new Mentee();
+        user.setId(1L);
+        user.setEmail("john@example.com");
+
+        when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(user));
+        when(passwordResetTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(LocalDateTime.class)))
+                .thenReturn(0L);
+
+        authService.requestPasswordReset("john@example.com");
+
+        verify(passwordResetTokenRepository).deleteByUserIdAndUsedFalse(1L);
+        verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+        verify(emailService).sendPasswordResetEmail(eq(user), anyString());
+    }
+
+    @Test
+    void requestPasswordResetWithUnknownEmailDoesNotThrow() {
+        when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
+
+        assertDoesNotThrow(() -> authService.requestPasswordReset("unknown@example.com"));
+        verify(emailService, never()).sendPasswordResetEmail(any(), anyString());
+    }
+
+    @Test
+    void requestPasswordResetRateLimitedThrows() {
+        Mentee user = new Mentee();
+        user.setId(1L);
+        user.setEmail("john@example.com");
+
+        when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(user));
+        when(passwordResetTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(LocalDateTime.class)))
+                .thenReturn(5L);
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> authService.requestPasswordReset("john@example.com"));
+        assertTrue(ex.getMessage().contains("Too many"));
+    }
+
+    // --- Reset Password ---
+
+    @Test
+    void resetPasswordSuccessfully() {
+        Mentee user = new Mentee();
+        user.setId(1L);
+        user.setPasswordHash("oldHash");
+
+        PasswordResetToken token = new PasswordResetToken();
+        token.setToken("valid-token");
+        token.setUser(user);
+        token.setUsed(false);
+        token.setExpiresAt(LocalDateTime.now().plusHours(1));
+
+        when(passwordResetTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(token));
+        when(passwordEncoder.encode("NewPass1")).thenReturn("newHash");
+
+        authService.resetPassword("valid-token", "NewPass1");
+
+        assertEquals("newHash", user.getPasswordHash());
+        assertTrue(token.getUsed());
+        verify(userRepository).save(user);
+        verify(passwordResetTokenRepository).save(token);
+    }
+
+    @Test
+    void resetPasswordWithExpiredTokenThrows() {
+        Mentee user = new Mentee();
+
+        PasswordResetToken token = new PasswordResetToken();
+        token.setToken("expired-token");
+        token.setUser(user);
+        token.setUsed(false);
+        token.setExpiresAt(LocalDateTime.now().minusHours(1));
+
+        when(passwordResetTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(token));
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> authService.resetPassword("expired-token", "NewPass1"));
+        assertTrue(ex.getMessage().contains("expired"));
+    }
+
+    @Test
+    void resetPasswordWithUsedTokenThrows() {
+        Mentee user = new Mentee();
+
+        PasswordResetToken token = new PasswordResetToken();
+        token.setToken("used-token");
+        token.setUser(user);
+        token.setUsed(true);
+        token.setExpiresAt(LocalDateTime.now().plusHours(1));
+
+        when(passwordResetTokenRepository.findByToken("used-token")).thenReturn(Optional.of(token));
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> authService.resetPassword("used-token", "NewPass1"));
+        assertTrue(ex.getMessage().contains("already used"));
+    }
+
+    @Test
+    void resetPasswordWithInvalidTokenThrows() {
+        when(passwordResetTokenRepository.findByToken("bad-token")).thenReturn(Optional.empty());
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> authService.resetPassword("bad-token", "NewPass1"));
+        assertEquals("Invalid reset token", ex.getMessage());
     }
 }

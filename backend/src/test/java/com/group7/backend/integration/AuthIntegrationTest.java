@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
+import com.group7.backend.dto.request.ResetPasswordRequest;
 import com.group7.backend.entity.User;
+import com.group7.backend.repository.PasswordResetTokenRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.VerificationTokenRepository;
 import com.group7.backend.service.EmailService;
@@ -45,14 +47,19 @@ class AuthIntegrationTest {
     @Autowired
     private VerificationTokenRepository verificationTokenRepository;
 
+    @Autowired
+    private PasswordResetTokenRepository passwordResetTokenRepository;
+
     @MockitoBean
     private EmailService emailService;
 
     @BeforeEach
     void cleanDb() {
+        passwordResetTokenRepository.deleteAll();
         verificationTokenRepository.deleteAll();
         userRepository.deleteAll();
         doNothing().when(emailService).sendVerificationEmail(any(User.class), anyString());
+        doNothing().when(emailService).sendPasswordResetEmail(any(User.class), anyString());
     }
 
     // --- Register (1.2.3.1) ---
@@ -303,6 +310,113 @@ class AuthIntegrationTest {
         mockMvc.perform(get("/api/users")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
+    }
+
+    // --- Forgot / Reset Password ---
+
+    @Test
+    void forgotPasswordWithUnknownEmailReturns200() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", "nobody@example.com"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void forgotPasswordWithRegisteredEmailReturns200() throws Exception {
+        registerAndVerify("ali@example.com", false);
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", "ali@example.com"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void resetPasswordFullFlow() throws Exception {
+        registerAndVerify("ali@example.com", false);
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", "ali@example.com"))))
+                .andExpect(status().isOk());
+
+        String resetToken = passwordResetTokenRepository
+                .findAll().stream()
+                .filter(t -> !t.getUsed())
+                .findFirst().orElseThrow().getToken();
+
+        ResetPasswordRequest resetRequest = new ResetPasswordRequest(null, resetToken, "NewPass1");
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetRequest)))
+                .andExpect(status().isOk());
+
+        LoginRequest loginWithNewPass = new LoginRequest();
+        loginWithNewPass.setEmail("ali@example.com");
+        loginWithNewPass.setPassword("NewPass1");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginWithNewPass)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sessionToken").isString());
+    }
+
+    @Test
+    void oldPasswordFailsAfterReset() throws Exception {
+        registerAndVerify("ali@example.com", false);
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", "ali@example.com"))))
+                .andExpect(status().isOk());
+
+        String resetToken = passwordResetTokenRepository
+                .findAll().stream()
+                .filter(t -> !t.getUsed())
+                .findFirst().orElseThrow().getToken();
+
+        ResetPasswordRequest resetRequest = new ResetPasswordRequest(null, resetToken, "NewPass1");
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetRequest)))
+                .andExpect(status().isOk());
+
+        LoginRequest loginWithOldPass = new LoginRequest();
+        loginWithOldPass.setEmail("ali@example.com");
+        loginWithOldPass.setPassword("Password1");
+
+        assertThrows(Exception.class, () ->
+                mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginWithOldPass))));
+    }
+
+    @Test
+    void resetPasswordWithUsedTokenFails() throws Exception {
+        registerAndVerify("ali@example.com", false);
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", "ali@example.com"))))
+                .andExpect(status().isOk());
+
+        String resetToken = passwordResetTokenRepository
+                .findAll().stream()
+                .filter(t -> !t.getUsed())
+                .findFirst().orElseThrow().getToken();
+
+        ResetPasswordRequest resetRequest = new ResetPasswordRequest(null, resetToken, "NewPass1");
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetRequest)))
+                .andExpect(status().isOk());
+
+        assertThrows(Exception.class, () ->
+                mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetRequest))));
     }
 
     // --- Helpers ---
