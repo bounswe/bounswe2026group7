@@ -6,6 +6,7 @@ import HomePage from './pages/HomePage'
 import ProfilePage from './pages/ProfilePage'
 import ExplorePage from './pages/ExplorePage'
 import AvailabilityPage from './pages/AvailabilityPage'
+import MessagesPage from './pages/MessagesPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
