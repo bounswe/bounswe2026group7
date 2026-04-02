@@ -37,4 +37,6 @@ public class Mentee extends User {
 
     @Column(nullable = false)
     private Integer cancelCount = 0;
+
+    private Long activeMentorId;
 }
