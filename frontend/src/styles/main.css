@@ -576,16 +576,17 @@
 .file-name { font-size: 13px; font-weight: 600; color: #2563eb; }
 .file-size { font-size: 11px; color: var(--text-muted); }
 .chat-input-bar {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: flex-end; gap: 12px;
   padding: 16px 24px; border-top: 1px solid var(--border);
 }
-.chat-add { font-size: 22px; color: var(--text-muted); cursor: pointer; }
+.chat-add { font-size: 22px; color: var(--text-muted); cursor: pointer; margin-bottom: 2px; }
 .chat-input {
   flex: 1; padding: 12px 18px;
   background: var(--green-bg); border: 1px solid var(--border);
-  border-radius: 50px; font-size: 14px;
+  border-radius: 20px; font-size: 14px;
   font-family: 'DM Sans', sans-serif; outline: none;
-  color: var(--text-dark);
+  color: var(--text-dark); resize: none; line-height: 1.5;
+  max-height: 120px; overflow-y: auto;
 }
 .chat-send {
   width: 40px; height: 40px; border-radius: 50%;

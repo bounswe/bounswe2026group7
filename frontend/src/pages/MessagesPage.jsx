@@ -185,10 +185,10 @@ export default function MessagesPage() {
             >
               +
             </span>
-            <input
+            <textarea
               className="chat-input"
-              type="text"
               placeholder="Type a message..."
+              rows={1}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
