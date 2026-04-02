@@ -59,6 +59,8 @@ export default function MessagesPage() {
   const [input, setInput] = useState('')
   const fileInputRef = useRef(null)
   const messagesEndRef = useRef(null)
+  const textareaRef = useRef(null)
+  const nextCursorRef = useRef(null)
 
   const active = CONVERSATIONS.find(c => c.id === activeConv)
   const currentMessages = messages[activeConv] || []
@@ -74,6 +76,21 @@ export default function MessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [currentMessages])
 
+  // Restore cursor position after React re-renders the textarea
+  useEffect(() => {
+    if (nextCursorRef.current !== null && textareaRef.current) {
+      const pos = nextCursorRef.current
+      textareaRef.current.selectionStart = pos
+      textareaRef.current.selectionEnd = pos
+      nextCursorRef.current = null
+    }
+    // Auto-resize on every input change
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'
+    }
+  }, [input])
+
   function sendMessage() {
     const text = input.trim()
     if (!text) return
@@ -83,7 +100,13 @@ export default function MessagesPage() {
   }
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
+      e.preventDefault()
+      const pos = e.target.selectionStart
+      const newValue = input.slice(0, pos) + '\n' + input.slice(pos)
+      setInput(newValue)
+      nextCursorRef.current = pos + 1
+    } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
     }
@@ -186,6 +209,7 @@ export default function MessagesPage() {
               +
             </span>
             <textarea
+              ref={textareaRef}
               className="chat-input"
               placeholder="Type a message..."
               rows={1}

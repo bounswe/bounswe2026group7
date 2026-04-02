@@ -562,6 +562,7 @@
   border-radius: 18px;
   font-size: 14px; line-height: 1.5;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 .bubble.them { background: #f3f5f4; color: var(--text-dark); border-bottom-left-radius: 4px; }
 .bubble.me { background: var(--green-mid); color: #fff; border-bottom-right-radius: 4px; }
