@@ -1,0 +1,645 @@
+import React from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+} from 'react-native';
+import { useRole } from '../components/RoleContext';
+
+type MeetingItem = {
+  id: string;
+  day: string;
+  date: string;
+  time: string;
+  title: string;
+  status: 'confirmed' | 'pending';
+};
+
+function parseString(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value ?? '';
+}
+
+function parseJsonList(value: string | string[] | undefined): string[] {
+  try {
+    const raw = parseString(value);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseMeetings(value: string | string[] | undefined): MeetingItem[] {
+  try {
+    const raw = parseString(value);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export default function ConnectionProfileScreen() {
+  const { role } = useRole();
+  const isMentorViewer = role === 'mentor';
+  const params = useLocalSearchParams();
+
+  const type = parseString(params.type);
+  const name = parseString(params.name);
+  const initials = parseString(params.initials);
+  const avatarBg = parseString(params.avatarBg) || '#D7E8DA';
+  const avatarText = parseString(params.avatarText) || '#2F563C';
+  const subtitle = parseString(params.subtitle);
+  const department = parseString(params.department);
+  const title = parseString(params.title);
+  const about = parseString(params.about);
+
+  const interests = parseJsonList(params.interests);
+  const goals = parseJsonList(params.goals);
+  const mentoringGoals = parseJsonList(params.mentoringGoals);
+  const preferences = parseJsonList(params.preferences);
+  const meetings = parseMeetings(params.meetings);
+
+  const stat1Label = parseString(params.stat1Label);
+  const stat1Value = parseString(params.stat1Value);
+  const stat2Label = parseString(params.stat2Label);
+  const stat2Value = parseString(params.stat2Value);
+  const stat3Label = parseString(params.stat3Label);
+  const stat3Value = parseString(params.stat3Value);
+
+  const isViewingMentor = type === 'mentor';
+
+  const openRequest = (mode: 'meeting' | 'change' | 'end') => {
+    router.push({
+      pathname: '/connection-request',
+      params: {
+        mode,
+        targetName: name,
+        targetType: type,
+      },
+    });
+  };
+
+  return (
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <View style={styles.topCircle} />
+          <View style={styles.leftCircle} />
+
+          <View style={styles.statusRow}>
+            <Text style={styles.statusText}>9:41</Text>
+            <Text style={styles.statusIcons}>▲ ▮</Text>
+          </View>
+
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Text style={styles.backText}>‹</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.avatarCircle, { backgroundColor: avatarBg }]}>
+            <Text style={[styles.avatarText, { color: avatarText }]}>{initials}</Text>
+          </View>
+
+          <Text style={styles.name}>{name}</Text>
+          <Text style={styles.roleText}>
+            {isViewingMentor ? title || subtitle : department ? `Mentee • ${department}` : subtitle}
+          </Text>
+
+          <View style={styles.headerBadge}>
+            <Text style={styles.headerBadgeText}>
+              {isMentorViewer
+                ? isViewingMentor
+                  ? 'Peer Mentor View'
+                  : 'Your Mentee'
+                : isViewingMentor
+                ? 'Mentor View'
+                : 'Your Mentor'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{stat1Value || '-'}</Text>
+            <Text style={styles.statLabel}>{stat1Label || 'Stat'}</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{stat2Value || '-'}</Text>
+            <Text style={styles.statLabel}>{stat2Label || 'Stat'}</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{stat3Value || '-'}</Text>
+            <Text style={styles.statLabel}>{stat3Label || 'Stat'}</Text>
+          </View>
+        </View>
+
+        <View style={styles.body}>
+          <Text style={styles.sectionTitle}>PROFILE</Text>
+
+          <View style={styles.card}>
+            <Text style={styles.cardLabel}>About</Text>
+            <Text style={styles.cardText}>{about || 'No bio added yet.'}</Text>
+
+            {!isViewingMentor ? (
+              <>
+                <Text style={styles.cardLabel}>Department</Text>
+                <Text style={styles.cardText}>{department || 'Not specified'}</Text>
+
+                <Text style={styles.cardLabel}>Goals</Text>
+                <View style={styles.tokensWrap}>
+                  {goals.map((item) => (
+                    <View key={item} style={styles.tokenChip}>
+                      <Text style={styles.tokenChipText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <Text style={styles.cardLabel}>Interests</Text>
+                <View style={styles.tokensWrap}>
+                  {interests.map((item) => (
+                    <View key={item} style={styles.tokenChip}>
+                      <Text style={styles.tokenChipText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardLabel}>Expertise / Interests</Text>
+                <View style={styles.tokensWrap}>
+                  {interests.map((item) => (
+                    <View key={item} style={styles.tokenChip}>
+                      <Text style={styles.tokenChipText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <Text style={styles.cardLabel}>Mentoring Goals</Text>
+                <View style={styles.tokensWrap}>
+                  {mentoringGoals.map((item) => (
+                    <View key={item} style={styles.tokenChip}>
+                      <Text style={styles.tokenChipText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <Text style={styles.cardLabel}>Preferred Mentee Criteria</Text>
+                <View style={styles.tokensWrap}>
+                  {preferences.map((item) => (
+                    <View key={item} style={styles.tokenChip}>
+                      <Text style={styles.tokenChipText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+          </View>
+
+          <Text style={styles.sectionTitle}>SHARED CALENDAR</Text>
+
+          <View style={styles.card}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarMonth}>April 2026</Text>
+              <TouchableOpacity>
+                <Text style={styles.calendarLink}>View Full</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weekRow}>
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+                <Text key={day} style={styles.weekDay}>
+                  {day}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.daysGrid}>
+              {['7', '8', '9', '10', '11', '12', '13'].map((day, index) => {
+                const highlighted = index === 1 || index === 4;
+                return (
+                  <View
+                    key={day}
+                    style={[
+                      styles.dayCell,
+                      highlighted && styles.dayCellActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.dayCellText,
+                        highlighted && styles.dayCellTextActive,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            <Text style={styles.cardLabel}>Upcoming Shared Meetings</Text>
+
+            {meetings.map((meeting) => (
+              <View key={meeting.id} style={styles.meetingRow}>
+                <View style={styles.meetingTimeBox}>
+                  <Text style={styles.meetingDay}>{meeting.day}</Text>
+                  <Text style={styles.meetingTime}>{meeting.time}</Text>
+                </View>
+
+                <View style={styles.meetingInfo}>
+                  <Text style={styles.meetingTitle}>{meeting.title}</Text>
+                  <Text style={styles.meetingDate}>{meeting.date}</Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.meetingBadge,
+                    meeting.status === 'confirmed'
+                      ? styles.meetingBadgeConfirmed
+                      : styles.meetingBadgePending,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.meetingBadgeText,
+                      meeting.status === 'confirmed'
+                        ? styles.meetingBadgeTextConfirmed
+                        : styles.meetingBadgeTextPending,
+                    ]}
+                  >
+                    {meeting.status === 'confirmed' ? 'Confirmed' : 'Pending'}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <Text style={styles.sectionTitle}>ACTIONS</Text>
+
+          <View style={styles.actionsGrid}>
+            <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => router.push('/messages')}>
+              <Text style={styles.actionButtonPrimaryText}>Open Messages</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('meeting')}>
+              <Text style={styles.actionButtonSecondaryText}>Setup Meeting Request</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('change')}>
+              <Text style={styles.actionButtonSecondaryText}>Change Request</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButtonDanger} onPress={() => openRequest('end')}>
+              <Text style={styles.actionButtonDangerText}>End Mentorship</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#ECE8E1',
+  },
+  scrollContent: {
+    paddingBottom: 36,
+  },
+  header: {
+    backgroundColor: '#456B50',
+    paddingTop: 54,
+    paddingBottom: 80,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  topCircle: {
+    position: 'absolute',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    top: -30,
+    right: -70,
+  },
+  leftCircle: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    bottom: 20,
+    left: -50,
+  },
+  statusRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  statusIcons: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    marginTop: 16,
+    marginBottom: 10,
+  },
+  backText: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontWeight: '500',
+  },
+  avatarCircle: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  avatarText: {
+    fontSize: 32,
+    fontWeight: '700',
+  },
+  name: {
+    color: '#F5F1E9',
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  roleText: {
+    color: 'rgba(245,241,233,0.75)',
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  headerBadge: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  headerBadgeText: {
+    color: '#F5F1E9',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  statsCard: {
+    marginTop: -36,
+    marginHorizontal: 24,
+    backgroundColor: '#F8F6F2',
+    borderRadius: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 26,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    color: '#2F563C',
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  statLabel: {
+    color: '#8B8176',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    height: 54,
+    backgroundColor: '#DDD5CA',
+  },
+  body: {
+    paddingHorizontal: 24,
+    paddingTop: 26,
+  },
+  sectionTitle: {
+    color: '#8B8176',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginBottom: 18,
+  },
+  card: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 26,
+    padding: 22,
+    marginBottom: 20,
+  },
+  cardLabel: {
+    color: '#7E7368',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  cardText: {
+    color: '#4A4138',
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  tokensWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  tokenChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18,
+    backgroundColor: '#EEF3EE',
+    borderWidth: 1,
+    borderColor: '#D7E8DA',
+  },
+  tokenChipText: {
+    color: '#2F563C',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  calendarMonth: {
+    color: '#23372B',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  calendarLink: {
+    color: '#4B7B57',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  weekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  weekDay: {
+    width: '13%',
+    textAlign: 'center',
+    color: '#9A8F82',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  dayCell: {
+    width: '13%',
+    aspectRatio: 1,
+    borderRadius: 14,
+    backgroundColor: '#FCFBF8',
+    borderWidth: 1,
+    borderColor: '#E1D7CA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayCellActive: {
+    backgroundColor: '#D7E8DA',
+    borderColor: '#BFD3C2',
+  },
+  dayCellText: {
+    color: '#8B8176',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  dayCellTextActive: {
+    color: '#2F563C',
+    fontWeight: '700',
+  },
+  meetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FCFBF8',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E1D7CA',
+    padding: 14,
+    marginBottom: 10,
+  },
+  meetingTimeBox: {
+    width: 72,
+    marginRight: 12,
+  },
+  meetingDay: {
+    color: '#2F563C',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  meetingTime: {
+    color: '#4A4138',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  meetingInfo: {
+    flex: 1,
+  },
+  meetingTitle: {
+    color: '#23372B',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  meetingDate: {
+    color: '#9A8F82',
+    fontSize: 12,
+  },
+  meetingBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  meetingBadgeConfirmed: {
+    backgroundColor: '#D7E8DA',
+  },
+  meetingBadgePending: {
+    backgroundColor: '#F5E8CC',
+  },
+  meetingBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  meetingBadgeTextConfirmed: {
+    color: '#2F563C',
+  },
+  meetingBadgeTextPending: {
+    color: '#7A5010',
+  },
+  actionsGrid: {
+    marginBottom: 24,
+  },
+  actionButtonPrimary: {
+    backgroundColor: '#4B7B57',
+    borderRadius: 24,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionButtonPrimaryText: {
+    color: '#F8F6F2',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  actionButtonSecondary: {
+    backgroundColor: '#D7E8DA',
+    borderRadius: 24,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionButtonSecondaryText: {
+    color: '#2F563C',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  actionButtonDanger: {
+    backgroundColor: '#FDF0EF',
+    borderWidth: 1,
+    borderColor: '#FAD4D4',
+    borderRadius: 24,
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  actionButtonDangerText: {
+    color: '#D9534F',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});

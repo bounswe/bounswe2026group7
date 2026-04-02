@@ -1,4 +1,5 @@
 import React from 'react';
+import { router } from 'expo-router';
 import { useRole } from '../../components/RoleContext';
 import {
   View,
@@ -8,6 +9,23 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
+
+type MentorCard = {
+  id: string;
+  initials: string;
+  avatarBg: string;
+  avatarText: string;
+  name: string;
+  role: string;
+  available: boolean;
+  tags: string[];
+  rating: string;
+  reviews: string;
+  about: string;
+  mentoringGoals: string[];
+  preferredMenteeCriteria: string[];
+  availability: string[];
+};
 
 export default function ExploreScreen() {
   const { role } = useRole();
@@ -21,8 +39,9 @@ export default function ExploreScreen() {
 }
 
 function MenteeExploreContent() {
-  const mentors = [
+  const mentors: MentorCard[] = [
     {
+      id: 'burak',
       initials: 'BA',
       avatarBg: '#D6E8DC',
       avatarText: '#2F563C',
@@ -32,8 +51,14 @@ function MenteeExploreContent() {
       tags: ['Swift', 'Mobile'],
       rating: '4.9',
       reviews: '24',
+      about:
+        'Focused on mobile architecture, clean code and helping mentees ship stronger projects.',
+      mentoringGoals: ['Guide junior developers', 'Improve project structure'],
+      preferredMenteeCriteria: ['Motivated', 'Consistent', 'Open to feedback'],
+      availability: ['Tue 15:00', 'Thu 17:30', 'Sat 12:00'],
     },
     {
+      id: 'ayse',
       initials: 'AY',
       avatarBg: '#E2D1E6',
       avatarText: '#6D3F72',
@@ -43,8 +68,14 @@ function MenteeExploreContent() {
       tags: ['Python', 'ML'],
       rating: '4.7',
       reviews: '18',
+      about:
+        'Helps mentees understand machine learning basics and practical project workflows.',
+      mentoringGoals: ['Teach ML fundamentals', 'Support project-based learning'],
+      preferredMenteeCriteria: ['Curious', 'Patient', 'Willing to practice'],
+      availability: ['Mon 19:00', 'Wed 18:00', 'Fri 16:00'],
     },
     {
+      id: 'mehmet',
       initials: 'MK',
       avatarBg: '#DFD9C9',
       avatarText: '#66582F',
@@ -54,8 +85,14 @@ function MenteeExploreContent() {
       tags: ['Node.js', 'AWS'],
       rating: '4.8',
       reviews: '31',
+      about:
+        'Interested in API design, scalable backend systems and mentoring software engineering habits.',
+      mentoringGoals: ['Teach backend fundamentals', 'Build strong engineering habits'],
+      preferredMenteeCriteria: ['Disciplined', 'Structured thinker', 'Learner mindset'],
+      availability: ['Wed 20:00', 'Sun 14:00'],
     },
     {
+      id: 'elif',
       initials: 'EA',
       avatarBg: '#D7E4F1',
       avatarText: '#355B7A',
@@ -65,8 +102,35 @@ function MenteeExploreContent() {
       tags: ['SQL', 'Data'],
       rating: '4.8',
       reviews: '21',
+      about:
+        'Supports mentees in data analysis, SQL foundations and project storytelling.',
+      mentoringGoals: ['Strengthen analytics thinking', 'Help build data portfolios'],
+      preferredMenteeCriteria: ['Consistent', 'Interested in data', 'Detail-oriented'],
+      availability: ['Tue 18:30', 'Thu 19:00'],
     },
   ];
+
+  const openMentorProfile = (mentor: MentorCard) => {
+    router.push({
+      pathname: '/mentor-public-profile',
+      params: {
+        id: mentor.id,
+        initials: mentor.initials,
+        avatarBg: mentor.avatarBg,
+        avatarText: mentor.avatarText,
+        name: mentor.name,
+        role: mentor.role,
+        available: mentor.available ? 'true' : 'false',
+        tags: JSON.stringify(mentor.tags),
+        rating: mentor.rating,
+        reviews: mentor.reviews,
+        about: mentor.about,
+        mentoringGoals: JSON.stringify(mentor.mentoringGoals),
+        preferredMenteeCriteria: JSON.stringify(mentor.preferredMenteeCriteria),
+        availability: JSON.stringify(mentor.availability),
+      },
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -127,18 +191,8 @@ function MenteeExploreContent() {
         {mentors.map((mentor, index) => (
           <View key={index} style={styles.card}>
             <View style={styles.cardTopRow}>
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: mentor.avatarBg },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.avatarText,
-                    { color: mentor.avatarText },
-                  ]}
-                >
+              <View style={[styles.avatar, { backgroundColor: mentor.avatarBg }]}>
+                <Text style={[styles.avatarText, { color: mentor.avatarText }]}>
                   {mentor.initials}
                 </Text>
               </View>
@@ -151,17 +205,13 @@ function MenteeExploreContent() {
               <View
                 style={[
                   styles.statusBadge,
-                  mentor.available
-                    ? styles.availableBadge
-                    : styles.fullBadge,
+                  mentor.available ? styles.availableBadge : styles.fullBadge,
                 ]}
               >
                 <Text
                   style={[
                     styles.statusBadgeText,
-                    mentor.available
-                      ? styles.availableBadgeText
-                      : styles.fullBadgeText,
+                    mentor.available ? styles.availableBadgeText : styles.fullBadgeText,
                   ]}
                 >
                   {mentor.available ? 'Available' : 'Full'}
@@ -187,7 +237,10 @@ function MenteeExploreContent() {
                 </Text>
               </View>
 
-              <TouchableOpacity style={styles.viewButton}>
+              <TouchableOpacity
+                style={styles.viewButton}
+                onPress={() => openMentorProfile(mentor)}
+              >
                 <Text style={styles.viewButtonText}>View Profile</Text>
               </TouchableOpacity>
             </View>
@@ -337,12 +390,7 @@ function MentorExploreContent() {
 
               <View style={styles.learningBottomRow}>
                 <View style={styles.progressTrack}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${item.progress}%` },
-                    ]}
-                  />
+                  <View style={[styles.progressFill, { width: `${item.progress}%` }]} />
                 </View>
                 <Text style={styles.learningTime}>{item.timeLeft}</Text>
               </View>

@@ -9,11 +9,44 @@ import {
 } from 'react-native';
 import { useRole } from '../../components/RoleContext';
 
+type MeetingItem = {
+  id: string;
+  day: string;
+  date: string;
+  time: string;
+  title: string;
+  status: 'confirmed' | 'pending';
+};
+
+type ConnectionCard = {
+  id: string;
+  initials: string;
+  avatarBg: string;
+  avatarText: string;
+  name: string;
+  subtitle: string;
+  progress: number;
+  type: 'mentor' | 'mentee';
+  department?: string;
+  title?: string;
+  about?: string;
+  interests?: string[];
+  goals?: string[];
+  mentoringGoals?: string[];
+  preferences?: string[];
+  meetings: MeetingItem[];
+  stats: {
+    first: { label: string; value: string };
+    second: { label: string; value: string };
+    third: { label: string; value: string };
+  };
+};
+
 export default function HomeScreen() {
   const { role } = useRole();
   const isMentor = role === 'mentor';
 
-  const activeMentees = [
+  const activeMentees: ConnectionCard[] = [
     {
       id: '1',
       initials: 'ZD',
@@ -22,6 +55,35 @@ export default function HomeScreen() {
       name: 'Zeynep Demir',
       subtitle: 'Goal: Learn React Native · Week 3',
       progress: 65,
+      type: 'mentee',
+      department: 'Computer Engineering',
+      about:
+        '3rd year student focused on mobile development and wants to build stronger React Native projects.',
+      interests: ['React Native', 'Frontend', 'UI'],
+      goals: ['Learn React Native', 'Ship one portfolio app'],
+      meetings: [
+        {
+          id: 'm1',
+          day: 'Tue',
+          date: 'Apr 8',
+          time: '15:00',
+          title: 'Weekly Check-in',
+          status: 'confirmed',
+        },
+        {
+          id: 'm2',
+          day: 'Fri',
+          date: 'Apr 11',
+          time: '17:30',
+          title: 'Code Review',
+          status: 'pending',
+        },
+      ],
+      stats: {
+        first: { label: 'Tasks', value: '12' },
+        second: { label: 'Meetings', value: '3' },
+        third: { label: 'Progress', value: '65%' },
+      },
     },
     {
       id: '2',
@@ -31,10 +93,31 @@ export default function HomeScreen() {
       name: 'Ali Çetin',
       subtitle: 'Goal: Backend API Design · Week 1',
       progress: 20,
+      type: 'mentee',
+      department: 'Software Engineering',
+      about:
+        'Interested in backend systems and wants to improve API design fundamentals.',
+      interests: ['Backend', 'Node.js', 'System Design'],
+      goals: ['Design better REST APIs', 'Understand auth flows'],
+      meetings: [
+        {
+          id: 'm3',
+          day: 'Wed',
+          date: 'Apr 9',
+          time: '14:00',
+          title: 'API Review',
+          status: 'confirmed',
+        },
+      ],
+      stats: {
+        first: { label: 'Tasks', value: '4' },
+        second: { label: 'Meetings', value: '1' },
+        third: { label: 'Progress', value: '20%' },
+      },
     },
   ];
 
-  const activeMentors = [
+  const activeMentors: ConnectionCard[] = [
     {
       id: '1',
       initials: 'BA',
@@ -43,6 +126,36 @@ export default function HomeScreen() {
       name: 'Burak Afşar',
       subtitle: 'Senior Software Engineer',
       progress: 45,
+      type: 'mentor',
+      title: 'Senior Software Engineer · Mobile',
+      about:
+        'Focused on mobile architecture, clean code and long-term growth for junior developers.',
+      interests: ['Swift', 'React Native', 'Mobile'],
+      mentoringGoals: ['Guide junior developers', 'Improve project structure'],
+      preferences: ['Motivated', 'Consistent', 'Open to feedback'],
+      meetings: [
+        {
+          id: 'm4',
+          day: 'Tue',
+          date: 'Apr 8',
+          time: '15:00',
+          title: 'Weekly Check-in',
+          status: 'confirmed',
+        },
+        {
+          id: 'm5',
+          day: 'Fri',
+          date: 'Apr 11',
+          time: '17:30',
+          title: 'Code Review',
+          status: 'pending',
+        },
+      ],
+      stats: {
+        first: { label: 'Rating', value: '4.9' },
+        second: { label: 'Reviews', value: '24' },
+        third: { label: 'Mentees', value: '8' },
+      },
     },
     {
       id: '2',
@@ -52,11 +165,71 @@ export default function HomeScreen() {
       name: 'Övgü Su',
       subtitle: 'UI/UX Designer',
       progress: 80,
+      type: 'mentor',
+      title: 'UI/UX Designer · Product Design',
+      about:
+        'Helps mentees improve product thinking, portfolio presentation and interface clarity.',
+      interests: ['UI/UX', 'Product Thinking', 'Design Systems'],
+      mentoringGoals: ['Build stronger portfolios', 'Teach design reasoning'],
+      preferences: ['Curious', 'Communicative', 'Iterative mindset'],
+      meetings: [
+        {
+          id: 'm6',
+          day: 'Mon',
+          date: 'Apr 7',
+          time: '18:00',
+          title: 'Portfolio Review',
+          status: 'confirmed',
+        },
+        {
+          id: 'm7',
+          day: 'Thu',
+          date: 'Apr 10',
+          time: '16:00',
+          title: 'Design Feedback',
+          status: 'confirmed',
+        },
+      ],
+      stats: {
+        first: { label: 'Rating', value: '4.8' },
+        second: { label: 'Reviews', value: '18' },
+        third: { label: 'Mentees', value: '5' },
+      },
     },
   ];
 
   const currentList = isMentor ? activeMentees : activeMentors;
   const sectionTitle = isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS';
+
+  const openConnectionProfile = (item: ConnectionCard) => {
+    router.push({
+      pathname: '/connection-profile',
+      params: {
+        id: item.id,
+        type: item.type,
+        name: item.name,
+        initials: item.initials,
+        avatarBg: item.avatarBg,
+        avatarText: item.avatarText,
+        subtitle: item.subtitle,
+        progress: String(item.progress),
+        department: item.department ?? '',
+        title: item.title ?? '',
+        about: item.about ?? '',
+        interests: JSON.stringify(item.interests ?? []),
+        goals: JSON.stringify(item.goals ?? []),
+        mentoringGoals: JSON.stringify(item.mentoringGoals ?? []),
+        preferences: JSON.stringify(item.preferences ?? []),
+        meetings: JSON.stringify(item.meetings),
+        stat1Label: item.stats.first.label,
+        stat1Value: item.stats.first.value,
+        stat2Label: item.stats.second.label,
+        stat2Value: item.stats.second.value,
+        stat3Label: item.stats.third.label,
+        stat3Value: item.stats.third.value,
+      },
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -100,55 +273,48 @@ export default function HomeScreen() {
 
         {currentList.map((item) => (
           <View key={item.id} style={styles.activeCard}>
-            <View style={styles.topRow}>
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: item.avatarBg },
-                ]}
-              >
-                <Text
+            <TouchableOpacity activeOpacity={0.9} onPress={() => openConnectionProfile(item)}>
+              <View style={styles.topRow}>
+                <View style={[styles.avatar, { backgroundColor: item.avatarBg }]}>
+                  <Text style={[styles.avatarText, { color: item.avatarText }]}>
+                    {item.initials}
+                  </Text>
+                </View>
+
+                <View style={styles.infoArea}>
+                  <Text style={styles.name}>{item.name}</Text>
+                  <Text style={styles.subtitle}>{item.subtitle}</Text>
+                </View>
+
+                <View style={styles.activeBadge}>
+                  <Text style={styles.activeBadgeText}>Active</Text>
+                </View>
+              </View>
+
+              <View style={styles.progressTrack}>
+                <View
                   style={[
-                    styles.avatarText,
-                    { color: item.avatarText },
+                    styles.progressFill,
+                    { width: `${item.progress}%` },
                   ]}
-                >
-                  {item.initials}
-                </Text>
+                />
               </View>
 
-              <View style={styles.infoArea}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.subtitle}>{item.subtitle}</Text>
-              </View>
+              <Text style={styles.progressText}>Progress: {item.progress}%</Text>
 
-              <View style={styles.activeBadge}>
-                <Text style={styles.activeBadgeText}>Active</Text>
-              </View>
-            </View>
-
-            <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${item.progress}%` },
-                ]}
-              />
-            </View>
-
-            <Text style={styles.progressText}>Progress: {item.progress}%</Text>
-            
-            <TouchableOpacity style={styles.endMentorshipButton}>
-              <Text style={styles.endMentorshipText}>End Mentorship</Text>
+              <TouchableOpacity
+                style={styles.viewProfileButton}
+                onPress={() => openConnectionProfile(item)}
+              >
+                <Text style={styles.viewProfileButtonText}>Open Shared Space</Text>
+              </TouchableOpacity>
             </TouchableOpacity>
           </View>
         ))}
 
         {currentList.length === 0 && (
           <View style={styles.emptyStateContainer}>
-            <Text style={styles.emptyStateText}>
-              No active connections found.
-            </Text>
+            <Text style={styles.emptyStateText}>No active connections found.</Text>
           </View>
         )}
       </ScrollView>
@@ -333,18 +499,16 @@ const styles = StyleSheet.create({
     color: '#8B8176',
     fontSize: 13,
     fontWeight: '500',
+    marginBottom: 14,
   },
-  endMentorshipButton: {
-    marginTop: 18,
-    paddingVertical: 12,
-    backgroundColor: '#FDF0EF',
+  viewProfileButton: {
+    backgroundColor: '#D7E8DA',
     borderRadius: 16,
+    paddingVertical: 12,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FAD4D4',
   },
-  endMentorshipText: {
-    color: '#D9534F',
+  viewProfileButtonText: {
+    color: '#2F563C',
     fontSize: 14,
     fontWeight: '700',
   },

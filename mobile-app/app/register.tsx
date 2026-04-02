@@ -10,14 +10,7 @@ import {
   StyleSheet,
   ScrollView,
   Image,
-  Alert,
 } from 'react-native';
-
-const PREDEFINED_INTERESTS = [
-  'React Native', 'Python', 'UI/UX Design', 
-  'Machine Learning', 'Data Science', 'Backend',
-  'Product Management', 'Cyber Security'
-];
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState('');
@@ -26,13 +19,14 @@ export default function RegisterScreen() {
   const [bio, setBio] = useState('');
   const [selectedRole, setSelectedRole] = useState<'Mentee' | 'Mentor'>('Mentee');
   const [interests, setInterests] = useState<string[]>([]);
+  const [interestInput, setInterestInput] = useState('');
   const [image, setImage] = useState<string | null>(null);
-  
+
   const { setRole: setGlobalRole } = useRole();
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 1,
@@ -43,12 +37,24 @@ export default function RegisterScreen() {
     }
   };
 
-  const toggleInterest = (interest: string) => {
-    if (interests.includes(interest)) {
-      setInterests(interests.filter((i) => i !== interest));
-    } else {
-      setInterests([...interests, interest]);
+  const addInterest = () => {
+    const trimmed = interestInput.trim();
+    if (!trimmed) return;
+
+    const exists = interests.some(
+      (item) => item.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      setInterestInput('');
+      return;
     }
+
+    setInterests([...interests, trimmed]);
+    setInterestInput('');
+  };
+
+  const removeInterest = (interestToRemove: string) => {
+    setInterests(interests.filter((item) => item !== interestToRemove));
   };
 
   const isFormValid = useMemo(() => {
@@ -63,7 +69,6 @@ export default function RegisterScreen() {
   const handleRegister = () => {
     const appRole = selectedRole === 'Mentor' ? 'mentor' : 'mentee';
     setGlobalRole(appRole);
-    // Logic to send registration data (including image and interests) to API goes here
     router.replace('/(tabs)/profile');
   };
 
@@ -85,7 +90,6 @@ export default function RegisterScreen() {
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Join the mentorship community</Text>
 
-          {/* Profile Photo Section */}
           <TouchableOpacity style={styles.imagePickerContainer} onPress={pickImage}>
             {image ? (
               <Image source={{ uri: image }} style={styles.profileImage} />
@@ -128,26 +132,31 @@ export default function RegisterScreen() {
             onChangeText={setBio}
           />
 
-          <Text style={styles.label}>INTERESTS (Select at least one)</Text>
+          <Text style={styles.label}>INTERESTS (Add at least one)</Text>
+
+          <View style={styles.interestInputRow}>
+            <TextInput
+              style={styles.interestInput}
+              placeholder="Add an interest"
+              placeholderTextColor="rgba(255,255,255,0.45)"
+              value={interestInput}
+              onChangeText={setInterestInput}
+              onSubmitEditing={addInterest}
+              returnKeyType="done"
+            />
+            <TouchableOpacity style={styles.addButton} onPress={addInterest}>
+              <Text style={styles.addButtonText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.interestsContainer}>
-            {PREDEFINED_INTERESTS.map((item) => (
-              <TouchableOpacity
-                key={item}
-                style={[
-                  styles.interestChip,
-                  interests.includes(item) && styles.interestChipActive,
-                ]}
-                onPress={() => toggleInterest(item)}
-              >
-                <Text
-                  style={[
-                    styles.interestText,
-                    interests.includes(item) && styles.interestTextActive,
-                  ]}
-                >
-                  {item}
-                </Text>
-              </TouchableOpacity>
+            {interests.map((item) => (
+              <View key={item} style={styles.interestChip}>
+                <Text style={styles.interestText}>{item}</Text>
+                <TouchableOpacity onPress={() => removeInterest(item)}>
+                  <Text style={styles.removeText}>×</Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
 
@@ -340,6 +349,37 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     textAlignVertical: 'top',
   },
+  interestInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  interestInput: {
+    flex: 1,
+    height: 54,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 18,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '500',
+    marginRight: 10,
+  },
+  addButton: {
+    height: 54,
+    paddingHorizontal: 18,
+    borderRadius: 18,
+    backgroundColor: '#F8F8F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    color: '#274B34',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   interestsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -347,6 +387,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   interestChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
@@ -354,18 +396,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
   },
-  interestChipActive: {
-    backgroundColor: '#F8F8F6',
-    borderColor: '#F8F8F6',
-  },
   interestText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.92)',
     fontSize: 14,
     fontWeight: '600',
   },
-  interestTextActive: {
-    color: '#274B34',
+  removeText: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 18,
     fontWeight: '700',
+    marginLeft: 8,
+    lineHeight: 18,
   },
   roleRow: {
     flexDirection: 'row',

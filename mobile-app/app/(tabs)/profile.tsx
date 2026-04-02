@@ -20,7 +20,7 @@ export default function ProfileScreen() {
     try {
       await SecureStore.deleteItemAsync('userToken');
       router.replace('/login');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'An error occurred while logging out.');
     }
   };
@@ -32,10 +32,91 @@ export default function ProfileScreen() {
   return <MenteeProfileContent onLogout={handleLogout} />;
 }
 
+function addToken(
+  value: string,
+  items: string[],
+  setItems: React.Dispatch<React.SetStateAction<string[]>>,
+  setValue: React.Dispatch<React.SetStateAction<string>>
+) {
+  const trimmed = value.trim();
+  if (!trimmed) return;
+
+  const exists = items.some((item) => item.toLowerCase() === trimmed.toLowerCase());
+  if (exists) {
+    setValue('');
+    return;
+  }
+
+  setItems([...items, trimmed]);
+  setValue('');
+}
+
+function removeToken(
+  token: string,
+  items: string[],
+  setItems: React.Dispatch<React.SetStateAction<string[]>>
+) {
+  setItems(items.filter((item) => item !== token));
+}
+
+function TokenEditor({
+  label,
+  placeholder,
+  values,
+  inputValue,
+  setInputValue,
+  onAdd,
+  onRemove,
+}: {
+  label: string;
+  placeholder: string;
+  values: string[];
+  inputValue: string;
+  setInputValue: React.Dispatch<React.SetStateAction<string>>;
+  onAdd: () => void;
+  onRemove: (token: string) => void;
+}) {
+  return (
+    <View style={styles.tokenSection}>
+      <Text style={styles.inputLabel}>{label}</Text>
+
+      <View style={styles.tokenInputRow}>
+        <TextInput
+          style={styles.tokenInput}
+          placeholder={placeholder}
+          placeholderTextColor="#B5ADA3"
+          value={inputValue}
+          onChangeText={setInputValue}
+          onSubmitEditing={onAdd}
+          returnKeyType="done"
+        />
+        <TouchableOpacity style={styles.addTokenButton} onPress={onAdd}>
+          <Text style={styles.addTokenButtonText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.tokensWrap}>
+        {values.map((item) => (
+          <View key={item} style={styles.tokenChip}>
+            <Text style={styles.tokenChipText}>{item}</Text>
+            <TouchableOpacity onPress={() => onRemove(item)}>
+              <Text style={styles.tokenRemoveText}>×</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   const [fullName, setFullName] = useState('Övgü Su Afşar');
   const [department, setDepartment] = useState('Computer Engineering');
   const [aboutMe, setAboutMe] = useState('');
+  const [interests, setInterests] = useState(['Frontend', 'React Native']);
+  const [goals, setGoals] = useState(['Find a mobile mentor', 'Improve app architecture']);
+  const [interestInput, setInterestInput] = useState('');
+  const [goalInput, setGoalInput] = useState('');
 
   return (
     <View style={styles.container}>
@@ -117,6 +198,26 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
               multiline
               textAlignVertical="top"
             />
+
+            <TokenEditor
+              label="Interests"
+              placeholder="Add an interest"
+              values={interests}
+              inputValue={interestInput}
+              setInputValue={setInterestInput}
+              onAdd={() => addToken(interestInput, interests, setInterests, setInterestInput)}
+              onRemove={(token) => removeToken(token, interests, setInterests)}
+            />
+
+            <TokenEditor
+              label="Goals"
+              placeholder="Add a goal"
+              values={goals}
+              inputValue={goalInput}
+              setInputValue={setGoalInput}
+              onAdd={() => addToken(goalInput, goals, setGoals, setGoalInput)}
+              onRemove={(token) => removeToken(token, goals, setGoals)}
+            />
           </View>
 
           <TouchableOpacity
@@ -146,6 +247,21 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
     '7+ years iOS dev. Passionate about mobile and mentorship.'
   );
 
+  const [expertise, setExpertise] = useState(['Swift', 'Mobile', 'React Native']);
+  const [mentoringGoals, setMentoringGoals] = useState([
+    'Guide junior developers',
+    'Help with project structure',
+  ]);
+  const [preferredMenteeCriteria, setPreferredMenteeCriteria] = useState([
+    'Motivated',
+    'Consistent',
+    'Open to feedback',
+  ]);
+
+  const [expertiseInput, setExpertiseInput] = useState('');
+  const [goalInput, setGoalInput] = useState('');
+  const [criteriaInput, setCriteriaInput] = useState('');
+
   return (
     <View style={styles.container}>
       <View style={styles.fixedHeader}>
@@ -168,15 +284,11 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
         <Text style={styles.roleText}>Senior iOS Developer · Apple</Text>
 
         <View style={styles.tagsRow}>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>Swift</Text>
-          </View>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>Mobile</Text>
-          </View>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>React Native</Text>
-          </View>
+          {expertise.slice(0, 3).map((item) => (
+            <View key={item} style={styles.tag}>
+              <Text style={styles.tagText}>{item}</Text>
+            </View>
+          ))}
         </View>
       </View>
 
@@ -291,6 +403,47 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             onChangeText={setBio}
             multiline
             textAlignVertical="top"
+          />
+
+          <TokenEditor
+            label="Expertise / Interests"
+            placeholder="Add a skill or interest"
+            values={expertise}
+            inputValue={expertiseInput}
+            setInputValue={setExpertiseInput}
+            onAdd={() => addToken(expertiseInput, expertise, setExpertise, setExpertiseInput)}
+            onRemove={(token) => removeToken(token, expertise, setExpertise)}
+          />
+
+          <TokenEditor
+            label="Mentoring Goals"
+            placeholder="Add a mentoring goal"
+            values={mentoringGoals}
+            inputValue={goalInput}
+            setInputValue={setGoalInput}
+            onAdd={() =>
+              addToken(goalInput, mentoringGoals, setMentoringGoals, setGoalInput)
+            }
+            onRemove={(token) => removeToken(token, mentoringGoals, setMentoringGoals)}
+          />
+
+          <TokenEditor
+            label="Preferred Mentee Criteria"
+            placeholder="Add a preference"
+            values={preferredMenteeCriteria}
+            inputValue={criteriaInput}
+            setInputValue={setCriteriaInput}
+            onAdd={() =>
+              addToken(
+                criteriaInput,
+                preferredMenteeCriteria,
+                setPreferredMenteeCriteria,
+                setCriteriaInput
+              )
+            }
+            onRemove={(token) =>
+              removeToken(token, preferredMenteeCriteria, setPreferredMenteeCriteria)
+            }
           />
         </View>
 
@@ -477,6 +630,8 @@ const styles = StyleSheet.create({
   tagsRow: {
     flexDirection: 'row',
     gap: 10,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   tag: {
     borderWidth: 1.5,
@@ -595,12 +750,72 @@ const styles = StyleSheet.create({
   aboutInput: {
     height: 110,
     paddingTop: 18,
-    marginBottom: 0,
+    marginBottom: 22,
   },
   bigInput: {
     height: 110,
     paddingTop: 18,
-    marginBottom: 0,
+    marginBottom: 22,
+  },
+  tokenSection: {
+    marginBottom: 22,
+  },
+  tokenInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  tokenInput: {
+    flex: 1,
+    height: 56,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    backgroundColor: '#FCFBF8',
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: '#4A4138',
+    marginRight: 10,
+  },
+  addTokenButton: {
+    height: 56,
+    paddingHorizontal: 18,
+    borderRadius: 18,
+    backgroundColor: '#4B7B57',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addTokenButtonText: {
+    color: '#F8F6F2',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  tokensWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tokenChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18,
+    backgroundColor: '#EEF3EE',
+    borderWidth: 1,
+    borderColor: '#D7E8DA',
+  },
+  tokenChipText: {
+    color: '#2F563C',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tokenRemoveText: {
+    color: '#2F563C',
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 8,
+    lineHeight: 18,
   },
   saveButtonMentee: {
     backgroundColor: '#4B7B57',
