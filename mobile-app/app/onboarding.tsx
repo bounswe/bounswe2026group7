@@ -26,7 +26,7 @@ export default function OnboardingScreen() {
         </Text>
 
         <Text style={styles.subtitle}>
-          Connect with mentors who've walked{'\n'}
+          {"Connect with mentors who've walked"}{'\n'}
           your path. Build something{'\n'}
           meaningful together.
         </Text>
