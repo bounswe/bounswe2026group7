@@ -4,8 +4,6 @@ import com.group7.backend.dto.request.UpdateProfileRequest;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
-import com.group7.backend.entity.Mentee;
-import com.group7.backend.entity.Mentor;
 import com.group7.backend.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -92,22 +90,6 @@ public class UserController {
         Long requesterId = (Long) authentication.getCredentials();
         ProfileResponse profile = userService.getProfileById(id, requesterId);
         return ResponseEntity.ok(profile);
-    }
-
-    @PostMapping("/mentors")
-    @Operation(summary = "Create mentor profile")
-    @ApiResponse(responseCode = "200", description = "Mentor created",
-            content = @Content)
-    public Mentor createMentor(@RequestBody Mentor mentor) {
-        return userService.createMentor(mentor);
-    }
-
-    @PostMapping("/mentees")
-    @Operation(summary = "Create mentee profile")
-    @ApiResponse(responseCode = "200", description = "Mentee created",
-            content = @Content)
-    public Mentee createMentee(@RequestBody Mentee mentee) {
-        return userService.createMentee(mentee);
     }
 
     @GetMapping("/mentors")

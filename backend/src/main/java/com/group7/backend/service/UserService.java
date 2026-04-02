@@ -39,14 +39,6 @@ public class UserService {
                 .toList();
     }
 
-    public Mentor createMentor(Mentor mentor) {
-        return mentorRepository.save(mentor);
-    }
-
-    public Mentee createMentee(Mentee mentee) {
-        return menteeRepository.save(mentee);
-    }
-
     @Transactional(readOnly = true)
     public List<MentorResponse> getAllMentors() {
         return mentorRepository.findAll().stream()
