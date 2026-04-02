@@ -12,27 +12,66 @@ const INITIAL_DAYS = [
   { key: 'Sun', label: 'Sun', start: '09:00', end: '18:00', on: false },
 ]
 
-const DURATIONS = ['30 min', '45 min', '60 min', '90 min']
+const DURATIONS = [
+  { label: '30 min', value: 30 },
+  { label: '45 min', value: 45 },
+  { label: '60 min', value: 60 },
+  { label: '90 min', value: 90 },
+]
 
-// TODO: apply user's local timezone when sending to backend
 const USER_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+function DayRow({ day, onToggle, onTimeChange }) {
+  return (
+    <div className={`day-row${day.on ? '' : ' off'}`}>
+      <div className={`day-chip${day.on ? '' : ' off'}`}>{day.label}</div>
+
+      <div className="time-range">
+        {day.on ? (
+          <>
+            <input
+              type="time"
+              className="time-input"
+              value={day.start}
+              onChange={e => onTimeChange(day.key, 'start', e.target.value)}
+              title="Start time"
+            />
+            <span className="time-sep">–</span>
+            <input
+              type="time"
+              className="time-input"
+              value={day.end}
+              onChange={e => onTimeChange(day.key, 'end', e.target.value)}
+              title="End time"
+            />
+          </>
+        ) : (
+          <span className="time-pill off">Not available</span>
+        )}
+      </div>
+
+      <button
+        className={`toggle${day.on ? '' : ' off'}`}
+        onClick={() => onToggle(day.key)}
+        aria-label={`${day.on ? 'Disable' : 'Enable'} ${day.label}`}
+      />
+    </div>
+  )
+}
 
 export default function AvailabilityPage() {
   const [days, setDays] = useState(INITIAL_DAYS)
-  const [duration, setDuration] = useState('60 min')
-  const [saved, setSaved] = useState(false)
-  const [timeError, setTimeError] = useState('')
+  const [duration, setDuration] = useState(60)
+  const [status, setStatus] = useState(null) // null | 'success' | string (error)
 
   function toggleDay(key) {
     setDays(prev => prev.map(d => d.key === key ? { ...d, on: !d.on } : d))
-    setTimeError('')
-    setSaved(false)
+    setStatus(null)
   }
 
   function updateTime(key, field, value) {
     setDays(prev => prev.map(d => d.key === key ? { ...d, [field]: value } : d))
-    setTimeError('')
-    setSaved(false)
+    setStatus(null)
   }
 
   function validate() {
@@ -41,132 +80,89 @@ export default function AvailabilityPage() {
       if (!d.start || !d.end) return `${d.label}: start and end time are required.`
       if (d.start >= d.end) return `${d.label}: end time must be after start time.`
     }
-    return ''
+    if (!days.some(d => d.on)) return 'Please enable at least one day.'
+    return null
   }
 
   function handleSave() {
     const error = validate()
     if (error) {
-      setTimeError(error)
+      setStatus(error)
       return
     }
 
-    const durationMinutes = parseInt(duration)
-    const availability = days
-      .filter(d => d.on)
-      .map(d => ({
-        day: d.key,
-        start: d.start,
-        end: d.end,
-      }))
-
     const payload = {
       timezone: USER_TIMEZONE,
-      sessionDurationMinutes: durationMinutes,
-      availability,
+      sessionDurationMinutes: duration,
+      availability: days
+        .filter(d => d.on)
+        .map(({ key, start, end }) => ({ day: key, start, end })),
     }
 
-    // TODO: send payload to backend API
+    // TODO: POST payload to backend API
     console.log('Availability payload:', JSON.stringify(payload, null, 2))
-    setSaved(true)
+    setStatus('success')
   }
 
   return (
     <MainLayout>
       <div className="page-header">
-        <div><div className="page-title">Edit Availability</div></div>
+        <div>
+          <div className="page-title">Edit Availability</div>
+          <div className="page-sub">Timezone: {USER_TIMEZONE}</div>
+        </div>
         <button className="action-btn" onClick={handleSave}>Save</button>
       </div>
 
-      {saved && (
+      {status === 'success' && (
         <div style={{
           background: 'var(--green-pale)', color: 'var(--green-dark)',
           border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
           padding: '12px 16px', marginBottom: '24px', fontSize: '14px', fontWeight: 500,
         }}>
-          Availability saved successfully.
+          ✓ Availability saved successfully.
         </div>
       )}
-
-      {timeError && (
+      {status && status !== 'success' && (
         <div style={{
           background: 'var(--red-soft)', color: 'var(--red-text)',
           border: '1px solid #f0d0d0', borderRadius: 'var(--radius-sm)',
           padding: '12px 16px', marginBottom: '24px', fontSize: '14px',
         }}>
-          {timeError}
+          {status}
         </div>
       )}
 
       <div className="avail-layout">
         <div className="card">
-          <p style={{ fontSize: '14px', color: 'var(--text-mid)', marginBottom: '4px' }}>
-            Set the days and hours you are available each week.
+          <div className="section-label">Weekly Schedule</div>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
+            Toggle days on or off, then click the time fields to adjust your hours.
           </p>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '24px' }}>
-            Timezone: {USER_TIMEZONE}
-          </p>
-
           {days.map(d => (
-            <div className="day-row" key={d.key}>
-              <div className={`day-chip${d.on ? '' : ' off'}`}>{d.label}</div>
-
-              <div className="time-range" style={{ flex: 1 }}>
-                {d.on ? (
-                  <>
-                    <input
-                      type="time"
-                      value={d.start}
-                      onChange={e => updateTime(d.key, 'start', e.target.value)}
-                      style={{
-                        padding: '8px 12px',
-                        background: 'var(--green-pale)', color: 'var(--green-dark)',
-                        border: '1px solid var(--border)', borderRadius: '8px',
-                        fontSize: '14px', fontWeight: 500,
-                        fontFamily: 'DM Sans, sans-serif', cursor: 'pointer',
-                        outline: 'none',
-                      }}
-                    />
-                    <span style={{ color: 'var(--text-muted)' }}>–</span>
-                    <input
-                      type="time"
-                      value={d.end}
-                      onChange={e => updateTime(d.key, 'end', e.target.value)}
-                      style={{
-                        padding: '8px 12px',
-                        background: 'var(--green-pale)', color: 'var(--green-dark)',
-                        border: '1px solid var(--border)', borderRadius: '8px',
-                        fontSize: '14px', fontWeight: 500,
-                        fontFamily: 'DM Sans, sans-serif', cursor: 'pointer',
-                        outline: 'none',
-                      }}
-                    />
-                  </>
-                ) : (
-                  <span className="time-pill off">Not available</span>
-                )}
-              </div>
-
-              <button
-                className={`toggle${d.on ? '' : ' off'}`}
-                onClick={() => toggleDay(d.key)}
-                aria-label={`Toggle ${d.label}`}
-              />
-            </div>
+            <DayRow
+              key={d.key}
+              day={d}
+              onToggle={toggleDay}
+              onTimeChange={updateTime}
+            />
           ))}
         </div>
 
         <div>
           <div className="card">
             <div className="section-label">Session Duration</div>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Default length per mentoring session.
+            </p>
             <div className="duration-grid">
-              {DURATIONS.map(dur => (
+              {DURATIONS.map(d => (
                 <div
-                  key={dur}
-                  className={`dur-btn${duration === dur ? ' active' : ''}`}
-                  onClick={() => { setDuration(dur); setSaved(false) }}
+                  key={d.value}
+                  className={`dur-btn${duration === d.value ? ' active' : ''}`}
+                  onClick={() => { setDuration(d.value); setStatus(null) }}
                 >
-                  {dur}
+                  {d.label}
                 </div>
               ))}
             </div>
