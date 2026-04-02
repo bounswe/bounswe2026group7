@@ -3,8 +3,18 @@ name: Mobile CI
 on:
   pull_request:
     branches: [main, dev]
+    paths:
+      - 'mobile-app/**'
+      - '.github/workflows/mobile-ci.yml'
   push:
     branches: [main, dev]
+    paths:
+      - 'mobile-app/**'
+      - '.github/workflows/mobile-ci.yml'
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   mobile-ci:
@@ -31,8 +41,14 @@ jobs:
       - name: Expo doctor çalıştır
         run: npx expo-doctor
 
+      - name: Type check çalıştır
+        run: npx tsc --noEmit
+
       - name: Lint çalıştır
         run: npm run lint --if-present
 
-      - name: Test çalıştır
-        run: npm test --if-present
+      - name: Unit test çalıştır
+        run: npm run test:unit --if-present
+
+      - name: Integration test çalıştır
+        run: npm run test:integration --if-present
