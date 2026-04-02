@@ -59,7 +59,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "${FRONTEND_PORT:-5174}:5173"
+      - "${FRONTEND_PORT:-8000}:8000"
     environment:
       VITE_BACKEND_URL: http://backend:8080
     depends_on:
