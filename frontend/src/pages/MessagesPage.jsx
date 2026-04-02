@@ -26,31 +26,41 @@ const CONVERSATIONS = [
   },
 ]
 
+// Historical "me" messages are already read
 const INITIAL_MESSAGES = {
   1: [
     { id: 1, from: 'them', text: "Hey! I've reviewed your React Native project files.", time: '14:22' },
-    { id: 2, from: 'me', text: 'Great, how should we structure the navigation?', time: '14:24' },
+    { id: 2, from: 'me', text: 'Great, how should we structure the navigation?', time: '14:24', status: 'read' },
     {
       id: 3, from: 'them',
       text: "I'd recommend a Stack + Tab navigator combo. Sharing the file.",
       time: '14:27',
       file: { name: 'navigation-structure.pdf', size: '234 KB · PDF' },
     },
-    { id: 4, from: 'me', text: "Thanks, I'll check it out!", time: '14:28' },
+    { id: 4, from: 'me', text: "Thanks, I'll check it out!", time: '14:28', status: 'read' },
   ],
   2: [
     { id: 1, from: 'them', text: 'Thanks for the session today!', time: '11:05' },
-    { id: 2, from: 'me', text: 'Glad it was helpful! Keep working on those tasks.', time: '11:07' },
+    { id: 2, from: 'me', text: 'Glad it was helpful! Keep working on those tasks.', time: '11:07', status: 'read' },
   ],
   3: [
     { id: 1, from: 'them', text: 'Check out this paper on transformers', time: '09:30' },
-    { id: 2, from: 'me', text: 'Will do, thanks!', time: '09:45' },
+    { id: 2, from: 'me', text: 'Will do, thanks!', time: '09:45', status: 'read' },
   ],
 }
 
 function getTime() {
   const now = new Date()
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+}
+
+function StatusTick({ status }) {
+  if (!status) return null
+  if (status === 'sending') return <span className="msg-status">✓</span>
+  if (status === 'sent')    return <span className="msg-status">✓</span>
+  if (status === 'delivered') return <span className="msg-status">✓✓</span>
+  if (status === 'read')    return <span className="msg-status read">✓✓</span>
+  return null
 }
 
 export default function MessagesPage() {
@@ -76,7 +86,6 @@ export default function MessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [currentMessages])
 
-  // Restore cursor position after React re-renders the textarea
   useEffect(() => {
     if (nextCursorRef.current !== null && textareaRef.current) {
       const pos = nextCursorRef.current
@@ -84,19 +93,30 @@ export default function MessagesPage() {
       textareaRef.current.selectionEnd = pos
       nextCursorRef.current = null
     }
-    // Auto-resize on every input change
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
       textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'
     }
   }, [input])
 
+  function updateStatus(convId, msgId, status) {
+    setMessages(prev => ({
+      ...prev,
+      [convId]: prev[convId].map(m => m.id === msgId ? { ...m, status } : m),
+    }))
+  }
+
   function sendMessage() {
     const text = input.trim()
     if (!text) return
-    const newMsg = { id: Date.now(), from: 'me', text, time: getTime() }
-    setMessages(prev => ({ ...prev, [activeConv]: [...(prev[activeConv] || []), newMsg] }))
+    const msgId = Date.now()
+    const convId = activeConv
+    const newMsg = { id: msgId, from: 'me', text, time: getTime(), status: 'sending' }
+    setMessages(prev => ({ ...prev, [convId]: [...(prev[convId] || []), newMsg] }))
     setInput('')
+
+    setTimeout(() => updateStatus(convId, msgId, 'sent'), 400)
+    setTimeout(() => updateStatus(convId, msgId, 'delivered'), 1200)
   }
 
   function handleKeyDown(e) {
@@ -115,15 +135,21 @@ export default function MessagesPage() {
   function handleFileChange(e) {
     const file = e.target.files[0]
     if (!file) return
+    const msgId = Date.now()
+    const convId = activeConv
     const newMsg = {
-      id: Date.now(),
+      id: msgId,
       from: 'me',
       text: '',
       time: getTime(),
+      status: 'sending',
       file: { name: file.name, size: `${(file.size / 1024).toFixed(0)} KB · ${file.type || 'file'}` },
     }
-    setMessages(prev => ({ ...prev, [activeConv]: [...(prev[activeConv] || []), newMsg] }))
+    setMessages(prev => ({ ...prev, [convId]: [...(prev[convId] || []), newMsg] }))
     e.target.value = ''
+
+    setTimeout(() => updateStatus(convId, msgId, 'sent'), 400)
+    setTimeout(() => updateStatus(convId, msgId, 'delivered'), 1200)
   }
 
   return (
@@ -133,7 +159,6 @@ export default function MessagesPage() {
       </div>
       <div className="messages-layout">
 
-        {/* Conversation list — #121 */}
         <div className="msg-list">
           <div className="msg-list-header">Conversations</div>
           {CONVERSATIONS.map(c => (
@@ -154,7 +179,6 @@ export default function MessagesPage() {
           ))}
         </div>
 
-        {/* Chat area — #120, #121, #122 */}
         <div className="chat-area">
           <div className="chat-header">
             <div className="chat-header-avatar" style={active.avatarStyle}>{active.initials}</div>
@@ -185,7 +209,10 @@ export default function MessagesPage() {
                       </div>
                     </div>
                   )}
-                  <div className="bubble-time">{msg.time}</div>
+                  <div className="bubble-time">
+                    {msg.time}
+                    {msg.from === 'me' && <StatusTick status={msg.status} />}
+                  </div>
                 </div>
               </div>
             ))}
@@ -193,7 +220,6 @@ export default function MessagesPage() {
           </div>
 
           <div className="chat-input-bar">
-            {/* Hidden file input — #122 */}
             <input
               type="file"
               ref={fileInputRef}

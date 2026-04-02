@@ -566,7 +566,9 @@
 }
 .bubble.them { background: #f3f5f4; color: var(--text-dark); border-bottom-left-radius: 4px; }
 .bubble.me { background: var(--green-mid); color: #fff; border-bottom-right-radius: 4px; }
-.bubble-time { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-align: center; }
+.bubble-time { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 3px; }
+.msg-status { font-size: 11px; color: var(--text-muted); letter-spacing: -2px; }
+.msg-status.read { color: var(--green-mid); }
 .file-bubble {
   display: flex; align-items: center; gap: 10px;
   background: #eef4ff; border: 1px solid #c5d8f5;
