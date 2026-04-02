@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { loginUser } from '../services/api'
 import { useAuth } from '../context/AuthContext'
-import '../styles/auth.css'
+import '../styles/main.css'
 
 function validate(fields) {
   const errors = {}
@@ -45,7 +45,7 @@ export default function LoginPage() {
     try {
       const data = await loginUser(fields)
       login(data.sessionToken, data.role, data.userId)
-      navigate('/dashboard', { replace: true })
+      navigate('/home', { replace: true })
     } catch (err) {
       setServerError(err.message || 'Invalid email or password.')
     } finally {
@@ -54,61 +54,51 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-page">
+    <div className="auth-screen">
       <div className="auth-card">
-        <h1>Sign in</h1>
+        <div className="auth-title">Welcome<br /><em>back.</em></div>
+        <div className="auth-sub">Sign in to continue your journey</div>
 
         {registered && !serverError && (
-          <div style={{ background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.4)', color: '#16a34a', borderRadius: '6px', padding: '10px 14px', fontSize: '14px', marginBottom: '16px' }}>
-            Account created! Please sign in.
-          </div>
+          <div className="auth-success">Account created! Please sign in.</div>
+        )}
+        {serverError && (
+          <div className="auth-error">{serverError}</div>
         )}
 
-        {serverError && <div className="server-error">{serverError}</div>}
-
         <form onSubmit={handleSubmit} noValidate>
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={fields.email}
-              onChange={e => handleChange('email', e.target.value)}
-              aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? 'email-error' : undefined}
-            />
-            {errors.email && (
-              <span id="email-error" className="field-error" role="alert">
-                {errors.email}
-              </span>
-            )}
-          </div>
+          <label className="field-label">Email</label>
+          <input
+            type="email"
+            className="auth-input"
+            value={fields.email}
+            onChange={e => handleChange('email', e.target.value)}
+            placeholder="you@example.com"
+            aria-invalid={!!errors.email}
+          />
+          {errors.email && <div className="field-error-msg">{errors.email}</div>}
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={fields.password}
-              onChange={e => handleChange('password', e.target.value)}
-              aria-invalid={!!errors.password}
-              aria-describedby={errors.password ? 'password-error' : undefined}
-            />
-            {errors.password && (
-              <span id="password-error" className="field-error" role="alert">
-                {errors.password}
-              </span>
-            )}
-          </div>
+          <label className="field-label">Password</label>
+          <input
+            type="password"
+            className="auth-input"
+            value={fields.password}
+            onChange={e => handleChange('password', e.target.value)}
+            placeholder="••••••••"
+            aria-invalid={!!errors.password}
+          />
+          {errors.password && <div className="field-error-msg">{errors.password}</div>}
 
-          <button type="submit" className="auth-submit" disabled={isLoading}>
-            {isLoading ? 'Signing in...' : 'Sign in'}
+          <div className="forgot-link">Forgot password?</div>
+
+          <button type="submit" className="auth-btn" disabled={isLoading}>
+            {isLoading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
-        <p className="auth-link">
-          Don&apos;t have an account? <Link to="/register">Create one</Link>
-        </p>
+        <div className="auth-footer">
+          Don&apos;t have an account? <Link to="/register">Sign up</Link>
+        </div>
       </div>
     </div>
   )

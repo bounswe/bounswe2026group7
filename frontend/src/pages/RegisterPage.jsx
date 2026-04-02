@@ -1,23 +1,17 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { registerUser } from '../services/api'
-import '../styles/auth.css'
+import '../styles/main.css'
 
 function validate(fields) {
   const errors = {}
-
-  if (!fields.firstName.trim()) {
-    errors.firstName = 'First name is required.'
-  }
-  if (!fields.lastName.trim()) {
-    errors.lastName = 'Last name is required.'
-  }
+  if (!fields.firstName.trim()) errors.firstName = 'First name is required.'
+  if (!fields.lastName.trim()) errors.lastName = 'Last name is required.'
   if (!fields.email.trim()) {
     errors.email = 'Email is required.'
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email)) {
     errors.email = 'Enter a valid email address.'
   }
-
   if (!fields.password) {
     errors.password = 'Password is required.'
   } else if (fields.password.length < 8) {
@@ -29,7 +23,6 @@ function validate(fields) {
   } else if (!/[0-9]/.test(fields.password)) {
     errors.password = 'Password must contain at least one number.'
   }
-
   return errors
 }
 
@@ -71,109 +64,84 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="auth-page">
+    <div className="auth-screen">
       <div className="auth-card">
-        <h1>Create account</h1>
+        <div className="auth-title">Create Account</div>
+        <div className="auth-sub">Join the mentorship community</div>
 
-        {serverError && <div className="server-error">{serverError}</div>}
+        {serverError && <div className="auth-error">{serverError}</div>}
 
         <form onSubmit={handleSubmit} noValidate>
-          <div className="form-group">
-            <label htmlFor="firstName">First name</label>
-            <input
-              id="firstName"
-              type="text"
-              value={fields.firstName}
-              onChange={e => handleChange('firstName', e.target.value)}
-              aria-invalid={!!errors.firstName}
-              aria-describedby={errors.firstName ? 'firstName-error' : undefined}
-            />
-            {errors.firstName && (
-              <span id="firstName-error" className="field-error" role="alert">
-                {errors.firstName}
-              </span>
-            )}
+          <label className="field-label">First Name</label>
+          <input
+            type="text"
+            className="auth-input"
+            value={fields.firstName}
+            onChange={e => handleChange('firstName', e.target.value)}
+            placeholder="First name"
+            aria-invalid={!!errors.firstName}
+          />
+          {errors.firstName && <div className="field-error-msg">{errors.firstName}</div>}
+
+          <label className="field-label">Last Name</label>
+          <input
+            type="text"
+            className="auth-input"
+            value={fields.lastName}
+            onChange={e => handleChange('lastName', e.target.value)}
+            placeholder="Last name"
+            aria-invalid={!!errors.lastName}
+          />
+          {errors.lastName && <div className="field-error-msg">{errors.lastName}</div>}
+
+          <label className="field-label">Email</label>
+          <input
+            type="email"
+            className="auth-input"
+            value={fields.email}
+            onChange={e => handleChange('email', e.target.value)}
+            placeholder="you@example.com"
+            aria-invalid={!!errors.email}
+          />
+          {errors.email && <div className="field-error-msg">{errors.email}</div>}
+
+          <label className="field-label">Password</label>
+          <input
+            type="password"
+            className="auth-input"
+            value={fields.password}
+            onChange={e => handleChange('password', e.target.value)}
+            placeholder="••••••••"
+            aria-invalid={!!errors.password}
+          />
+          {errors.password && <div className="field-error-msg">{errors.password}</div>}
+
+          <label className="field-label">I am a</label>
+          <div className="role-row">
+            <button
+              type="button"
+              className={`role-btn${!fields.isMentor ? ' active' : ''}`}
+              onClick={() => handleChange('isMentor', false)}
+            >
+              Mentee
+            </button>
+            <button
+              type="button"
+              className={`role-btn${fields.isMentor ? ' active' : ''}`}
+              onClick={() => handleChange('isMentor', true)}
+            >
+              Mentor
+            </button>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="lastName">Last name</label>
-            <input
-              id="lastName"
-              type="text"
-              value={fields.lastName}
-              onChange={e => handleChange('lastName', e.target.value)}
-              aria-invalid={!!errors.lastName}
-              aria-describedby={errors.lastName ? 'lastName-error' : undefined}
-            />
-            {errors.lastName && (
-              <span id="lastName-error" className="field-error" role="alert">
-                {errors.lastName}
-              </span>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={fields.email}
-              onChange={e => handleChange('email', e.target.value)}
-              aria-invalid={!!errors.email}
-              aria-describedby={errors.email ? 'email-error' : undefined}
-            />
-            {errors.email && (
-              <span id="email-error" className="field-error" role="alert">
-                {errors.email}
-              </span>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={fields.password}
-              onChange={e => handleChange('password', e.target.value)}
-              aria-invalid={!!errors.password}
-              aria-describedby={errors.password ? 'password-error' : undefined}
-            />
-            {errors.password && (
-              <span id="password-error" className="field-error" role="alert">
-                {errors.password}
-              </span>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label>I am a</label>
-            <div className="role-toggle">
-              <button
-                type="button"
-                className={!fields.isMentor ? 'active' : ''}
-                onClick={() => handleChange('isMentor', false)}
-              >
-                Mentee
-              </button>
-              <button
-                type="button"
-                className={fields.isMentor ? 'active' : ''}
-                onClick={() => handleChange('isMentor', true)}
-              >
-                Mentor
-              </button>
-            </div>
-          </div>
-
-          <button type="submit" className="auth-submit" disabled={isLoading}>
-            {isLoading ? 'Creating account...' : 'Create account'}
+          <button type="submit" className="auth-btn" disabled={isLoading}>
+            {isLoading ? 'Creating account...' : 'Create Account'}
           </button>
         </form>
 
-        <p className="auth-link">
+        <div className="auth-footer">
           Already have an account? <Link to="/login">Sign in</Link>
-        </p>
+        </div>
       </div>
     </div>
   )
