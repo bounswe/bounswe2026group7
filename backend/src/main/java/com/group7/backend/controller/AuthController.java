@@ -2,6 +2,7 @@ package com.group7.backend.controller;
 
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
+import com.group7.backend.dto.request.ResetPasswordRequest;
 import com.group7.backend.dto.response.AuthResponse;
 import com.group7.backend.dto.response.UserResponse;
 import com.group7.backend.service.AuthService;
@@ -75,5 +76,37 @@ public class AuthController {
         String email = body.get("email");
         authService.resendVerification(email);
         return ResponseEntity.ok(Map.of("message", "Verification email sent. Please check your inbox."));
+    }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Request password reset", description = "Sends a password reset email. Always returns 200 to prevent email enumeration. Rate limited to 5 per hour.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "If the email is registered, a reset link has been sent", content = @Content)
+    })
+    public ResponseEntity<Map<String, String>> forgotPassword(@RequestBody Map<String, String> body) {
+        authService.requestPasswordReset(body.get("email"));
+        return ResponseEntity.ok(Map.of("message", "If that email is registered, a password reset link has been sent."));
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Reset password", description = "Sets a new password using the token from the reset email.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Password reset successfully", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Invalid, expired, or already used token", content = @Content)
+    })
+    public ResponseEntity<Map<String, String>> resetPassword(@RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request.getToken(), request.getNewPassword());
+        return ResponseEntity.ok(Map.of("message", "Password reset successfully. You can now log in."));
+    }
+
+    @GetMapping("/validate-reset-token")
+    @Operation(summary = "Validate reset token", description = "Checks whether a password reset token is still valid.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Token is valid", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Token is invalid or expired", content = @Content)
+    })
+    public ResponseEntity<Map<String, String>> validateResetToken(@RequestParam String token) {
+        authService.validateResetToken(token);
+        return ResponseEntity.ok(Map.of("message", "Token is valid."));
     }
 }

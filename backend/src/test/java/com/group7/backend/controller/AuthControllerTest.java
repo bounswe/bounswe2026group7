@@ -17,6 +17,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.group7.backend.dto.request.ResetPasswordRequest;
+
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -241,5 +243,78 @@ class AuthControllerTest {
                 mockMvc.perform(post("/api/auth/resend-verification")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("email", "jane@example.com")))));
+    }
+
+    // --- Forgot Password Endpoint ---
+
+    @Test
+    void forgotPasswordAlwaysReturns200() throws Exception {
+        doNothing().when(authService).requestPasswordReset(anyString());
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", "jane@example.com"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").isString());
+    }
+
+    @Test
+    void forgotPasswordWithUnknownEmailStillReturns200() throws Exception {
+        doNothing().when(authService).requestPasswordReset("unknown@example.com");
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("email", "unknown@example.com"))))
+                .andExpect(status().isOk());
+    }
+
+    // --- Reset Password Endpoint ---
+
+    @Test
+    void resetPasswordReturns200() throws Exception {
+        doNothing().when(authService).resetPassword(anyString(), anyString());
+
+        ResetPasswordRequest request = new ResetPasswordRequest(null, "valid-token", "NewPass1");
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Password reset successfully. You can now log in."));
+    }
+
+    @Test
+    void resetPasswordWithInvalidTokenThrows() throws Exception {
+        doThrow(new RuntimeException("Invalid reset token"))
+                .when(authService).resetPassword("bad-token", "NewPass1");
+
+        ResetPasswordRequest request = new ResetPasswordRequest(null, "bad-token", "NewPass1");
+
+        assertThrows(Exception.class, () ->
+                mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))));
+    }
+
+    // --- Validate Reset Token Endpoint ---
+
+    @Test
+    void validateResetTokenReturns200() throws Exception {
+        doNothing().when(authService).validateResetToken("valid-token");
+
+        mockMvc.perform(get("/api/auth/validate-reset-token")
+                        .param("token", "valid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Token is valid."));
+    }
+
+    @Test
+    void validateResetTokenWithExpiredTokenThrows() throws Exception {
+        doThrow(new RuntimeException("Reset token has expired. Please request a new one."))
+                .when(authService).validateResetToken("expired-token");
+
+        assertThrows(Exception.class, () ->
+                mockMvc.perform(get("/api/auth/validate-reset-token")
+                        .param("token", "expired-token")));
     }
 }
