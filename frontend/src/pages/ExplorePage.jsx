@@ -22,7 +22,7 @@ const MENTORS = [
     initials: 'AY',
     name: 'Ayşe Yıldız',
     sub: 'ML Engineer · Google',
-    tags: ['Python', 'ML'],
+    tags: ['Python', 'AI/ML'],
     rating: '4.7',
     reviews: 18,
     stars: 5,
