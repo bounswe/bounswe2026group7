@@ -2,6 +2,8 @@ package com.group7.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
 import java.util.List;
 
@@ -23,6 +25,7 @@ public class Mentor extends User {
     @ElementCollection
     @CollectionTable(name = "mentor_interests", joinColumns = @JoinColumn(name = "mentor_id"))
     @Column(name = "interest")
+    @Fetch(FetchMode.SUBSELECT)
     private List<String> interests;
 
     @Column(nullable = false)
@@ -34,6 +37,7 @@ public class Mentor extends User {
     @ElementCollection
     @CollectionTable(name = "mentor_preferred_mentee_skills", joinColumns = @JoinColumn(name = "mentor_id"))
     @Column(name = "skill")
+    @Fetch(FetchMode.SUBSELECT)
     private List<String> preferredMenteeSkills;
 
     private String preferredMenteeMajor;
