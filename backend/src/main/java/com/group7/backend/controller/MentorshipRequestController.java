@@ -1,8 +1,11 @@
 package com.group7.backend.controller;
 
+import com.group7.backend.dto.request.AcceptRequestRequest;
 import com.group7.backend.dto.request.MentorshipRequestCreateRequest;
 import com.group7.backend.dto.response.MentorshipRequestResponse;
+import com.group7.backend.dto.response.MentorshipResponse;
 import com.group7.backend.service.MentorshipRequestService;
+import com.group7.backend.service.MentorshipService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -26,9 +29,12 @@ import org.springframework.web.bind.annotation.*;
 public class MentorshipRequestController {
 
     private final MentorshipRequestService mentorshipRequestService;
+    private final MentorshipService mentorshipService;
 
-    public MentorshipRequestController(MentorshipRequestService mentorshipRequestService) {
+    public MentorshipRequestController(MentorshipRequestService mentorshipRequestService,
+                                       MentorshipService mentorshipService) {
         this.mentorshipRequestService = mentorshipRequestService;
+        this.mentorshipService = mentorshipService;
     }
 
     @PostMapping
@@ -92,5 +98,46 @@ public class MentorshipRequestController {
         Long mentorId = (Long) authentication.getCredentials();
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(mentorshipRequestService.getReceivedRequests(mentorId, pageable));
+    }
+
+    @PutMapping("/{id}/accept")
+    @PreAuthorize("hasRole('MENTOR')")
+    @Operation(
+            summary = "Accept a mentorship request",
+            description = "Accepts a pending request and creates an active mentorship with the specified duration. "
+                    + "Sets the mentee's active mentor, increments the mentor's mentee count, "
+                    + "and cancels all other pending requests from this mentee."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Request accepted, mentorship created",
+                    content = @Content(schema = @Schema(implementation = MentorshipResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Request not found", content = @Content),
+            @ApiResponse(responseCode = "409", description = "Business rule violation", content = @Content)
+    })
+    public ResponseEntity<MentorshipResponse> acceptRequest(
+            @PathVariable Long id,
+            @Valid @RequestBody AcceptRequestRequest request,
+            Authentication authentication) {
+        Long mentorId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(mentorshipService.acceptRequest(mentorId, id, request));
+    }
+
+    @PutMapping("/{id}/reject")
+    @PreAuthorize("hasRole('MENTOR')")
+    @Operation(
+            summary = "Reject a mentorship request",
+            description = "Rejects a pending mentorship request."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Request rejected"),
+            @ApiResponse(responseCode = "404", description = "Request not found", content = @Content),
+            @ApiResponse(responseCode = "409", description = "Request is not pending", content = @Content)
+    })
+    public ResponseEntity<Void> rejectRequest(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long mentorId = (Long) authentication.getCredentials();
+        mentorshipService.rejectRequest(mentorId, id);
+        return ResponseEntity.ok().build();
     }
 }
