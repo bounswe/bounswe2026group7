@@ -89,7 +89,7 @@ export default function LoginPage() {
           />
           {errors.password && <div className="field-error-msg">{errors.password}</div>}
 
-          <div className="forgot-link">Forgot password?</div>
+          <Link to="/forgot-password" className="forgot-link">Forgot password?</Link>
 
           <button type="submit" className="auth-btn" disabled={isLoading}>
             {isLoading ? 'Signing in...' : 'Sign In'}
