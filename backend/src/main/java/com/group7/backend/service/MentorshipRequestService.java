@@ -48,7 +48,7 @@ public class MentorshipRequestService {
             throw new MentorshipRequestException("Mentor has reached maximum mentee capacity");
         }
 
-        if (mentorshipRequestRepository.existsByMenteeIdAndMentorIdAndStatus(
+        if (mentorshipRequestRepository.existsByMentee_IdAndMentor_IdAndStatus(
                 menteeId, dto.getMentorId(), MentorshipRequestStatus.PENDING)) {
             throw new MentorshipRequestException("You already have a pending request to this mentor");
         }

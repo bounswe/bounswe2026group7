@@ -80,7 +80,7 @@ class MentorshipRequestServiceTest {
     void createRequestSuccess() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findById(2L)).thenReturn(Optional.of(mentor));
-        when(mentorshipRequestRepository.existsByMenteeIdAndMentorIdAndStatus(
+        when(mentorshipRequestRepository.existsByMentee_IdAndMentor_IdAndStatus(
                 1L, 2L, MentorshipRequestStatus.PENDING)).thenReturn(false);
         when(mentorshipRequestRepository.save(any(MentorshipRequest.class))).thenAnswer(invocation -> {
             MentorshipRequest req = invocation.getArgument(0);
@@ -104,7 +104,7 @@ class MentorshipRequestServiceTest {
     void createRequestSavesCorrectEntity() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findById(2L)).thenReturn(Optional.of(mentor));
-        when(mentorshipRequestRepository.existsByMenteeIdAndMentorIdAndStatus(
+        when(mentorshipRequestRepository.existsByMentee_IdAndMentor_IdAndStatus(
                 1L, 2L, MentorshipRequestStatus.PENDING)).thenReturn(false);
         when(mentorshipRequestRepository.save(any(MentorshipRequest.class))).thenAnswer(invocation -> {
             MentorshipRequest req = invocation.getArgument(0);
@@ -129,7 +129,7 @@ class MentorshipRequestServiceTest {
         createRequest.setMessage(null);
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findById(2L)).thenReturn(Optional.of(mentor));
-        when(mentorshipRequestRepository.existsByMenteeIdAndMentorIdAndStatus(
+        when(mentorshipRequestRepository.existsByMentee_IdAndMentor_IdAndStatus(
                 1L, 2L, MentorshipRequestStatus.PENDING)).thenReturn(false);
         when(mentorshipRequestRepository.save(any(MentorshipRequest.class))).thenAnswer(invocation -> {
             MentorshipRequest req = invocation.getArgument(0);
@@ -191,7 +191,7 @@ class MentorshipRequestServiceTest {
     void createRequestDuplicatePending() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findById(2L)).thenReturn(Optional.of(mentor));
-        when(mentorshipRequestRepository.existsByMenteeIdAndMentorIdAndStatus(
+        when(mentorshipRequestRepository.existsByMentee_IdAndMentor_IdAndStatus(
                 1L, 2L, MentorshipRequestStatus.PENDING)).thenReturn(true);
 
         assertThatThrownBy(() -> mentorshipRequestService.createRequest(1L, createRequest))
@@ -203,7 +203,7 @@ class MentorshipRequestServiceTest {
     void createRequestConcurrentDuplicateCaughtByDb() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findById(2L)).thenReturn(Optional.of(mentor));
-        when(mentorshipRequestRepository.existsByMenteeIdAndMentorIdAndStatus(
+        when(mentorshipRequestRepository.existsByMentee_IdAndMentor_IdAndStatus(
                 1L, 2L, MentorshipRequestStatus.PENDING)).thenReturn(false);
         when(mentorshipRequestRepository.save(any(MentorshipRequest.class)))
                 .thenThrow(new DataIntegrityViolationException("unique constraint violated"));
