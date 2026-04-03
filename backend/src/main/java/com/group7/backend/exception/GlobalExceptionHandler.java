@@ -27,6 +27,11 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
+    @ExceptionHandler(OverlappingSlotException.class)
+    public ResponseEntity<Map<String, String>> handleOverlappingSlot(OverlappingSlotException ex) {
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
+    }
+
     @ExceptionHandler(AuthenticationFailedException.class)
     public ResponseEntity<Map<String, String>> handleAuthenticationFailed(AuthenticationFailedException ex) {
         return buildErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
