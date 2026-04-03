@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
@@ -37,9 +38,14 @@ public class AuthController {
                     content = @Content(schema = @Schema(implementation = UserResponse.class))),
             @ApiResponse(responseCode = "400", description = "Validation error", content = @Content)
     })
-    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
-        UserResponse response = authService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+        try {
+            UserResponse response = authService.register(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (ResponseStatusException ex) {
+            return ResponseEntity.status(ex.getStatusCode())
+                    .body(Map.of("error", ex.getStatusCode().toString(), "message", ex.getReason()));
+        }
     }
 
     @PostMapping("/login")
@@ -50,9 +56,14 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "Invalid credentials", content = @Content),
             @ApiResponse(responseCode = "403", description = "Email not verified", content = @Content)
     })
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
-        AuthResponse response = authService.authenticate(request);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        try {
+            AuthResponse response = authService.authenticate(request);
+            return ResponseEntity.ok(response);
+        } catch (ResponseStatusException ex) {
+            return ResponseEntity.status(ex.getStatusCode())
+                    .body(Map.of("error", "Unauthorized", "message", ex.getReason()));
+        }
     }
 
     @GetMapping("/verify-email")
@@ -61,9 +72,14 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Email verified successfully", content = @Content),
             @ApiResponse(responseCode = "400", description = "Invalid, expired, or already used token", content = @Content)
     })
-    public ResponseEntity<Map<String, String>> verifyEmail(@RequestParam String token) {
-        authService.verifyEmail(token);
-        return ResponseEntity.ok(Map.of("message", "Email verified successfully. You can now log in."));
+    public ResponseEntity<?> verifyEmail(@RequestParam String token) {
+        try {
+            authService.verifyEmail(token);
+            return ResponseEntity.ok(Map.of("message", "Email verified successfully. You can now log in."));
+        } catch (ResponseStatusException ex) {
+            return ResponseEntity.status(ex.getStatusCode())
+                    .body(Map.of("error", ex.getStatusCode().toString(), "message", ex.getReason()));
+        }
     }
 
     @PostMapping("/resend-verification")
@@ -72,10 +88,15 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Verification email sent", content = @Content),
             @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content)
     })
-    public ResponseEntity<Map<String, String>> resendVerification(@RequestBody Map<String, String> body) {
-        String email = body.get("email");
-        authService.resendVerification(email);
-        return ResponseEntity.ok(Map.of("message", "Verification email sent. Please check your inbox."));
+    public ResponseEntity<?> resendVerification(@RequestBody Map<String, String> body) {
+        try {
+            String email = body.get("email");
+            authService.resendVerification(email);
+            return ResponseEntity.ok(Map.of("message", "Verification email sent. Please check your inbox."));
+        } catch (ResponseStatusException ex) {
+            return ResponseEntity.status(ex.getStatusCode())
+                    .body(Map.of("error", ex.getStatusCode().toString(), "message", ex.getReason()));
+        }
     }
 
     @PostMapping("/forgot-password")
@@ -94,9 +115,14 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Password reset successfully", content = @Content),
             @ApiResponse(responseCode = "400", description = "Invalid, expired, or already used token", content = @Content)
     })
-    public ResponseEntity<Map<String, String>> resetPassword(@RequestBody ResetPasswordRequest request) {
-        authService.resetPassword(request.getToken(), request.getNewPassword());
-        return ResponseEntity.ok(Map.of("message", "Password reset successfully. You can now log in."));
+    public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest request) {
+        try {
+            authService.resetPassword(request.getToken(), request.getNewPassword());
+            return ResponseEntity.ok(Map.of("message", "Password reset successfully. You can now log in."));
+        } catch (ResponseStatusException ex) {
+            return ResponseEntity.status(ex.getStatusCode())
+                    .body(Map.of("error", ex.getStatusCode().toString(), "message", ex.getReason()));
+        }
     }
 
     @GetMapping("/validate-reset-token")
@@ -105,8 +131,13 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Token is valid", content = @Content),
             @ApiResponse(responseCode = "400", description = "Token is invalid or expired", content = @Content)
     })
-    public ResponseEntity<Map<String, String>> validateResetToken(@RequestParam String token) {
-        authService.validateResetToken(token);
-        return ResponseEntity.ok(Map.of("message", "Token is valid."));
+    public ResponseEntity<?> validateResetToken(@RequestParam String token) {
+        try {
+            authService.validateResetToken(token);
+            return ResponseEntity.ok(Map.of("message", "Token is valid."));
+        } catch (ResponseStatusException ex) {
+            return ResponseEntity.status(ex.getStatusCode())
+                    .body(Map.of("error", ex.getStatusCode().toString(), "message", ex.getReason()));
+        }
     }
 }

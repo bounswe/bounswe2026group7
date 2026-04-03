@@ -15,9 +15,11 @@ import com.group7.backend.repository.VerificationTokenRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -63,7 +65,7 @@ public class AuthService {
     @Transactional
     public UserResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already in use");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already in use");
         }
 
         User user;
@@ -109,14 +111,14 @@ public class AuthService {
 
     public AuthResponse authenticate(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Invalid email or password");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
         if (!Boolean.TRUE.equals(user.getIsEmailVerified())) {
-            throw new RuntimeException("Email not verified. Please check your inbox.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Email not verified. Please check your inbox.");
         }
 
         String role = (user instanceof Mentor) ? "MENTOR" : "MENTEE";
@@ -128,14 +130,14 @@ public class AuthService {
     @Transactional
     public void verifyEmail(String token) {
         VerificationToken verificationToken = verificationTokenRepository.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid verification token"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid verification token"));
 
         if (Boolean.TRUE.equals(verificationToken.getUsed())) {
-            throw new RuntimeException("Verification token already used");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verification token already used");
         }
 
         if (verificationToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Verification token has expired. Please request a new one.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Verification token has expired. Please request a new one.");
         }
 
         User user = verificationToken.getUser();
@@ -149,17 +151,17 @@ public class AuthService {
     @Transactional
     public void resendVerification(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("No account found with that email"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "No account found with that email"));
 
         if (Boolean.TRUE.equals(user.getIsEmailVerified())) {
-            throw new RuntimeException("Email is already verified");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email is already verified");
         }
 
         long recentCount = verificationTokenRepository.countByUserIdAndCreatedAtAfter(
                 user.getId(), LocalDateTime.now().minusHours(1));
 
         if (recentCount >= resendMaxPerHour) {
-            throw new RuntimeException("Too many resend requests. Please try again later.");
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many resend requests. Please try again later.");
         }
 
         String token = createVerificationToken(user);
@@ -173,7 +175,7 @@ public class AuthService {
                     user.getId(), LocalDateTime.now().minusHours(1));
 
             if (recentCount >= resetMaxRequestsPerHour) {
-                throw new RuntimeException("Too many password reset requests. Please try again later.");
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many password reset requests. Please try again later.");
             }
 
             passwordResetTokenRepository.deleteByUserIdAndUsedFalse(user.getId());
@@ -194,14 +196,14 @@ public class AuthService {
     @Transactional
     public void resetPassword(String token, String newPassword) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid reset token"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reset token"));
 
         if (Boolean.TRUE.equals(resetToken.getUsed())) {
-            throw new RuntimeException("Reset token already used");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reset token already used");
         }
 
         if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Reset token has expired. Please request a new one.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reset token has expired. Please request a new one.");
         }
 
         User user = resetToken.getUser();
@@ -214,14 +216,14 @@ public class AuthService {
 
     public void validateResetToken(String token) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid reset token"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reset token"));
 
         if (Boolean.TRUE.equals(resetToken.getUsed())) {
-            throw new RuntimeException("Reset token already used");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reset token already used");
         }
 
         if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Reset token has expired. Please request a new one.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reset token has expired. Please request a new one.");
         }
     }
 
