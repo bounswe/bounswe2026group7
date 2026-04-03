@@ -1,5 +1,6 @@
 package com.group7.backend.service;
 
+import com.group7.backend.dto.response.MenteeCandidateResponse;
 import com.group7.backend.dto.response.MentorMatchResponse;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
@@ -159,7 +160,7 @@ class MatchingServiceTest {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
 
         assertThatThrownBy(() -> matchingService.getTopMentors(1L, null))
-                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .isInstanceOf(com.group7.backend.exception.MatchingNotAllowedException.class)
                 .hasMessageContaining("active mentor");
     }
 
@@ -239,5 +240,354 @@ class MatchingServiceTest {
         List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
 
         assertThat(result.get(0).getMatchScore()).isGreaterThanOrEqualTo(result.get(1).getMatchScore());
+    }
+
+    // ── Candidate mentees: preference matching ──────────────────────────────
+
+    @Test
+    void candidateMenteesMatchesByInterest() {
+        assertThat(matchingService.matchesMentorPreferences(mentor, mentee)).isTrue();
+    }
+
+    @Test
+    void candidateMenteesMatchesBySkill() {
+        Mentor m = new Mentor();
+        m.setPreferredMenteeSkills(List.of("Python"));
+
+        Mentee me = new Mentee();
+        me.setSkills(List.of("Python"));
+
+        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    @Test
+    void candidateMenteesMatchesByPreferredMajor() {
+        Mentor m = new Mentor();
+        m.setPreferredMenteeMajor("Computer Science");
+
+        Mentee me = new Mentee();
+        me.setMajor("Computer Science");
+
+        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    @Test
+    void candidateMenteesMatchesByField() {
+        Mentor m = new Mentor();
+        m.setField("Computer Science");
+
+        Mentee me = new Mentee();
+        me.setMajor("Computer Science");
+
+        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    @Test
+    void candidateMenteesNoOverlapReturnsfalse() {
+        Mentor m = new Mentor();
+        m.setField("Music");
+        m.setPreferredMenteeMajor("Music");
+        m.setPreferredMenteeSkills(List.of("Piano"));
+        m.setInterests(List.of("Jazz"));
+
+        Mentee me = new Mentee();
+        me.setMajor("Computer Science");
+        me.setSkills(List.of("Java"));
+        me.setInterests(List.of("AI"));
+
+        assertThat(matchingService.matchesMentorPreferences(m, me)).isFalse();
+    }
+
+    @Test
+    void candidateMenteesNullFieldsDoNotCrash() {
+        Mentor m = new Mentor();
+        Mentee me = new Mentee();
+
+        assertThat(matchingService.matchesMentorPreferences(m, me)).isFalse();
+    }
+
+    // ── Candidate mentees: active mentor exclusion ──────────────────────────
+
+    @Test
+    void candidateMenteesExcludesActivelyMentoredMentees() {
+        Mentee activeMentee = new Mentee();
+        activeMentee.setActiveMentorId(99L);
+        activeMentee.setInterests(List.of("AI"));
+
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee, activeMentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+
+        assertThat(result).hasSize(1);
+    }
+
+    // ── Candidate mentees: capacity check ───────────────────────────────────
+
+    @Test
+    void candidateMenteesFullCapacityBlocksRequest() {
+        mentor.setCurrentMenteeCount(3); // full
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+
+        assertThatThrownBy(() -> matchingService.getCandidateMentees(1L, null))
+                .isInstanceOf(com.group7.backend.exception.MatchingNotAllowedException.class)
+                .hasMessageContaining("capacity");
+    }
+
+    // ── Candidate mentees: mentor not found ─────────────────────────────────
+
+    @Test
+    void candidateMenteesMentorNotFoundThrows() {
+        when(mentorRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> matchingService.getCandidateMentees(99L, null))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ── Candidate mentees: keyword filter ───────────────────────────────────
+
+    @Test
+    void candidateMenteesKeywordFilterMatchesGoals() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "machine");
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void candidateMenteesKeywordFilterNoMatchReturnsEmpty() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "rust");
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void candidateMenteesNullKeywordReturnsAll() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+
+        assertThat(result).hasSize(1);
+    }
+
+    // ── Candidate mentees: case insensitivity ───────────────────────────────
+
+    @Test
+    void candidateMenteesMatchesByInterestCaseInsensitive() {
+        Mentor m = new Mentor();
+        m.setInterests(List.of("ai"));
+
+        Mentee me = new Mentee();
+        me.setInterests(List.of("AI"));
+
+        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    @Test
+    void candidateMenteesMatchesBySkillCaseInsensitive() {
+        Mentor m = new Mentor();
+        m.setPreferredMenteeSkills(List.of("JAVA"));
+
+        Mentee me = new Mentee();
+        me.setSkills(List.of("java"));
+
+        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    @Test
+    void candidateMenteesMatchesByMajorCaseInsensitive() {
+        Mentor m = new Mentor();
+        m.setPreferredMenteeMajor("computer science");
+
+        Mentee me = new Mentee();
+        me.setMajor("Computer Science");
+
+        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    // ── Candidate mentees: keyword on different fields ──────────────────────
+
+    @Test
+    void candidateMenteesKeywordFilterMatchesMajor() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "Computer");
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void candidateMenteesKeywordFilterMatchesSkill() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "Java");
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void candidateMenteesKeywordFilterMatchesInterest() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "AI");
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void candidateMenteesKeywordFilterMatchesCareerInterest() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "backend");
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void candidateMenteesKeywordFilterIsCaseInsensitive() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "MACHINE");
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void candidateMenteesEmptyKeywordReturnsAll() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "");
+
+        assertThat(result).hasSize(1);
+    }
+
+    // ── Candidate mentees: multiple mentees filtering ───────────────────────
+
+    @Test
+    void candidateMenteesFiltersOutNonMatchingMentees() {
+        Mentee nonMatching = new Mentee();
+        nonMatching.setMajor("Music");
+        nonMatching.setSkills(List.of("Piano"));
+        nonMatching.setInterests(List.of("Jazz"));
+
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee, nonMatching));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getMajor()).isEqualTo("Computer Science");
+    }
+
+    @Test
+    void candidateMenteesReturnsMultipleMatchingMentees() {
+        Mentee secondMatch = new Mentee();
+        secondMatch.setInterests(List.of("AI"));
+        secondMatch.setSkills(List.of("Kotlin"));
+
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee, secondMatch));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+
+        assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void candidateMenteesExcludesAllActivelyMentoredMentees() {
+        Mentee active1 = new Mentee();
+        active1.setActiveMentorId(10L);
+        active1.setInterests(List.of("AI"));
+
+        Mentee active2 = new Mentee();
+        active2.setActiveMentorId(20L);
+        active2.setInterests(List.of("Systems"));
+
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee, active1, active2));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+
+        assertThat(result).hasSize(1);
+    }
+
+    // ── Candidate mentees: capacity edge cases ──────────────────────────────
+
+    @Test
+    void candidateMenteesExactCapacityBlocksRequest() {
+        mentor.setMaxMenteeCapacity(2);
+        mentor.setCurrentMenteeCount(2);
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+
+        assertThatThrownBy(() -> matchingService.getCandidateMentees(1L, null))
+                .isInstanceOf(com.group7.backend.exception.MatchingNotAllowedException.class);
+    }
+
+    @Test
+    void candidateMenteesOneSlotLeftAllowed() {
+        mentor.setMaxMenteeCapacity(3);
+        mentor.setCurrentMenteeCount(2);
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+
+        assertThat(result).hasSize(1);
+    }
+
+    // ── Candidate mentees: DTO mapping ──────────────────────────────────────
+
+    @Test
+    void candidateMenteesResponseContainsCorrectFields() {
+        mentee.setFirstName("Elif");
+        mentee.setBackgroundInfo("3rd year CS student");
+        mentee.setMeetingFreqPref("Weekly");
+
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+
+        assertThat(result).hasSize(1);
+        MenteeCandidateResponse dto = result.get(0);
+        assertThat(dto.getFirstName()).isEqualTo("Elif");
+        assertThat(dto.getGoals()).isEqualTo("career machine learning");
+        assertThat(dto.getMajor()).isEqualTo("Computer Science");
+        assertThat(dto.getInterests()).containsExactly("AI", "Databases");
+        assertThat(dto.getSkills()).containsExactly("Java", "Python");
+        assertThat(dto.getCareerInterest()).isEqualTo("backend engineering");
+        assertThat(dto.getBackgroundInfo()).isEqualTo("3rd year CS student");
+        assertThat(dto.getMeetingFreqPref()).isEqualTo("Weekly");
+    }
+
+    @Test
+    void candidateMenteesKeywordAndPreferenceFilterCombined() {
+        Mentee matchingWithKeyword = new Mentee();
+        matchingWithKeyword.setInterests(List.of("AI"));
+        matchingWithKeyword.setGoals("machine learning research");
+
+        Mentee matchingWithoutKeyword = new Mentee();
+        matchingWithoutKeyword.setInterests(List.of("AI"));
+        matchingWithoutKeyword.setGoals("web development");
+
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(menteeRepository.findAll()).thenReturn(List.of(matchingWithKeyword, matchingWithoutKeyword));
+
+        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "machine");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getGoals()).isEqualTo("machine learning research");
     }
 }

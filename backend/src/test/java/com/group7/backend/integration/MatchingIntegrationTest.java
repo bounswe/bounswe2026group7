@@ -242,4 +242,257 @@ class MatchingIntegrationTest {
         var matches = objectMapper.readTree(result.getResponse().getContentAsString());
         assertThat(matches.size()).isLessThanOrEqualTo(5);
     }
+
+    // ── Candidate mentees (mentor-side) ─────────────────────────────────────
+
+    @Test
+    void mentorGetsCandidateMenteeList() throws Exception {
+        String mentorToken = registerAndLogin("cm_mentor1@example.com", true);
+        Mentor mentor = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentor1@example.com"))
+                .findFirst().orElseThrow();
+        mentor.setField("Computer Science");
+        mentor.setPreferredMenteeMajor("Computer Science");
+        mentor.setPreferredMenteeSkills(List.of("Java"));
+        mentor.setInterests(List.of("AI"));
+        mentor.setMaxMenteeCapacity(3);
+        mentorRepository.save(mentor);
+
+        registerAndLogin("cm_mentee1@example.com", false);
+        Mentee mentee = menteeRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentee1@example.com"))
+                .findFirst().orElseThrow();
+        mentee.setMajor("Computer Science");
+        mentee.setSkills(List.of("Java"));
+        mentee.setInterests(List.of("AI"));
+        menteeRepository.save(mentee);
+
+        MvcResult result = mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andReturn();
+
+        var candidates = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(candidates.size()).isGreaterThan(0);
+        assertThat(candidates.get(0).has("lastName")).isFalse();
+        assertThat(candidates.get(0).has("profilePhoto")).isFalse();
+        assertThat(candidates.get(0).get("firstName").asText()).isNotBlank();
+    }
+
+    @Test
+    void candidateMenteesExcludesActiveMentored() throws Exception {
+        String mentorToken = registerAndLogin("cm_mentor2@example.com", true);
+        Mentor mentor = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentor2@example.com"))
+                .findFirst().orElseThrow();
+        mentor.setInterests(List.of("AI"));
+        mentor.setMaxMenteeCapacity(3);
+        mentorRepository.save(mentor);
+
+        registerAndLogin("cm_mentee2@example.com", false);
+        Mentee mentee = menteeRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentee2@example.com"))
+                .findFirst().orElseThrow();
+        mentee.setInterests(List.of("AI"));
+        mentee.setActiveMentorId(mentor.getId());
+        menteeRepository.save(mentee);
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void candidateMenteesKeywordFilter() throws Exception {
+        String mentorToken = registerAndLogin("cm_mentor3@example.com", true);
+        Mentor mentor = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentor3@example.com"))
+                .findFirst().orElseThrow();
+        mentor.setInterests(List.of("AI"));
+        mentor.setMaxMenteeCapacity(3);
+        mentorRepository.save(mentor);
+
+        registerAndLogin("cm_mentee3@example.com", false);
+        Mentee mentee = menteeRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentee3@example.com"))
+                .findFirst().orElseThrow();
+        mentee.setInterests(List.of("AI"));
+        mentee.setGoals("machine learning research");
+        menteeRepository.save(mentee);
+
+        // keyword "machine" should match
+        mockMvc.perform(get("/api/matching/mentees?keyword=machine")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").exists());
+
+        // keyword "rust" should not match
+        mockMvc.perform(get("/api/matching/mentees?keyword=rust")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void menteeRoleBlockedFromCandidateMenteesEndpoint() throws Exception {
+        String menteeToken = registerAndLogin("cm_mentee4@example.com", false);
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer " + menteeToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void fullCapacityMentorBlockedFromCandidateMentees() throws Exception {
+        String mentorToken = registerAndLogin("cm_mentor5@example.com", true);
+        Mentor mentor = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentor5@example.com"))
+                .findFirst().orElseThrow();
+        mentor.setMaxMenteeCapacity(1);
+        mentor.setCurrentMenteeCount(1);
+        mentorRepository.save(mentor);
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void candidateMenteesExcludesNonMatchingMentees() throws Exception {
+        String mentorToken = registerAndLogin("cm_mentor6@example.com", true);
+        Mentor mentor = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentor6@example.com"))
+                .findFirst().orElseThrow();
+        mentor.setField("Computer Science");
+        mentor.setInterests(List.of("AI"));
+        mentor.setPreferredMenteeSkills(List.of("Java"));
+        mentor.setMaxMenteeCapacity(3);
+        mentorRepository.save(mentor);
+
+        // Matching mentee
+        registerAndLogin("cm_mentee6a@example.com", false);
+        Mentee matching = menteeRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentee6a@example.com"))
+                .findFirst().orElseThrow();
+        matching.setInterests(List.of("AI"));
+        matching.setSkills(List.of("Java"));
+        menteeRepository.save(matching);
+
+        // Non-matching mentee
+        registerAndLogin("cm_mentee6b@example.com", false);
+        Mentee nonMatching = menteeRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentee6b@example.com"))
+                .findFirst().orElseThrow();
+        nonMatching.setMajor("Music");
+        nonMatching.setInterests(List.of("Jazz"));
+        nonMatching.setSkills(List.of("Piano"));
+        menteeRepository.save(nonMatching);
+
+        MvcResult result = mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        var candidates = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(candidates.size()).isEqualTo(1);
+        assertThat(candidates.get(0).get("firstName").asText()).isEqualTo("Test");
+    }
+
+    @Test
+    void candidateMenteesResponseContainsExpectedFields() throws Exception {
+        String mentorToken = registerAndLogin("cm_mentor7@example.com", true);
+        Mentor mentor = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentor7@example.com"))
+                .findFirst().orElseThrow();
+        mentor.setInterests(List.of("AI"));
+        mentor.setMaxMenteeCapacity(3);
+        mentorRepository.save(mentor);
+
+        registerAndLogin("cm_mentee7@example.com", false);
+        Mentee mentee = menteeRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentee7@example.com"))
+                .findFirst().orElseThrow();
+        mentee.setInterests(List.of("AI"));
+        mentee.setGoals("Learn machine learning");
+        mentee.setMajor("Computer Science");
+        mentee.setSkills(List.of("Java", "Python"));
+        mentee.setCareerInterest("Backend Engineering");
+        mentee.setBackgroundInfo("3rd year CS student");
+        menteeRepository.save(mentee);
+
+        MvcResult result = mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        var candidates = objectMapper.readTree(result.getResponse().getContentAsString());
+        var candidate = candidates.get(0);
+        assertThat(candidate.get("id").asLong()).isPositive();
+        assertThat(candidate.get("firstName").asText()).isEqualTo("Test");
+        assertThat(candidate.get("goals").asText()).isEqualTo("Learn machine learning");
+        assertThat(candidate.get("major").asText()).isEqualTo("Computer Science");
+        assertThat(candidate.get("careerInterest").asText()).isEqualTo("Backend Engineering");
+        assertThat(candidate.get("backgroundInfo").asText()).isEqualTo("3rd year CS student");
+        assertThat(candidate.get("interests").size()).isEqualTo(1);
+        assertThat(candidate.get("skills").size()).isEqualTo(2);
+        // Privacy fields must not be present
+        assertThat(candidate.has("lastName")).isFalse();
+        assertThat(candidate.has("profilePhoto")).isFalse();
+        assertThat(candidate.has("email")).isFalse();
+        assertThat(candidate.has("passwordHash")).isFalse();
+        assertThat(candidate.has("activeMentorId")).isFalse();
+    }
+
+    @Test
+    void candidateMenteesCapacityErrorResponseFormat() throws Exception {
+        String mentorToken = registerAndLogin("cm_mentor8@example.com", true);
+        Mentor mentor = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentor8@example.com"))
+                .findFirst().orElseThrow();
+        mentor.setMaxMenteeCapacity(1);
+        mentor.setCurrentMenteeCount(1);
+        mentorRepository.save(mentor);
+
+        MvcResult result = mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isForbidden())
+                .andReturn();
+
+        var body = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(body.get("error").asText()).isEqualTo("Forbidden");
+        assertThat(body.get("message").asText()).contains("capacity");
+    }
+
+    @Test
+    void candidateMenteesKeywordFilterCaseInsensitive() throws Exception {
+        String mentorToken = registerAndLogin("cm_mentor9@example.com", true);
+        Mentor mentor = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentor9@example.com"))
+                .findFirst().orElseThrow();
+        mentor.setInterests(List.of("AI"));
+        mentor.setMaxMenteeCapacity(3);
+        mentorRepository.save(mentor);
+
+        registerAndLogin("cm_mentee9@example.com", false);
+        Mentee mentee = menteeRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("cm_mentee9@example.com"))
+                .findFirst().orElseThrow();
+        mentee.setInterests(List.of("AI"));
+        mentee.setGoals("Machine Learning Research");
+        menteeRepository.save(mentee);
+
+        // lowercase keyword should match uppercase goals
+        mockMvc.perform(get("/api/matching/mentees?keyword=machine")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").exists());
+
+        // uppercase keyword should also match
+        mockMvc.perform(get("/api/matching/mentees?keyword=MACHINE")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").exists());
+    }
 }

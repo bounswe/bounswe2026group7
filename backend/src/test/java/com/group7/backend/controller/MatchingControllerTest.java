@@ -2,6 +2,7 @@ package com.group7.backend.controller;
 
 import com.group7.backend.config.JwtAuthenticationFilter;
 import com.group7.backend.config.SecurityConfig;
+import com.group7.backend.dto.response.MenteeCandidateResponse;
 import com.group7.backend.dto.response.MentorMatchResponse;
 import com.group7.backend.service.JwtService;
 import com.group7.backend.service.MatchingService;
@@ -96,11 +97,144 @@ class MatchingControllerTest {
     void getTopMentorsReturns403WhenAlreadyHasMentor() throws Exception {
         mockValidMenteeJwt("mentee-token", 1L);
         when(matchingService.getTopMentors(eq(1L), any()))
-                .thenThrow(new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.FORBIDDEN, "You already have an active mentor"));
+                .thenThrow(new com.group7.backend.exception.MatchingNotAllowedException(
+                        "You already have an active mentor"));
 
         mockMvc.perform(get("/api/matching/mentors")
                         .header("Authorization", "Bearer mentee-token"))
                 .andExpect(status().isForbidden());
+    }
+
+    // ── Candidate mentees endpoint ──────────────────────────────────────────
+
+    @Test
+    void getCandidateMenteesReturns200ForMentor() throws Exception {
+        mockValidMentorJwt("mentor-token", 2L);
+        MenteeCandidateResponse candidate = new MenteeCandidateResponse();
+        candidate.setFirstName("Elif");
+        candidate.setMajor("Computer Science");
+        when(matchingService.getCandidateMentees(eq(2L), any())).thenReturn(List.of(candidate));
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].firstName").value("Elif"))
+                .andExpect(jsonPath("$[0].major").value("Computer Science"));
+    }
+
+    @Test
+    void getCandidateMenteesWithKeywordReturns200() throws Exception {
+        mockValidMentorJwt("mentor-token", 2L);
+        when(matchingService.getCandidateMentees(eq(2L), eq("java"))).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/matching/mentees?keyword=java")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    void getCandidateMenteesReturns403ForMenteeRole() throws Exception {
+        mockValidMenteeJwt("mentee-token", 1L);
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getCandidateMenteesReturns403WithoutToken() throws Exception {
+        mockMvc.perform(get("/api/matching/mentees"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getCandidateMenteesReturns403WhenAtCapacity() throws Exception {
+        mockValidMentorJwt("mentor-token", 2L);
+        when(matchingService.getCandidateMentees(eq(2L), any()))
+                .thenThrow(new com.group7.backend.exception.MatchingNotAllowedException(
+                        "You have reached your maximum mentee capacity"));
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getCandidateMenteesReturns404WhenMentorNotFound() throws Exception {
+        mockValidMentorJwt("mentor-token", 2L);
+        when(matchingService.getCandidateMentees(eq(2L), any()))
+                .thenThrow(new com.group7.backend.exception.ResourceNotFoundException("Mentor not found"));
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getCandidateMenteesReturnsEmptyArrayWhenNoCandidates() throws Exception {
+        mockValidMentorJwt("mentor-token", 2L);
+        when(matchingService.getCandidateMentees(eq(2L), any())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void getCandidateMenteesResponseExcludesPrivateFields() throws Exception {
+        mockValidMentorJwt("mentor-token", 2L);
+        MenteeCandidateResponse candidate = new MenteeCandidateResponse();
+        candidate.setFirstName("Elif");
+        candidate.setGoals("Learn AI");
+        candidate.setMajor("CS");
+        candidate.setInterests(List.of("AI"));
+        candidate.setSkills(List.of("Java"));
+        when(matchingService.getCandidateMentees(eq(2L), any())).thenReturn(List.of(candidate));
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].firstName").value("Elif"))
+                .andExpect(jsonPath("$[0].goals").value("Learn AI"))
+                .andExpect(jsonPath("$[0].interests[0]").value("AI"))
+                .andExpect(jsonPath("$[0].skills[0]").value("Java"))
+                .andExpect(jsonPath("$[0].lastName").doesNotExist())
+                .andExpect(jsonPath("$[0].profilePhoto").doesNotExist())
+                .andExpect(jsonPath("$[0].email").doesNotExist())
+                .andExpect(jsonPath("$[0].passwordHash").doesNotExist());
+    }
+
+    @Test
+    void getCandidateMenteesReturnsMultipleCandidates() throws Exception {
+        mockValidMentorJwt("mentor-token", 2L);
+        MenteeCandidateResponse c1 = new MenteeCandidateResponse();
+        c1.setFirstName("Elif");
+        MenteeCandidateResponse c2 = new MenteeCandidateResponse();
+        c2.setFirstName("Ayse");
+        when(matchingService.getCandidateMentees(eq(2L), any())).thenReturn(List.of(c1, c2));
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].firstName").value("Elif"))
+                .andExpect(jsonPath("$[1].firstName").value("Ayse"));
+    }
+
+    @Test
+    void getCandidateMenteesCapacityErrorResponseFormat() throws Exception {
+        mockValidMentorJwt("mentor-token", 2L);
+        when(matchingService.getCandidateMentees(eq(2L), any()))
+                .thenThrow(new com.group7.backend.exception.MatchingNotAllowedException(
+                        "You have reached your maximum mentee capacity"));
+
+        mockMvc.perform(get("/api/matching/mentees")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Forbidden"))
+                .andExpect(jsonPath("$.message").value("You have reached your maximum mentee capacity"));
     }
 }
