@@ -144,9 +144,10 @@ class AuthServiceTest {
     void registerWithDuplicateEmailThrows() {
         when(userRepository.existsByEmail("john@example.com")).thenReturn(true);
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.register(registerRequest));
-        assertEquals("Email already in use", ex.getMessage());
+        assertEquals("Email already in use", ex.getReason());
         verify(userRepository, never()).save(any());
     }
 
@@ -220,9 +221,10 @@ class AuthServiceTest {
         when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(mentee));
         when(passwordEncoder.matches("Password1", "hashedPassword")).thenReturn(true);
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.authenticate(loginRequest));
-        assertEquals("Email not verified. Please check your inbox.", ex.getMessage());
+        assertEquals("Email not verified. Please check your inbox.", ex.getReason());
     }
 
     // --- Invalid Credentials (1.2.3.7) ---
@@ -236,18 +238,20 @@ class AuthServiceTest {
         when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(mentee));
         when(passwordEncoder.matches("Password1", "hashedPassword")).thenReturn(false);
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.authenticate(loginRequest));
-        assertEquals("Invalid email or password", ex.getMessage());
+        assertEquals("Invalid email or password", ex.getReason());
     }
 
     @Test
     void loginWithNonexistentEmailThrows() {
         when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.empty());
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.authenticate(loginRequest));
-        assertEquals("Invalid email or password", ex.getMessage());
+        assertEquals("Invalid email or password", ex.getReason());
     }
 
     // --- Verify Email (1.2.3.4) ---
@@ -287,9 +291,10 @@ class AuthServiceTest {
 
         when(verificationTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(token));
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.verifyEmail("expired-token"));
-        assertTrue(ex.getMessage().contains("expired"));
+        assertTrue(ex.getReason().contains("expired"));
     }
 
     @Test
@@ -304,18 +309,20 @@ class AuthServiceTest {
 
         when(verificationTokenRepository.findByToken("used-token")).thenReturn(Optional.of(token));
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.verifyEmail("used-token"));
-        assertTrue(ex.getMessage().contains("already used"));
+        assertTrue(ex.getReason().contains("already used"));
     }
 
     @Test
     void verifyEmailWithInvalidTokenThrows() {
         when(verificationTokenRepository.findByToken("nonexistent")).thenReturn(Optional.empty());
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.verifyEmail("nonexistent"));
-        assertEquals("Invalid verification token", ex.getMessage());
+        assertEquals("Invalid verification token", ex.getReason());
     }
 
     // --- Resend Verification (1.2.3.4) ---
@@ -348,9 +355,10 @@ class AuthServiceTest {
         when(verificationTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(LocalDateTime.class)))
                 .thenReturn(3L);
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.resendVerification("john@example.com"));
-        assertTrue(ex.getMessage().contains("Too many"));
+        assertTrue(ex.getReason().contains("Too many"));
     }
 
     @Test
@@ -362,9 +370,10 @@ class AuthServiceTest {
 
         when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(user));
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.resendVerification("john@example.com"));
-        assertTrue(ex.getMessage().contains("already verified"));
+        assertTrue(ex.getReason().contains("already verified"));
     }
 
     // --- Request Password Reset ---
@@ -404,9 +413,10 @@ class AuthServiceTest {
         when(passwordResetTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(LocalDateTime.class)))
                 .thenReturn(5L);
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.requestPasswordReset("john@example.com"));
-        assertTrue(ex.getMessage().contains("Too many"));
+        assertTrue(ex.getReason().contains("Too many"));
     }
 
     // --- Reset Password ---
@@ -446,9 +456,10 @@ class AuthServiceTest {
 
         when(passwordResetTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(token));
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.resetPassword("expired-token", "NewPass1"));
-        assertTrue(ex.getMessage().contains("expired"));
+        assertTrue(ex.getReason().contains("expired"));
     }
 
     @Test
@@ -463,17 +474,19 @@ class AuthServiceTest {
 
         when(passwordResetTokenRepository.findByToken("used-token")).thenReturn(Optional.of(token));
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.resetPassword("used-token", "NewPass1"));
-        assertTrue(ex.getMessage().contains("already used"));
+        assertTrue(ex.getReason().contains("already used"));
     }
 
     @Test
     void resetPasswordWithInvalidTokenThrows() {
         when(passwordResetTokenRepository.findByToken("bad-token")).thenReturn(Optional.empty());
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
+        org.springframework.web.server.ResponseStatusException ex = assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
                 () -> authService.resetPassword("bad-token", "NewPass1"));
-        assertEquals("Invalid reset token", ex.getMessage());
+        assertEquals("Invalid reset token", ex.getReason());
     }
 }
