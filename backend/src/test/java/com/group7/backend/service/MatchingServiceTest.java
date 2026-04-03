@@ -144,7 +144,7 @@ class MatchingServiceTest {
     void fullCapacityMentorExcluded() {
         mentor.setCurrentMenteeCount(3); // full
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAllWithCollections()).thenReturn(List.of(mentor));
+        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
 
         List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
 
@@ -185,7 +185,7 @@ class MatchingServiceTest {
         }).toList();
 
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAllWithCollections()).thenReturn(sixMentors);
+        when(mentorRepository.findAll()).thenReturn(sixMentors);
 
         List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
 
@@ -197,7 +197,7 @@ class MatchingServiceTest {
     @Test
     void keywordFilterMatchesExpertise() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAllWithCollections()).thenReturn(List.of(mentor));
+        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
 
         List<MentorMatchResponse> result = matchingService.getTopMentors(1L, "Java");
 
@@ -207,7 +207,7 @@ class MatchingServiceTest {
     @Test
     void keywordFilterNoMatchReturnsEmpty() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAllWithCollections()).thenReturn(List.of(mentor));
+        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
 
         List<MentorMatchResponse> result = matchingService.getTopMentors(1L, "rust");
 
@@ -217,7 +217,7 @@ class MatchingServiceTest {
     @Test
     void nullKeywordReturnsAll() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAllWithCollections()).thenReturn(List.of(mentor));
+        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
 
         List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
 
@@ -234,7 +234,7 @@ class MatchingServiceTest {
         // no matching fields → score 0
 
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAllWithCollections()).thenReturn(List.of(lowScore, mentor));
+        when(mentorRepository.findAll()).thenReturn(List.of(lowScore, mentor));
 
         List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
 

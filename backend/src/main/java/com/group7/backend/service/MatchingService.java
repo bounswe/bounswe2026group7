@@ -35,7 +35,7 @@ public class MatchingService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You already have an active mentor");
         }
 
-        List<Mentor> mentors = mentorRepository.findAllWithCollections();
+        List<Mentor> mentors = mentorRepository.findAll();
 
         return mentors.stream()
                 .filter(m -> m.getCurrentMenteeCount() < m.getMaxMenteeCapacity())
