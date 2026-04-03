@@ -4,9 +4,11 @@ import com.group7.backend.dto.request.UpdateProfileRequest;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
+import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -69,8 +71,9 @@ public class UserController {
     // ── Existing endpoints ──────────────────────────────────
 
     @GetMapping
-    @Operation(summary = "List users")
-    @ApiResponse(responseCode = "200", description = "List of users")
+    @Operation(summary = "List users", description = "Returns all user profiles with role-specific fields.")
+    @ApiResponse(responseCode = "200", description = "List of users",
+            content = @Content(array = @ArraySchema(schema = @Schema(oneOf = {MentorResponse.class, MenteeResponse.class}))))
     public List<ProfileResponse> getAllUsers() {
         return userService.getAllUsers();
     }
@@ -93,26 +96,34 @@ public class UserController {
     }
 
     @GetMapping("/mentors")
-    @Operation(summary = "List mentors")
-    @ApiResponse(responseCode = "200", description = "List of mentors")
+    @Operation(summary = "List mentors", description = "Returns all mentor profiles.")
+    @ApiResponse(responseCode = "200", description = "List of mentors",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = MentorResponse.class))))
     public List<MentorResponse> getAllMentors() {
         return userService.getAllMentors();
     }
 
     @GetMapping("/mentees")
-    @Operation(summary = "List mentees")
-    @ApiResponse(responseCode = "200", description = "List of mentees")
+    @Operation(summary = "List mentees", description = "Returns all mentee profiles.")
+    @ApiResponse(responseCode = "200", description = "List of mentees",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = MenteeResponse.class))))
     public List<MenteeResponse> getAllMentees() {
         return userService.getAllMentees();
     }
 
     @DeleteMapping("/{id:\\d+}")
-    @Operation(summary = "Delete user")
+    @Operation(summary = "Delete user", description = "Deletes the authenticated user's own account. Users can only delete themselves.")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "User deleted"),
+            @ApiResponse(responseCode = "403", description = "Cannot delete another user's account", content = @Content),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
-    public ResponseEntity<Void> deleteUser(@Parameter(description = "User id") @PathVariable Long id) {
+    public ResponseEntity<Void> deleteUser(@Parameter(description = "User id") @PathVariable Long id,
+                                           Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        if (!requesterId.equals(id)) {
+            throw new ProfileNotVisibleException("You can only delete your own account");
+        }
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
     }

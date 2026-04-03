@@ -19,6 +19,7 @@ import com.group7.backend.exception.AuthenticationFailedException;
 import com.group7.backend.exception.DuplicateEmailException;
 import com.group7.backend.exception.InvalidTokenException;
 import com.group7.backend.exception.RateLimitExceededException;
+import com.group7.backend.exception.ResourceNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -153,7 +154,7 @@ public class AuthService {
     @Transactional
     public void resendVerification(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new InvalidTokenException("No account found with that email"));
+                .orElseThrow(() -> new ResourceNotFoundException("No account found with that email"));
 
         if (Boolean.TRUE.equals(user.getIsEmailVerified())) {
             throw new InvalidTokenException("Email is already verified");
