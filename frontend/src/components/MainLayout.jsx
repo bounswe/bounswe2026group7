@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   Home, Compass, MessageCircle, CheckSquare, CalendarDays,
-  Clock, Star, User,
+  Clock, User,
 } from 'lucide-react'
 import '../styles/main.css'
 
@@ -24,7 +24,6 @@ const SIDEBAR_LINKS = [
   { label: 'My Tasks', path: '/tasks', icon: CheckSquare },
   { label: 'Schedule', path: '/schedule', icon: CalendarDays },
   { label: 'Availability', path: '/availability', icon: Clock },
-  { label: 'Rate Mentor', path: '/rate', icon: Star },
   { label: 'Profile', path: '/profile', icon: User },
 ]
 
