@@ -22,6 +22,11 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
     }
 
+    @ExceptionHandler(MatchingNotAllowedException.class)
+    public ResponseEntity<Map<String, String>> handleMatchingNotAllowed(MatchingNotAllowedException ex) {
+        return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationErrors(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new HashMap<>();

@@ -1,11 +1,11 @@
 package com.group7.backend.service;
 
+import com.group7.backend.dto.response.MenteeCandidateResponse;
 import com.group7.backend.dto.response.MentorMatchResponse;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
+import com.group7.backend.exception.MatchingNotAllowedException;
 import com.group7.backend.exception.ResourceNotFoundException;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
 import org.springframework.stereotype.Service;
@@ -32,7 +32,7 @@ public class MatchingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Mentee not found"));
 
         if (mentee.getActiveMentorId() != null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You already have an active mentor");
+            throw new MatchingNotAllowedException("You already have an active mentor");
         }
 
         List<Mentor> mentors = mentorRepository.findAll();
@@ -44,6 +44,67 @@ public class MatchingService {
                 .sorted(Comparator.comparingInt(MentorMatchResponse::getMatchScore).reversed())
                 .limit(5)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MenteeCandidateResponse> getCandidateMentees(Long mentorId, String keyword) {
+        Mentor mentor = mentorRepository.findById(mentorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor not found"));
+
+        if (mentor.getCurrentMenteeCount() >= mentor.getMaxMenteeCapacity()) {
+            throw new MatchingNotAllowedException("You have reached your maximum mentee capacity");
+        }
+
+        List<Mentee> mentees = menteeRepository.findAll();
+
+        return mentees.stream()
+                .filter(m -> m.getActiveMentorId() == null)
+                .filter(m -> matchesMentorPreferences(mentor, m))
+                .filter(m -> matchesMenteeKeyword(m, keyword))
+                .map(MenteeCandidateResponse::from)
+                .toList();
+    }
+
+    boolean matchesMentorPreferences(Mentor mentor, Mentee mentee) {
+        List<String> mentorInterests = nullSafe(mentor.getInterests());
+        List<String> menteeInterests = nullSafe(mentee.getInterests());
+        for (String interest : menteeInterests) {
+            if (containsIgnoreCase(mentorInterests, interest)) {
+                return true;
+            }
+        }
+
+        List<String> preferredSkills = nullSafe(mentor.getPreferredMenteeSkills());
+        for (String skill : nullSafe(mentee.getSkills())) {
+            if (containsIgnoreCase(preferredSkills, skill)) {
+                return true;
+            }
+        }
+
+        if (mentee.getMajor() != null && mentor.getPreferredMenteeMajor() != null
+                && mentee.getMajor().equalsIgnoreCase(mentor.getPreferredMenteeMajor())) {
+            return true;
+        }
+
+        if (mentee.getMajor() != null && mentor.getField() != null
+                && mentee.getMajor().equalsIgnoreCase(mentor.getField())) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean matchesMenteeKeyword(Mentee mentee, String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return true;
+        }
+        String kw = keyword.toLowerCase();
+        return containsSubstring(mentee.getGoals(), kw)
+                || containsSubstring(mentee.getMajor(), kw)
+                || containsSubstring(mentee.getCareerInterest(), kw)
+                || containsSubstring(mentee.getBackgroundInfo(), kw)
+                || listContainsSubstring(mentee.getInterests(), kw)
+                || listContainsSubstring(mentee.getSkills(), kw);
     }
 
     int calculateScore(Mentor mentor, Mentee mentee) {
