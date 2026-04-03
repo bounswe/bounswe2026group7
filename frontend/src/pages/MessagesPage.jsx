@@ -26,7 +26,6 @@ const CONVERSATIONS = [
   },
 ]
 
-// Historical "me" messages are already read
 const INITIAL_MESSAGES = {
   1: [
     { id: 1, from: 'them', text: "Hey! I've reviewed your React Native project files.", time: '14:22' },
@@ -49,6 +48,10 @@ const INITIAL_MESSAGES = {
   ],
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const ALLOWED_TYPES = ['image/', 'application/pdf', 'application/msword',
+  'application/vnd.openxmlformats', 'text/plain', 'application/zip']
+
 function getTime() {
   const now = new Date()
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -56,17 +59,46 @@ function getTime() {
 
 function StatusTick({ status }) {
   if (!status) return null
-  if (status === 'sending') return <span className="msg-status">✓</span>
-  if (status === 'sent')    return <span className="msg-status">✓</span>
+  if (status === 'sending')   return <span className="msg-status">✓</span>
+  if (status === 'sent')      return <span className="msg-status">✓</span>
   if (status === 'delivered') return <span className="msg-status">✓✓</span>
-  if (status === 'read')    return <span className="msg-status read">✓✓</span>
+  if (status === 'read')      return <span className="msg-status read">✓✓</span>
   return null
+}
+
+function renderText(text) {
+  const parts = text.split(/(https?:\/\/\S+)/)
+  return parts.map((part, i) =>
+    /^https?:\/\/\S+$/.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="msg-link">{part}</a>
+      : part
+  )
+}
+
+function extractFirstUrl(text) {
+  const match = text.match(/https?:\/\/\S+/)
+  return match ? match[0] : null
+}
+
+function LinkPreview({ url }) {
+  let hostname = ''
+  try { hostname = new URL(url).hostname } catch { return null }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="link-preview">
+      <span className="link-preview-icon">🔗</span>
+      <div>
+        <div className="link-preview-domain">{hostname}</div>
+        <div className="link-preview-url">{url.length > 50 ? url.slice(0, 50) + '…' : url}</div>
+      </div>
+    </a>
+  )
 }
 
 export default function MessagesPage() {
   const [activeConv, setActiveConv] = useState(1)
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
   const [input, setInput] = useState('')
+  const [fileError, setFileError] = useState(null)
   const fileInputRef = useRef(null)
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
@@ -135,6 +167,20 @@ export default function MessagesPage() {
   function handleFileChange(e) {
     const file = e.target.files[0]
     if (!file) return
+
+    if (file.size > MAX_FILE_SIZE) {
+      setFileError('File too large. Maximum size is 10 MB.')
+      e.target.value = ''
+      return
+    }
+    const typeAllowed = ALLOWED_TYPES.some(t => file.type.startsWith(t))
+    if (!typeAllowed) {
+      setFileError('File type not supported. Allowed: images, PDF, Word, text, zip.')
+      e.target.value = ''
+      return
+    }
+
+    setFileError(null)
     const msgId = Date.now()
     const convId = activeConv
     const newMsg = {
@@ -196,26 +242,32 @@ export default function MessagesPage() {
           </div>
 
           <div className="chat-messages">
-            {currentMessages.map(msg => (
-              <div key={msg.id} className={`bubble-wrap ${msg.from}`}>
-                <div>
-                  {msg.text && <div className={`bubble ${msg.from}`}>{msg.text}</div>}
-                  {msg.file && (
-                    <div className="file-bubble">
-                      <div className="file-icon">📄</div>
-                      <div>
-                        <div className="file-name">{msg.file.name}</div>
-                        <div className="file-size">{msg.file.size}</div>
+            {currentMessages.map(msg => {
+              const firstUrl = msg.text ? extractFirstUrl(msg.text) : null
+              return (
+                <div key={msg.id} className={`bubble-wrap ${msg.from}`}>
+                  <div>
+                    {msg.text && (
+                      <div className={`bubble ${msg.from}`}>{renderText(msg.text)}</div>
+                    )}
+                    {firstUrl && <LinkPreview url={firstUrl} />}
+                    {msg.file && (
+                      <div className="file-bubble">
+                        <div className="file-icon">📄</div>
+                        <div>
+                          <div className="file-name">{msg.file.name}</div>
+                          <div className="file-size">{msg.file.size}</div>
+                        </div>
                       </div>
+                    )}
+                    <div className="bubble-time">
+                      {msg.time}
+                      {msg.from === 'me' && <StatusTick status={msg.status} />}
                     </div>
-                  )}
-                  <div className="bubble-time">
-                    {msg.time}
-                    {msg.from === 'me' && <StatusTick status={msg.status} />}
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
             <div ref={messagesEndRef} />
           </div>
 
@@ -226,9 +278,12 @@ export default function MessagesPage() {
               style={{ display: 'none' }}
               onChange={handleFileChange}
             />
+            {fileError && (
+              <div className="file-error">{fileError}</div>
+            )}
             <span
               className="chat-add"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => { setFileError(null); fileInputRef.current?.click() }}
               title="Attach file"
               style={{ cursor: 'pointer' }}
             >

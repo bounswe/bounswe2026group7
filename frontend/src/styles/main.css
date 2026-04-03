@@ -569,6 +569,26 @@
 .bubble-time { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 3px; }
 .msg-status { font-size: 11px; color: var(--text-muted); letter-spacing: -2px; }
 .msg-status.read { color: var(--green-mid); }
+.msg-link { color: inherit; text-decoration: underline; opacity: 0.9; word-break: break-all; }
+.msg-link:hover { opacity: 1; }
+.link-preview {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px;
+  margin-top: 6px; text-decoration: none;
+  max-width: 260px; cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.link-preview:hover { box-shadow: var(--shadow-card); }
+.link-preview-icon { font-size: 18px; flex-shrink: 0; }
+.link-preview-domain { font-size: 12px; font-weight: 600; color: var(--text-dark); }
+.link-preview-url { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.file-error {
+  position: absolute; bottom: 80px; left: 24px; right: 24px;
+  background: var(--red-soft); color: var(--red-text);
+  border: 1px solid #f0d0d0; border-radius: var(--radius-sm);
+  padding: 8px 14px; font-size: 13px;
+}
 .file-bubble {
   display: flex; align-items: center; gap: 10px;
   background: #eef4ff; border: 1px solid #c5d8f5;
@@ -581,6 +601,7 @@
 .chat-input-bar {
   display: flex; align-items: flex-end; gap: 12px;
   padding: 16px 24px; border-top: 1px solid var(--border);
+  position: relative;
 }
 .chat-add { font-size: 22px; color: var(--text-muted); cursor: pointer; margin-bottom: 2px; }
 .chat-input {
