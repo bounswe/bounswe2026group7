@@ -1,5 +1,9 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import {
+  Home, Compass, MessageCircle, CheckSquare, CalendarDays,
+  Clock, Star, User,
+} from 'lucide-react'
 import '../styles/main.css'
 
 const SOON = new Set(['/messages', '/tasks', '/schedule'])
@@ -14,14 +18,14 @@ const NAV_TABS = [
 ]
 
 const SIDEBAR_LINKS = [
-  { label: 'Home', path: '/home', icon: '🏠' },
-  { label: 'Explore', path: '/explore', icon: '🔍' },
-  { label: 'Messages', path: '/messages', icon: '💬' },
-  { label: 'My Tasks', path: '/tasks', icon: '✅' },
-  { label: 'Schedule', path: '/schedule', icon: '📅' },
-  { label: 'Availability', path: '/availability', icon: '🕐' },
-  { label: 'Rate Mentor', path: '/rate', icon: '⭐' },
-  { label: 'Profile', path: '/profile', icon: '👤' },
+  { label: 'Home', path: '/home', icon: Home },
+  { label: 'Explore', path: '/explore', icon: Compass },
+  { label: 'Messages', path: '/messages', icon: MessageCircle },
+  { label: 'My Tasks', path: '/tasks', icon: CheckSquare },
+  { label: 'Schedule', path: '/schedule', icon: CalendarDays },
+  { label: 'Availability', path: '/availability', icon: Clock },
+  { label: 'Rate Mentor', path: '/rate', icon: Star },
+  { label: 'Profile', path: '/profile', icon: User },
 ]
 
 export default function MainLayout({ children }) {
@@ -82,7 +86,7 @@ export default function MainLayout({ children }) {
                   disabled={soon}
                   title={soon ? 'Coming soon' : undefined}
                 >
-                  <span className="icon">{link.icon}</span> {link.label}
+                  <link.icon size={16} strokeWidth={1.75} className="icon" /> {link.label}
                   {soon && <span className="soon-badge">Soon</span>}
                 </button>
               )

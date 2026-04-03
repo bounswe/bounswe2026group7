@@ -275,7 +275,7 @@
 }
 .sidebar-link:hover { background: var(--green-pale); color: var(--green-dark); }
 .sidebar-link.active { background: var(--green-pale); color: var(--green-dark); font-weight: 600; }
-.sidebar-link .icon { font-size: 18px; }
+.sidebar-link .icon { flex-shrink: 0; }
 .main-content { padding: 36px 48px; background: var(--green-bg); }
 
 /* ── PAGE HEADER ── */
