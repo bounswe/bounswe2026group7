@@ -105,6 +105,12 @@ describe('verifyEmail', () => {
     expect(fetch).toHaveBeenCalledWith('/api/auth/verify-email?token=abc123')
   })
 
+  it('encodes special characters in token', async () => {
+    mockFetchSuccess({})
+    await verifyEmail({ token: 'abc+def==/' })
+    expect(fetch).toHaveBeenCalledWith('/api/auth/verify-email?token=abc%2Bdef%3D%3D%2F')
+  })
+
   it('throws on invalid token', async () => {
     mockFetchFailure({ message: 'Invalid or expired token' })
     await expect(verifyEmail({ token: 'bad' }))
@@ -136,9 +142,33 @@ describe('validateResetToken', () => {
     expect(fetch).toHaveBeenCalledWith('/api/auth/validate-reset-token?token=abc123')
   })
 
+  it('encodes special characters in token', async () => {
+    mockFetchSuccess({})
+    await validateResetToken({ token: 'abc+def==/' })
+    expect(fetch).toHaveBeenCalledWith('/api/auth/validate-reset-token?token=abc%2Bdef%3D%3D%2F')
+  })
+
   it('throws on expired token', async () => {
     mockFetchFailure({ message: 'Token expired' })
     await expect(validateResetToken({ token: 'expired' }))
       .rejects.toThrow('Token expired')
+  })
+})
+
+describe('handleResponse error fallbacks', () => {
+  it('uses error field when message is absent', async () => {
+    mockFetchFailure({ error: 'Something went wrong' })
+    await expect(loginUser({ email: 'a@b.com', password: 'x' }))
+      .rejects.toThrow('Something went wrong')
+  })
+
+  it('falls back to statusText when body is not JSON', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      statusText: 'Service Unavailable',
+      json: () => Promise.reject(new Error('not json')),
+    })
+    await expect(loginUser({ email: 'a@b.com', password: 'x' }))
+      .rejects.toThrow('Service Unavailable')
   })
 })
