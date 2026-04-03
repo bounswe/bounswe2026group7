@@ -29,3 +29,40 @@ export async function loginUser({ email, password }) {
   })
   return handleResponse(res)
 }
+
+export async function verifyEmail({ token }) {
+  const res = await fetch(`${BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}`)
+  return handleResponse(res)
+}
+
+export async function validateResetToken({ token }) {
+  const res = await fetch(`${BASE_URL}/auth/validate-reset-token?token=${encodeURIComponent(token)}`)
+  return handleResponse(res)
+}
+
+export async function resendVerification({ email }) {
+  const res = await fetch(`${BASE_URL}/auth/resend-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  return handleResponse(res)
+}
+
+export async function forgotPassword({ email }) {
+  const res = await fetch(`${BASE_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  return handleResponse(res)
+}
+
+export async function resetPassword({ token, newPassword }) {
+  const res = await fetch(`${BASE_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, newPassword }),
+  })
+  return handleResponse(res)
+}

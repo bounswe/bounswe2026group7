@@ -120,10 +120,10 @@ class AuthIntegrationTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
-        assertThrows(Exception.class, () ->
-                mockMvc.perform(post("/api/auth/register")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))));
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict());
     }
 
     // --- Password Validation (1.2.3.3) ---
@@ -155,10 +155,10 @@ class AuthIntegrationTest {
         loginRequest.setEmail("ali@example.com");
         loginRequest.setPassword("Password1");
 
-        assertThrows(Exception.class, () ->
-                mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(loginRequest))));
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -186,8 +186,8 @@ class AuthIntegrationTest {
 
     @Test
     void verifyEmailWithInvalidTokenFails() throws Exception {
-        assertThrows(Exception.class, () ->
-                mockMvc.perform(get("/api/auth/verify-email").param("token", "invalid-token")));
+        mockMvc.perform(get("/api/auth/verify-email").param("token", "invalid-token"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -253,10 +253,10 @@ class AuthIntegrationTest {
         loginRequest.setEmail("ali@example.com");
         loginRequest.setPassword("WrongPass1");
 
-        assertThrows(Exception.class, () ->
-                mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(loginRequest))));
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -265,10 +265,10 @@ class AuthIntegrationTest {
         loginRequest.setEmail("noone@example.com");
         loginRequest.setPassword("Password1");
 
-        assertThrows(Exception.class, () ->
-                mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(loginRequest))));
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized());
     }
 
     // --- Password Stored as Hash (2.2.1) ---
@@ -387,10 +387,10 @@ class AuthIntegrationTest {
         loginWithOldPass.setEmail("ali@example.com");
         loginWithOldPass.setPassword("Password1");
 
-        assertThrows(Exception.class, () ->
-                mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(loginWithOldPass))));
+                        .content(objectMapper.writeValueAsString(loginWithOldPass)))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -413,10 +413,10 @@ class AuthIntegrationTest {
                         .content(objectMapper.writeValueAsString(resetRequest)))
                 .andExpect(status().isOk());
 
-        assertThrows(Exception.class, () ->
-                mockMvc.perform(post("/api/auth/reset-password")
+        mockMvc.perform(post("/api/auth/reset-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(resetRequest))));
+                        .content(objectMapper.writeValueAsString(resetRequest)))
+                .andExpect(status().isBadRequest());
     }
 
     // --- Helpers ---
