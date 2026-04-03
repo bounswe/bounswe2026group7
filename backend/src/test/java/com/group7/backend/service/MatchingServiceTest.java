@@ -159,7 +159,7 @@ class MatchingServiceTest {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
 
         assertThatThrownBy(() -> matchingService.getTopMentors(1L, null))
-                .isInstanceOf(com.group7.backend.exception.ProfileNotVisibleException.class)
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
                 .hasMessageContaining("active mentor");
     }
 

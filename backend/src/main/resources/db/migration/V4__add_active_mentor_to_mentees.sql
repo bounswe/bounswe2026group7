@@ -1,1 +1,1 @@
-ALTER TABLE mentees ADD COLUMN active_mentor_id BIGINT REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE mentees ADD COLUMN active_mentor_id BIGINT REFERENCES mentors(id) ON DELETE SET NULL;

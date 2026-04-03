@@ -3,8 +3,9 @@ package com.group7.backend.service;
 import com.group7.backend.dto.response.MentorMatchResponse;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
-import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
 import org.springframework.stereotype.Service;
@@ -31,10 +32,10 @@ public class MatchingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Mentee not found"));
 
         if (mentee.getActiveMentorId() != null) {
-            throw new ProfileNotVisibleException("You already have an active mentor");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You already have an active mentor");
         }
 
-        List<Mentor> mentors = mentorRepository.findAll();
+        List<Mentor> mentors = mentorRepository.findAllWithCollections();
 
         return mentors.stream()
                 .filter(m -> m.getCurrentMenteeCount() < m.getMaxMenteeCapacity())
@@ -82,7 +83,7 @@ public class MatchingService {
             String[] goalWords = mentee.getGoals().toLowerCase().split("\\s+");
             String lowerMentoringGoals = mentor.getMentoringGoals().toLowerCase();
             for (String word : goalWords) {
-                if (word.length() > 2 && lowerMentoringGoals.contains(word)) {
+                if (word.length() > 3 && lowerMentoringGoals.contains(word)) {
                     score += 2;
                 }
             }
@@ -94,7 +95,7 @@ public class MatchingService {
             if (mentee.getCareerInterest() != null) {
                 String[] careerWords = mentee.getCareerInterest().toLowerCase().split("\\s+");
                 for (String word : careerWords) {
-                    if (word.length() > 2 && lowerExpertise.contains(word)) {
+                    if (word.length() > 3 && lowerExpertise.contains(word)) {
                         score += 2;
                     }
                 }

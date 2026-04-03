@@ -96,7 +96,8 @@ class MatchingControllerTest {
     void getTopMentorsReturns403WhenAlreadyHasMentor() throws Exception {
         mockValidMenteeJwt("mentee-token", 1L);
         when(matchingService.getTopMentors(eq(1L), any()))
-                .thenThrow(new com.group7.backend.exception.ProfileNotVisibleException("You already have an active mentor"));
+                .thenThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.FORBIDDEN, "You already have an active mentor"));
 
         mockMvc.perform(get("/api/matching/mentors")
                         .header("Authorization", "Bearer mentee-token"))
