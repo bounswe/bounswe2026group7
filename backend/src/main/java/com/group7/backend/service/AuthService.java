@@ -15,6 +15,10 @@ import com.group7.backend.repository.VerificationTokenRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import com.group7.backend.exception.AuthenticationFailedException;
+import com.group7.backend.exception.DuplicateEmailException;
+import com.group7.backend.exception.InvalidTokenException;
+import com.group7.backend.exception.RateLimitExceededException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,7 +67,7 @@ public class AuthService {
     @Transactional
     public UserResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email already in use");
+            throw new DuplicateEmailException("Email already in use");
         }
 
         User user;
@@ -109,14 +113,14 @@ public class AuthService {
 
     public AuthResponse authenticate(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+                .orElseThrow(() -> new AuthenticationFailedException("Invalid email or password"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Invalid email or password");
+            throw new AuthenticationFailedException("Invalid email or password");
         }
 
         if (!Boolean.TRUE.equals(user.getIsEmailVerified())) {
-            throw new RuntimeException("Email not verified. Please check your inbox.");
+            throw new AuthenticationFailedException("Email not verified. Please check your inbox.");
         }
 
         String role = (user instanceof Mentor) ? "MENTOR" : "MENTEE";
@@ -128,14 +132,14 @@ public class AuthService {
     @Transactional
     public void verifyEmail(String token) {
         VerificationToken verificationToken = verificationTokenRepository.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid verification token"));
+                .orElseThrow(() -> new InvalidTokenException("Invalid verification token"));
 
         if (Boolean.TRUE.equals(verificationToken.getUsed())) {
-            throw new RuntimeException("Verification token already used");
+            throw new InvalidTokenException("Verification token already used");
         }
 
         if (verificationToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Verification token has expired. Please request a new one.");
+            throw new InvalidTokenException("Verification token has expired. Please request a new one.");
         }
 
         User user = verificationToken.getUser();
@@ -149,17 +153,17 @@ public class AuthService {
     @Transactional
     public void resendVerification(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("No account found with that email"));
+                .orElseThrow(() -> new InvalidTokenException("No account found with that email"));
 
         if (Boolean.TRUE.equals(user.getIsEmailVerified())) {
-            throw new RuntimeException("Email is already verified");
+            throw new InvalidTokenException("Email is already verified");
         }
 
         long recentCount = verificationTokenRepository.countByUserIdAndCreatedAtAfter(
                 user.getId(), LocalDateTime.now().minusHours(1));
 
         if (recentCount >= resendMaxPerHour) {
-            throw new RuntimeException("Too many resend requests. Please try again later.");
+            throw new RateLimitExceededException("Too many resend requests. Please try again later.");
         }
 
         String token = createVerificationToken(user);
@@ -173,7 +177,7 @@ public class AuthService {
                     user.getId(), LocalDateTime.now().minusHours(1));
 
             if (recentCount >= resetMaxRequestsPerHour) {
-                throw new RuntimeException("Too many password reset requests. Please try again later.");
+                throw new RateLimitExceededException("Too many password reset requests. Please try again later.");
             }
 
             passwordResetTokenRepository.deleteByUserIdAndUsedFalse(user.getId());
@@ -194,14 +198,14 @@ public class AuthService {
     @Transactional
     public void resetPassword(String token, String newPassword) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid reset token"));
+                .orElseThrow(() -> new InvalidTokenException("Invalid reset token"));
 
         if (Boolean.TRUE.equals(resetToken.getUsed())) {
-            throw new RuntimeException("Reset token already used");
+            throw new InvalidTokenException("Reset token already used");
         }
 
         if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Reset token has expired. Please request a new one.");
+            throw new InvalidTokenException("Reset token has expired. Please request a new one.");
         }
 
         User user = resetToken.getUser();
@@ -214,14 +218,14 @@ public class AuthService {
 
     public void validateResetToken(String token) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid reset token"));
+                .orElseThrow(() -> new InvalidTokenException("Invalid reset token"));
 
         if (Boolean.TRUE.equals(resetToken.getUsed())) {
-            throw new RuntimeException("Reset token already used");
+            throw new InvalidTokenException("Reset token already used");
         }
 
         if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Reset token has expired. Please request a new one.");
+            throw new InvalidTokenException("Reset token has expired. Please request a new one.");
         }
     }
 
