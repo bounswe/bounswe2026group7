@@ -2,6 +2,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
 
+const SOON = new Set(['/messages', '/tasks', '/schedule'])
+
 const NAV_TABS = [
   { label: 'Home', path: '/home' },
   { label: 'Explore', path: '/explore' },
@@ -40,15 +42,21 @@ export default function MainLayout({ children }) {
           <span>Mentor</span>Net
         </div>
         <div className="nav-tabs">
-          {NAV_TABS.map(tab => (
-            <button
-              key={tab.path}
-              className={`nav-tab${currentPath === tab.path ? ' active' : ''}`}
-              onClick={() => navigate(tab.path)}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {NAV_TABS.map(tab => {
+            const soon = SOON.has(tab.path)
+            return (
+              <button
+                key={tab.path}
+                className={`nav-tab${currentPath === tab.path ? ' active' : ''}${soon ? ' soon' : ''}`}
+                onClick={soon ? undefined : () => navigate(tab.path)}
+                disabled={soon}
+                title={soon ? 'Coming soon' : undefined}
+              >
+                {tab.label}
+                {soon && <span className="soon-badge">Soon</span>}
+              </button>
+            )
+          })}
         </div>
         <div className="nav-right">
           <div className="avatar-sm">{initials}</div>
@@ -64,15 +72,21 @@ export default function MainLayout({ children }) {
             <div className="sidebar-badge">Active Mentorship: 1</div>
           </div>
           <nav className="sidebar-nav">
-            {SIDEBAR_LINKS.map(link => (
-              <button
-                key={link.path}
-                className={`sidebar-link${currentPath === link.path ? ' active' : ''}`}
-                onClick={() => navigate(link.path)}
-              >
-                <span className="icon">{link.icon}</span> {link.label}
-              </button>
-            ))}
+            {SIDEBAR_LINKS.map(link => {
+              const soon = SOON.has(link.path)
+              return (
+                <button
+                  key={link.path}
+                  className={`sidebar-link${currentPath === link.path ? ' active' : ''}${soon ? ' soon' : ''}`}
+                  onClick={soon ? undefined : () => navigate(link.path)}
+                  disabled={soon}
+                  title={soon ? 'Coming soon' : undefined}
+                >
+                  <span className="icon">{link.icon}</span> {link.label}
+                  {soon && <span className="soon-badge">Soon</span>}
+                </button>
+              )
+            })}
           </nav>
         </aside>
         <main className="main-content">

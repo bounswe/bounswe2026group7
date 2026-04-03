@@ -205,6 +205,17 @@
 }
 .nav-tab:hover { color: #fff; background: rgba(255,255,255,0.1); }
 .nav-tab.active { color: #fff; background: rgba(255,255,255,0.18); }
+.nav-tab.soon, .nav-tab.soon:hover { opacity: 0.45; cursor: default; background: none; }
+.sidebar-link.soon, .sidebar-link.soon:hover { opacity: 0.45; cursor: default; background: none; color: var(--text-muted); }
+.soon-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  background: rgba(255,255,255,0.18); color: #fff;
+  border-radius: 4px; padding: 1px 5px; margin-left: 6px;
+  vertical-align: middle; text-transform: uppercase;
+}
+.sidebar-link.soon .soon-badge {
+  background: var(--border); color: var(--text-muted);
+}
 .nav-right { display: flex; align-items: center; gap: 12px; }
 .avatar-sm {
   width: 36px; height: 36px; border-radius: 50%;
