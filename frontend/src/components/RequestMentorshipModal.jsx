@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import '../styles/modal.css'
 
 export default function RequestMentorshipModal({ visible, onClose, onSubmit, loading, error, mentorName, defaultMessage }) {
   const [message, setMessage] = useState(defaultMessage || '')
@@ -75,8 +76,8 @@ export default function RequestMentorshipModal({ visible, onClose, onSubmit, loa
           {error && <div className="modal-api-error">{error}</div>}
 
           <div className="modal-actions">
-            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={loading || !isValid}>
+            <button type="button" className="modal-btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="modal-btn-primary" disabled={loading || !isValid}>
               {loading ? 'Sending...' : 'Send Request'}
             </button>
           </div>
