@@ -9,6 +9,7 @@ import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.service.JwtService;
 import com.group7.backend.service.MentorshipRequestService;
+import com.group7.backend.service.MentorshipService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -41,6 +42,9 @@ class MentorshipRequestControllerTest {
 
     @MockitoBean
     private MentorshipRequestService mentorshipRequestService;
+
+    @MockitoBean
+    private MentorshipService mentorshipService;
 
     @MockitoBean
     private JwtService jwtService;
