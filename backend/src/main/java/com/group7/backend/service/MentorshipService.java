@@ -8,6 +8,8 @@ import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.MentorshipRequestRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,7 @@ import java.util.Set;
 @Service
 public class MentorshipService {
 
+    private static final Logger log = LoggerFactory.getLogger(MentorshipService.class);
     private static final Set<Integer> ALLOWED_DURATIONS = Set.of(1, 3, 6);
 
     private final MentorshipRepository mentorshipRepository;
@@ -36,6 +39,7 @@ public class MentorshipService {
                 .orElseThrow(() -> new ResourceNotFoundException("Mentorship request not found"));
 
         if (request.getStatus() != MentorshipRequestStatus.PENDING) {
+            log.warn("Mentorship acceptance rejected: requestId={} is not pending", requestId);
             throw new MentorshipRequestException("Request is no longer pending");
         }
 
@@ -43,14 +47,17 @@ public class MentorshipService {
         Mentor mentor = request.getMentor();
 
         if (mentee.getActiveMentorId() != null) {
+            log.warn("Mentorship acceptance rejected: menteeId={} already has active mentor", mentee.getId());
             throw new MentorshipRequestException("Mentee already has an active mentor");
         }
 
         if (mentor.getCurrentMenteeCount() >= mentor.getMaxMenteeCapacity()) {
+            log.warn("Mentorship acceptance rejected: mentorId={} is at capacity", mentor.getId());
             throw new MentorshipRequestException("You have reached your maximum mentee capacity");
         }
 
         if (!ALLOWED_DURATIONS.contains(dto.getDuration())) {
+            log.warn("Mentorship acceptance rejected: invalid duration={} for requestId={}", dto.getDuration(), requestId);
             throw new MentorshipRequestException("Duration must be 1, 3, or 6 months");
         }
 
@@ -71,6 +78,8 @@ public class MentorshipService {
         mentorshipRequestRepository.cancelOtherPendingRequests(mentee.getId(), requestId);
 
         Mentorship saved = mentorshipRepository.save(mentorship);
+        log.info("Mentorship accepted: mentorshipId={}, mentorId={}, menteeId={}, requestId={}",
+            saved.getId(), mentor.getId(), mentee.getId(), requestId);
         return MentorshipResponse.from(saved);
     }
 
@@ -81,10 +90,12 @@ public class MentorshipService {
                 .orElseThrow(() -> new ResourceNotFoundException("Mentorship request not found"));
 
         if (request.getStatus() != MentorshipRequestStatus.PENDING) {
+            log.warn("Mentorship rejection rejected: requestId={} is not pending", requestId);
             throw new MentorshipRequestException("Request is no longer pending");
         }
 
         request.setStatus(MentorshipRequestStatus.REJECTED);
+        log.info("Mentorship request rejected: requestId={}, mentorId={}", requestId, mentorId);
     }
 
     @Transactional(readOnly = true)
@@ -101,10 +112,13 @@ public class MentorshipService {
                 .orElseThrow(() -> new ResourceNotFoundException("Mentorship not found"));
 
         if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
+            log.warn("Shared goal update rejected: mentorshipId={} not active", mentorshipId);
             throw new MentorshipRequestException("Mentorship is not active");
         }
 
         mentorship.setSharedGoal(dto.getSharedGoal());
-        return MentorshipResponse.from(mentorshipRepository.save(mentorship));
+        Mentorship saved = mentorshipRepository.save(mentorship);
+        log.info("Shared goal updated: mentorshipId={}, updatedByUserId={}", mentorshipId, userId);
+        return MentorshipResponse.from(saved);
     }
 }

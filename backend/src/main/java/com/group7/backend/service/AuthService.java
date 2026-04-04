@@ -68,6 +68,7 @@ public class AuthService {
     @Transactional
     public UserResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
+            log.warn("Registration rejected due to duplicate email");
             throw new DuplicateEmailException("Email already in use");
         }
 
@@ -95,6 +96,7 @@ public class AuthService {
         user.setIsEmailVerified(false);
 
         User saved = userRepository.save(user);
+        log.info("User registered successfully: userId={}, role={}", saved.getId(), role);
 
         String token = createVerificationToken(saved);
         emailService.sendVerificationEmail(saved, token);
@@ -114,18 +116,24 @@ public class AuthService {
 
     public AuthResponse authenticate(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new AuthenticationFailedException("Invalid email or password"));
+                .orElseThrow(() -> {
+                    log.warn("Authentication failed: user not found");
+                    return new AuthenticationFailedException("Invalid email or password");
+                });
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            log.warn("Authentication failed: password mismatch for userId={}", user.getId());
             throw new AuthenticationFailedException("Invalid email or password");
         }
 
         if (!Boolean.TRUE.equals(user.getIsEmailVerified())) {
+            log.warn("Authentication blocked: email not verified for userId={}", user.getId());
             throw new AuthenticationFailedException("Email not verified. Please check your inbox.");
         }
 
         String role = (user instanceof Mentor) ? "MENTOR" : "MENTEE";
         String token = jwtService.generateToken(user.getId(), user.getEmail(), role);
+        log.info("Authentication succeeded: userId={}, role={}", user.getId(), role);
 
         return new AuthResponse(token, role, user.getId());
     }
@@ -149,6 +157,7 @@ public class AuthService {
 
         verificationToken.setUsed(true);
         verificationTokenRepository.save(verificationToken);
+        log.info("Email verification completed for userId={}", user.getId());
     }
 
     @Transactional
@@ -169,6 +178,7 @@ public class AuthService {
 
         String token = createVerificationToken(user);
         emailService.sendVerificationEmail(user, token);
+        log.info("Verification email resent for userId={}", user.getId());
     }
 
     @Transactional
@@ -215,6 +225,7 @@ public class AuthService {
 
         resetToken.setUsed(true);
         passwordResetTokenRepository.save(resetToken);
+        log.info("Password reset completed for userId={}", user.getId());
     }
 
     public void validateResetToken(String token) {
