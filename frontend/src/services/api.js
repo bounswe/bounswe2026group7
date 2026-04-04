@@ -66,3 +66,16 @@ export async function resetPassword({ token, newPassword }) {
   })
   return handleResponse(res)
 }
+
+export async function createMentorshipRequest({ mentorId, message }) {
+  const token = localStorage.getItem('auth_token')
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const res = await fetch(`${BASE_URL}/mentorship/requests`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ mentorId, message }),
+  })
+  return handleResponse(res)
+}

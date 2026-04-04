@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import MainLayout from '../components/MainLayout'
+import RequestMentorshipModal from '../components/RequestMentorshipModal'
+import { createMentorshipRequest } from '../services/api'
 import '../styles/main.css'
 
 const FILTERS = ['All', 'Backend', 'Mobile', 'AI/ML', 'DevOps', 'Frontend', 'Data']
@@ -92,6 +94,10 @@ function StarRow({ count }) {
 export default function ExplorePage() {
   const [activeFilter, setActiveFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const [selectedMentor, setSelectedMentor] = useState(null)
+  const [requestSentIds, setRequestSentIds] = useState(new Set())
+  const [modalLoading, setModalLoading] = useState(false)
+  const [modalError, setModalError] = useState('')
 
   const filtered = MENTORS.filter(m => {
     const matchesFilter = activeFilter === 'All' || m.tags.some(t => t === activeFilter) || m.sub.toLowerCase().includes(activeFilter.toLowerCase())
@@ -99,8 +105,55 @@ export default function ExplorePage() {
     return matchesFilter && matchesSearch
   })
 
+  const showToast = (message, type = 'success') => {
+    const notification = document.createElement('div')
+    notification.className = `toast toast-${type}`
+    notification.textContent = message
+    document.body.appendChild(notification)
+    setTimeout(() => notification.remove(), 3500)
+  }
+
+  const openRequestModal = (mentor) => {
+    setSelectedMentor(mentor)
+    setModalError('')
+  }
+
+  const closeRequestModal = () => {
+    if (!modalLoading) {
+      setSelectedMentor(null)
+      setModalError('')
+    }
+  }
+
+  const handleSendRequest = async (message) => {
+    if (!selectedMentor || modalLoading) return
+    setModalLoading(true)
+    setModalError('')
+
+    try {
+      await createMentorshipRequest({ mentorId: selectedMentor.id, message })
+      setRequestSentIds(prev => new Set(prev).add(selectedMentor.id))
+      setSelectedMentor(null)
+      showToast('Request sent successfully.', 'success')
+    } catch (err) {
+      setModalError(err.message || 'Failed to send request. Please try again.')
+      showToast('Unable to send request.', 'error')
+    } finally {
+      setModalLoading(false)
+    }
+  }
+
   return (
     <MainLayout>
+      <RequestMentorshipModal
+        visible={Boolean(selectedMentor)}
+        onClose={closeRequestModal}
+        onSubmit={handleSendRequest}
+        loading={modalLoading}
+        error={modalError}
+        mentorName={selectedMentor?.name}
+      />
+
       <div className="page-header">
         <div><div className="page-title">Find a Mentor</div></div>
         <button className="action-btn">Filter</button>
@@ -154,13 +207,22 @@ export default function ExplorePage() {
                 <StarRow count={m.stars} />
                 <span className="rating-text">{m.rating} ({m.reviews})</span>
               </div>
-              <button
-                className="view-btn"
-                style={!m.available ? { opacity: 0.5, cursor: 'default' } : {}}
-                disabled={!m.available}
-              >
-                View
-              </button>
+              <div className="mentor-actions">
+                <button
+                  className="view-btn"
+                  style={!m.available ? { opacity: 0.5, cursor: 'default' } : {}}
+                >
+                  View
+                </button>
+                <button
+                  className={`send-request-btn${requestSentIds.has(m.id) ? ' sent' : ''}`}
+                  disabled={!m.available || requestSentIds.has(m.id)}
+                  onClick={() => openRequestModal(m)}
+                  style={!m.available ? { opacity: 0.5, cursor: 'default' } : {}}
+                >
+                  {requestSentIds.has(m.id) ? 'Request Sent' : 'Send Request'}
+                </button>
+              </div>
             </div>
           </div>
         ))}
