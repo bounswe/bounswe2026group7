@@ -34,6 +34,9 @@ class MentorshipServiceTest {
     @Mock
     private MentorshipRequestRepository mentorshipRequestRepository;
 
+    @Mock
+    private NotificationEventPublisher notificationEventPublisher;
+
     @InjectMocks
     private MentorshipService mentorshipService;
 
@@ -83,6 +86,7 @@ class MentorshipServiceTest {
         assertThat(response.getMenteeId()).isEqualTo(2L);
         assertThat(response.getDuration()).isEqualTo(3);
         assertThat(response.getStatus()).isEqualTo("ACTIVE");
+        verify(notificationEventPublisher).publishRequestAccepted(2L, "Ahmet");
     }
 
     @Test
@@ -206,6 +210,7 @@ class MentorshipServiceTest {
         mentorshipService.rejectRequest(1L, 10L);
 
         assertThat(request.getStatus()).isEqualTo(MentorshipRequestStatus.REJECTED);
+        verify(notificationEventPublisher).publishRequestRejected(2L, "Ahmet");
     }
 
     @Test
