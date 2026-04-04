@@ -1,5 +1,6 @@
 package com.group7.backend.controller;
 
+import com.group7.backend.dto.request.EmailRequest;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.dto.request.ResetPasswordRequest;
@@ -35,7 +36,8 @@ public class AuthController {
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "User created",
                     content = @Content(schema = @Schema(implementation = UserResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Validation error", content = @Content)
+            @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
+            @ApiResponse(responseCode = "409", description = "Email already in use", content = @Content)
     })
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
         UserResponse response = authService.register(request);
@@ -47,10 +49,10 @@ public class AuthController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Authenticated",
                     content = @Content(schema = @Schema(implementation = AuthResponse.class))),
-            @ApiResponse(responseCode = "401", description = "Invalid credentials", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Email not verified", content = @Content)
+            @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Invalid credentials or email not verified", content = @Content)
     })
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.authenticate(request);
         return ResponseEntity.ok(response);
     }
@@ -70,21 +72,23 @@ public class AuthController {
     @Operation(summary = "Resend verification email", description = "Sends a new verification email. Rate limited to 3 per hour.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Verification email sent", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Invalid email or already verified", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Account not found", content = @Content),
             @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content)
     })
-    public ResponseEntity<Map<String, String>> resendVerification(@RequestBody Map<String, String> body) {
-        String email = body.get("email");
-        authService.resendVerification(email);
+    public ResponseEntity<Map<String, String>> resendVerification(@Valid @RequestBody EmailRequest request) {
+        authService.resendVerification(request.getEmail());
         return ResponseEntity.ok(Map.of("message", "Verification email sent. Please check your inbox."));
     }
 
     @PostMapping("/forgot-password")
     @Operation(summary = "Request password reset", description = "Sends a password reset email. Always returns 200 to prevent email enumeration. Rate limited to 5 per hour.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "If the email is registered, a reset link has been sent", content = @Content)
+            @ApiResponse(responseCode = "200", description = "If the email is registered, a reset link has been sent", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Validation error", content = @Content)
     })
-    public ResponseEntity<Map<String, String>> forgotPassword(@RequestBody Map<String, String> body) {
-        authService.requestPasswordReset(body.get("email"));
+    public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody EmailRequest request) {
+        authService.requestPasswordReset(request.getEmail());
         return ResponseEntity.ok(Map.of("message", "If that email is registered, a password reset link has been sent."));
     }
 
@@ -94,7 +98,7 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Password reset successfully", content = @Content),
             @ApiResponse(responseCode = "400", description = "Invalid, expired, or already used token", content = @Content)
     })
-    public ResponseEntity<Map<String, String>> resetPassword(@RequestBody ResetPasswordRequest request) {
+    public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request.getToken(), request.getNewPassword());
         return ResponseEntity.ok(Map.of("message", "Password reset successfully. You can now log in."));
     }

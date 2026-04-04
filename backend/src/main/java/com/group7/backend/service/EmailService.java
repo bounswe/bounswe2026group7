@@ -1,6 +1,7 @@
 package com.group7.backend.service;
 
 import com.group7.backend.entity.User;
+import com.group7.backend.exception.EmailSendException;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,7 +40,7 @@ public class EmailService {
             helper.setText(html, true);
             mailSender.send(message);
         } catch (MessagingException e) {
-            throw new RuntimeException("Failed to send verification email", e);
+            throw new EmailSendException("Failed to send verification email", e);
         }
     }
 
@@ -56,7 +57,7 @@ public class EmailService {
             helper.setText(html, true);
             mailSender.send(message);
         } catch (MessagingException e) {
-            throw new RuntimeException("Failed to send password reset email", e);
+            throw new EmailSendException("Failed to send password reset email", e);
         }
     }
 
