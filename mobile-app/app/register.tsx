@@ -1,3 +1,5 @@
+import apiClient from '../api/client';
+
 import { router } from 'expo-router';
 import { useRole } from '../components/RoleContext';
 import React, { useMemo, useState } from 'react';
@@ -10,6 +12,7 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
 
 export default function RegisterScreen() {
@@ -66,12 +69,37 @@ export default function RegisterScreen() {
     );
   }, [fullName, email, password, interests]);
 
-  const handleRegister = () => {
-    const appRole = selectedRole === 'Mentor' ? 'mentor' : 'mentee';
-    setGlobalRole(appRole);
-    router.replace('/(tabs)/profile');
-  };
+  const handleRegister = async () => {
+    if (!isFormValid) {
+      Alert.alert("Error", "Please fill in all required fields and add at least one interest.");
+      return;
+    }
 
+    try {
+      const nameParts = fullName.trim().split(' ');
+      const fName = nameParts[0];
+      const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'User';
+
+      // Backend'e kayıt isteği gönderiyoruz
+      await apiClient.post('/auth/register', {
+        firstName: fName,
+        lastName: lName,
+        email: email,
+        password: password,
+        isMentor: selectedRole === 'Mentor'
+      });
+
+      Alert.alert("Success", "Account created! Now please log in.");
+      router.replace('/login');
+    }  catch (error: any) {
+      // Backend'den gelen gerçek hata mesajını yakalıyoruz
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Registration failed";
+      
+      Alert.alert("Error Details", errorMessage);
+      console.error("Full error:", error);
+  
+    }
+  };
   return (
     <View style={styles.container}>
       <View style={styles.topCircle} />
