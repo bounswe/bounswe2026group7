@@ -143,6 +143,8 @@ export default function HomePage() {
                 {recommended.map(m => {
                   const tags = (m.interests || []).slice(0, 3)
                   const alreadySent = requestSentIds.has(m.id)
+                  const atCapacity = m.maxMenteeCapacity != null && m.currentMenteeCount >= m.maxMenteeCapacity
+                  const btnDisabled = alreadySent || atCapacity
                   return (
                     <div className="mentor-card" key={m.id}>
                       <div className="mc-header">
@@ -155,6 +157,7 @@ export default function HomePage() {
                             </div>
                           </div>
                         </div>
+                        {atCapacity && <span className="badge-full">Full</span>}
                       </div>
                       {tags.length > 0 && (
                         <div className="mc-tags">
@@ -165,10 +168,10 @@ export default function HomePage() {
                         <div className="mentor-actions">
                           <button
                             className={`send-request-btn${alreadySent ? ' sent' : ''}`}
-                            disabled={alreadySent}
-                            onClick={() => openRequestModal(m)}
+                            disabled={btnDisabled}
+                            onClick={() => !btnDisabled && openRequestModal(m)}
                           >
-                            {alreadySent ? 'Request Sent' : 'Send Request'}
+                            {alreadySent ? 'Request Sent' : atCapacity ? 'At Capacity' : 'Send Request'}
                           </button>
                         </div>
                       </div>

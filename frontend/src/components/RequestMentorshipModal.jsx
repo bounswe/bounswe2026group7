@@ -3,8 +3,8 @@ import '../styles/modal.css'
 
 export default function RequestMentorshipModal({ visible, onClose, onSubmit, loading, error, mentorName, defaultMessage }) {
   const [message, setMessage] = useState(defaultMessage || '')
-  const [touched, setTouched] = useState(false)
   const overlayRef = useRef(null)
+  const textareaRef = useRef(null)
   const maxChars = 500
 
   useEffect(() => {
@@ -23,12 +23,12 @@ export default function RequestMentorshipModal({ visible, onClose, onSubmit, loa
   useEffect(() => {
     if (visible) {
       setMessage(defaultMessage || '')
-      setTouched(false)
+      // Focus textarea when modal opens
+      setTimeout(() => textareaRef.current?.focus(), 50)
     }
   }, [visible, defaultMessage])
 
-  const isValid = message.trim().length > 0 && message.trim().length <= maxChars
-  const errorMessage = touched && message.trim().length === 0 ? 'Message is required.' : ''
+  const isValid = message.trim().length <= maxChars
 
   const handleOverlayClick = (event) => {
     if (event.target === overlayRef.current) {
@@ -38,12 +38,13 @@ export default function RequestMentorshipModal({ visible, onClose, onSubmit, loa
 
   const handleSubmit = (event) => {
     event.preventDefault()
-    setTouched(true)
     if (!isValid) return
     onSubmit(message.trim())
   }
 
   if (!visible) return null
+
+  const charCount = message.trim().length
 
   return (
     <div className="modal-overlay" ref={overlayRef} onMouseDown={handleOverlayClick}>
@@ -51,26 +52,27 @@ export default function RequestMentorshipModal({ visible, onClose, onSubmit, loa
         <div className="modal-header">
           <div>
             <h2 id="requestMentorshipTitle">Send Mentorship Request</h2>
-            <p className="modal-subtitle">Write a short message to {mentorName || 'the mentor'} explaining your goals.</p>
+            <p className="modal-subtitle">Optionally write a message to {mentorName || 'the mentor'} explaining your goals.</p>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <label className="modal-label" htmlFor="mentorshipMessage">Introductory Message</label>
+          <label className="modal-label" htmlFor="mentorshipMessage">Introductory Message <span style={{ fontWeight: 400, color: '#64748b' }}>(optional)</span></label>
           <textarea
             id="mentorshipMessage"
+            ref={textareaRef}
             className="modal-textarea"
             maxLength={maxChars}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            onBlur={() => setTouched(true)}
             placeholder="Tell the mentor why you'd like to work with them..."
             rows={8}
           />
           <div className="modal-footer-row">
-            <span className="char-count">{message.trim().length}/{maxChars}</span>
-            {errorMessage && <span className="field-error">{errorMessage}</span>}
+            <span className="char-count" style={{ color: charCount > maxChars ? '#b91c1c' : '#64748b' }}>
+              {charCount}/{maxChars}
+            </span>
           </div>
 
           {error && <div className="modal-api-error">{error}</div>}
