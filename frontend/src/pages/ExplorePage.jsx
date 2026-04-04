@@ -1,97 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import MainLayout from '../components/MainLayout'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
-import { createMentorshipRequest } from '../services/api'
+import { getMatchingMentors, getSentMentorshipRequests, createMentorshipRequest } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
 
 const FILTERS = ['All', 'Backend', 'Mobile', 'AI/ML', 'DevOps', 'Frontend', 'Data']
 
-const MENTORS = [
-  {
-    id: 1,
-    initials: 'BA',
-    name: 'Burak Afşar',
-    sub: 'Senior iOS Dev · Apple',
-    tags: ['Swift', 'Mobile'],
-    rating: '4.9',
-    reviews: 24,
-    stars: 5,
-    available: true,
-    avatarStyle: { background: '#dce9fc', color: '#2563eb' },
-  },
-  {
-    id: 2,
-    initials: 'AY',
-    name: 'Ayşe Yıldız',
-    sub: 'ML Engineer · Google',
-    tags: ['Python', 'AI/ML'],
-    rating: '4.7',
-    reviews: 18,
-    stars: 5,
-    available: true,
-    avatarStyle: { background: '#ece8f8', color: '#5b4c8a' },
-  },
-  {
-    id: 3,
-    initials: 'MK',
-    name: 'Mehmet Kaya',
-    sub: 'Backend Lead · Trendyol',
-    tags: ['Node.js', 'AWS'],
-    rating: '4.5',
-    reviews: 31,
-    stars: 4,
-    available: false,
-    avatarStyle: { background: '#f5ead8', color: '#8a6a20' },
-  },
-  {
-    id: 4,
-    initials: 'DÇ',
-    name: 'Deniz Çelik',
-    sub: 'Frontend Lead · Getir',
-    tags: ['React', 'TypeScript'],
-    rating: '4.8',
-    reviews: 12,
-    stars: 5,
-    available: true,
-    avatarStyle: { background: '#e8f5ea', color: '#2d7a3a' },
-  },
-  {
-    id: 5,
-    initials: 'SA',
-    name: 'Selin Arslan',
-    sub: 'Data Scientist · Insider',
-    tags: ['Python', 'SQL', 'Data'],
-    rating: '4.6',
-    reviews: 9,
-    stars: 4,
-    available: true,
-    avatarStyle: { background: '#fce8e8', color: '#c0392b' },
-  },
-  {
-    id: 6,
-    initials: 'EY',
-    name: 'Emre Yılmaz',
-    sub: 'DevOps Engineer · Hepsiburada',
-    tags: ['Kubernetes', 'Docker'],
-    rating: '4.9',
-    reviews: 7,
-    stars: 5,
-    available: true,
-    avatarStyle: { background: '#e0f4f8', color: '#0e7490' },
-  },
-]
-
-function StarRow({ count }) {
-  return (
-    <span className="stars">
-      {[1, 2, 3, 4, 5].map(i => (
-        <span key={i}>{i <= count ? '★' : '☆'}</span>
-      ))}
-    </span>
-  )
-}
-
 export default function ExplorePage() {
+  const { role } = useAuth()
+  const isMentee = role === 'MENTEE'
+
+  const [mentors, setMentors] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [hasActiveMentor, setHasActiveMentor] = useState(false)
   const [activeFilter, setActiveFilter] = useState('All')
   const [search, setSearch] = useState('')
   const [selectedMentor, setSelectedMentor] = useState(null)
@@ -99,10 +21,74 @@ export default function ExplorePage() {
   const [modalLoading, setModalLoading] = useState(false)
   const [modalError, setModalError] = useState('')
 
-  const filtered = MENTORS.filter(m => {
-    const matchesFilter = activeFilter === 'All' || m.tags.some(t => t === activeFilter) || m.sub.toLowerCase().includes(activeFilter.toLowerCase())
-    const matchesSearch = search === '' || m.name.toLowerCase().includes(search.toLowerCase()) || m.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))
-    return matchesFilter && matchesSearch
+  const debounceRef = useRef(null)
+
+  useEffect(() => {
+    if (!isMentee) return
+
+    async function init() {
+      setLoading(true)
+      try {
+        const [mentorData, sentData] = await Promise.allSettled([
+          getMatchingMentors(),
+          getSentMentorshipRequests(),
+        ])
+
+        if (mentorData.status === 'fulfilled') {
+          setMentors(mentorData.value)
+        } else {
+          const msg = mentorData.reason?.message || ''
+          if (msg.includes('403') || mentorData.reason?.status === 403) {
+            setHasActiveMentor(true)
+          }
+        }
+
+        if (sentData.status === 'fulfilled') {
+          const pending = new Set(
+            (sentData.value.content || [])
+              .filter(r => r.status === 'PENDING')
+              .map(r => r.mentorId)
+          )
+          setRequestSentIds(pending)
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    init()
+  }, [isMentee])
+
+  useEffect(() => {
+    if (!isMentee) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const data = await getMatchingMentors(search || undefined)
+        setMentors(data)
+        setHasActiveMentor(false)
+      } catch (err) {
+        const msg = err?.message || ''
+        if (msg.includes('403')) {
+          setHasActiveMentor(true)
+          setMentors([])
+        }
+      } finally {
+        setLoading(false)
+      }
+    }, 400)
+    return () => clearTimeout(debounceRef.current)
+  }, [search, isMentee])
+
+  const filtered = mentors.filter(m => {
+    if (activeFilter === 'All') return true
+    const interests = m.interests || []
+    return (
+      interests.some(i => i.toLowerCase().includes(activeFilter.toLowerCase())) ||
+      (m.expertise || '').toLowerCase().includes(activeFilter.toLowerCase()) ||
+      (m.field || '').toLowerCase().includes(activeFilter.toLowerCase())
+    )
   })
 
   const showToast = (message, type = 'success') => {
@@ -151,13 +137,18 @@ export default function ExplorePage() {
         onSubmit={handleSendRequest}
         loading={modalLoading}
         error={modalError}
-        mentorName={selectedMentor?.name}
+        mentorName={selectedMentor?.firstName}
       />
 
       <div className="page-header">
         <div><div className="page-title">Find a Mentor</div></div>
-        <button className="action-btn">Filter</button>
       </div>
+
+      {hasActiveMentor && (
+        <div className="active-mentor-banner">
+          You already have an active mentor. Sending new requests is disabled.
+        </div>
+      )}
 
       <div className="explore-header">
         <div className="search-box">
@@ -183,50 +174,54 @@ export default function ExplorePage() {
         ))}
       </div>
 
-      <div className="mentors-grid">
-        {filtered.map(m => (
-          <div className="mentor-card" key={m.id}>
-            <div className="mc-header">
-              <div className="mc-info">
-                <div className="mc-avatar" style={m.avatarStyle}>{m.initials}</div>
-                <div>
-                  <div className="mc-name">{m.name}</div>
-                  <div className="mc-sub">{m.sub}</div>
+      {!isMentee ? (
+        <div className="empty-state">This page is for mentees looking for a mentor.</div>
+      ) : loading ? (
+        <div className="empty-state">Loading mentors...</div>
+      ) : filtered.length === 0 ? (
+        <div className="empty-state">No mentors found. Try a different search or filter.</div>
+      ) : (
+        <div className="mentors-grid">
+          {filtered.map(m => {
+            const tags = (m.interests || []).slice(0, 3)
+            const alreadySent = requestSentIds.has(m.id)
+            return (
+              <div className="mentor-card" key={m.id}>
+                <div className="mc-header">
+                  <div className="mc-info">
+                    <div className="mc-avatar">{m.firstName?.[0] ?? '?'}</div>
+                    <div>
+                      <div className="mc-name">{m.firstName}</div>
+                      <div className="mc-sub">
+                        {[m.expertise, m.affiliation].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {tags.length > 0 && (
+                  <div className="mc-tags">
+                    {tags.map(tag => <span className="tag" key={tag}>{tag}</span>)}
+                  </div>
+                )}
+                {m.bio && <div className="mc-bio">{m.bio}</div>}
+                <div className="mc-footer">
+                  <div className="mentor-actions">
+                    {isMentee && (
+                      <button
+                        className={`send-request-btn${alreadySent ? ' sent' : ''}`}
+                        disabled={alreadySent || hasActiveMentor}
+                        onClick={() => openRequestModal(m)}
+                      >
+                        {alreadySent ? 'Request Sent' : 'Send Request'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-              {m.available
-                ? <span className="badge-avail">Available</span>
-                : <span className="badge-full">Full</span>
-              }
-            </div>
-            <div className="mc-tags">
-              {m.tags.map(tag => <span className="tag" key={tag}>{tag}</span>)}
-            </div>
-            <div className="mc-footer">
-              <div>
-                <StarRow count={m.stars} />
-                <span className="rating-text">{m.rating} ({m.reviews})</span>
-              </div>
-              <div className="mentor-actions">
-                <button
-                  className="view-btn"
-                  style={!m.available ? { opacity: 0.5, cursor: 'default' } : {}}
-                >
-                  View
-                </button>
-                <button
-                  className={`send-request-btn${requestSentIds.has(m.id) ? ' sent' : ''}`}
-                  disabled={!m.available || requestSentIds.has(m.id)}
-                  onClick={() => openRequestModal(m)}
-                  style={!m.available ? { opacity: 0.5, cursor: 'default' } : {}}
-                >
-                  {requestSentIds.has(m.id) ? 'Request Sent' : 'Send Request'}
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </MainLayout>
   )
 }
