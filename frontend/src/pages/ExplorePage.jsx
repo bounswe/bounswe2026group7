@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import MainLayout from '../components/MainLayout'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
-import { getMatchingMentors, getSentMentorshipRequests, createMentorshipRequest } from '../services/api'
+import { getAllMentors, getMatchingMentors, getSentMentorshipRequests, createMentorshipRequest } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
 
@@ -21,35 +21,35 @@ export default function ExplorePage() {
   const [modalLoading, setModalLoading] = useState(false)
   const [modalError, setModalError] = useState('')
 
-  const debounceRef = useRef(null)
-
   useEffect(() => {
-    if (!isMentee) return
-
     async function init() {
       setLoading(true)
       try {
         const [mentorData, sentData] = await Promise.allSettled([
-          getMatchingMentors(),
-          getSentMentorshipRequests(),
+          getAllMentors(),
+          isMentee ? getSentMentorshipRequests() : Promise.resolve(null),
         ])
 
         if (mentorData.status === 'fulfilled') {
           setMentors(mentorData.value)
-        } else {
-          const msg = mentorData.reason?.message || ''
-          if (msg.includes('403') || mentorData.reason?.status === 403) {
-            setHasActiveMentor(true)
-          }
         }
 
-        if (sentData.status === 'fulfilled') {
+        if (sentData.status === 'fulfilled' && sentData.value) {
           const pending = new Set(
             (sentData.value.content || [])
               .filter(r => r.status === 'PENDING')
               .map(r => r.mentorId)
           )
           setRequestSentIds(pending)
+        }
+
+        // Check if mentee already has an active mentor
+        if (isMentee) {
+          try {
+            await getMatchingMentors()
+          } catch (err) {
+            if ((err?.message || '').includes('403')) setHasActiveMentor(true)
+          }
         }
       } finally {
         setLoading(false)
@@ -59,36 +59,22 @@ export default function ExplorePage() {
     init()
   }, [isMentee])
 
-  useEffect(() => {
-    if (!isMentee) return
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true)
-      try {
-        const data = await getMatchingMentors(search || undefined)
-        setMentors(data)
-        setHasActiveMentor(false)
-      } catch (err) {
-        const msg = err?.message || ''
-        if (msg.includes('403')) {
-          setHasActiveMentor(true)
-          setMentors([])
-        }
-      } finally {
-        setLoading(false)
-      }
-    }, 400)
-    return () => clearTimeout(debounceRef.current)
-  }, [search, isMentee])
-
   const filtered = mentors.filter(m => {
-    if (activeFilter === 'All') return true
     const interests = m.interests || []
-    return (
+    const matchesFilter = activeFilter === 'All' ||
       interests.some(i => i.toLowerCase().includes(activeFilter.toLowerCase())) ||
       (m.expertise || '').toLowerCase().includes(activeFilter.toLowerCase()) ||
       (m.field || '').toLowerCase().includes(activeFilter.toLowerCase())
-    )
+
+    const kw = search.toLowerCase()
+    const matchesSearch = !kw ||
+      (m.firstName || '').toLowerCase().includes(kw) ||
+      (m.expertise || '').toLowerCase().includes(kw) ||
+      (m.field || '').toLowerCase().includes(kw) ||
+      (m.affiliation || '').toLowerCase().includes(kw) ||
+      interests.some(i => i.toLowerCase().includes(kw))
+
+    return matchesFilter && matchesSearch
   })
 
   const showToast = (message, type = 'success') => {

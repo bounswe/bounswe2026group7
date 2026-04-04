@@ -78,6 +78,14 @@ export async function getMatchingMentors(keyword) {
   return handleResponse(res)
 }
 
+export async function getAllMentors() {
+  const token = localStorage.getItem('auth_token')
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${BASE_URL}/users/mentors`, { headers })
+  return handleResponse(res)
+}
+
 export async function getSentMentorshipRequests() {
   const token = localStorage.getItem('auth_token')
   const headers = {}
