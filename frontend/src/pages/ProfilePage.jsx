@@ -18,8 +18,11 @@ const MENTOR_DEFAULTS = {
   goals: 'Help young developers grow their skills and successfully enter the industry.',
   skills: 'Swift, iOS, Xcode, React Native',
   interests: 'Mobile Development, Mentoring, Tech Education',
-  mentoringPreferences: 'Prefer mentees interested in mobile development. Max 3 mentees, 3-month duration.',
+  mentoringPreferences: 'Prefer mentees interested in mobile development.',
   profileVisible: true,
+  mentorshipDuration: 3,
+  maxCapacity: 3,
+  currentActiveMentees: 1,
 }
 
 function PrivacyBadge({ visible }) {
@@ -94,6 +97,8 @@ export default function ProfilePage() {
 
   const initials = form.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
+  const capacityPercentage = isMentor ? Math.min((form.currentActiveMentees / form.maxCapacity) * 100, 100) : 0
+
   return (
     <MainLayout>
       <div className="page-header">
@@ -133,7 +138,10 @@ export default function ProfilePage() {
             <ViewField label="Skills" value={form.skills} visible={form.profileVisible} />
             <ViewField label="Interests" value={form.interests} visible={form.profileVisible} />
             {isMentor && (
-              <ViewField label="Mentoring Preferences" value={form.mentoringPreferences} visible={form.profileVisible} />
+              <>
+                <ViewField label="Mentoring Preferences" value={form.mentoringPreferences} visible={form.profileVisible} />
+                <ViewField label="Mentorship Duration" value={`${form.mentorshipDuration} Month${form.mentorshipDuration !== 1 ? 's' : ''}`} visible={form.profileVisible} />
+              </>
             )}
           </div>
         </div>
@@ -215,6 +223,67 @@ export default function ProfilePage() {
                 />
                 {errors.mentoringPreferences && <div style={{ color: 'var(--red-text)', fontSize: '13px', marginTop: '4px' }}>{errors.mentoringPreferences}</div>}
               </div>
+            )}
+
+            {isMentor && (
+              <>
+                {/* Mentorship Duration */}
+                <div className="form-field">
+                  <label className="form-label">Mentorship Duration</label>
+                  <div className="duration-selector">
+                    {[1, 3, 6].map(month => (
+                      <button
+                        key={month}
+                        type="button"
+                        className={`duration-btn${form.mentorshipDuration === month ? ' active' : ''}`}
+                        onClick={() => handleChange('mentorshipDuration', month)}
+                      >
+                        {month}M
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Max Capacity */}
+                <div className="form-field">
+                  <label className="form-label">Max Mentee Capacity</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={form.maxCapacity}
+                    onChange={e => handleChange('maxCapacity', parseInt(e.target.value) || 1)}
+                  />
+                </div>
+
+                {/* Active Mentees Tracker */}
+                <div className="form-field">
+                  <label className="form-label">Active Mentees</label>
+                  <div className="capacity-display">
+                    <div className="capacity-number">
+                      <span className="current">{form.currentActiveMentees}</span>
+                      <span className="separator">/</span>
+                      <span className="max">{form.maxCapacity}</span>
+                    </div>
+                    <div className="capacity-bar">
+                      <div
+                        className="capacity-fill"
+                        style={{ width: `${capacityPercentage}%` }}
+                      />
+                    </div>
+                    <div className="capacity-status">
+                      {form.currentActiveMentees >= form.maxCapacity ? (
+                        <span className="status-full">⚠️ At Capacity</span>
+                      ) : (
+                        <span className="status-available">
+                          ✓ {form.maxCapacity - form.currentActiveMentees} spot{form.maxCapacity - form.currentActiveMentees !== 1 ? 's' : ''} available
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
 
             <div className="divider" />

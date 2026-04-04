@@ -508,6 +508,104 @@
 }
 .form-input:focus { border-color: var(--green-mid); }
 .form-textarea { resize: vertical; min-height: 100px; }
+
+/* ── MENTOR PREFERENCES (In-Profile) ── */
+.duration-selector {
+  display: flex;
+  gap: 10px;
+}
+
+.duration-btn {
+  flex: 1;
+  padding: 11px 14px;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'DM Sans', sans-serif;
+  white-space: nowrap;
+}
+
+.duration-btn:hover {
+  border-color: var(--green-mid);
+  color: var(--green-dark);
+}
+
+.duration-btn.active {
+  background: var(--green-pale);
+  border-color: var(--green-mid);
+  color: var(--green-dark);
+  font-weight: 700;
+}
+
+.capacity-display {
+  background: #f9faf9;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+}
+
+.capacity-number {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.capacity-number .current {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--green-dark);
+}
+
+.capacity-number .separator {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.capacity-number .max {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.capacity-bar {
+  width: 100%;
+  height: 8px;
+  background: #e5e7e5;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.capacity-fill {
+  height: 100%;
+  background: var(--green-mid);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.capacity-status {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-mid);
+}
+
+.status-available {
+  color: var(--green-dark);
+}
+
+.status-full {
+  color: #dc2626;
+}
+
 .save-btn {
   width: 100%; padding: 14px;
   background: var(--green-mid); color: #fff;
