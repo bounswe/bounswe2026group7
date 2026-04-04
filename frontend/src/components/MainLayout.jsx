@@ -14,6 +14,7 @@ const NAV_TABS = [
   { label: 'Messages', path: '/messages' },
   { label: 'Tasks', path: '/tasks' },
   { label: 'Schedule', path: '/schedule' },
+  { label: 'Availability', path: '/availability' },
   { label: 'Profile', path: '/profile' },
 ]
 
