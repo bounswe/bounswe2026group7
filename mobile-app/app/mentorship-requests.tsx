@@ -8,23 +8,52 @@ import {
   ScrollView,
 } from 'react-native';
 
+type CandidateRequest = {
+  id: string;
+  initials: string;
+  avatarBg: string;
+  avatarText: string;
+  name: string;
+  time: string;
+  message: string;
+  department: string;
+  about: string;
+  goals: string[];
+  interests: string[];
+  background: string;
+};
+
 export default function MentorshipRequestsScreen() {
-  const incomingRequests = [
+  const incomingRequests: CandidateRequest[] = [
     {
+      id: 'ovgu',
       initials: 'ÖA',
       avatarBg: '#D6E8DC',
       avatarText: '#2F563C',
       name: 'Övgü Su Afşar',
       time: '2 hours ago',
       message: 'Looking for mentorship on my React Native project.',
+      department: 'Computer Engineering',
+      about:
+        'I want to improve my mobile development skills and learn how to structure larger React Native projects.',
+      goals: ['Learn React Native', 'Build portfolio project', 'Improve clean code'],
+      interests: ['React Native', 'UI/UX', 'Frontend'],
+      background: '3rd year student with internship experience and growing interest in product-focused mobile apps.',
     },
     {
+      id: 'berkan',
       initials: 'BK',
       avatarBg: '#E2D1E6',
       avatarText: '#6D3F72',
       name: 'Berkan Kılıç',
       time: '1 day ago',
       message: 'Seeking guidance in machine learning fundamentals.',
+      department: 'Industrial Engineering',
+      about:
+        'I am trying to build stronger ML basics and get better at practical project workflows.',
+      goals: ['Understand ML fundamentals', 'Build first ML pipeline'],
+      interests: ['Machine Learning', 'Python', 'Data Science'],
+      background: 'Interested in analytics and wants to transition into ML-based product work.',
     },
   ];
 
@@ -46,6 +75,26 @@ export default function MentorshipRequestsScreen() {
       progress: 20,
     },
   ];
+
+  const openCandidateProfile = (item: CandidateRequest) => {
+    router.push({
+      pathname: '/request-candidate-profile',
+      params: {
+        id: item.id,
+        initials: item.initials,
+        avatarBg: item.avatarBg,
+        avatarText: item.avatarText,
+        name: item.name,
+        time: item.time,
+        message: item.message,
+        department: item.department,
+        about: item.about,
+        background: item.background,
+        goals: JSON.stringify(item.goals),
+        interests: JSON.stringify(item.interests),
+      },
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -79,21 +128,11 @@ export default function MentorshipRequestsScreen() {
       >
         <Text style={styles.sectionTitle}>INCOMING</Text>
 
-        {incomingRequests.map((item, index) => (
-          <View key={index} style={styles.requestCard}>
+        {incomingRequests.map((item) => (
+          <View key={item.id} style={styles.requestCard}>
             <View style={styles.topRow}>
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: item.avatarBg },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.avatarText,
-                    { color: item.avatarText },
-                  ]}
-                >
+              <View style={[styles.avatar, { backgroundColor: item.avatarBg }]}>
+                <Text style={[styles.avatarText, { color: item.avatarText }]}>
                   {item.initials}
                 </Text>
               </View>
@@ -106,15 +145,12 @@ export default function MentorshipRequestsScreen() {
 
             <Text style={styles.message}>{item.message}</Text>
 
-            <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={[styles.actionButton, styles.acceptButton]}>
-                <Text style={styles.acceptButtonText}>Accept</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={[styles.actionButton, styles.rejectButton]}>
-                <Text style={styles.rejectButtonText}>Reject</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.viewProfileButton}
+              onPress={() => openCandidateProfile(item)}
+            >
+              <Text style={styles.viewProfileButtonText}>View Profile</Text>
+            </TouchableOpacity>
           </View>
         ))}
 
@@ -123,18 +159,8 @@ export default function MentorshipRequestsScreen() {
         {activeMentorships.map((item, index) => (
           <View key={index} style={styles.activeCard}>
             <View style={styles.topRow}>
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: item.avatarBg },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.avatarText,
-                    { color: item.avatarText },
-                  ]}
-                >
+              <View style={[styles.avatar, { backgroundColor: item.avatarBg }]}>
+                <Text style={[styles.avatarText, { color: item.avatarText }]}>
                   {item.initials}
                 </Text>
               </View>
@@ -307,29 +333,14 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 18,
   },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  actionButton: {
-    flex: 1,
+  viewProfileButton: {
+    backgroundColor: '#D7E8DA',
     borderRadius: 18,
     paddingVertical: 16,
     alignItems: 'center',
   },
-  acceptButton: {
-    backgroundColor: '#D7E8DA',
-  },
-  acceptButtonText: {
+  viewProfileButtonText: {
     color: '#2F563C',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  rejectButton: {
-    backgroundColor: '#FDF0EF',
-  },
-  rejectButtonText: {
-    color: '#D9534F',
     fontSize: 15,
     fontWeight: '700',
   },

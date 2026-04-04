@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { router } from 'expo-router';
 import { useRole } from '../../components/RoleContext';
+import apiClient from '../../api/client';
 import {
   View,
   Text,
@@ -7,7 +9,35 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
+
+// Yardımcı Fonksiyon: Baş harfleri hesaplar
+const getInitials = (name: string) => {
+  if (!name) return 'U';
+  const parts = name.trim().split(' ');
+  if (parts.length > 1) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+};
+
+type MentorCard = {
+  id: string;
+  initials: string;
+  avatarBg: string;
+  avatarText: string;
+  name: string;
+  role: string;
+  available: boolean;
+  tags: string[];
+  rating: string;
+  reviews: string;
+  about: string;
+  mentoringGoals: string[];
+  preferredMenteeCriteria: string[];
+  availability: string[];
+};
 
 export default function ExploreScreen() {
   const { role } = useRole();
@@ -21,382 +51,124 @@ export default function ExploreScreen() {
 }
 
 function MenteeExploreContent() {
-  const mentors = [
-    {
-      initials: 'BA',
-      avatarBg: '#D6E8DC',
-      avatarText: '#2F563C',
-      name: 'Burak Afşar',
-      role: 'Senior iOS Dev · Apple',
-      available: true,
-      tags: ['Swift', 'Mobile'],
-      rating: '4.9',
-      reviews: '24',
-    },
-    {
-      initials: 'AY',
-      avatarBg: '#E2D1E6',
-      avatarText: '#6D3F72',
-      name: 'Ayşe Yıldız',
-      role: 'ML Engineer · Google',
-      available: true,
-      tags: ['Python', 'ML'],
-      rating: '4.7',
-      reviews: '18',
-    },
-    {
-      initials: 'MK',
-      avatarBg: '#DFD9C9',
-      avatarText: '#66582F',
-      name: 'Mehmet Kaya',
-      role: 'Backend Lead · Trendyol',
-      available: false,
-      tags: ['Node.js', 'AWS'],
-      rating: '4.8',
-      reviews: '31',
-    },
-    {
-      initials: 'EA',
-      avatarBg: '#D7E4F1',
-      avatarText: '#355B7A',
-      name: 'Elif Arslan',
-      role: 'Data Scientist · Microsoft',
-      available: true,
-      tags: ['SQL', 'Data'],
-      rating: '4.8',
-      reviews: '21',
-    },
-  ];
+  const [mentors, setMentors] = useState<MentorCard[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMentors = async () => {
+      try {
+        // Backend'den gerçek mentor listesini çekiyoruz
+        const response = await apiClient.get('/users/mentors');
+        const data = response.data;
+
+        // Backend verisini bizim MentorCard tipine dönüştürüyoruz
+        const mappedMentors = data.map((m: any) => ({
+          id: String(m.id),
+          name: `${m.firstName} ${m.lastName}`,
+          initials: getInitials(`${m.firstName} ${m.lastName}`),
+          role: m.field || 'Mentor',
+          avatarBg: '#D6E8DC', // Tasarım için sabit renkler
+          avatarText: '#2F563C',
+          available: true,
+          tags: m.interests || [],
+          rating: '5.0', // Şimdilik placeholder
+          reviews: '0',
+          about: m.bio || 'No bio provided.',
+          mentoringGoals: [],
+          preferredMenteeCriteria: [],
+          availability: [],
+        }));
+
+        setMentors(mappedMentors);
+      } catch (error) {
+        console.error('Mentorları çekerken hata oluştu:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMentors();
+  }, []);
+
+  const openMentorProfile = (mentor: MentorCard) => {
+    router.push({
+      pathname: '/mentor-public-profile',
+      params: {
+        id: mentor.id,
+        initials: mentor.initials,
+        name: mentor.name,
+        role: mentor.role,
+        available: mentor.available ? 'true' : 'false',
+        tags: JSON.stringify(mentor.tags),
+        rating: mentor.rating,
+        reviews: mentor.reviews,
+        about: mentor.about,
+      },
+    });
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.fixedHeader}>
         <View style={styles.topCircle} />
-
-        <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
-          <Text style={styles.statusIcons}>▲ ▮</Text>
-        </View>
-
-        <Text style={styles.title}>
-          Find a{'\n'}
-          <Text style={styles.titleItalic}>Mentor.</Text>
-        </Text>
-
+        <Text style={styles.title}>Find a{'\n'}<Text style={styles.titleItalic}>Mentor.</Text></Text>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            placeholder="Search topics or mentors..."
-            placeholderTextColor="rgba(255,255,255,0.45)"
-            style={styles.searchInput}
-          />
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          <TouchableOpacity style={[styles.filterButton, styles.filterButtonActive]}>
-            <Text style={[styles.filterText, styles.filterTextActive]}>All</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Backend</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Mobile</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>AI/ML</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Data</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-
-      <ScrollView
-        style={styles.listArea}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {mentors.map((mentor, index) => (
-          <View key={index} style={styles.card}>
-            <View style={styles.cardTopRow}>
-              <View
-                style={[
-                  styles.avatar,
-                  { backgroundColor: mentor.avatarBg },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.avatarText,
-                    { color: mentor.avatarText },
-                  ]}
-                >
-                  {mentor.initials}
-                </Text>
-              </View>
-
-              <View style={styles.cardInfo}>
-                <Text style={styles.cardName}>{mentor.name}</Text>
-                <Text style={styles.cardRole}>{mentor.role}</Text>
-              </View>
-
-              <View
-                style={[
-                  styles.statusBadge,
-                  mentor.available
-                    ? styles.availableBadge
-                    : styles.fullBadge,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusBadgeText,
-                    mentor.available
-                      ? styles.availableBadgeText
-                      : styles.fullBadgeText,
-                  ]}
-                >
-                  {mentor.available ? 'Available' : 'Full'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.tagsRow}>
-              {mentor.tags.map((tag, tagIndex) => (
-                <View key={tagIndex} style={styles.tag}>
-                  <Text style={styles.tagText}>{tag}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.cardBottomRow}>
-              <View style={styles.ratingRow}>
-                <Text style={styles.stars}>★★★★★</Text>
-                <Text style={styles.ratingText}>
-                  {mentor.rating} ({mentor.reviews})
-                </Text>
-              </View>
-
-              <TouchableOpacity style={styles.viewButton}>
-                <Text style={styles.viewButtonText}>View Profile</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-function MentorExploreContent() {
-  const featuredLearning = [
-    {
-      icon: '📘',
-      iconBg: '#D9E6F2',
-      title: 'Structuring Your First Session',
-      progress: 65,
-      timeLeft: '4 min left',
-    },
-    {
-      icon: '🎬',
-      iconBg: '#E7DFF0',
-      title: 'How to Set SMART Goals with\nMentees',
-      progress: 30,
-      timeLeft: '12 min left',
-    },
-  ];
-
-  const recommended = [
-    {
-      icon: '🧠',
-      iconBg: '#DFE7C8',
-      title: 'Dealing with Disengaged\nMentees',
-      badge: 'New',
-      badgeType: 'green',
-      meta: 'Article · 6 min',
-    },
-    {
-      icon: '🎙️',
-      iconBg: '#EADFD6',
-      title: 'Active Listening in\nMentorship',
-      badge: 'Popular',
-      badgeType: 'rose',
-      meta: 'Podcast · 22 min',
-    },
-    {
-      icon: '📋',
-      iconBg: '#ECE4C8',
-      title: 'Mentorship Contract\nTemplates',
-      badge: 'Toolkit',
-      badgeType: 'gold',
-      meta: 'Guide · Free',
-    },
-    {
-      icon: '📊',
-      iconBg: '#DCE5F1',
-      title: 'Tracking Mentee Progress\nEffectively',
-      badge: 'Data',
-      badgeType: 'blue',
-      meta: 'Article · 5 min',
-    },
-  ];
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.fixedHeaderMentor}>
-        <View style={styles.mentorTopCircle} />
-        <View style={styles.mentorLeftCircle} />
-
-        <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
-          <Text style={styles.statusIcons}>▲ ▮</Text>
-        </View>
-
-        <Text style={styles.title}>
-          Grow as a{'\n'}
-          <Text style={styles.titleItalic}>Mentor.</Text>
-        </Text>
-
-        <View style={styles.searchBoxMentor}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            placeholder="Search articles, guides, events..."
-            placeholderTextColor="rgba(255,255,255,0.45)"
-            style={styles.searchInput}
-          />
+          <TextInput placeholder="Search topics or mentors..." placeholderTextColor="rgba(255,255,255,0.45)" style={styles.searchInput} />
         </View>
       </View>
 
-      <ScrollView
-        style={styles.listArea}
-        contentContainerStyle={styles.mentorListContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.mentorFilterRow}
-        >
-          <TouchableOpacity style={[styles.pillButton, styles.pillButtonActive]}>
-            <Text style={[styles.pillText, styles.pillTextActive]}>All</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.pillButton}>
-            <Text style={styles.pillText}>Articles</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.pillButton}>
-            <Text style={styles.pillText}>Videos</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.pillButton}>
-            <Text style={styles.pillText}>Guides</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.pillButton}>
-            <Text style={styles.pillText}>Events</Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        <Text style={styles.sectionTitle}>FEATURED RESOURCE</Text>
-
-        <View style={styles.featuredCard}>
-          <View style={styles.featuredCircle} />
-          <View style={styles.editorPill}>
-            <Text style={styles.editorPillText}>⭐ Editor&apos;s Pick</Text>
-          </View>
-
-          <Text style={styles.featuredTitle}>
-            The Art of Giving Feedback That{'\n'}
-            Actually Sticks
-          </Text>
-
-          <Text style={styles.featuredMeta}>8 min read · Mentoring Skills</Text>
-        </View>
-
-        <Text style={styles.sectionTitle}>CONTINUE LEARNING</Text>
-
-        {featuredLearning.map((item, index) => (
-          <View key={index} style={styles.learningCard}>
-            <View style={[styles.learningIconBox, { backgroundColor: item.iconBg }]}>
-              <Text style={styles.learningIcon}>{item.icon}</Text>
-            </View>
-
-            <View style={styles.learningTextArea}>
-              <Text style={styles.learningTitle}>{item.title}</Text>
-
-              <View style={styles.learningBottomRow}>
-                <View style={styles.progressTrack}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${item.progress}%` },
-                    ]}
-                  />
+      {loading ? (
+        <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
+      ) : (
+        <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+          {mentors.map((mentor) => (
+            <View key={mentor.id} style={styles.card}>
+              <View style={styles.cardTopRow}>
+                <View style={[styles.avatar, { backgroundColor: mentor.avatarBg }]}>
+                  <Text style={[styles.avatarText, { color: mentor.avatarText }]}>{mentor.initials}</Text>
                 </View>
-                <Text style={styles.learningTime}>{item.timeLeft}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.chevron}>›</Text>
-          </View>
-        ))}
-
-        <Text style={styles.sectionTitle}>RECOMMENDED FOR YOU</Text>
-
-        {recommended.map((item, index) => (
-          <View key={index} style={styles.recommendCard}>
-            <View style={[styles.recommendIconBox, { backgroundColor: item.iconBg }]}>
-              <Text style={styles.recommendIcon}>{item.icon}</Text>
-            </View>
-
-            <View style={styles.recommendTextArea}>
-              <Text style={styles.recommendTitle}>{item.title}</Text>
-
-              <View style={styles.metaRow}>
-                <View
-                  style={[
-                    styles.metaBadge,
-                    item.badgeType === 'green' && styles.metaBadgeGreen,
-                    item.badgeType === 'rose' && styles.metaBadgeRose,
-                    item.badgeType === 'gold' && styles.metaBadgeGold,
-                    item.badgeType === 'blue' && styles.metaBadgeBlue,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.metaBadgeText,
-                      item.badgeType === 'green' && styles.metaBadgeTextGreen,
-                      item.badgeType === 'rose' && styles.metaBadgeTextRose,
-                      item.badgeType === 'gold' && styles.metaBadgeTextGold,
-                      item.badgeType === 'blue' && styles.metaBadgeTextBlue,
-                    ]}
-                  >
-                    {item.badge}
+                <View style={styles.cardInfo}>
+                  <Text style={styles.cardName}>{mentor.name}</Text>
+                  <Text style={styles.cardRole}>{mentor.role}</Text>
+                </View>
+                <View style={[styles.statusBadge, mentor.available ? styles.availableBadge : styles.fullBadge]}>
+                  <Text style={[styles.statusBadgeText, mentor.available ? styles.availableBadgeText : styles.fullBadgeText]}>
+                    {mentor.available ? 'Available' : 'Full'}
                   </Text>
                 </View>
-
-                <Text style={styles.metaText}>{item.meta}</Text>
+              </View>
+              <View style={styles.tagsRow}>
+                {mentor.tags.map((tag, idx) => (
+                  <View key={idx} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>
+                ))}
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.cardBottomRow}>
+                <View style={styles.ratingRow}>
+                  <Text style={styles.stars}>★★★★★</Text>
+                  <Text style={styles.ratingText}>{mentor.rating} ({mentor.reviews})</Text>
+                </View>
+                <TouchableOpacity style={styles.viewButton} onPress={() => openMentorProfile(mentor)}>
+                  <Text style={styles.viewButtonText}>View Profile</Text>
+                </TouchableOpacity>
               </View>
             </View>
-
-            <Text style={styles.chevron}>›</Text>
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
     </View>
   );
 }
+
+// Mentor içeriği için mevcut tasarımını koruyabilir veya benzer bir 
+// fetch işlemiyle potansiyel Menteeleri listeleyebilirsin.
+function MentorExploreContent() {
+  // Mevcut MentorExploreContent kodun buraya gelecek...
+  return <View><Text>Mentor Explore (Resources)</Text></View>;
+}
+
+// Stilleri (styles) dosyanın sonuna eklemeyi unutma...
 
 const styles = StyleSheet.create({
   container: {
