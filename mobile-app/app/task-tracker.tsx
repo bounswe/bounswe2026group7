@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import {
   View,
@@ -29,7 +29,14 @@ type CompletedTask = {
   checked: boolean;
 };
 
+function parseString(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value ?? '';
+}
+
 export default function TaskTrackerScreen() {
+  const params = useLocalSearchParams();
+  const connectedUserName = parseString(params.connectedUserName) || 'Your Mentor';
+
   const [pendingTasks] = useState<PendingTask[]>([
     { id: 1, title: 'Mentor List with FlatList', due: 'Today' },
     { id: 2, title: 'AsyncStorage Token\nManagement', due: 'Tomorrow' },
@@ -40,8 +47,8 @@ export default function TaskTrackerScreen() {
       id: 1,
       title: 'Registration Screen\nImplementation',
       description: 'Form validation added, awaiting mentor\nreview',
-      mentorInitials: 'BA',
-      mentorName: 'Burak Afşar',
+      mentorInitials: connectedUserName.substring(0, 2).toUpperCase(),
+      mentorName: connectedUserName,
       status: 'In Review',
     },
   ]);
@@ -67,7 +74,7 @@ export default function TaskTrackerScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <Text style={styles.statusIcons}>●●●</Text>
         </View>
 

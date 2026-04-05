@@ -57,27 +57,32 @@ function MenteeExploreContent() {
   useEffect(() => {
     const fetchMentors = async () => {
       try {
-        // Backend'den gerçek mentor listesini çekiyoruz
-        const response = await apiClient.get('/users/mentors');
-        const data = response.data;
+        const res = await apiClient.get('/users/mentors');
+        const data: any[] = res.data;
 
-        // Backend verisini bizim MentorCard tipine dönüştürüyoruz
-        const mappedMentors = data.map((m: any) => ({
-          id: String(m.id),
-          name: `${m.firstName} ${m.lastName}`,
-          initials: getInitials(`${m.firstName} ${m.lastName}`),
-          role: m.field || 'Mentor',
-          avatarBg: '#D6E8DC', // Tasarım için sabit renkler
-          avatarText: '#2F563C',
-          available: true,
-          tags: m.interests || [],
-          rating: '5.0', // Şimdilik placeholder
-          reviews: '0',
-          about: m.bio || 'No bio provided.',
-          mentoringGoals: [],
-          preferredMenteeCriteria: [],
-          availability: [],
-        }));
+        const mappedMentors = data.map((m: any) => {
+          const fullName = m.lastName ? `${m.firstName} ${m.lastName}` : m.firstName;
+          const hasCapacity =
+            m.maxMenteeCapacity == null
+              ? true
+              : (m.currentMenteeCount ?? 0) < m.maxMenteeCapacity;
+          return {
+            id: String(m.id),
+            name: fullName,
+            initials: getInitials(fullName),
+            role: m.field || m.expertise || 'Mentor',
+            avatarBg: '#D6E8DC',
+            avatarText: '#2F563C',
+            available: hasCapacity,
+            tags: m.interests || [],
+            rating: '5.0',
+            reviews: '0',
+            about: m.bio || 'No bio provided.',
+            mentoringGoals: [],
+            preferredMenteeCriteria: [],
+            availability: [],
+          };
+        });
 
         setMentors(mappedMentors);
       } catch (error) {
@@ -94,6 +99,7 @@ function MenteeExploreContent() {
     router.push({
       pathname: '/mentor-public-profile',
       params: {
+        mentorId: mentor.id,
         id: mentor.id,
         initials: mentor.initials,
         name: mentor.name,
@@ -161,11 +167,110 @@ function MenteeExploreContent() {
   );
 }
 
-// Mentor içeriği için mevcut tasarımını koruyabilir veya benzer bir 
-// fetch işlemiyle potansiyel Menteeleri listeleyebilirsin.
+type MenteeCard = {
+  id: string;
+  initials: string;
+  firstName: string;
+  major: string;
+  goals: string;
+  careerInterest: string;
+  interests: string[];
+  skills: string[];
+  meetingFreqPref: string;
+};
+
 function MentorExploreContent() {
-  // Mevcut MentorExploreContent kodun buraya gelecek...
-  return <View><Text>Mentor Explore (Resources)</Text></View>;
+  const [mentees, setMentees] = useState<MenteeCard[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiClient.get('/matching/mentees')
+      .then((res) => {
+        const data = res.data;
+        const mapped = data.map((m: any) => ({
+          id: String(m.id),
+          initials: m.firstName.substring(0, 2).toUpperCase(),
+          firstName: m.firstName,
+          major: m.major || '',
+          goals: m.goals || '',
+          careerInterest: m.careerInterest || '',
+          interests: m.interests || [],
+          skills: m.skills || [],
+          meetingFreqPref: m.meetingFreqPref || '',
+        }));
+        setMentees(mapped);
+      })
+      .catch((err) => console.error('Mentee fetch error:', err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const AVATAR_COLORS = [
+    { bg: '#D6E8DC', text: '#2F563C' },
+    { bg: '#DFD9C9', text: '#66582F' },
+    { bg: '#CCD6E5', text: '#4A5D7A' },
+    { bg: '#E2D1E6', text: '#6D3F72' },
+    { bg: '#F1E1BB', text: '#8A5D12' },
+    { bg: '#D8E5F1', text: '#315A7A' },
+  ];
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.fixedHeader}>
+        <View style={styles.topCircle} />
+        <Text style={styles.title}>Find a{'\n'}<Text style={styles.titleItalic}>Mentee.</Text></Text>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput placeholder="Search mentees..." placeholderTextColor="rgba(255,255,255,0.45)" style={styles.searchInput} />
+        </View>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
+      ) : (
+        <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+          {mentees.length === 0 && (
+            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+              <Text style={{ color: '#9A8F82', fontSize: 15 }}>No candidate mentees found.</Text>
+            </View>
+          )}
+          {mentees.map((mentee, idx) => {
+            const colors = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+            return (
+              <View key={mentee.id} style={styles.card}>
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
+                    <Text style={[styles.avatarText, { color: colors.text }]}>{mentee.initials}</Text>
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardName}>{mentee.firstName}</Text>
+                    <Text style={styles.cardRole}>{mentee.major || 'Student'}</Text>
+                  </View>
+                  {!!mentee.meetingFreqPref && (
+                    <View style={styles.statusBadge}>
+                      <Text style={styles.statusBadgeText}>{mentee.meetingFreqPref}</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.tagsRow}>
+                  {mentee.interests.slice(0, 3).map((tag, i) => (
+                    <View key={i} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>
+                  ))}
+                </View>
+                {!!mentee.goals && (
+                  <>
+                    <View style={styles.divider} />
+                    <Text style={{ color: '#7E7368', fontSize: 13, lineHeight: 18 }} numberOfLines={2}>
+                      {mentee.goals}
+                    </Text>
+                  </>
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
+    </View>
+  );
 }
 
 // Stilleri (styles) dosyanın sonuna eklemeyi unutma...

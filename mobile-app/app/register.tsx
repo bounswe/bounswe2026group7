@@ -1,7 +1,6 @@
 import apiClient from '../api/client';
 
 import { router } from 'expo-router';
-import { useRole } from '../components/RoleContext';
 import React, { useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -25,16 +24,19 @@ export default function RegisterScreen() {
   const [interestInput, setInterestInput] = useState('');
   const [image, setImage] = useState<string | null>(null);
 
-  const { setRole: setGlobalRole } = useRole();
 
   const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photo library.');
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1,
+      quality: 0.7,
     });
-
     if (!result.canceled) {
       setImage(result.assets[0].uri);
     }
@@ -80,24 +82,29 @@ export default function RegisterScreen() {
       const fName = nameParts[0];
       const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'User';
 
-      // Backend'e kayıt isteği gönderiyoruz
-      await apiClient.post('/auth/register', {
+      const registerRes = await apiClient.post('/auth/register', {
         firstName: fName,
         lastName: lName,
         email: email,
         password: password,
-        isMentor: selectedRole === 'Mentor'
+        isMentor: selectedRole === 'Mentor',
       });
 
-      Alert.alert("Success", "Account created! Now please log in.");
-      router.replace('/login');
-    }  catch (error: any) {
-      // Backend'den gelen gerçek hata mesajını yakalıyoruz
+      // Kayıt başarılı — bio ve interests'i profile patch et
+      // Bunun için önce giriş yapıp token almamız lazım; ancak register sonrası
+      // token dönmediği için bio/interests'i email verify sonrası login akışına bırakıyoruz.
+      // Şimdilik yalnızca başarı mesajı göster ve login'e yönlendir.
+      // İleride backend register'a token dönerse bu kısım güncellenebilir.
+
+      const successMsg = registerRes.data?.message ||
+        "Account created! Please check your email to verify your account, then log in.";
+      Alert.alert("Success", successMsg, [
+        { text: "Go to Login", onPress: () => router.replace('/login') },
+      ]);
+    } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Registration failed";
-      
-      Alert.alert("Error Details", errorMessage);
+      Alert.alert("Registration Failed", errorMessage);
       console.error("Full error:", error);
-  
     }
   };
   return (
@@ -110,7 +117,7 @@ export default function RegisterScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 
@@ -120,7 +127,12 @@ export default function RegisterScreen() {
 
           <TouchableOpacity style={styles.imagePickerContainer} onPress={pickImage}>
             {image ? (
-              <Image source={{ uri: image }} style={styles.profileImage} />
+              <View>
+                <Image source={{ uri: image }} style={styles.profileImage} />
+                <View style={styles.photoSelectedBadge}>
+                  <Text style={styles.photoSelectedBadgeText}>✓</Text>
+                </View>
+              </View>
             ) : (
               <View style={styles.imagePlaceholder}>
                 <Text style={styles.imagePlaceholderText}>+</Text>
@@ -491,6 +503,24 @@ const styles = StyleSheet.create({
   },
   signInText: {
     color: '#DCE7D9',
+    fontWeight: '700',
+  },
+  photoSelectedBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#4D7257',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoSelectedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
   },
 });

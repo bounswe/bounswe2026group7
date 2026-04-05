@@ -67,7 +67,7 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 

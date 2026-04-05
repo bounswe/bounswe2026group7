@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   View,
@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRole } from '../components/RoleContext';
+import apiClient from '../api/client';
 
 type MeetingItem = {
   id: string;
@@ -45,21 +46,35 @@ export default function ConnectionProfileScreen() {
   const isMentorViewer = role === 'mentor';
   const params = useLocalSearchParams();
 
+  const id = parseString(params.id);
   const type = parseString(params.type);
   const name = parseString(params.name);
   const initials = parseString(params.initials);
   const avatarBg = parseString(params.avatarBg) || '#D7E8DA';
   const avatarText = parseString(params.avatarText) || '#2F563C';
   const subtitle = parseString(params.subtitle);
-  const department = parseString(params.department);
-  const title = parseString(params.title);
-  const about = parseString(params.about);
+  const meetings = parseMeetings(params.meetings);
 
-  const interests = parseJsonList(params.interests);
-  const goals = parseJsonList(params.goals);
+  const [about, setAbout] = useState(parseString(params.about));
+  const [department, setDepartment] = useState(parseString(params.department));
+  const [title, setTitle] = useState(parseString(params.title));
+  const [interests, setInterests] = useState(parseJsonList(params.interests));
+  const [goals, setGoals] = useState(parseJsonList(params.goals));
   const mentoringGoals = parseJsonList(params.mentoringGoals);
   const preferences = parseJsonList(params.preferences);
-  const meetings = parseMeetings(params.meetings);
+
+  useEffect(() => {
+    if (!id) return;
+    apiClient.get(`/users/${id}`).then((res) => {
+      const d = res.data;
+      if (d.bio) setAbout(d.bio);
+      else if (d.backgroundInfo) setAbout(d.backgroundInfo);
+      if (d.major) setDepartment(d.major);
+      if (d.field) setTitle(d.field);
+      if (d.interests?.length) setInterests(d.interests);
+      if (d.goals) setGoals([d.goals]);
+    }).catch(() => {});
+  }, [id]);
 
   const stat1Label = parseString(params.stat1Label);
   const stat1Value = parseString(params.stat1Value);
@@ -81,6 +96,20 @@ export default function ConnectionProfileScreen() {
     });
   };
 
+  const openMeetings = () => {
+    router.push({
+      pathname: '/meetings-sessions',
+      params: { connectedUserName: name, connectedUserType: type },
+    });
+  };
+
+  const openTasks = () => {
+    router.push({
+      pathname: '/task-tracker',
+      params: { connectedUserName: name, connectedUserType: type },
+    });
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -89,7 +118,7 @@ export default function ConnectionProfileScreen() {
           <View style={styles.leftCircle} />
 
           <View style={styles.statusRow}>
-            <Text style={styles.statusText}>9:41</Text>
+            <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
             <Text style={styles.statusIcons}>▲ ▮</Text>
           </View>
 
@@ -280,9 +309,21 @@ export default function ConnectionProfileScreen() {
           <Text style={styles.sectionTitle}>ACTIONS</Text>
 
           <View style={styles.actionsGrid}>
-            <TouchableOpacity style={styles.actionButtonPrimary} onPress={() => router.push('/messages')}>
+            <TouchableOpacity
+              style={styles.actionButtonPrimary}
+              onPress={() => router.push({ pathname: '/(tabs)/messages', params: { openWith: name } })}
+            >
               <Text style={styles.actionButtonPrimaryText}>Open Messages</Text>
             </TouchableOpacity>
+
+            <View style={styles.actionButtonRow}>
+              <TouchableOpacity style={[styles.actionButtonSecondary, styles.actionButtonHalf]} onPress={openMeetings}>
+                <Text style={styles.actionButtonSecondaryText}>📅 Meetings</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionButtonSecondary, styles.actionButtonHalf]} onPress={openTasks}>
+                <Text style={styles.actionButtonSecondaryText}>✅ My Tasks</Text>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('meeting')}>
               <Text style={styles.actionButtonSecondaryText}>Setup Meeting Request</Text>
@@ -641,5 +682,14 @@ const styles = StyleSheet.create({
     color: '#D9534F',
     fontSize: 16,
     fontWeight: '700',
+  },
+  actionButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  actionButtonHalf: {
+    flex: 1,
+    marginBottom: 0,
   },
 });

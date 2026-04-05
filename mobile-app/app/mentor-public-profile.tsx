@@ -1,11 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
+import apiClient from '../api/client';
+import { TextInput } from 'react-native';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from 'react-native';
 
 function parseString(value: string | string[] | undefined) {
@@ -24,6 +27,7 @@ function parseJsonArray(value: string | string[] | undefined): string[] {
 export default function MentorPublicProfileScreen() {
   const params = useLocalSearchParams();
 
+  const mentorId = parseString(params.mentorId);
   const initials = parseString(params.initials);
   const avatarBg = parseString(params.avatarBg) || '#D6E8DC';
   const avatarText = parseString(params.avatarText) || '#2F563C';
@@ -39,11 +43,27 @@ export default function MentorPublicProfileScreen() {
   const preferredMenteeCriteria = parseJsonArray(params.preferredMenteeCriteria);
   const availability = parseJsonArray(params.availability);
 
-  const [requestStatus, setRequestStatus] = useState<'idle' | 'waiting'>('idle');
+  const [requestStatus, setRequestStatus] = useState<'idle' | 'sending' | 'waiting'>('idle');
+  const [requestMessage, setRequestMessage] = useState('');
 
-  const topButtonText = useMemo(() => {
-    return requestStatus === 'waiting' ? 'Waiting for Response' : 'Send Request';
-  }, [requestStatus]);
+  const handleSendRequest = async () => {
+    if (!mentorId) {
+      Alert.alert('Error', 'Mentor information is missing.');
+      return;
+    }
+    setRequestStatus('sending');
+    try {
+      await apiClient.post('/mentorship-requests', {
+        mentorId: Number(mentorId),
+        message: requestMessage.trim() || undefined,
+      });
+      setRequestStatus('waiting');
+    } catch (error: any) {
+      setRequestStatus('idle');
+      const msg = error.response?.data?.message || 'Could not send request. Please try again.';
+      Alert.alert('Request Failed', msg);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -52,31 +72,13 @@ export default function MentorPublicProfileScreen() {
           <View style={styles.topCircle} />
 
           <View style={styles.statusRow}>
-            <Text style={styles.statusText}>9:41</Text>
+            <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
             <Text style={styles.statusIcons}>▲ ▮</Text>
           </View>
 
           <View style={styles.topActionRow}>
             <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
               <Text style={styles.backButtonText}>‹ Back</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.requestButton,
-                requestStatus === 'waiting' && styles.requestButtonWaiting,
-              ]}
-              disabled={requestStatus === 'waiting'}
-              onPress={() => setRequestStatus('waiting')}
-            >
-              <Text
-                style={[
-                  styles.requestButtonText,
-                  requestStatus === 'waiting' && styles.requestButtonTextWaiting,
-                ]}
-              >
-                {topButtonText}
-              </Text>
             </TouchableOpacity>
           </View>
 
@@ -180,14 +182,38 @@ export default function MentorPublicProfileScreen() {
           ))}
         </View>
 
-        {requestStatus === 'waiting' ? (
+        <View style={styles.composeCard}>
+          <Text style={styles.composeLabel}>YOUR MESSAGE (optional)</Text>
+          <TextInput
+            style={styles.composeInput}
+            placeholder="Introduce yourself and explain why you'd like this mentor..."
+            placeholderTextColor="#B5ADA3"
+            value={requestMessage}
+            onChangeText={setRequestMessage}
+            multiline
+            maxLength={500}
+            editable={requestStatus === 'idle'}
+          />
+          <Text style={styles.charCount}>{requestMessage.length}/500</Text>
+          <TouchableOpacity
+            style={[styles.sendButton, requestStatus !== 'idle' && styles.sendButtonDisabled]}
+            onPress={handleSendRequest}
+            disabled={requestStatus !== 'idle'}
+          >
+            <Text style={styles.sendButtonText}>
+              {requestStatus === 'sending' ? 'Sending…' : requestStatus === 'waiting' ? 'Request Sent' : 'Send Request'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {requestStatus === 'waiting' && (
           <View style={styles.waitingCard}>
             <Text style={styles.waitingTitle}>Request Sent</Text>
             <Text style={styles.waitingText}>
               Your mentorship request is now pending. Waiting for mentor response.
             </Text>
           </View>
-        ) : null}
+        )}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -444,5 +470,56 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 12,
+  },
+  requestButtonCancel: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  composeCard: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 26,
+    padding: 20,
+    marginBottom: 18,
+  },
+  composeLabel: {
+    color: '#8B8176',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    marginBottom: 10,
+  },
+  composeInput: {
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    borderRadius: 18,
+    backgroundColor: '#FCFBF8',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#4A4138',
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 8,
+  },
+  charCount: {
+    color: '#B5ADA3',
+    fontSize: 12,
+    textAlign: 'right',
+    marginBottom: 14,
+  },
+  sendButton: {
+    backgroundColor: '#456B50',
+    borderRadius: 18,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  sendButtonText: {
+    color: '#F8F6F2',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#8BAF93',
   },
 });

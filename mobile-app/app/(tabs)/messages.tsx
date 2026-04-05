@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
 } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { useRole } from '../../components/RoleContext';
 
 type Conversation = {
@@ -226,12 +227,23 @@ const supportMessages: Message[] = [
 export default function MessagesScreen() {
   const { role } = useRole();
   const isMentor = role === 'mentor';
+  const params = useLocalSearchParams();
 
   const [search, setSearch] = useState('');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [draft, setDraft] = useState('');
 
   const conversations = isMentor ? mentorConversations : menteeConversations;
+
+  // connection-profile'dan "Open Messages" ile gelindiyse ilgili conversation'ı otomatik aç
+  useEffect(() => {
+    const openWith = Array.isArray(params.openWith) ? params.openWith[0] : params.openWith;
+    if (!openWith) return;
+    const match = conversations.find((c) =>
+      c.name.toLowerCase().includes(openWith.toLowerCase())
+    );
+    if (match) setSelectedConversation(match);
+  }, [params.openWith, conversations]);
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -261,7 +273,7 @@ export default function MessagesScreen() {
           <View style={styles.bgBlobSmall} />
 
           <View style={styles.statusRow}>
-            <Text style={styles.statusText}>9:41</Text>
+            <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
             <Text style={styles.statusText}>▲ ▮</Text>
           </View>
 
@@ -463,7 +475,7 @@ export default function MessagesScreen() {
         <View style={styles.bgBlobSmall} />
 
         <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <Text style={styles.statusText}>▲ ▮</Text>
         </View>
 

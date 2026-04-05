@@ -12,7 +12,9 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 
 // İsme göre baş harfleri hesaplayan yardımcı fonksiyon
 const getInitials = (name: string) => {
@@ -25,13 +27,14 @@ const getInitials = (name: string) => {
 };
 
 export default function ProfileScreen() {
-  const { role } = useRole();
+  const { role, clearRole } = useRole();
   const isMentor = role === 'mentor';
 
   const handleLogout = async () => {
     try {
       await SecureStore.deleteItemAsync('userToken');
       await SecureStore.deleteItemAsync('userId');
+      clearRole();
       router.replace('/login');
     } catch {
       Alert.alert('Error', 'An error occurred while logging out.');
@@ -94,18 +97,42 @@ function TokenEditor({
   );
 }
 
+type SentRequest = {
+  id: number;
+  mentorFirstName: string;
+  message: string;
+  status: string;
+  createdAt: string;
+};
+
+async function pickAvatar(storageKey: string): Promise<string | null> {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permission needed', 'Please allow access to your photo library.');
+    return null;
+  }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.7,
+  });
+  if (result.canceled || !result.assets[0]) return null;
+  const uri = result.assets[0].uri;
+  await SecureStore.setItemAsync(storageKey, uri);
+  return uri;
+}
+
 // --- MENTEE PROFILI ---
 function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   const [fullName, setFullName] = useState('');
   const [department, setDepartment] = useState('');
   const [aboutMe, setAboutMe] = useState('');
-
   const [interestInput, setInterestInput] = useState('');
-  const [goalInput, setGoalInput] = useState('');
-
-  // MenteeProfileContent içinde:
-  const [interests, setInterests] = useState<string[]>([]); // [] yerine <string[]>([])
-  const [goals, setGoals] = useState<string[]>([]);
+  const [interests, setInterests] = useState<string[]>([]);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [sentRequests, setSentRequests] = useState<SentRequest[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
 
   const handleSave = async () => {
     try {
@@ -120,11 +147,7 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
         interests: interests      // Liste olarak gönderiyoruz
       };
 
-      console.log("İstek atılıyor: PATCH /api/users/me");
-      
-      // PUT yerine PATCH kullanıyoruz ve URL'yi /me yapıyoruz
-      const response = await apiClient.patch('/users/me', updateData); 
-      
+      await apiClient.patch('/users/me', updateData);
       Alert.alert('Başarılı', 'Profilin güncellendi!');
     } catch (error: any) {
       const serverMessage = error.response?.data?.message || error.message;
@@ -134,24 +157,39 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   };
 
   useEffect(() => {
-    const fetchProfileData = async () => {
+    const fetchAll = async () => {
       try {
         const userId = await SecureStore.getItemAsync('userId');
         if (!userId) return;
-
-        const response = await apiClient.get(`/users/${userId}`); //
-        const data = response.data; //
-
+        const profileRes = await apiClient.get(`/users/${userId}`);
+        const data = profileRes.data;
         setFullName(`${data.firstName} ${data.lastName}`);
         setDepartment(data.major || '');
         setAboutMe(data.backgroundInfo || '');
         if (data.interests) setInterests(data.interests);
-        // Backend'den gelen goals string ise JSON parse edilebilir veya direkt atanabilir
+        if (data.profilePhoto) {
+          setProfilePhoto(data.profilePhoto);
+        } else {
+          const local = await SecureStore.getItemAsync('menteeAvatarUri');
+          if (local) setProfilePhoto(local);
+        }
       } catch (error) {
         console.error('Error fetching mentee profile:', error);
+        const local = await SecureStore.getItemAsync('menteeAvatarUri');
+        if (local) setProfilePhoto(local);
+      }
+
+      try {
+        const reqRes = await apiClient.get('/mentorship-requests/sent');
+        const list = reqRes.data.content ?? reqRes.data;
+        setSentRequests(list);
+      } catch (error) {
+        console.error('Error fetching sent requests:', error);
+      } finally {
+        setRequestsLoading(false);
       }
     };
-    fetchProfileData();
+    fetchAll();
   }, []);
 
   return (
@@ -160,14 +198,45 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
         <View style={styles.header}>
           <View style={styles.topCircle} />
           <View style={styles.leftCircle} />
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{getInitials(fullName)}</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.avatarCircle}
+            onPress={async () => {
+              const uri = await pickAvatar('menteeAvatarUri');
+              if (uri) setProfilePhoto(uri);
+            }}
+          >
+            {profilePhoto ? (
+              <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{getInitials(fullName)}</Text>
+            )}
+            <View style={styles.avatarEditBadge}>
+              <Text style={styles.avatarEditText}>✎</Text>
+            </View>
+          </TouchableOpacity>
           <Text style={styles.name}>{fullName || 'Loading...'}</Text>
           <Text style={styles.roleText}>Mentee • {department}</Text>
         </View>
 
         <View style={styles.body}>
+          {/* Quick Actions */}
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/mentorship-requests')}
+            >
+              <Text style={styles.quickActionIcon}>📋</Text>
+              <Text style={styles.quickActionText}>My Requests</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/(tabs)/explore')}
+            >
+              <Text style={styles.quickActionIcon}>🔍</Text>
+              <Text style={styles.quickActionText}>Find Mentor</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.formCardMentee}>
             <Text style={styles.inputLabel}>Full Name</Text>
             <TextInput style={styles.input} value={fullName} onChangeText={setFullName} />
@@ -186,10 +255,42 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
               onRemove={(t) => setInterests(interests.filter(i => i !== t))} 
             />
           </View>
-          {/* Mentee için */}
           <TouchableOpacity style={styles.saveButtonMentee} onPress={handleSave}>
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
+
+          {/* Sent Requests */}
+          <Text style={styles.sectionHeaderText}>MY REQUESTS</Text>
+          {requestsLoading ? null : sentRequests.length === 0 ? (
+            <View style={styles.emptyRequestsCard}>
+              <Text style={styles.emptyRequestsText}>No requests sent yet.</Text>
+            </View>
+          ) : (
+            sentRequests.map((req) => {
+              const statusColor =
+                req.status === 'PENDING' ? '#8A5D12' :
+                req.status === 'ACCEPTED' ? '#2F563C' : '#D9534F';
+              const statusBg =
+                req.status === 'PENDING' ? '#F1E1BB' :
+                req.status === 'ACCEPTED' ? '#D7E8DA' : '#FDF0EF';
+              return (
+                <View key={req.id} style={styles.requestCard}>
+                  <View style={styles.requestCardRow}>
+                    <Text style={styles.requestCardName}>{req.mentorFirstName}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
+                      <Text style={[styles.statusBadgeText, { color: statusColor }]}>
+                        {req.status}
+                      </Text>
+                    </View>
+                  </View>
+                  {!!req.message && (
+                    <Text style={styles.requestCardMessage} numberOfLines={2}>{req.message}</Text>
+                  )}
+                </View>
+              );
+            })
+          )}
+
           <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
@@ -204,51 +305,134 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
   const [displayName, setDisplayName] = useState('');
   const [title, setTitle] = useState('');
   const [bio, setBio] = useState('');
-// MentorProfileContent içinde:
-  const [expertise, setExpertise] = useState<string[]>([]);
-  const [expertiseInput, setExpertiseInput] = useState('');
+  const [interests, setInterests] = useState<string[]>([]);
+  const [interestInput, setInterestInput] = useState('');
+  const [maxMenteeCapacity, setMaxMenteeCapacity] = useState('3');
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
         const userId = await SecureStore.getItemAsync('userId');
         if (!userId) return;
-
-        const response = await apiClient.get(`/users/${userId}`); //
-        const data = response.data; //
-
+        const response = await apiClient.get(`/users/${userId}`);
+        const data = response.data;
         setDisplayName(`${data.firstName} ${data.lastName}`);
         setTitle(data.field || '');
         setBio(data.bio || '');
-        if (data.interests) setExpertise(data.interests);
+        if (data.interests) setInterests(data.interests);
+        if (data.maxMenteeCapacity != null) setMaxMenteeCapacity(String(data.maxMenteeCapacity));
+        if (data.profilePhoto) {
+          setProfilePhoto(data.profilePhoto);
+        } else {
+          const local = await SecureStore.getItemAsync('mentorAvatarUri');
+          if (local) setProfilePhoto(local);
+        }
       } catch (error) {
         console.error('Error fetching mentor profile:', error);
+        const local = await SecureStore.getItemAsync('mentorAvatarUri');
+        if (local) setProfilePhoto(local);
       }
     };
     fetchProfileData();
   }, []);
+
+  const handleSave = async () => {
+    const capacity = parseInt(maxMenteeCapacity, 10);
+    if (isNaN(capacity) || capacity < 1) {
+      Alert.alert('Hata', 'Mentee kapasitesi en az 1 olmalıdır.');
+      return;
+    }
+    try {
+      const nameParts = displayName.trim().split(' ');
+      await apiClient.patch('/users/me', {
+        firstName: nameParts[0],
+        lastName: nameParts.length > 1 ? nameParts.slice(1).join(' ') : '',
+        field: title,
+        bio: bio,
+        interests: interests,
+        maxMenteeCapacity: capacity,
+      });
+      Alert.alert('Başarılı', 'Profilin güncellendi!');
+    } catch (error: any) {
+      const serverMessage = error.response?.data?.message || error.message;
+      Alert.alert('Güncelleme Başarısız', serverMessage);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.topCircle} />
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.avatarCircle}
+            onPress={async () => {
+              const uri = await pickAvatar('mentorAvatarUri');
+              if (uri) setProfilePhoto(uri);
+            }}
+          >
+            {profilePhoto ? (
+              <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
+            )}
+            <View style={styles.avatarEditBadge}>
+              <Text style={styles.avatarEditText}>✎</Text>
+            </View>
+          </TouchableOpacity>
           <Text style={styles.name}>{displayName || 'Loading...'}</Text>
           <Text style={styles.roleText}>{title}</Text>
         </View>
-        
+
         <View style={styles.body}>
+          {/* Quick Actions */}
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/mentorship-requests')}
+            >
+              <Text style={styles.quickActionIcon}>📋</Text>
+              <Text style={styles.quickActionText}>Requests</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/availability-scheduling')}
+            >
+              <Text style={styles.quickActionIcon}>📅</Text>
+              <Text style={styles.quickActionText}>Availability</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.formCardMentor}>
             <Text style={styles.inputLabel}>Display Name</Text>
             <TextInput style={styles.input} value={displayName} onChangeText={setDisplayName} />
-            <Text style={styles.inputLabel}>Title</Text>
+            <Text style={styles.inputLabel}>Title / Field</Text>
             <TextInput style={styles.input} value={title} onChangeText={setTitle} />
             <Text style={styles.inputLabel}>Bio</Text>
             <TextInput style={[styles.input, styles.bigInput]} value={bio} onChangeText={setBio} multiline />
+            <Text style={styles.inputLabel}>Max Mentee Capacity</Text>
+            <TextInput
+              style={styles.input}
+              value={maxMenteeCapacity}
+              onChangeText={setMaxMenteeCapacity}
+              keyboardType="number-pad"
+              placeholder="e.g. 3"
+              placeholderTextColor="#B5ADA3"
+            />
+            <TokenEditor
+              label="Interests / Expertise"
+              placeholder="Add expertise"
+              values={interests}
+              inputValue={interestInput}
+              setInputValue={setInterestInput}
+              onAdd={() => { if (interestInput.trim()) setInterests([...interests, interestInput.trim()]); setInterestInput(''); }}
+              onRemove={(t) => setInterests(interests.filter(i => i !== t))}
+            />
           </View>
+          <TouchableOpacity style={styles.saveButtonMentor} onPress={handleSave}>
+            <Text style={styles.saveButtonText}>Save Changes</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
@@ -264,8 +448,11 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#456B50', paddingTop: 54, paddingBottom: 60, alignItems: 'center', overflow: 'hidden' },
   topCircle: { position: 'absolute', width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,255,255,0.05)', top: -30, right: -70 },
   leftCircle: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.04)', bottom: 20, left: -50 },
-  avatarCircle: { width: 110, height: 110, borderRadius: 55, borderWidth: 3, borderColor: 'rgba(255,255,255,0.38)', justifyContent: 'center', alignItems: 'center', marginTop: 20, marginBottom: 15 },
+  avatarCircle: { width: 110, height: 110, borderRadius: 55, borderWidth: 3, borderColor: 'rgba(255,255,255,0.38)', justifyContent: 'center', alignItems: 'center', marginTop: 20, marginBottom: 15, overflow: 'hidden', position: 'relative' },
   avatarText: { color: '#F5F1E9', fontSize: 32, fontWeight: '700' },
+  avatarImage: { width: 110, height: 110, borderRadius: 55 },
+  avatarEditBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#456B50', borderRadius: 12, width: 28, height: 28, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#F5F1E9' },
+  avatarEditText: { color: '#F5F1E9', fontSize: 14 },
   name: { color: '#F5F1E9', fontSize: 24, fontWeight: '700', marginBottom: 5 },
   roleText: { color: 'rgba(245,241,233,0.75)', fontSize: 14, fontWeight: '500' },
   body: { paddingHorizontal: 24, paddingTop: 20 },
@@ -284,9 +471,29 @@ const styles = StyleSheet.create({
   tokenChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 15, backgroundColor: '#EEF3EE', borderWidth: 1, borderColor: '#D7E8DA' },
   tokenChipText: { color: '#2F563C', fontSize: 13, fontWeight: '600' },
   tokenRemoveText: { color: '#2F563C', fontSize: 18, fontWeight: '700', marginLeft: 8 },
-  logoutButton: { backgroundColor: '#FDF0EF', borderWidth: 1, borderColor: '#FAD4D4', borderRadius: 20, paddingVertical: 15, alignItems: 'center' },
+  logoutButton: { backgroundColor: '#FDF0EF', borderWidth: 1, borderColor: '#FAD4D4', borderRadius: 20, paddingVertical: 15, alignItems: 'center', marginTop: 12 },
   logoutButtonText: { color: '#D9534F', fontSize: 16, fontWeight: '700' },
-  // ... mevcut stillerinin sonuna şunları ekle:
+  quickActionsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  quickActionButton: {
+    flex: 1,
+    backgroundColor: '#F8F6F2',
+    borderRadius: 20,
+    paddingVertical: 18,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#D7E8DA',
+  },
+  quickActionIcon: { fontSize: 24, marginBottom: 6 },
+  quickActionText: { color: '#2F563C', fontSize: 13, fontWeight: '700' },
+  sectionHeaderText: { fontSize: 12, fontWeight: '700', letterSpacing: 2, color: '#8B8176', marginTop: 8, marginBottom: 12 },
+  emptyRequestsCard: { backgroundColor: '#F8F6F2', borderRadius: 18, padding: 18, alignItems: 'center', marginBottom: 16 },
+  emptyRequestsText: { color: '#9A8F82', fontSize: 14, fontWeight: '500' },
+  requestCard: { backgroundColor: '#F8F6F2', borderRadius: 18, padding: 16, marginBottom: 10 },
+  requestCardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  requestCardName: { color: '#23372B', fontSize: 15, fontWeight: '700' },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  statusBadgeText: { fontSize: 12, fontWeight: '700' },
+  requestCardMessage: { color: '#7E7368', fontSize: 13, marginTop: 8, lineHeight: 18 },
 
   saveButtonMentee: {
     backgroundColor: '#4B7B57',

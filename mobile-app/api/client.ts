@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 // Kendi bilgisayarının IPv4 adresini buraya yazmalısın. 
 // Örnek: 'http://192.168.1.45:8080/api'
 const apiClient = axios.create({
-  baseURL: 'http://192.168.1.23:8080/api', 
+  baseURL: 'http://192.168.1.134:8080/api', 
   headers: {
     'Content-Type': 'application/json',
   },

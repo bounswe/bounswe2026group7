@@ -66,7 +66,7 @@ export default function ConnectionRequestScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backText}>‹ Back</Text>
           </TouchableOpacity>

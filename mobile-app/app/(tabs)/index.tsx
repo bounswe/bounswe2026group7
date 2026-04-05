@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { router } from 'expo-router';
 import {
   View,
@@ -6,230 +6,124 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
+import apiClient from '../../api/client';
 
-type MeetingItem = {
-  id: string;
-  day: string;
-  date: string;
-  time: string;
-  title: string;
-  status: 'confirmed' | 'pending';
+const AVATAR_COLORS = [
+  { bg: '#DFD9C9', text: '#66582F' },
+  { bg: '#CCD6E5', text: '#4A5D7A' },
+  { bg: '#D7E8DA', text: '#2F563C' },
+  { bg: '#E2D1E6', text: '#6D3F72' },
+  { bg: '#D6E8DC', text: '#2F563C' },
+  { bg: '#F1E1BB', text: '#8A5D12' },
+];
+
+const getAvatarColors = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
+
+const calcProgress = (startDate: string, endDate: string) => {
+  const start = new Date(startDate).getTime();
+  const end = new Date(endDate).getTime();
+  const now = Date.now();
+  if (now >= end) return 100;
+  if (now <= start) return 0;
+  return Math.round(((now - start) / (end - start)) * 100);
 };
 
 type ConnectionCard = {
-  id: string;
-  initials: string;
-  avatarBg: string;
-  avatarText: string;
-  name: string;
-  subtitle: string;
-  progress: number;
+  mentorshipId: number;
+  connectedUserId: number;
+  connectedUserFirstName: string;
   type: 'mentor' | 'mentee';
-  department?: string;
-  title?: string;
-  about?: string;
-  interests?: string[];
-  goals?: string[];
-  mentoringGoals?: string[];
-  preferences?: string[];
-  meetings: MeetingItem[];
-  stats: {
-    first: { label: string; value: string };
-    second: { label: string; value: string };
-    third: { label: string; value: string };
-  };
+  progress: number;
+  startDate: string;
+  endDate: string;
+  sharedGoal: string;
 };
 
 export default function HomeScreen() {
   const { role } = useRole();
   const isMentor = role === 'mentor';
 
-  const activeMentees: ConnectionCard[] = [
-    {
-      id: '1',
-      initials: 'ZD',
-      avatarBg: '#DFD9C9',
-      avatarText: '#66582F',
-      name: 'Zeynep Demir',
-      subtitle: 'Goal: Learn React Native · Week 3',
-      progress: 65,
-      type: 'mentee',
-      department: 'Computer Engineering',
-      about:
-        '3rd year student focused on mobile development and wants to build stronger React Native projects.',
-      interests: ['React Native', 'Frontend', 'UI'],
-      goals: ['Learn React Native', 'Ship one portfolio app'],
-      meetings: [
-        {
-          id: 'm1',
-          day: 'Tue',
-          date: 'Apr 8',
-          time: '15:00',
-          title: 'Weekly Check-in',
-          status: 'confirmed',
-        },
-        {
-          id: 'm2',
-          day: 'Fri',
-          date: 'Apr 11',
-          time: '17:30',
-          title: 'Code Review',
-          status: 'pending',
-        },
-      ],
-      stats: {
-        first: { label: 'Tasks', value: '12' },
-        second: { label: 'Meetings', value: '3' },
-        third: { label: 'Progress', value: '65%' },
-      },
-    },
-    {
-      id: '2',
-      initials: 'AC',
-      avatarBg: '#CCD6E5',
-      avatarText: '#4A5D7A',
-      name: 'Ali Çetin',
-      subtitle: 'Goal: Backend API Design · Week 1',
-      progress: 20,
-      type: 'mentee',
-      department: 'Software Engineering',
-      about:
-        'Interested in backend systems and wants to improve API design fundamentals.',
-      interests: ['Backend', 'Node.js', 'System Design'],
-      goals: ['Design better REST APIs', 'Understand auth flows'],
-      meetings: [
-        {
-          id: 'm3',
-          day: 'Wed',
-          date: 'Apr 9',
-          time: '14:00',
-          title: 'API Review',
-          status: 'confirmed',
-        },
-      ],
-      stats: {
-        first: { label: 'Tasks', value: '4' },
-        second: { label: 'Meetings', value: '1' },
-        third: { label: 'Progress', value: '20%' },
-      },
-    },
-  ];
+  const [connections, setConnections] = useState<ConnectionCard[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const activeMentors: ConnectionCard[] = [
-    {
-      id: '1',
-      initials: 'BA',
-      avatarBg: '#D7E8DA',
-      avatarText: '#2F563C',
-      name: 'Burak Afşar',
-      subtitle: 'Senior Software Engineer',
-      progress: 45,
-      type: 'mentor',
-      title: 'Senior Software Engineer · Mobile',
-      about:
-        'Focused on mobile architecture, clean code and long-term growth for junior developers.',
-      interests: ['Swift', 'React Native', 'Mobile'],
-      mentoringGoals: ['Guide junior developers', 'Improve project structure'],
-      preferences: ['Motivated', 'Consistent', 'Open to feedback'],
-      meetings: [
-        {
-          id: 'm4',
-          day: 'Tue',
-          date: 'Apr 8',
-          time: '15:00',
-          title: 'Weekly Check-in',
-          status: 'confirmed',
-        },
-        {
-          id: 'm5',
-          day: 'Fri',
-          date: 'Apr 11',
-          time: '17:30',
-          title: 'Code Review',
-          status: 'pending',
-        },
-      ],
-      stats: {
-        first: { label: 'Rating', value: '4.9' },
-        second: { label: 'Reviews', value: '24' },
-        third: { label: 'Mentees', value: '8' },
-      },
-    },
-    {
-      id: '2',
-      initials: 'OA',
-      avatarBg: '#E2D1E6',
-      avatarText: '#6D3F72',
-      name: 'Övgü Su',
-      subtitle: 'UI/UX Designer',
-      progress: 80,
-      type: 'mentor',
-      title: 'UI/UX Designer · Product Design',
-      about:
-        'Helps mentees improve product thinking, portfolio presentation and interface clarity.',
-      interests: ['UI/UX', 'Product Thinking', 'Design Systems'],
-      mentoringGoals: ['Build stronger portfolios', 'Teach design reasoning'],
-      preferences: ['Curious', 'Communicative', 'Iterative mindset'],
-      meetings: [
-        {
-          id: 'm6',
-          day: 'Mon',
-          date: 'Apr 7',
-          time: '18:00',
-          title: 'Portfolio Review',
-          status: 'confirmed',
-        },
-        {
-          id: 'm7',
-          day: 'Thu',
-          date: 'Apr 10',
-          time: '16:00',
-          title: 'Design Feedback',
-          status: 'confirmed',
-        },
-      ],
-      stats: {
-        first: { label: 'Rating', value: '4.8' },
-        second: { label: 'Reviews', value: '18' },
-        third: { label: 'Mentees', value: '5' },
-      },
-    },
-  ];
+  const fetchMentorships = useCallback(async () => {
+    try {
+      setLoading(true);
+      const userId = await SecureStore.getItemAsync('userId');
+      const res = await apiClient.get('/mentorships');
+      const mentorships: any[] = res.data;
 
-  const currentList = isMentor ? activeMentees : activeMentors;
-  const sectionTitle = isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS';
+      const cards: ConnectionCard[] = mentorships
+        .filter((m) => m.status === 'ACTIVE')
+        .map((m) => {
+          const isCurrentUserMentor = String(m.mentorId) === userId;
+          const connectedUserId = isCurrentUserMentor ? m.menteeId : m.mentorId;
+          const connectedUserFirstName = isCurrentUserMentor ? m.menteeFirstName : m.mentorFirstName;
+          const type: 'mentor' | 'mentee' = isCurrentUserMentor ? 'mentee' : 'mentor';
+
+          return {
+            mentorshipId: m.id,
+            connectedUserId,
+            connectedUserFirstName,
+            type,
+            progress: calcProgress(m.startDate, m.endDate),
+            startDate: m.startDate,
+            endDate: m.endDate,
+            sharedGoal: m.sharedGoal || '',
+          };
+        });
+
+      setConnections(cards);
+    } catch (error) {
+      console.error('Error fetching mentorships:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMentorships();
+  }, [fetchMentorships]);
 
   const openConnectionProfile = (item: ConnectionCard) => {
+    const colors = getAvatarColors(item.connectedUserId);
+    const initials = item.connectedUserFirstName.substring(0, 2).toUpperCase();
+
     router.push({
       pathname: '/connection-profile',
       params: {
-        id: item.id,
+        id: String(item.connectedUserId),
         type: item.type,
-        name: item.name,
-        initials: item.initials,
-        avatarBg: item.avatarBg,
-        avatarText: item.avatarText,
-        subtitle: item.subtitle,
+        name: item.connectedUserFirstName,
+        initials,
+        avatarBg: colors.bg,
+        avatarText: colors.text,
+        subtitle: item.sharedGoal || (item.type === 'mentor' ? 'Your Mentor' : 'Your Mentee'),
         progress: String(item.progress),
-        department: item.department ?? '',
-        title: item.title ?? '',
-        about: item.about ?? '',
-        interests: JSON.stringify(item.interests ?? []),
-        goals: JSON.stringify(item.goals ?? []),
-        mentoringGoals: JSON.stringify(item.mentoringGoals ?? []),
-        preferences: JSON.stringify(item.preferences ?? []),
-        meetings: JSON.stringify(item.meetings),
-        stat1Label: item.stats.first.label,
-        stat1Value: item.stats.first.value,
-        stat2Label: item.stats.second.label,
-        stat2Value: item.stats.second.value,
-        stat3Label: item.stats.third.label,
-        stat3Value: item.stats.third.value,
+        about: '',
+        interests: '[]',
+        goals: item.sharedGoal ? JSON.stringify([item.sharedGoal]) : '[]',
+        mentoringGoals: '[]',
+        preferences: '[]',
+        meetings: '[]',
+        stat1Label: 'Progress',
+        stat1Value: `${item.progress}%`,
+        stat2Label: 'Duration',
+        stat2Value: `${Math.round((new Date(item.endDate).getTime() - new Date(item.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))}mo`,
+        stat3Label: 'Status',
+        stat3Value: 'Active',
       },
     });
   };
+
+  const sectionTitle = isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS';
+  const visibleConnections = isMentor
+    ? connections.filter((c) => c.type === 'mentee')
+    : connections.filter((c) => c.type === 'mentor');
 
   return (
     <View style={styles.container}>
@@ -238,7 +132,7 @@ export default function HomeScreen() {
         <View style={styles.rightCircle} />
 
         <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 
@@ -271,51 +165,53 @@ export default function HomeScreen() {
       >
         <Text style={styles.sectionTitle}>{sectionTitle}</Text>
 
-        {currentList.map((item) => (
-          <View key={item.id} style={styles.activeCard}>
-            <TouchableOpacity activeOpacity={0.9} onPress={() => openConnectionProfile(item)}>
-              <View style={styles.topRow}>
-                <View style={[styles.avatar, { backgroundColor: item.avatarBg }]}>
-                  <Text style={[styles.avatarText, { color: item.avatarText }]}>
-                    {item.initials}
-                  </Text>
-                </View>
-
-                <View style={styles.infoArea}>
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={styles.subtitle}>{item.subtitle}</Text>
-                </View>
-
-                <View style={styles.activeBadge}>
-                  <Text style={styles.activeBadgeText}>Active</Text>
-                </View>
-              </View>
-
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${item.progress}%` },
-                  ]}
-                />
-              </View>
-
-              <Text style={styles.progressText}>Progress: {item.progress}%</Text>
-
-              <TouchableOpacity
-                style={styles.viewProfileButton}
-                onPress={() => openConnectionProfile(item)}
-              >
-                <Text style={styles.viewProfileButtonText}>Open Shared Space</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </View>
-        ))}
-
-        {currentList.length === 0 && (
+        {loading ? (
+          <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 30 }} />
+        ) : visibleConnections.length === 0 ? (
           <View style={styles.emptyStateContainer}>
             <Text style={styles.emptyStateText}>No active connections found.</Text>
           </View>
+        ) : (
+          visibleConnections.map((item) => {
+            const colors = getAvatarColors(item.connectedUserId);
+            const initials = item.connectedUserFirstName.substring(0, 2).toUpperCase();
+            return (
+              <View key={item.mentorshipId} style={styles.activeCard}>
+                <TouchableOpacity activeOpacity={0.9} onPress={() => openConnectionProfile(item)}>
+                  <View style={styles.topRow}>
+                    <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
+                      <Text style={[styles.avatarText, { color: colors.text }]}>
+                        {initials}
+                      </Text>
+                    </View>
+
+                    <View style={styles.infoArea}>
+                      <Text style={styles.name}>{item.connectedUserFirstName}</Text>
+                      <Text style={styles.subtitle}>
+                        {item.sharedGoal || (item.type === 'mentor' ? 'Your Mentor' : 'Your Mentee')}
+                      </Text>
+                    </View>
+
+                    <View style={styles.activeBadge}>
+                      <Text style={styles.activeBadgeText}>Active</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${item.progress}%` }]} />
+                  </View>
+                  <Text style={styles.progressText}>Progress: {item.progress}%</Text>
+
+                  <TouchableOpacity
+                    style={styles.viewProfileButton}
+                    onPress={() => openConnectionProfile(item)}
+                  >
+                    <Text style={styles.viewProfileButtonText}>Open Shared Space</Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -323,10 +219,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ECE8E1',
-  },
+  container: { flex: 1, backgroundColor: '#ECE8E1' },
   fixedHeader: {
     backgroundColor: '#456B50',
     paddingTop: 54,
@@ -352,21 +245,9 @@ const styles = StyleSheet.create({
     top: 70,
     right: -40,
   },
-  statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  statusIcons: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-  },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  statusIcons: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -380,11 +261,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 16,
   },
-  profileBadgeText: {
-    color: '#F7F4EE',
-    fontSize: 14,
-    fontWeight: '700',
-  },
+  profileBadgeText: { color: '#F7F4EE', fontSize: 14, fontWeight: '700' },
   notificationButton: {
     width: 44,
     height: 44,
@@ -394,9 +271,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'relative',
   },
-  notificationIcon: {
-    fontSize: 20,
-  },
+  notificationIcon: { fontSize: 20 },
   notificationDot: {
     position: 'absolute',
     top: 10,
@@ -415,19 +290,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 10,
   },
-  titleItalic: {
-    fontStyle: 'italic',
-    fontWeight: '700',
-  },
-  scrollArea: {
-    flex: 1,
-    backgroundColor: '#ECE8E1',
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 34,
-  },
+  titleItalic: { fontStyle: 'italic', fontWeight: '700' },
+  scrollArea: { flex: 1, backgroundColor: '#ECE8E1' },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 34 },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
@@ -441,10 +306,7 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 18,
   },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  topRow: { flexDirection: 'row', alignItems: 'center' },
   avatar: {
     width: 68,
     height: 68,
@@ -453,35 +315,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
   },
-  avatarText: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  infoArea: {
-    flex: 1,
-  },
-  name: {
-    color: '#23372B',
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  subtitle: {
-    color: '#9A8F82',
-    fontSize: 13,
-    fontWeight: '500',
-  },
+  avatarText: { fontSize: 20, fontWeight: '700' },
+  infoArea: { flex: 1 },
+  name: { color: '#23372B', fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  subtitle: { color: '#9A8F82', fontSize: 13, fontWeight: '500' },
   activeBadge: {
     backgroundColor: '#D7E8DA',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 14,
   },
-  activeBadgeText: {
-    color: '#2F563C',
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  activeBadgeText: { color: '#2F563C', fontSize: 11, fontWeight: '700' },
   progressTrack: {
     height: 9,
     borderRadius: 999,
@@ -490,35 +334,15 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 10,
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#5D8D66',
-  },
-  progressText: {
-    color: '#8B8176',
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 14,
-  },
+  progressFill: { height: '100%', borderRadius: 999, backgroundColor: '#5D8D66' },
+  progressText: { color: '#8B8176', fontSize: 13, fontWeight: '500', marginBottom: 14 },
   viewProfileButton: {
     backgroundColor: '#D7E8DA',
     borderRadius: 16,
     paddingVertical: 12,
     alignItems: 'center',
   },
-  viewProfileButtonText: {
-    color: '#2F563C',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  emptyStateContainer: {
-    paddingVertical: 40,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    color: '#9A8F82',
-    fontSize: 15,
-    fontWeight: '500',
-  },
+  viewProfileButtonText: { color: '#2F563C', fontSize: 14, fontWeight: '700' },
+  emptyStateContainer: { paddingVertical: 40, alignItems: 'center' },
+  emptyStateText: { color: '#9A8F82', fontSize: 15, fontWeight: '500' },
 });

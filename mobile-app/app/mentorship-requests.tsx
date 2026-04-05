@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { router } from 'expo-router';
 import {
   View,
@@ -6,95 +6,103 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import apiClient from '../api/client';
 
-type CandidateRequest = {
-  id: string;
-  initials: string;
-  avatarBg: string;
-  avatarText: string;
-  name: string;
-  time: string;
+const AVATAR_COLORS = [
+  { bg: '#D6E8DC', text: '#2F563C' },
+  { bg: '#DFD9C9', text: '#66582F' },
+  { bg: '#CCD6E5', text: '#4A5D7A' },
+  { bg: '#E2D1E6', text: '#6D3F72' },
+  { bg: '#F1E1BB', text: '#8A5D12' },
+  { bg: '#D8E5F1', text: '#315A7A' },
+];
+
+const getAvatarColors = (id: number) => AVATAR_COLORS[id % AVATAR_COLORS.length];
+
+const formatTime = (isoString: string) => {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  return 'Just now';
+};
+
+type IncomingRequest = {
+  id: number;
+  menteeId: number;
+  menteeFirstName: string;
   message: string;
-  department: string;
-  about: string;
-  goals: string[];
-  interests: string[];
-  background: string;
+  createdAt: string;
+};
+
+type ActiveMentorship = {
+  id: number;
+  menteeId: number;
+  menteeFirstName: string;
+  startDate: string;
+  endDate: string;
 };
 
 export default function MentorshipRequestsScreen() {
-  const incomingRequests: CandidateRequest[] = [
-    {
-      id: 'ovgu',
-      initials: 'ÖA',
-      avatarBg: '#D6E8DC',
-      avatarText: '#2F563C',
-      name: 'Övgü Su Afşar',
-      time: '2 hours ago',
-      message: 'Looking for mentorship on my React Native project.',
-      department: 'Computer Engineering',
-      about:
-        'I want to improve my mobile development skills and learn how to structure larger React Native projects.',
-      goals: ['Learn React Native', 'Build portfolio project', 'Improve clean code'],
-      interests: ['React Native', 'UI/UX', 'Frontend'],
-      background: '3rd year student with internship experience and growing interest in product-focused mobile apps.',
-    },
-    {
-      id: 'berkan',
-      initials: 'BK',
-      avatarBg: '#E2D1E6',
-      avatarText: '#6D3F72',
-      name: 'Berkan Kılıç',
-      time: '1 day ago',
-      message: 'Seeking guidance in machine learning fundamentals.',
-      department: 'Industrial Engineering',
-      about:
-        'I am trying to build stronger ML basics and get better at practical project workflows.',
-      goals: ['Understand ML fundamentals', 'Build first ML pipeline'],
-      interests: ['Machine Learning', 'Python', 'Data Science'],
-      background: 'Interested in analytics and wants to transition into ML-based product work.',
-    },
-  ];
+  const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([]);
+  const [activeMentorships, setActiveMentorships] = useState<ActiveMentorship[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const activeMentorships = [
-    {
-      initials: 'ZD',
-      avatarBg: '#DFD9C9',
-      avatarText: '#66582F',
-      name: 'Zeynep Demir',
-      subtitle: 'Mentee · Week 3',
-      progress: 65,
-    },
-    {
-      initials: 'AC',
-      avatarBg: '#CCD6E5',
-      avatarText: '#4A5D7A',
-      name: 'Ali Çetin',
-      subtitle: 'Mentee · Week 1',
-      progress: 20,
-    },
-  ];
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [requestsRes, mentorshipsRes] = await Promise.all([
+        apiClient.get('/mentorship-requests/received'),
+        apiClient.get('/mentorships'),
+      ]);
 
-  const openCandidateProfile = (item: CandidateRequest) => {
+      const pending = (requestsRes.data.content ?? requestsRes.data).filter(
+        (r: any) => r.status === 'PENDING'
+      );
+      setIncomingRequests(pending);
+      setActiveMentorships(mentorshipsRes.data);
+    } catch (error: any) {
+      console.error('Error fetching mentorship data:', error);
+      Alert.alert('Error', 'Could not load mentorship data.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const openCandidateProfile = (item: IncomingRequest) => {
+    const colors = getAvatarColors(item.menteeId);
     router.push({
       pathname: '/request-candidate-profile',
       params: {
-        id: item.id,
-        initials: item.initials,
-        avatarBg: item.avatarBg,
-        avatarText: item.avatarText,
-        name: item.name,
-        time: item.time,
-        message: item.message,
-        department: item.department,
-        about: item.about,
-        background: item.background,
-        goals: JSON.stringify(item.goals),
-        interests: JSON.stringify(item.interests),
+        requestId: String(item.id),
+        menteeId: String(item.menteeId),
+        menteeFirstName: item.menteeFirstName,
+        hiddenInitial: item.menteeFirstName.substring(0, 2).toUpperCase(),
+        avatarBg: colors.bg,
+        avatarText: colors.text,
+        time: formatTime(item.createdAt),
+        message: item.message || '',
       },
     });
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#456B50" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -102,7 +110,7 @@ export default function MentorshipRequestsScreen() {
         <View style={styles.topCircle} />
 
         <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 
@@ -128,79 +136,90 @@ export default function MentorshipRequestsScreen() {
       >
         <Text style={styles.sectionTitle}>INCOMING</Text>
 
-        {incomingRequests.map((item) => (
-          <View key={item.id} style={styles.requestCard}>
-            <View style={styles.topRow}>
-              <View style={[styles.avatar, { backgroundColor: item.avatarBg }]}>
-                <Text style={[styles.avatarText, { color: item.avatarText }]}>
-                  {item.initials}
-                </Text>
-              </View>
-
-              <View style={styles.infoArea}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.time}>{item.time}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.message}>{item.message}</Text>
-
-            <TouchableOpacity
-              style={styles.viewProfileButton}
-              onPress={() => openCandidateProfile(item)}
-            >
-              <Text style={styles.viewProfileButtonText}>View Profile</Text>
-            </TouchableOpacity>
+        {incomingRequests.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No pending requests.</Text>
           </View>
-        ))}
+        ) : (
+          incomingRequests.map((item) => {
+            const colors = getAvatarColors(item.menteeId);
+            return (
+              <View key={item.id} style={styles.requestCard}>
+                <View style={styles.topRow}>
+                  <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
+                    <Text style={[styles.avatarText, { color: colors.text }]}>
+                      {item.menteeFirstName.substring(0, 2).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.infoArea}>
+                    <Text style={styles.name}>{item.menteeFirstName}</Text>
+                    <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
+                  </View>
+                </View>
+
+                {!!item.message && (
+                  <Text style={styles.message}>{item.message}</Text>
+                )}
+
+                <TouchableOpacity
+                  style={styles.viewProfileButton}
+                  onPress={() => openCandidateProfile(item)}
+                >
+                  <Text style={styles.viewProfileButtonText}>View Profile</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })
+        )}
 
         <Text style={styles.sectionTitle}>ACTIVE MENTORSHIPS</Text>
 
-        {activeMentorships.map((item, index) => (
-          <View key={index} style={styles.activeCard}>
-            <View style={styles.topRow}>
-              <View style={[styles.avatar, { backgroundColor: item.avatarBg }]}>
-                <Text style={[styles.avatarText, { color: item.avatarText }]}>
-                  {item.initials}
-                </Text>
-              </View>
-
-              <View style={styles.infoArea}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.subtitle}>{item.subtitle}</Text>
-              </View>
-
-              <View style={styles.activeBadge}>
-                <Text style={styles.activeBadgeText}>Active</Text>
-              </View>
-            </View>
-
-            <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${item.progress}%` },
-                ]}
-              />
-            </View>
-
-            <Text style={styles.progressText}>Progress: {item.progress}%</Text>
-
-            <TouchableOpacity style={styles.endMentorshipButton}>
-              <Text style={styles.endMentorshipText}>End Mentorship</Text>
-            </TouchableOpacity>
+        {activeMentorships.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No active mentorships.</Text>
           </View>
-        ))}
+        ) : (
+          activeMentorships.map((item) => {
+            const colors = getAvatarColors(item.menteeId);
+            const start = new Date(item.startDate).getTime();
+            const end = new Date(item.endDate).getTime();
+            const now = Date.now();
+            const progress = Math.min(
+              100,
+              Math.max(0, Math.round(((now - start) / (end - start)) * 100))
+            );
+            return (
+              <View key={item.id} style={styles.activeCard}>
+                <View style={styles.topRow}>
+                  <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
+                    <Text style={[styles.avatarText, { color: colors.text }]}>
+                      {item.menteeFirstName.substring(0, 2).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.infoArea}>
+                    <Text style={styles.name}>{item.menteeFirstName}</Text>
+                    <Text style={styles.subtitle}>Mentee · Active</Text>
+                  </View>
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>Active</Text>
+                  </View>
+                </View>
+
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${progress}%` }]} />
+                </View>
+                <Text style={styles.progressText}>Progress: {progress}%</Text>
+              </View>
+            );
+          })
+        )}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ECE8E1',
-  },
+  container: { flex: 1, backgroundColor: '#ECE8E1' },
   fixedHeader: {
     backgroundColor: '#456B50',
     paddingTop: 54,
@@ -217,21 +236,9 @@ const styles = StyleSheet.create({
     top: -30,
     right: -70,
   },
-  statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  statusIcons: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-  },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  statusIcons: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
@@ -247,31 +254,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 16,
   },
-  backButtonText: {
-    color: '#F7F4EE',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  title: {
-    color: '#F7F4EE',
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  titleItalic: {
-    fontStyle: 'italic',
-    fontWeight: '700',
-  },
-  scrollArea: {
-    flex: 1,
-    backgroundColor: '#ECE8E1',
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 34,
-  },
+  backButtonText: { color: '#F7F4EE', fontSize: 14, fontWeight: '700' },
+  title: { color: '#F7F4EE', fontSize: 34, lineHeight: 38, fontWeight: '700', marginTop: 6 },
+  titleItalic: { fontStyle: 'italic', fontWeight: '700' },
+  scrollArea: { flex: 1, backgroundColor: '#ECE8E1' },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 34 },
   sectionTitle: {
     color: '#8B8176',
     fontSize: 13,
@@ -279,6 +266,8 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: 16,
   },
+  emptyState: { paddingVertical: 20, alignItems: 'center', marginBottom: 24 },
+  emptyStateText: { color: '#9A8F82', fontSize: 15, fontWeight: '500' },
   requestCard: {
     backgroundColor: '#F8F6F2',
     borderRadius: 26,
@@ -291,10 +280,7 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 18,
   },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  topRow: { flexDirection: 'row', alignItems: 'center' },
   avatar: {
     width: 78,
     height: 78,
@@ -303,29 +289,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
   },
-  avatarText: {
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  infoArea: {
-    flex: 1,
-  },
-  name: {
-    color: '#23372B',
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  time: {
-    color: '#9A8F82',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  subtitle: {
-    color: '#9A8F82',
-    fontSize: 13,
-    fontWeight: '500',
-  },
+  avatarText: { fontSize: 22, fontWeight: '700' },
+  infoArea: { flex: 1 },
+  name: { color: '#23372B', fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  time: { color: '#9A8F82', fontSize: 13, fontWeight: '500' },
+  subtitle: { color: '#9A8F82', fontSize: 13, fontWeight: '500' },
   message: {
     color: '#5A524A',
     fontSize: 15,
@@ -339,22 +307,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
-  viewProfileButtonText: {
-    color: '#2F563C',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  viewProfileButtonText: { color: '#2F563C', fontSize: 15, fontWeight: '700' },
   activeBadge: {
     backgroundColor: '#D7E8DA',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,
   },
-  activeBadgeText: {
-    color: '#2F563C',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  activeBadgeText: { color: '#2F563C', fontSize: 12, fontWeight: '700' },
   progressTrack: {
     height: 9,
     borderRadius: 999,
@@ -363,24 +323,6 @@ const styles = StyleSheet.create({
     marginTop: 18,
     marginBottom: 10,
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#5D8D66',
-  },
-  progressText: {
-    color: '#8B8176',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  endMentorshipButton: {
-    marginTop: 16,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  endMentorshipText: {
-    color: '#D9534F',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  progressFill: { height: '100%', borderRadius: 999, backgroundColor: '#5D8D66' },
+  progressText: { color: '#8B8176', fontSize: 13, fontWeight: '500' },
 });
