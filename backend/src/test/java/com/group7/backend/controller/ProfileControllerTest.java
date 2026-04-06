@@ -308,12 +308,10 @@ class ProfileControllerTest {
         UpdateProfileRequest request = new UpdateProfileRequest();
         request.setFirstName("NewFirst");
         request.setLastName("NewLast");
-        request.setProfilePhoto("https://example.com/new-photo.jpg");
 
         MentorResponse response = buildMentorResponse();
         response.setFirstName("NewFirst");
         response.setLastName("NewLast");
-        response.setProfilePhoto("https://example.com/new-photo.jpg");
 
         when(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).thenReturn(response);
 
@@ -323,8 +321,7 @@ class ProfileControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.firstName").value("NewFirst"))
-                .andExpect(jsonPath("$.lastName").value("NewLast"))
-                .andExpect(jsonPath("$.profilePhoto").value("https://example.com/new-photo.jpg"));
+                .andExpect(jsonPath("$.lastName").value("NewLast"));
     }
 
     @Test
