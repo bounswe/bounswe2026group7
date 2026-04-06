@@ -13,7 +13,10 @@ import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
@@ -23,11 +26,14 @@ public class UserService {
     private final UserRepository userRepository;
     private final MentorRepository mentorRepository;
     private final MenteeRepository menteeRepository;
+    private final FileStorageService fileStorageService;
 
-    public UserService(UserRepository userRepository, MentorRepository mentorRepository, MenteeRepository menteeRepository) {
+    public UserService(UserRepository userRepository, MentorRepository mentorRepository,
+                       MenteeRepository menteeRepository, FileStorageService fileStorageService) {
         this.userRepository = userRepository;
         this.mentorRepository = mentorRepository;
         this.menteeRepository = menteeRepository;
+        this.fileStorageService = fileStorageService;
     }
 
     // ── Existing methods ────────────────────────────────────
@@ -53,8 +59,22 @@ public class UserService {
                 .toList();
     }
 
+    @Transactional
     public void deleteUser(Long id) {
-        userRepository.deleteById(id);
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
+        String photoUrl = user.getProfilePhoto();
+        userRepository.delete(user);
+
+        // Delete file AFTER transaction commits
+        if (photoUrl != null) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    fileStorageService.deleteFile(photoUrl);
+                }
+            });
+        }
     }
 
     // ── Profile CRUD methods ────────────────────────────────
@@ -87,14 +107,12 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
         // Apply common fields (skip nulls)
+        // Note: profilePhoto is intentionally NOT set here — use POST /api/users/me/photo instead
         if (request.getFirstName() != null) {
             user.setFirstName(request.getFirstName());
         }
         if (request.getLastName() != null) {
             user.setLastName(request.getLastName());
-        }
-        if (request.getProfilePhoto() != null) {
-            user.setProfilePhoto(request.getProfilePhoto());
         }
 
         // Apply role-specific fields
@@ -106,6 +124,54 @@ public class UserService {
 
         User saved = userRepository.save(user);
         return mapToResponse(saved);
+    }
+
+    @Transactional
+    public ProfileResponse uploadProfilePhoto(Long userId, MultipartFile file) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        // Store new file FIRST (before touching DB or deleting old file)
+        String newPhotoUrl = fileStorageService.storeFile(file);
+        String oldPhotoUrl = user.getProfilePhoto();
+
+        // Update DB
+        user.setProfilePhoto(newPhotoUrl);
+        User saved = userRepository.save(user);
+
+        // Delete old file AFTER transaction commits (so rollback doesn't lose old photo)
+        if (oldPhotoUrl != null) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    fileStorageService.deleteFile(oldPhotoUrl);
+                }
+            });
+        }
+
+        return mapToResponse(saved);
+    }
+
+    @Transactional
+    public ProfileResponse deleteProfilePhoto(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+        String oldPhotoUrl = user.getProfilePhoto();
+        if (oldPhotoUrl != null) {
+            user.setProfilePhoto(null);
+            userRepository.save(user);
+
+            // Delete file AFTER transaction commits
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    fileStorageService.deleteFile(oldPhotoUrl);
+                }
+            });
+        }
+
+        return mapToResponse(user);
     }
 
     // ── Private helpers ─────────────────────────────────────

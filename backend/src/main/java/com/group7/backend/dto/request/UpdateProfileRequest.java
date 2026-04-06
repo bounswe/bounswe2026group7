@@ -25,8 +25,7 @@ public class UpdateProfileRequest {
     @Schema(description = "Last name", example = "Sarioglu")
     private String lastName;
 
-    @Schema(description = "Profile photo URL", example = "https://example.com/photo.jpg")
-    private String profilePhoto;
+    // profilePhoto is set exclusively via POST /api/users/me/photo
 
     // ── Mentor-specific fields ──────────────────────────────
 

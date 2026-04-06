@@ -15,9 +15,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -65,6 +67,40 @@ public class UserController {
                                                            Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
         ProfileResponse updated = userService.updateProfile(userId, request);
+        return ResponseEntity.ok(updated);
+    }
+
+    // ── Photo upload ─────────────────────────────────────────
+
+    @PostMapping(value = "/me/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload profile photo",
+            description = "Uploads a profile photo (JPEG, PNG, GIF, or WebP, max 5MB). "
+                    + "Replaces the existing photo if one is set.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Photo uploaded",
+                    content = @Content(schema = @Schema(oneOf = {MentorResponse.class, MenteeResponse.class}))),
+            @ApiResponse(responseCode = "400", description = "Invalid file (wrong type, too large, or empty)", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Not authenticated", content = @Content)
+    })
+    public ResponseEntity<ProfileResponse> uploadPhoto(
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        ProfileResponse updated = userService.uploadProfilePhoto(userId, file);
+        return ResponseEntity.ok(updated);
+    }
+
+    @DeleteMapping("/me/photo")
+    @Operation(summary = "Delete profile photo",
+            description = "Removes the authenticated user's profile photo.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Photo removed",
+                    content = @Content(schema = @Schema(oneOf = {MentorResponse.class, MenteeResponse.class}))),
+            @ApiResponse(responseCode = "401", description = "Not authenticated", content = @Content)
+    })
+    public ResponseEntity<ProfileResponse> deletePhoto(Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        ProfileResponse updated = userService.deleteProfilePhoto(userId);
         return ResponseEntity.ok(updated);
     }
 
