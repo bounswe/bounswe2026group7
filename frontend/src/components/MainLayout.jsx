@@ -30,13 +30,20 @@ const SIDEBAR_LINKS = [
 export default function MainLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { role } = useAuth()
+  const { role, firstName, lastName, profilePhoto } = useAuth()
   const currentPath = location.pathname
 
-  const initials = 'ÖA'
-  const displayName = 'Övgü Su Afşar'
-  const department = 'Computer Engineering'
+  const displayName = [firstName, lastName].filter(Boolean).join(' ') || 'User'
+  const initials = [firstName?.[0], lastName?.[0]].filter(Boolean).join('').toUpperCase() || '?'
   const roleLabel = role === 'MENTOR' ? 'Mentor' : 'Mentee'
+
+  const avatar = profilePhoto
+    ? <img src={profilePhoto} alt={initials} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+    : initials
+
+  const avatarSm = profilePhoto
+    ? <img src={profilePhoto} alt={initials} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+    : initials
 
   return (
     <>
@@ -62,16 +69,16 @@ export default function MainLayout({ children }) {
           })}
         </div>
         <div className="nav-right">
-          <div className="avatar-sm">{initials}</div>
+          <div className="avatar-sm">{avatarSm}</div>
         </div>
       </nav>
 
       <div className="main-layout">
         <aside className="sidebar">
           <div className="sidebar-user">
-            <div className="sidebar-avatar">{initials}</div>
+            <div className="sidebar-avatar">{avatar}</div>
             <div className="sidebar-name">{displayName}</div>
-            <div className="sidebar-role">{roleLabel} · {department}</div>
+            <div className="sidebar-role">{roleLabel}</div>
             <div className="sidebar-badge">Active Mentorship: 1</div>
           </div>
           <nav className="sidebar-nav">

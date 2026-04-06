@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { getOwnProfile } from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -7,6 +8,9 @@ export function AuthProvider({ children }) {
     token: null,
     role: null,
     userId: null,
+    firstName: null,
+    lastName: null,
+    profilePhoto: null,
   })
 
   useEffect(() => {
@@ -14,7 +18,15 @@ export function AuthProvider({ children }) {
     const role = localStorage.getItem('auth_role')
     const userId = localStorage.getItem('auth_userId')
     if (token) {
-      setAuth({ token, role, userId })
+      setAuth(prev => ({ ...prev, token, role, userId }))
+      getOwnProfile().then(data => {
+        setAuth(prev => ({
+          ...prev,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          profilePhoto: data.profilePhoto,
+        }))
+      }).catch(() => {})
     }
   }, [])
 
@@ -22,18 +34,30 @@ export function AuthProvider({ children }) {
     localStorage.setItem('auth_token', token)
     localStorage.setItem('auth_role', role)
     localStorage.setItem('auth_userId', String(userId))
-    setAuth({ token, role, userId: String(userId) })
+    setAuth(prev => ({ ...prev, token, role, userId: String(userId) }))
+    getOwnProfile().then(data => {
+      setAuth(prev => ({
+        ...prev,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        profilePhoto: data.profilePhoto,
+      }))
+    }).catch(() => {})
   }
 
   function logout() {
     localStorage.removeItem('auth_token')
     localStorage.removeItem('auth_role')
     localStorage.removeItem('auth_userId')
-    setAuth({ token: null, role: null, userId: null })
+    setAuth({ token: null, role: null, userId: null, firstName: null, lastName: null, profilePhoto: null })
+  }
+
+  function setProfileData(firstName, lastName, profilePhoto) {
+    setAuth(prev => ({ ...prev, firstName, lastName, profilePhoto }))
   }
 
   return (
-    <AuthContext.Provider value={{ ...auth, login, logout }}>
+    <AuthContext.Provider value={{ ...auth, login, logout, setProfileData }}>
       {children}
     </AuthContext.Provider>
   )

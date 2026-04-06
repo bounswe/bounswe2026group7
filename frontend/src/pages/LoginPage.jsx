@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { loginUser } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -27,6 +28,12 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
 
   const registered = location.state?.registered
+  const [exiting, setExiting] = useState(false)
+
+  function handleBack() {
+    setExiting(true)
+    setTimeout(() => navigate('/'), 260)
+  }
 
   function handleChange(name, value) {
     setFields(prev => ({ ...prev, [name]: value }))
@@ -55,7 +62,23 @@ export default function LoginPage() {
 
   return (
     <div className="auth-screen">
-      <div className="auth-card">
+      <div className="auth-circle auth-circle-top" />
+      <div className="auth-circle auth-circle-bottom-left" />
+      <div className="auth-circle auth-circle-bottom-right" />
+
+      <motion.div
+        className="auth-card"
+        initial={{ opacity: 0, y: 28, scale: 0.97 }}
+        animate={exiting
+          ? { opacity: 0, y: -20, scale: 0.97 }
+          : { opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.26, ease: [0.25, 0.46, 0.45, 0.94], delay: exiting ? 0 : 0.05 }}
+      >
+        <div className="auth-brand">
+          <button className="auth-back" onClick={handleBack} aria-label="Back">←</button>
+          <span className="auth-brand-name">MentorNet</span>
+        </div>
+
         <div className="auth-title">Welcome<br /><em>back.</em></div>
         <div className="auth-sub">Sign in to continue your journey</div>
 
@@ -99,7 +122,7 @@ export default function LoginPage() {
         <div className="auth-footer">
           Don&apos;t have an account? <Link to="/register">Sign up</Link>
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }
