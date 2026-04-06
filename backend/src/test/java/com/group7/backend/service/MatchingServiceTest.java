@@ -19,6 +19,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,6 +30,9 @@ class MatchingServiceTest {
 
     @Mock
     private MentorRepository mentorRepository;
+
+    @Mock
+    private NotificationEventPublisher notificationEventPublisher;
 
     @InjectMocks
     private MatchingService matchingService;
@@ -203,6 +207,7 @@ class MatchingServiceTest {
         List<MentorMatchResponse> result = matchingService.getTopMentors(1L, "Java");
 
         assertThat(result).hasSize(1);
+        verify(notificationEventPublisher).publishMatchFound(1L, result.get(0).getFirstName());
     }
 
     @Test
