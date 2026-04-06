@@ -79,43 +79,11 @@ export async function getMatchingMentors(keyword) {
 }
 
 export async function getAllMentors() {
-  await new Promise(r => setTimeout(r, 600))
-  // Provide robust mock mentors since the backend endpoint might not be ready
-  return [
-    {
-      id: 'm1',
-      firstName: 'Alan',
-      lastName: 'Turing',
-      expertise: 'Senior Engineer',
-      affiliation: 'Tech Corp',
-      interests: ['Backend', 'AI/ML', 'Data'],
-      bio: 'Passionate about building scalable systems and training neural networks.',
-      maxMenteeCapacity: 3,
-      currentMenteeCount: 1
-    },
-    {
-      id: 'm2',
-      firstName: 'Grace',
-      lastName: 'Hopper',
-      expertise: 'DevOps Specialist',
-      affiliation: 'CloudNet',
-      interests: ['DevOps', 'Backend'],
-      bio: 'Infrastructure as code enthusiast and CI/CD expert.',
-      maxMenteeCapacity: 2,
-      currentMenteeCount: 2
-    },
-    {
-      id: 'm3',
-      firstName: 'Ada',
-      lastName: 'Lovelace',
-      expertise: 'Frontend Architect',
-      affiliation: 'WebWorks',
-      interests: ['Frontend', 'Mobile'],
-      bio: 'Crafting beautiful user interfaces and pixel-perfect mobile apps.',
-      maxMenteeCapacity: 5,
-      currentMenteeCount: 3
-    }
-  ]
+  const token = localStorage.getItem('auth_token')
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${BASE_URL}/users/mentors`, { headers })
+  return handleResponse(res)
 }
 
 export async function getSentMentorshipRequests() {
