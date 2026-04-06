@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { router } from 'expo-router';
 import {
   View,
@@ -7,7 +7,10 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+import apiClient from '../api/client';
 
 type DayItem = {
   key: string;
@@ -33,18 +36,64 @@ const TIME_OPTIONS = [
   '20:00',
 ];
 
-export default function AvailabilitySchedulingScreen() {
-  const [days, setDays] = useState<DayItem[]>([
-    { key: 'mon', short: 'Mon', active: true, start: '09:00', end: '18:00' },
-    { key: 'tue', short: 'Tue', active: true, start: '09:00', end: '18:00' },
-    { key: 'wed', short: 'Wed', active: true, start: '09:00', end: '18:00' },
-    { key: 'thu', short: 'Thu', active: true, start: '09:00', end: '18:00' },
-    { key: 'fri', short: 'Fri', active: true, start: '09:00', end: '18:00' },
-    { key: 'sat', short: 'Sat', active: false },
-    { key: 'sun', short: 'Sun', active: false },
-  ]);
+const DAY_KEY_TO_API: Record<string, string> = {
+  mon: 'MONDAY',
+  tue: 'TUESDAY',
+  wed: 'WEDNESDAY',
+  thu: 'THURSDAY',
+  fri: 'FRIDAY',
+  sat: 'SATURDAY',
+  sun: 'SUNDAY',
+};
 
+
+const DEFAULT_DAYS: DayItem[] = [
+  { key: 'mon', short: 'Mon', active: false },
+  { key: 'tue', short: 'Tue', active: false },
+  { key: 'wed', short: 'Wed', active: false },
+  { key: 'thu', short: 'Thu', active: false },
+  { key: 'fri', short: 'Fri', active: false },
+  { key: 'sat', short: 'Sat', active: false },
+  { key: 'sun', short: 'Sun', active: false },
+];
+
+export default function AvailabilitySchedulingScreen() {
+  const [days, setDays] = useState<DayItem[]>(DEFAULT_DAYS);
   const [selectedDuration, setSelectedDuration] = useState('60 min');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const loadAvailability = async () => {
+      try {
+        const userId = await SecureStore.getItemAsync('userId');
+        if (!userId) return;
+        const res = await apiClient.get(`/availability/${userId}`);
+        const slots: any[] = res.data;
+
+        setDays((prev) =>
+          prev.map((day) => {
+            const apiDay = DAY_KEY_TO_API[day.key];
+            const slot = slots.find((s) => s.dayOfWeek === apiDay);
+            if (slot) {
+              return {
+                ...day,
+                active: true,
+                start: slot.startTime.substring(0, 5),
+                end: slot.endTime.substring(0, 5),
+              };
+            }
+            return { ...day, active: false, start: undefined, end: undefined };
+          })
+        );
+      } catch (err) {
+        console.error('Availability load error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadAvailability();
+  }, []);
 
   const toggleDay = (key: string) => {
     setDays((prev) =>
@@ -89,7 +138,7 @@ export default function AvailabilitySchedulingScreen() {
     );
   };
 
-  const handleUpdateAvailability = () => {
+  const handleUpdateAvailability = async () => {
     const invalidDay = days.find((day) => {
       if (!day.active || !day.start || !day.end) return false;
       const startIndex = TIME_OPTIONS.indexOf(day.start);
@@ -98,15 +147,29 @@ export default function AvailabilitySchedulingScreen() {
     });
 
     if (invalidDay) {
-      Alert.alert(
-        "Invalid Time Slot",
-        `For ${invalidDay.short}, the end time must be after the start time.`
-      );
+      Alert.alert('Invalid Time Slot', `For ${invalidDay.short}, the end time must be after the start time.`);
       return;
     }
 
-    Alert.alert("Success", "Availability successfully updated!");
-    // API call to save the schedule goes here
+    const slots = days
+      .filter((day) => day.active && day.start && day.end)
+      .map((day) => ({
+        dayOfWeek: DAY_KEY_TO_API[day.key],
+        startTime: day.start,
+        endTime: day.end,
+        recurring: true,
+      }));
+
+    setSaving(true);
+    try {
+      await apiClient.put('/availability', { slots });
+      Alert.alert('Success', 'Availability successfully updated!');
+    } catch (error: any) {
+      const msg = error.response?.data?.message || 'Could not save availability.';
+      Alert.alert('Error', msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const durations = ['30 min', '45 min', '60 min', '90 min'];
@@ -117,7 +180,7 @@ export default function AvailabilitySchedulingScreen() {
         <View style={styles.topCircle} />
 
         <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 
@@ -129,8 +192,10 @@ export default function AvailabilitySchedulingScreen() {
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleUpdateAvailability}>
-            <Text style={styles.saveText}>Save</Text>
+          <TouchableOpacity onPress={handleUpdateAvailability} disabled={saving}>
+            <Text style={[styles.saveText, saving && { opacity: 0.5 }]}>
+              {saving ? 'Saving...' : 'Save'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -141,6 +206,10 @@ export default function AvailabilitySchedulingScreen() {
           </Text>
         </View>
       </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
+      ) : null}
 
       <ScrollView
         style={styles.scrollArea}
@@ -253,8 +322,14 @@ export default function AvailabilitySchedulingScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.updateButton} onPress={handleUpdateAvailability}>
-          <Text style={styles.updateButtonText}>Update Availability</Text>
+        <TouchableOpacity
+          style={[styles.updateButton, saving && { opacity: 0.6 }]}
+          onPress={handleUpdateAvailability}
+          disabled={saving}
+        >
+          <Text style={styles.updateButtonText}>
+            {saving ? 'Saving...' : 'Update Availability'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

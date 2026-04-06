@@ -1,5 +1,5 @@
 import React from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import {
   View,
   Text,
@@ -8,21 +8,28 @@ import {
   ScrollView,
 } from 'react-native';
 
+function parseString(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value ?? '';
+}
+
 export default function MeetingsSessionsScreen() {
+  const params = useLocalSearchParams();
+  const connectedUserName = parseString(params.connectedUserName) || 'Your Mentor';
+
   const meetings = [
     {
       day: 'Mon',
       time: '10:00',
       title: 'Code Review',
-      mentor: 'Burak Afşar',
+      mentor: connectedUserName,
       status: 'Confirmed',
       statusType: 'confirmed',
     },
     {
       day: 'Wed',
       time: '14:00',
-      title: 'Architecture\nTalk',
-      mentor: 'Burak Afşar',
+      title: 'Architecture Talk',
+      mentor: connectedUserName,
       status: 'Scheduled',
       statusType: 'scheduled',
     },
@@ -30,7 +37,7 @@ export default function MeetingsSessionsScreen() {
       day: 'Fri',
       time: '16:00',
       title: 'Weekly Wrap-up',
-      mentor: 'Burak Afşar',
+      mentor: connectedUserName,
       status: 'Pending',
       statusType: 'pending',
     },
@@ -43,14 +50,14 @@ export default function MeetingsSessionsScreen() {
         <View style={styles.rightCircle} />
 
         <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 
         <View style={styles.headerTopRow}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.replace('/(tabs)/profile')}
+            onPress={() => router.back()}
           >
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>

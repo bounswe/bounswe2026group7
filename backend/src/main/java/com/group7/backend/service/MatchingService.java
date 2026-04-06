@@ -20,10 +20,14 @@ public class MatchingService {
 
     private final MenteeRepository menteeRepository;
     private final MentorRepository mentorRepository;
+    private final NotificationEventPublisher notificationEventPublisher;
 
-    public MatchingService(MenteeRepository menteeRepository, MentorRepository mentorRepository) {
+    public MatchingService(MenteeRepository menteeRepository,
+                           MentorRepository mentorRepository,
+                           NotificationEventPublisher notificationEventPublisher) {
         this.menteeRepository = menteeRepository;
         this.mentorRepository = mentorRepository;
+        this.notificationEventPublisher = notificationEventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -37,13 +41,19 @@ public class MatchingService {
 
         List<Mentor> mentors = mentorRepository.findAll();
 
-        return mentors.stream()
+        List<MentorMatchResponse> matches = mentors.stream()
                 .filter(m -> m.getCurrentMenteeCount() < m.getMaxMenteeCapacity())
                 .filter(m -> matchesKeyword(m, keyword))
                 .map(m -> MentorMatchResponse.from(m, calculateScore(m, mentee)))
                 .sorted(Comparator.comparingInt(MentorMatchResponse::getMatchScore).reversed())
                 .limit(5)
                 .toList();
+
+        if (!matches.isEmpty()) {
+            notificationEventPublisher.publishMatchFound(menteeId, matches.get(0).getFirstName());
+        }
+
+        return matches;
     }
 
     @Transactional(readOnly = true)
@@ -57,12 +67,18 @@ public class MatchingService {
 
         List<Mentee> mentees = menteeRepository.findAll();
 
-        return mentees.stream()
+        List<MenteeCandidateResponse> candidates = mentees.stream()
                 .filter(m -> m.getActiveMentorId() == null)
                 .filter(m -> matchesMentorPreferences(mentor, m))
                 .filter(m -> matchesMenteeKeyword(m, keyword))
                 .map(MenteeCandidateResponse::from)
                 .toList();
+
+        if (!candidates.isEmpty()) {
+            notificationEventPublisher.publishMatchFound(mentorId, candidates.get(0).getFirstName());
+        }
+
+        return candidates;
     }
 
     boolean matchesMentorPreferences(Mentor mentor, Mentee mentee) {

@@ -25,11 +25,14 @@ public class MentorshipService {
 
     private final MentorshipRepository mentorshipRepository;
     private final MentorshipRequestRepository mentorshipRequestRepository;
+    private final NotificationEventPublisher notificationEventPublisher;
 
     public MentorshipService(MentorshipRepository mentorshipRepository,
-                             MentorshipRequestRepository mentorshipRequestRepository) {
+                             MentorshipRequestRepository mentorshipRequestRepository,
+                             NotificationEventPublisher notificationEventPublisher) {
         this.mentorshipRepository = mentorshipRepository;
         this.mentorshipRequestRepository = mentorshipRequestRepository;
+        this.notificationEventPublisher = notificationEventPublisher;
     }
 
     @Transactional
@@ -80,6 +83,7 @@ public class MentorshipService {
         Mentorship saved = mentorshipRepository.save(mentorship);
         log.info("Mentorship accepted: mentorshipId={}, mentorId={}, menteeId={}, requestId={}",
             saved.getId(), mentor.getId(), mentee.getId(), requestId);
+        notificationEventPublisher.publishRequestAccepted(mentee.getId(), mentor.getFirstName());
         return MentorshipResponse.from(saved);
     }
 
@@ -96,6 +100,7 @@ public class MentorshipService {
 
         request.setStatus(MentorshipRequestStatus.REJECTED);
         log.info("Mentorship request rejected: requestId={}, mentorId={}", requestId, mentorId);
+        notificationEventPublisher.publishRequestRejected(request.getMentee().getId(), request.getMentor().getFirstName());
     }
 
     @Transactional(readOnly = true)

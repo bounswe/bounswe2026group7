@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import apiClient from '../../api/client'; // Klasör yapına göre kontrol et (api/client.ts)
+
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
@@ -10,17 +12,31 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+
+// İsme göre baş harfleri hesaplayan yardımcı fonksiyon
+const getInitials = (name: string) => {
+  if (!name) return 'U';
+  const parts = name.trim().split(' ');
+  if (parts.length > 1) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+};
 
 export default function ProfileScreen() {
-  const { role } = useRole();
+  const { role, clearRole } = useRole();
   const isMentor = role === 'mentor';
 
   const handleLogout = async () => {
     try {
       await SecureStore.deleteItemAsync('userToken');
+      await SecureStore.deleteItemAsync('userId');
+      clearRole();
       router.replace('/login');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'An error occurred while logging out.');
     }
   };
@@ -32,103 +48,248 @@ export default function ProfileScreen() {
   return <MenteeProfileContent onLogout={handleLogout} />;
 }
 
+// Token (Chip) Editörü Bileşeni
+function TokenEditor({
+  label,
+  placeholder,
+  values,
+  inputValue,
+  setInputValue,
+  onAdd,
+  onRemove,
+}: {
+  label: string;
+  placeholder: string;
+  values: string[];
+  inputValue: string;
+  setInputValue: React.Dispatch<React.SetStateAction<string>>;
+  onAdd: () => void;
+  onRemove: (token: string) => void;
+}) {
+  return (
+    <View style={styles.tokenSection}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <View style={styles.tokenInputRow}>
+        <TextInput
+          style={styles.tokenInput}
+          placeholder={placeholder}
+          placeholderTextColor="#B5ADA3"
+          value={inputValue}
+          onChangeText={setInputValue}
+          onSubmitEditing={onAdd}
+          returnKeyType="done"
+        />
+        <TouchableOpacity style={styles.addTokenButton} onPress={onAdd}>
+          <Text style={styles.addTokenButtonText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.tokensWrap}>
+        {values.map((item) => (
+          <View key={item} style={styles.tokenChip}>
+            <Text style={styles.tokenChipText}>{item}</Text>
+            <TouchableOpacity onPress={() => onRemove(item)}>
+              <Text style={styles.tokenRemoveText}>×</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+type SentRequest = {
+  id: number;
+  mentorFirstName: string;
+  message: string;
+  status: string;
+  createdAt: string;
+};
+
+async function pickAvatar(storageKey: string): Promise<string | null> {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permission needed', 'Please allow access to your photo library.');
+    return null;
+  }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.7,
+  });
+  if (result.canceled || !result.assets[0]) return null;
+  const uri = result.assets[0].uri;
+  await SecureStore.setItemAsync(storageKey, uri);
+  return uri;
+}
+
+// --- MENTEE PROFILI ---
 function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
-  const [fullName, setFullName] = useState('Övgü Su Afşar');
-  const [department, setDepartment] = useState('Computer Engineering');
+  const [fullName, setFullName] = useState('');
+  const [department, setDepartment] = useState('');
   const [aboutMe, setAboutMe] = useState('');
+  const [interestInput, setInterestInput] = useState('');
+  const [interests, setInterests] = useState<string[]>([]);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [sentRequests, setSentRequests] = useState<SentRequest[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
+
+  const handleSave = async () => {
+    try {
+      // Artık userId'ye ihtiyacımız yok, backend bizi token'dan tanıyacak
+      const fullNameParts = fullName.trim().split(' ');
+      
+      const updateData = {
+        firstName: fullNameParts[0],
+        lastName: fullNameParts.length > 1 ? fullNameParts.slice(1).join(' ') : '',
+        major: department,        // Beratcan'ın beklediği field isimlerini kontrol et
+        backgroundInfo: aboutMe,  // Mentee için backgroundInfo, Mentor için bio olabilir
+        interests: interests      // Liste olarak gönderiyoruz
+      };
+
+      await apiClient.patch('/users/me', updateData);
+      Alert.alert('Başarılı', 'Profilin güncellendi!');
+    } catch (error: any) {
+      const serverMessage = error.response?.data?.message || error.message;
+      console.error('Update hatası:', error.response?.data);
+      Alert.alert('Güncelleme Başarısız', serverMessage);
+    }
+  };
+
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const userId = await SecureStore.getItemAsync('userId');
+        if (!userId) return;
+        const profileRes = await apiClient.get(`/users/${userId}`);
+        const data = profileRes.data;
+        setFullName(`${data.firstName} ${data.lastName}`);
+        setDepartment(data.major || '');
+        setAboutMe(data.backgroundInfo || '');
+        if (data.interests) setInterests(data.interests);
+        if (data.profilePhoto) {
+          setProfilePhoto(data.profilePhoto);
+        } else {
+          const local = await SecureStore.getItemAsync('menteeAvatarUri');
+          if (local) setProfilePhoto(local);
+        }
+      } catch (error) {
+        console.error('Error fetching mentee profile:', error);
+        const local = await SecureStore.getItemAsync('menteeAvatarUri');
+        if (local) setProfilePhoto(local);
+      }
+
+      try {
+        const reqRes = await apiClient.get('/mentorship-requests/sent');
+        const list = reqRes.data.content ?? reqRes.data;
+        setSentRequests(list);
+      } catch (error) {
+        console.error('Error fetching sent requests:', error);
+      } finally {
+        setRequestsLoading(false);
+      }
+    };
+    fetchAll();
+  }, []);
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.topCircle} />
           <View style={styles.leftCircle} />
-
-          <View style={styles.statusRow}>
-            <Text style={styles.statusText}>9:41</Text>
-            <Text style={styles.statusIcons}>▲ ▮</Text>
-          </View>
-
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>ÖA</Text>
-          </View>
-
-          <Text style={styles.name}>Övgü Su Afşar</Text>
-          <Text style={styles.roleText}>Mentee • Computer Engineering</Text>
-
-          <View style={styles.badgeMentee}>
-            <Text style={styles.badgeMenteeText}>Active Mentorship: 1</Text>
-          </View>
-        </View>
-
-        <View style={styles.statsCardMentee}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>12</Text>
-            <Text style={styles.statLabel}>Tasks</Text>
-          </View>
-
-          <View style={styles.statDividerTall} />
-
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>3</Text>
-            <Text style={styles.statLabel}>Meetings</Text>
-          </View>
-
-          <View style={styles.statDividerTall} />
-
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>4.8</Text>
-            <Text style={styles.statLabel}>Rating</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.avatarCircle}
+            onPress={async () => {
+              const uri = await pickAvatar('menteeAvatarUri');
+              if (uri) setProfilePhoto(uri);
+            }}
+          >
+            {profilePhoto ? (
+              <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{getInitials(fullName)}</Text>
+            )}
+            <View style={styles.avatarEditBadge}>
+              <Text style={styles.avatarEditText}>✎</Text>
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.name}>{fullName || 'Loading...'}</Text>
+          <Text style={styles.roleText}>Mentee • {department}</Text>
         </View>
 
         <View style={styles.body}>
-          <Text style={styles.sectionTitleMentee}>PERSONAL INFO</Text>
+          {/* Quick Actions */}
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/mentorship-requests')}
+            >
+              <Text style={styles.quickActionIcon}>📋</Text>
+              <Text style={styles.quickActionText}>My Requests</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/(tabs)/explore')}
+            >
+              <Text style={styles.quickActionIcon}>🔍</Text>
+              <Text style={styles.quickActionText}>Find Mentor</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.formCardMentee}>
             <Text style={styles.inputLabel}>Full Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your full name"
-              placeholderTextColor="#B5ADA3"
-              value={fullName}
-              onChangeText={setFullName}
-            />
-
+            <TextInput style={styles.input} value={fullName} onChangeText={setFullName} />
             <Text style={styles.inputLabel}>Department</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your department"
-              placeholderTextColor="#B5ADA3"
-              value={department}
-              onChangeText={setDepartment}
-            />
-
+            <TextInput style={styles.input} value={department} onChangeText={setDepartment} />
             <Text style={styles.inputLabel}>About Me</Text>
-            <TextInput
-              style={[styles.input, styles.aboutInput]}
-              placeholder="Tell us about yourself"
-              placeholderTextColor="#B5ADA3"
-              value={aboutMe}
-              onChangeText={setAboutMe}
-              multiline
-              textAlignVertical="top"
+            <TextInput style={[styles.input, styles.aboutInput]} value={aboutMe} onChangeText={setAboutMe} multiline />
+            
+            <TokenEditor 
+              label="Interests" 
+              placeholder="Add interest" 
+              values={interests} 
+              inputValue={interestInput} 
+              setInputValue={setInterestInput} 
+              onAdd={() => { if(interestInput) setInterests([...interests, interestInput]); setInterestInput(''); }} 
+              onRemove={(t) => setInterests(interests.filter(i => i !== t))} 
             />
           </View>
-
-          <TouchableOpacity
-            style={styles.myTasksButton}
-            onPress={() => router.push('/task-tracker')}
-          >
-            <Text style={styles.myTasksButtonText}>My Tasks</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.saveButtonMentee}>
+          <TouchableOpacity style={styles.saveButtonMentee} onPress={handleSave}>
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
+
+          {/* Sent Requests */}
+          <Text style={styles.sectionHeaderText}>MY REQUESTS</Text>
+          {requestsLoading ? null : sentRequests.length === 0 ? (
+            <View style={styles.emptyRequestsCard}>
+              <Text style={styles.emptyRequestsText}>No requests sent yet.</Text>
+            </View>
+          ) : (
+            sentRequests.map((req) => {
+              const statusColor =
+                req.status === 'PENDING' ? '#8A5D12' :
+                req.status === 'ACCEPTED' ? '#2F563C' : '#D9534F';
+              const statusBg =
+                req.status === 'PENDING' ? '#F1E1BB' :
+                req.status === 'ACCEPTED' ? '#D7E8DA' : '#FDF0EF';
+              return (
+                <View key={req.id} style={styles.requestCard}>
+                  <View style={styles.requestCardRow}>
+                    <Text style={styles.requestCardName}>{req.mentorFirstName}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
+                      <Text style={[styles.statusBadgeText, { color: statusColor }]}>
+                        {req.status}
+                      </Text>
+                    </View>
+                  </View>
+                  {!!req.message && (
+                    <Text style={styles.requestCardMessage} numberOfLines={2}>{req.message}</Text>
+                  )}
+                </View>
+              );
+            })
+          )}
 
           <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
             <Text style={styles.logoutButtonText}>Log Out</Text>
@@ -139,538 +300,231 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   );
 }
 
+// --- MENTOR PROFILI ---
 function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
-  const [displayName, setDisplayName] = useState('Burak Afşar');
-  const [title, setTitle] = useState('Senior iOS Developer · Apple');
-  const [bio, setBio] = useState(
-    '7+ years iOS dev. Passionate about mobile and mentorship.'
-  );
+  const [displayName, setDisplayName] = useState('');
+  const [title, setTitle] = useState('');
+  const [bio, setBio] = useState('');
+  const [interests, setInterests] = useState<string[]>([]);
+  const [interestInput, setInterestInput] = useState('');
+  const [maxMenteeCapacity, setMaxMenteeCapacity] = useState('3');
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      try {
+        const userId = await SecureStore.getItemAsync('userId');
+        if (!userId) return;
+        const response = await apiClient.get(`/users/${userId}`);
+        const data = response.data;
+        setDisplayName(`${data.firstName} ${data.lastName}`);
+        setTitle(data.field || '');
+        setBio(data.bio || '');
+        if (data.interests) setInterests(data.interests);
+        if (data.maxMenteeCapacity != null) setMaxMenteeCapacity(String(data.maxMenteeCapacity));
+        if (data.profilePhoto) {
+          setProfilePhoto(data.profilePhoto);
+        } else {
+          const local = await SecureStore.getItemAsync('mentorAvatarUri');
+          if (local) setProfilePhoto(local);
+        }
+      } catch (error) {
+        console.error('Error fetching mentor profile:', error);
+        const local = await SecureStore.getItemAsync('mentorAvatarUri');
+        if (local) setProfilePhoto(local);
+      }
+    };
+    fetchProfileData();
+  }, []);
+
+  const handleSave = async () => {
+    const capacity = parseInt(maxMenteeCapacity, 10);
+    if (isNaN(capacity) || capacity < 1) {
+      Alert.alert('Hata', 'Mentee kapasitesi en az 1 olmalıdır.');
+      return;
+    }
+    try {
+      const nameParts = displayName.trim().split(' ');
+      await apiClient.patch('/users/me', {
+        firstName: nameParts[0],
+        lastName: nameParts.length > 1 ? nameParts.slice(1).join(' ') : '',
+        field: title,
+        bio: bio,
+        interests: interests,
+        maxMenteeCapacity: capacity,
+      });
+      Alert.alert('Başarılı', 'Profilin güncellendi!');
+    } catch (error: any) {
+      const serverMessage = error.response?.data?.message || error.message;
+      Alert.alert('Güncelleme Başarısız', serverMessage);
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <View style={styles.fixedHeader}>
-        <View style={styles.topCircle} />
-        <View style={styles.leftCircleMentor} />
-
-        <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
-          <Text style={styles.statusIcons}>▲ ▮</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <View style={styles.topCircle} />
+          <TouchableOpacity
+            style={styles.avatarCircle}
+            onPress={async () => {
+              const uri = await pickAvatar('mentorAvatarUri');
+              if (uri) setProfilePhoto(uri);
+            }}
+          >
+            {profilePhoto ? (
+              <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
+            )}
+            <View style={styles.avatarEditBadge}>
+              <Text style={styles.avatarEditText}>✎</Text>
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.name}>{displayName || 'Loading...'}</Text>
+          <Text style={styles.roleText}>{title}</Text>
         </View>
 
-        <View style={styles.avatarWrapper}>
-          <View style={styles.avatarCircleMentor}>
-            <Text style={styles.avatarText}>BA</Text>
+        <View style={styles.body}>
+          {/* Quick Actions */}
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/mentorship-requests')}
+            >
+              <Text style={styles.quickActionIcon}>📋</Text>
+              <Text style={styles.quickActionText}>Requests</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/availability-scheduling')}
+            >
+              <Text style={styles.quickActionIcon}>📅</Text>
+              <Text style={styles.quickActionText}>Availability</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.onlineDot} />
+
+          <View style={styles.formCardMentor}>
+            <Text style={styles.inputLabel}>Display Name</Text>
+            <TextInput style={styles.input} value={displayName} onChangeText={setDisplayName} />
+            <Text style={styles.inputLabel}>Title / Field</Text>
+            <TextInput style={styles.input} value={title} onChangeText={setTitle} />
+            <Text style={styles.inputLabel}>Bio</Text>
+            <TextInput style={[styles.input, styles.bigInput]} value={bio} onChangeText={setBio} multiline />
+            <Text style={styles.inputLabel}>Max Mentee Capacity</Text>
+            <TextInput
+              style={styles.input}
+              value={maxMenteeCapacity}
+              onChangeText={setMaxMenteeCapacity}
+              keyboardType="number-pad"
+              placeholder="e.g. 3"
+              placeholderTextColor="#B5ADA3"
+            />
+            <TokenEditor
+              label="Interests / Expertise"
+              placeholder="Add expertise"
+              values={interests}
+              inputValue={interestInput}
+              setInputValue={setInterestInput}
+              onAdd={() => { if (interestInput.trim()) setInterests([...interests, interestInput.trim()]); setInterestInput(''); }}
+              onRemove={(t) => setInterests(interests.filter(i => i !== t))}
+            />
+          </View>
+          <TouchableOpacity style={styles.saveButtonMentor} onPress={handleSave}>
+            <Text style={styles.saveButtonText}>Save Changes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+            <Text style={styles.logoutButtonText}>Log Out</Text>
+          </TouchableOpacity>
         </View>
-
-        <Text style={styles.name}>Burak Afşar</Text>
-        <Text style={styles.roleText}>Senior iOS Developer · Apple</Text>
-
-        <View style={styles.tagsRow}>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>Swift</Text>
-          </View>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>Mobile</Text>
-          </View>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>React Native</Text>
-          </View>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.scrollArea}
-        contentContainerStyle={styles.scrollContentMentor}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.statsCardMentor}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>4.9</Text>
-            <Text style={styles.statLabel}>Rating</Text>
-          </View>
-
-          <View style={styles.statDivider} />
-
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>24</Text>
-            <Text style={styles.statLabel}>Reviews</Text>
-          </View>
-
-          <View style={styles.statDivider} />
-
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>8</Text>
-            <Text style={styles.statLabel}>Mentees</Text>
-          </View>
-
-          <View style={styles.statDivider} />
-
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>2y</Text>
-            <Text style={styles.statLabel}>Experience</Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>MANAGE</Text>
-
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => router.push('/mentorship-requests')}
-        >
-          <View style={[styles.cardIconBox, { backgroundColor: '#F3E7E2' }]}>
-            <Text style={styles.cardIcon}>📥</Text>
-          </View>
-
-          <View style={styles.cardTextArea}>
-            <Text style={styles.cardTitle}>Mentorship Requests</Text>
-            <Text style={styles.cardSubtitle}>Review incoming applications</Text>
-          </View>
-
-          <View style={styles.badgeRed}>
-            <Text style={styles.badgeRedText}>2</Text>
-          </View>
-
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => router.push('/availability-scheduling')}
-        >
-          <View style={[styles.cardIconBox, { backgroundColor: '#E3ECE6' }]}>
-            <Text style={styles.cardIcon}>📅</Text>
-          </View>
-
-          <View style={styles.cardTextArea}>
-            <Text style={styles.cardTitle}>Availability & Scheduling</Text>
-            <Text style={styles.cardSubtitle}>Set your weekly hours</Text>
-          </View>
-
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => router.push('/meetings-sessions')}
-        >
-          <View style={[styles.cardIconBox, { backgroundColor: '#E7E9EF' }]}>
-            <Text style={styles.cardIcon}>🗒️</Text>
-          </View>
-
-          <View style={styles.cardTextArea}>
-            <Text style={styles.cardTitle}>Meetings & Sessions</Text>
-            <Text style={styles.cardSubtitle}>3 upcoming this week</Text>
-          </View>
-
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.sectionTitle}>PROFILE INFO</Text>
-
-        <View style={styles.formCardMentor}>
-          <Text style={styles.inputLabel}>Display Name</Text>
-          <TextInput
-            style={styles.input}
-            value={displayName}
-            onChangeText={setDisplayName}
-          />
-
-          <Text style={styles.inputLabel}>Title</Text>
-          <TextInput
-            style={styles.input}
-            value={title}
-            onChangeText={setTitle}
-          />
-
-          <Text style={styles.inputLabel}>Bio</Text>
-          <TextInput
-            style={[styles.input, styles.bigInput]}
-            value={bio}
-            onChangeText={setBio}
-            multiline
-            textAlignVertical="top"
-          />
-        </View>
-
-        <TouchableOpacity style={styles.saveButtonMentor}>
-          <Text style={styles.saveButtonText}>Save Profile</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutButtonText}>Log Out</Text>
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  logoutButton: {
-    marginTop: 12,
-    marginBottom: 40,
-    backgroundColor: '#FDF0EF',
-    borderWidth: 1,
-    borderColor: '#FAD4D4',
-    borderRadius: 24,
+  container: { flex: 1, backgroundColor: '#ECE8E1' },
+  scrollContent: { paddingBottom: 32 },
+  header: { backgroundColor: '#456B50', paddingTop: 54, paddingBottom: 60, alignItems: 'center', overflow: 'hidden' },
+  topCircle: { position: 'absolute', width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,255,255,0.05)', top: -30, right: -70 },
+  leftCircle: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.04)', bottom: 20, left: -50 },
+  avatarCircle: { width: 110, height: 110, borderRadius: 55, borderWidth: 3, borderColor: 'rgba(255,255,255,0.38)', justifyContent: 'center', alignItems: 'center', marginTop: 20, marginBottom: 15, overflow: 'hidden', position: 'relative' },
+  avatarText: { color: '#F5F1E9', fontSize: 32, fontWeight: '700' },
+  avatarImage: { width: 110, height: 110, borderRadius: 55 },
+  avatarEditBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#456B50', borderRadius: 12, width: 28, height: 28, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#F5F1E9' },
+  avatarEditText: { color: '#F5F1E9', fontSize: 14 },
+  name: { color: '#F5F1E9', fontSize: 24, fontWeight: '700', marginBottom: 5 },
+  roleText: { color: 'rgba(245,241,233,0.75)', fontSize: 14, fontWeight: '500' },
+  body: { paddingHorizontal: 24, paddingTop: 20 },
+  formCardMentee: { backgroundColor: '#F8F6F2', borderRadius: 26, padding: 20, marginBottom: 20 },
+  formCardMentor: { backgroundColor: '#F8F6F2', borderRadius: 26, padding: 20, marginBottom: 20 },
+  inputLabel: { color: '#7E7368', fontSize: 12, fontWeight: '700', marginBottom: 8 },
+  input: { height: 60, borderRadius: 18, borderWidth: 1.5, borderColor: '#D8CEC0', backgroundColor: '#FCFBF8', paddingHorizontal: 15, fontSize: 16, color: '#4A4138', marginBottom: 15 },
+  aboutInput: { height: 100, textAlignVertical: 'top', paddingTop: 10 },
+  bigInput: { height: 100, textAlignVertical: 'top', paddingTop: 10 },
+  tokenSection: { marginBottom: 15 },
+  tokenInputRow: { flexDirection: 'row', marginBottom: 10 },
+  tokenInput: { flex: 1, height: 50, borderRadius: 15, borderWidth: 1.5, borderColor: '#D8CEC0', backgroundColor: '#FCFBF8', paddingHorizontal: 12, marginRight: 10 },
+  addTokenButton: { backgroundColor: '#4B7B57', borderRadius: 15, paddingHorizontal: 15, justifyContent: 'center' },
+  addTokenButtonText: { color: '#F8F6F2', fontWeight: '700' },
+  tokensWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tokenChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 15, backgroundColor: '#EEF3EE', borderWidth: 1, borderColor: '#D7E8DA' },
+  tokenChipText: { color: '#2F563C', fontSize: 13, fontWeight: '600' },
+  tokenRemoveText: { color: '#2F563C', fontSize: 18, fontWeight: '700', marginLeft: 8 },
+  logoutButton: { backgroundColor: '#FDF0EF', borderWidth: 1, borderColor: '#FAD4D4', borderRadius: 20, paddingVertical: 15, alignItems: 'center', marginTop: 12 },
+  logoutButtonText: { color: '#D9534F', fontSize: 16, fontWeight: '700' },
+  quickActionsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  quickActionButton: {
+    flex: 1,
+    backgroundColor: '#F8F6F2',
+    borderRadius: 20,
     paddingVertical: 18,
     alignItems: 'center',
-  },
-  logoutButtonText: {
-    color: '#D9534F',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  myTasksButton: {
-    backgroundColor: '#D7E8DA',
-    borderRadius: 24,
-    paddingVertical: 20,
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  myTasksButtonText: {
-    color: '#2F563C',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#ECE8E1',
-  },
-  scrollContent: {
-    paddingBottom: 32,
-  },
-  scrollArea: {
-    flex: 1,
-    backgroundColor: '#ECE8E1',
-  },
-  scrollContentMentor: {
-    paddingHorizontal: 24,
-    paddingTop: 14,
-    paddingBottom: 36,
-  },
-  header: {
-    backgroundColor: '#456B50',
-    paddingTop: 54,
-    paddingBottom: 80,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  fixedHeader: {
-    backgroundColor: '#456B50',
-    paddingTop: 54,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  topCircle: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    top: -30,
-    right: -70,
-  },
-  leftCircle: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    bottom: 20,
-    left: -50,
-  },
-  leftCircleMentor: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    bottom: 30,
-    left: -50,
-  },
-  statusRow: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  statusIcons: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  avatarWrapper: {
-    marginTop: 22,
-    marginBottom: 16,
-  },
-  avatarCircle: {
-    width: 118,
-    height: 118,
-    borderRadius: 59,
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.38)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 26,
-    marginBottom: 18,
-  },
-  avatarCircleMentor: {
-    width: 118,
-    height: 118,
-    borderRadius: 59,
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: '#F5F1E9',
-    fontSize: 34,
-    fontWeight: '700',
-  },
-  onlineDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#63D17A',
-    position: 'absolute',
-    right: 4,
-    bottom: 8,
-    borderWidth: 3,
-    borderColor: '#456B50',
-  },
-  name: {
-    color: '#F5F1E9',
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  roleText: {
-    color: 'rgba(245,241,233,0.75)',
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 14,
-    textAlign: 'center',
-  },
-  badgeMentee: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  badgeMenteeText: {
-    color: '#F5F1E9',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  tag: {
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.18)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 16,
+    borderColor: '#D7E8DA',
   },
-  tagText: {
-    color: '#F5F1E9',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  statsCardMentee: {
-    marginTop: -36,
-    marginHorizontal: 24,
-    backgroundColor: '#F8F6F2',
-    borderRadius: 28,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 26,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  statsCardMentor: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 26,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    marginBottom: 24,
-    marginTop: 2,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 22,
-  },
-  statNumber: {
-    color: '#2F563C',
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  statLabel: {
-    color: '#8B8176',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  statDividerTall: {
-    width: 1,
-    height: 54,
-    backgroundColor: '#DDD5CA',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#DDD5CA',
-  },
-  body: {
-    paddingHorizontal: 24,
-    paddingTop: 26,
-  },
-  sectionTitleMentee: {
-    color: '#8B8176',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginBottom: 18,
-  },
-  sectionTitle: {
-    color: '#8B8176',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginBottom: 16,
-  },
-  formCardMentee: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 26,
-    padding: 22,
-    marginBottom: 22,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  formCardMentor: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 26,
-    padding: 22,
-    marginBottom: 22,
-  },
-  inputLabel: {
-    color: '#7E7368',
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 10,
-  },
-  input: {
-    height: 64,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#D8CEC0',
-    backgroundColor: '#FCFBF8',
-    paddingHorizontal: 18,
-    fontSize: 16,
-    color: '#4A4138',
-    marginBottom: 22,
-  },
-  aboutInput: {
-    height: 110,
-    paddingTop: 18,
-    marginBottom: 0,
-  },
-  bigInput: {
-    height: 110,
-    paddingTop: 18,
-    marginBottom: 0,
-  },
+  quickActionIcon: { fontSize: 24, marginBottom: 6 },
+  quickActionText: { color: '#2F563C', fontSize: 13, fontWeight: '700' },
+  sectionHeaderText: { fontSize: 12, fontWeight: '700', letterSpacing: 2, color: '#8B8176', marginTop: 8, marginBottom: 12 },
+  emptyRequestsCard: { backgroundColor: '#F8F6F2', borderRadius: 18, padding: 18, alignItems: 'center', marginBottom: 16 },
+  emptyRequestsText: { color: '#9A8F82', fontSize: 14, fontWeight: '500' },
+  requestCard: { backgroundColor: '#F8F6F2', borderRadius: 18, padding: 16, marginBottom: 10 },
+  requestCardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  requestCardName: { color: '#23372B', fontSize: 15, fontWeight: '700' },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  statusBadgeText: { fontSize: 12, fontWeight: '700' },
+  requestCardMessage: { color: '#7E7368', fontSize: 13, marginTop: 8, lineHeight: 18 },
+
   saveButtonMentee: {
     backgroundColor: '#4B7B57',
     borderRadius: 24,
-    paddingVertical: 20,
+    paddingVertical: 18,
     alignItems: 'center',
+    marginTop: 10,
     marginBottom: 12,
+    // Hafif gölge efekti
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   saveButtonMentor: {
     backgroundColor: '#467853',
     borderRadius: 24,
-    paddingVertical: 20,
+    paddingVertical: 18,
     alignItems: 'center',
+    marginTop: 20,
+    // Hafif gölge efekti
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   saveButtonText: {
     color: '#F8F6F2',
     fontSize: 17,
     fontWeight: '700',
-  },
-  actionCard: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 24,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cardIconBox: {
-    width: 68,
-    height: 68,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  cardIcon: {
-    fontSize: 30,
-  },
-  cardTextArea: {
-    flex: 1,
-  },
-  cardTitle: {
-    color: '#23372B',
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  cardSubtitle: {
-    color: '#9A8F82',
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  badgeRed: {
-    minWidth: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#EA4E4E',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-    paddingHorizontal: 8,
-  },
-  badgeRedText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  chevron: {
-    fontSize: 28,
-    color: '#B9B0A5',
-    fontWeight: '400',
   },
 });

@@ -1,3 +1,8 @@
+
+import apiClient from '../api/client';
+import * as SecureStore from 'expo-secure-store';
+import { useRole } from '../components/RoleContext';
+
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
@@ -9,7 +14,6 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -19,13 +23,37 @@ export default function LoginScreen() {
     return email.trim().length > 0 && password.trim().length > 0;
   }, [email, password]);
 
+  const { setRole } = useRole(); // RoleContext'i alıyoruz
+
   const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please fill in all fields.");
+      return;
+    }
+
     try {
-      const fakeToken = 'jwt_dummy_token_12345';
-      await SecureStore.setItemAsync('userToken', fakeToken);
-      router.replace('/(tabs)/profile');
-    } catch {
-      Alert.alert('Error', 'Failed to securely store the login token.');
+      // 1. Backend'e giriş isteği atıyoruz
+      const response = await apiClient.post('/auth/login', {
+        email: email,
+        password: password
+      });
+
+
+    // 2. Gelen cevaptan token, rol VE userId'yi çıkarıyoruz
+      const { sessionToken, role, userId } = response.data; // userId'yi de alıyoruz
+      await SecureStore.setItemAsync('userToken', sessionToken);
+      await SecureStore.setItemAsync('userId', userId.toString()); // ID'yi kaydediyoruz
+
+      // 4. Backend'den dönen rolü uygulamamıza set ediyoruz 
+      // (Backend "MENTOR" veya "MENTEE" dönüyorsa bunu küçük harfe çevirip context'e veriyoruz)
+      setRole(role.toLowerCase());
+
+      // 5. Başarılı giriş, ana sayfaya yönlendir
+      router.replace('/(tabs)');
+
+    } catch (error) {
+      Alert.alert("Login Failed", "Invalid email or password.");
+      console.error(error);
     }
   };
 
@@ -39,7 +67,7 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.statusRow}>
-          <Text style={styles.statusText}>9:41</Text>
+          <Text style={styles.statusText}>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</Text>
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 

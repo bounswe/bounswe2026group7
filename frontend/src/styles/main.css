@@ -411,6 +411,18 @@
 
 /* ── EXPLORE PAGE ── */
 .explore-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.active-mentor-banner {
+  background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+  border-radius: 12px; padding: 12px 18px; margin-bottom: 20px;
+  font-size: 14px; font-weight: 500;
+}
+.empty-state {
+  text-align: center; color: var(--text-muted); padding: 60px 0; font-size: 15px;
+}
+.mc-bio {
+  font-size: 13px; color: var(--text-muted); margin-bottom: 12px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .search-box {
   flex: 1; display: flex; align-items: center; gap: 10px;
   background: #fff; border: 1px solid var(--border);
@@ -450,18 +462,51 @@
 .mc-name { font-weight: 700; font-size: 15px; }
 .mc-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .mc-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-.mc-footer { display: flex; align-items: center; justify-content: space-between; }
+.mc-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mentor-actions { display: flex; gap: 10px; align-items: center; }
 .stars { color: var(--gold); font-size: 14px; }
 .rating-text { font-size: 13px; color: var(--text-muted); margin-left: 6px; }
-.view-btn {
-  padding: 8px 18px;
-  background: var(--green-pale); color: var(--green-dark);
-  border: none; border-radius: 50px;
-  font-size: 13px; font-weight: 600;
-  font-family: 'DM Sans', sans-serif;
-  cursor: pointer; transition: background 0.2s;
+.view-btn,
+.send-request-btn {
+  padding: 8px 16px;
+  height: 36px;
+  white-space: nowrap;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
-.view-btn:hover { background: #c5e0ca; }
+
+.view-btn {
+  background: var(--green-pale);
+  color: var(--green-dark);
+}
+
+.view-btn:hover { 
+  background: #d7ebd6; 
+}
+
+.send-request-btn {
+  margin-top: 0;
+  background: #4CAF50;
+  color: #ffffff;
+}
+
+.send-request-btn:hover {
+  filter: brightness(0.9);
+}
+
+.send-request-btn.sent {
+  background: #a855f7;
+  color: #ffffff;
+  cursor: default;
+  filter: brightness(1); 
+}
 
 /* ── PROFILE PAGE ── */
 .profile-layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; }
@@ -758,6 +803,7 @@
 }
 .toggle.off { background: #d0d5d0; }
 .toggle.off::after { right: auto; left: 3px; }
+
 .duration-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .dur-btn {
   padding: 14px 12px; border-radius: 10px;

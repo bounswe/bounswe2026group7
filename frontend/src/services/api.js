@@ -66,3 +66,43 @@ export async function resetPassword({ token, newPassword }) {
   })
   return handleResponse(res)
 }
+
+export async function getMatchingMentors(keyword) {
+  const token = localStorage.getItem('auth_token')
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const url = keyword
+    ? `${BASE_URL}/matching/mentors?keyword=${encodeURIComponent(keyword)}`
+    : `${BASE_URL}/matching/mentors`
+  const res = await fetch(url, { headers })
+  return handleResponse(res)
+}
+
+export async function getAllMentors() {
+  const token = localStorage.getItem('auth_token')
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${BASE_URL}/users/mentors`, { headers })
+  return handleResponse(res)
+}
+
+export async function getSentMentorshipRequests() {
+  const token = localStorage.getItem('auth_token')
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(`${BASE_URL}/mentorship-requests/sent`, { headers })
+  return handleResponse(res)
+}
+
+export async function createMentorshipRequest({ mentorId, message }) {
+  const token = localStorage.getItem('auth_token')
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  const res = await fetch(`${BASE_URL}/mentorship-requests`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ mentorId, message }),
+  })
+  return handleResponse(res)
+}
