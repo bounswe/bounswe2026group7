@@ -54,18 +54,25 @@ function PrivacyBadge({ visible }) {
   )
 }
 
-function ViewField({ label, value, visible }) {
+function ViewField({ label, value, visible, chips = false }) {
+  const items = chips && value ? value.split(',').map(s => s.trim()).filter(Boolean) : []
   return (
     <div style={{ marginBottom: '16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
         <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
           {label}
         </span>
         {visible !== undefined && <PrivacyBadge visible={visible} />}
       </div>
-      <div style={{ fontSize: '14px', color: 'var(--text-mid)', lineHeight: 1.6 }}>
-        {value || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Not set</span>}
-      </div>
+      {chips && items.length > 0 ? (
+        <div className="profile-chips">
+          {items.map(item => <span className="profile-chip" key={item}>{item}</span>)}
+        </div>
+      ) : (
+        <div style={{ fontSize: '14px', color: 'var(--text-mid)', lineHeight: 1.6 }}>
+          {value || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Not set</span>}
+        </div>
+      )}
     </div>
   )
 }
@@ -205,10 +212,10 @@ export default function ProfilePage() {
                 <ViewField label="Field" value={form.field} />
                 <ViewField label="Expertise" value={form.expertise} />
                 <ViewField label="Affiliation" value={form.affiliation} />
-                <ViewField label="Interests" value={form.interests} />
+                <ViewField label="Interests" value={form.interests} chips />
                 <ViewField label="Mentoring Goals" value={form.mentoringGoals} />
                 <ViewField label="Preferred Mentee Major" value={form.preferredMenteeMajor} />
-                <ViewField label="Preferred Mentee Skills" value={form.preferredMenteeSkills} />
+                <ViewField label="Preferred Mentee Skills" value={form.preferredMenteeSkills} chips />
                 <ViewField label="Max Mentees" value={form.maxMenteeCapacity} />
                 <ViewField label="Mentorship Duration" value={form.mentorshipDuration ? `${form.mentorshipDuration} months` : ''} />
               </>
@@ -216,8 +223,8 @@ export default function ProfilePage() {
               <>
                 <ViewField label="Background" value={form.background} visible={form.profileVisible} />
                 <ViewField label="Goals" value={form.goals} visible={form.profileVisible} />
-                <ViewField label="Skills" value={form.skills} visible={form.profileVisible} />
-                <ViewField label="Interests" value={form.interests} visible={form.profileVisible} />
+                <ViewField label="Skills" value={form.skills} visible={form.profileVisible} chips />
+                <ViewField label="Interests" value={form.interests} visible={form.profileVisible} chips />
                 <ViewField label="Major" value={form.major} visible={form.profileVisible} />
                 <ViewField label="Career Interest" value={form.careerInterest} visible={form.profileVisible} />
                 <ViewField label="Meeting Preference" value={form.meetingFreqPref} visible={form.profileVisible} />

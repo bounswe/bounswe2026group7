@@ -511,26 +511,70 @@
 /* ── PROFILE PAGE ── */
 .profile-layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; }
 .profile-card-hero {
-  background: var(--green-mid); border-radius: var(--radius);
-  padding: 32px 24px; text-align: center; color: #fff;
+  background: var(--green-dark); border-radius: var(--radius);
+  padding: 36px 24px; text-align: center; color: #fff;
   margin-bottom: 16px;
+  position: relative; overflow: hidden;
+}
+/* Decorative circles inspired by mobile app */
+.profile-card-hero::before {
+  content: '';
+  position: absolute; width: 200px; height: 200px; border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+  top: -40px; right: -50px;
+  pointer-events: none;
+}
+.profile-card-hero::after {
+  content: '';
+  position: absolute; width: 140px; height: 140px; border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  bottom: -20px; left: -30px;
+  pointer-events: none;
 }
 .profile-avatar-lg {
-  width: 80px; height: 80px; border-radius: 50%;
-  background: rgba(255,255,255,0.2);
+  width: 90px; height: 90px; border-radius: 50%;
+  background: rgba(255,255,255,0.18);
   display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 24px; color: #fff;
+  font-weight: 700; font-size: 26px; color: #fff;
   margin: 0 auto 16px;
-  border: 3px solid rgba(255,255,255,0.4);
+  border: 3px solid rgba(255,255,255,0.38);
+  position: relative; z-index: 1;
+  overflow: hidden;
 }
-.profile-name { font-size: 20px; font-weight: 700; }
-.profile-role { font-size: 13px; color: rgba(255,255,255,0.75); margin-top: 4px; }
+.profile-name { font-size: 20px; font-weight: 700; position: relative; z-index: 1; }
+.profile-role { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 4px; position: relative; z-index: 1; }
 .profile-badge {
   display: inline-block; margin-top: 12px;
   padding: 5px 14px;
-  background: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.15);
   border-radius: 20px; font-size: 12px; font-weight: 600;
-  color: #fff;
+  color: #fff; position: relative; z-index: 1;
+}
+/* Availability badges (used in UserProfilePage) */
+.availability-badge {
+  display: inline-block; margin-top: 12px;
+  padding: 6px 16px; border-radius: 20px;
+  font-size: 12px; font-weight: 700;
+  position: relative; z-index: 1;
+}
+.availability-badge.available { background: rgba(215,232,218,0.25); color: #d7f0dc; border: 1px solid rgba(215,232,218,0.3); }
+.availability-badge.full { background: rgba(240,214,215,0.2); color: #ffd5d5; border: 1px solid rgba(240,214,215,0.3); }
+/* Stats row (used in UserProfilePage) */
+.profile-stats-row {
+  background: #fff; border-radius: var(--radius);
+  display: flex; box-shadow: var(--shadow-card); margin-bottom: 16px;
+  overflow: hidden;
+}
+.psr-item { flex: 1; text-align: center; padding: 18px 12px; }
+.psr-item + .psr-item { border-left: 1px solid var(--border); }
+.psr-num { font-size: 22px; font-weight: 700; color: var(--green-dark); }
+.psr-lbl { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+/* Chip tags for profile field values */
+.profile-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.profile-chip {
+  padding: 5px 14px; border-radius: 20px;
+  background: #eef3ee; border: 1px solid #d7e8da;
+  font-size: 13px; font-weight: 600; color: #2f563c;
 }
 .profile-stats {
   background: #fff; border-radius: var(--radius);
@@ -555,13 +599,25 @@
 .form-textarea { resize: vertical; min-height: 100px; }
 .save-btn {
   width: 100%; padding: 14px;
-  background: var(--green-mid); color: #fff;
+  background: var(--green-dark); color: #fff;
   border: none; border-radius: 50px;
   font-size: 15px; font-weight: 700;
   font-family: 'DM Sans', sans-serif;
   cursor: pointer; transition: background 0.2s;
 }
-.save-btn:hover { background: var(--green-dark); }
+.save-btn:hover { background: var(--green-mid); }
+.save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+/* View Profile button on mentor cards */
+.view-profile-btn {
+  padding: 8px 16px; height: 36px;
+  border-radius: 999px; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--border);
+  background: #fff; color: var(--text-mid);
+  cursor: pointer; transition: all 0.15s;
+  font-family: 'DM Sans', sans-serif;
+  white-space: nowrap;
+}
+.view-profile-btn:hover { background: var(--green-pale); color: var(--green-dark); border-color: var(--green-mid); }
 
 /* ── MESSAGES PAGE ── */
 .messages-layout {

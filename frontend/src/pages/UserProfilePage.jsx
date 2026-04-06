@@ -6,16 +6,26 @@ import { getUserById, createMentorshipRequest, getSentMentorshipRequests } from 
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
 
-function ProfileField({ label, value }) {
-  if (!value && value !== 0) return null
+function ProfileField({ label, value, chips = false }) {
+  const isEmpty = !value && value !== 0
+  const isEmptyList = Array.isArray(value) && value.length === 0
+  if (isEmpty || isEmptyList) return null
   return (
-    <div style={{ marginBottom: '16px' }}>
-      <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '4px' }}>
-        {label}
-      </div>
-      <div style={{ fontSize: '14px', color: 'var(--text-mid)', lineHeight: 1.6 }}>
-        {Array.isArray(value) ? value.join(', ') : String(value)}
-      </div>
+    <div style={{ marginBottom: '18px' }}>
+      <div className="section-label" style={{ marginBottom: '8px' }}>{label}</div>
+      {chips && Array.isArray(value) ? (
+        <div className="profile-chips">
+          {value.map(v => <span className="profile-chip" key={v}>{v}</span>)}
+        </div>
+      ) : Array.isArray(value) ? (
+        <div className="profile-chips">
+          {value.map(v => <span className="profile-chip" key={v}>{v}</span>)}
+        </div>
+      ) : (
+        <div style={{ fontSize: '14px', color: 'var(--text-mid)', lineHeight: 1.6 }}>
+          {String(value)}
+        </div>
+      )}
     </div>
   )
 }
@@ -130,16 +140,39 @@ export default function UserProfilePage() {
             }
             <div className="profile-name">{displayName}</div>
             <div className="profile-role">{isMentorProfile ? 'Mentor' : 'Mentee'}</div>
+            {isMentorProfile && profile.maxMenteeCapacity != null && (
+              <span className={`availability-badge ${(profile.currentMenteeCount ?? 0) < profile.maxMenteeCapacity ? 'available' : 'full'}`}>
+                {(profile.currentMenteeCount ?? 0) < profile.maxMenteeCapacity ? 'Available for Requests' : 'Currently Full'}
+              </span>
+            )}
           </div>
 
+          {isMentorProfile && (
+            <div className="profile-stats-row">
+              <div className="psr-item">
+                <div className="psr-num">{(profile.interests || []).length}</div>
+                <div className="psr-lbl">Topics</div>
+              </div>
+              <div className="psr-item">
+                <div className="psr-num">{profile.mentorshipDuration ?? '—'}</div>
+                <div className="psr-lbl">Months</div>
+              </div>
+              <div className="psr-item">
+                <div className="psr-num">{profile.currentMenteeCount ?? 0}/{profile.maxMenteeCapacity ?? '∞'}</div>
+                <div className="psr-lbl">Mentees</div>
+              </div>
+            </div>
+          )}
+
           {isMentee && isMentorProfile && (
-            <div style={{ marginTop: '16px', textAlign: 'center' }}>
+            <div style={{ textAlign: 'center' }}>
               <button
                 className={`send-request-btn${requestSent ? ' sent' : ''}`}
                 disabled={requestSent}
                 onClick={() => !requestSent && setModalVisible(true)}
+                style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
               >
-                {requestSent ? 'Request Sent' : 'Send Request'}
+                {requestSent ? '✓ Request Sent' : 'Send Request'}
               </button>
             </div>
           )}
@@ -149,33 +182,25 @@ export default function UserProfilePage() {
         <div className="card">
           {isMentorProfile ? (
             <>
-              <div className="section-label">About</div>
               <ProfileField label="Bio" value={profile.bio} />
               <ProfileField label="Field" value={profile.field} />
               <ProfileField label="Expertise" value={profile.expertise} />
               <ProfileField label="Affiliation" value={profile.affiliation} />
-              <ProfileField label="Interests" value={profile.interests} />
+              <ProfileField label="Interests" value={profile.interests} chips />
 
               <div className="divider" />
-              <div className="section-label">Mentoring</div>
+
               <ProfileField label="Mentoring Goals" value={profile.mentoringGoals} />
               <ProfileField label="Preferred Mentee Major" value={profile.preferredMenteeMajor} />
-              <ProfileField label="Preferred Mentee Skills" value={profile.preferredMenteeSkills} />
-              <ProfileField label="Mentorship Duration" value={profile.mentorshipDuration ? `${profile.mentorshipDuration} months` : null} />
-              <ProfileField label="Capacity" value={
-                profile.maxMenteeCapacity != null
-                  ? `${profile.currentMenteeCount ?? 0} / ${profile.maxMenteeCapacity} mentees`
-                  : null
-              } />
+              <ProfileField label="Preferred Mentee Skills" value={profile.preferredMenteeSkills} chips />
             </>
           ) : (
             <>
-              <div className="section-label">About</div>
               {/* Per req 1.1.2.6: hide lastName and profilePhoto for unmatched mentees */}
               <ProfileField label="Background" value={profile.backgroundInfo} />
               <ProfileField label="Goals" value={profile.goals} />
-              <ProfileField label="Interests" value={profile.interests} />
-              <ProfileField label="Skills" value={profile.skills} />
+              <ProfileField label="Interests" value={profile.interests} chips />
+              <ProfileField label="Skills" value={profile.skills} chips />
             </>
           )}
         </div>
