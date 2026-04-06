@@ -3,7 +3,6 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { loginUser } from '../services/api'
 import { useAuth } from '../context/AuthContext'
-import PageTransition from '../components/PageTransition'
 import '../styles/main.css'
 
 function validate(fields) {
@@ -56,7 +55,6 @@ export default function LoginPage() {
   }
 
   return (
-    <PageTransition>
     <div className="auth-screen">
       <div className="auth-circle auth-circle-top" />
       <div className="auth-circle auth-circle-bottom-left" />
@@ -118,6 +116,5 @@ export default function LoginPage() {
         </div>
       </motion.div>
     </div>
-    </PageTransition>
   )
 }

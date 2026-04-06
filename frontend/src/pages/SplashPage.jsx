@@ -1,14 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import PageTransition, { staggerContainer, fadeUp, scaleIn, fadeIn } from '../components/PageTransition'
+import { staggerContainer, fadeUp, scaleIn, fadeIn } from '../components/PageTransition'
 import '../styles/main.css'
 
 export default function SplashPage() {
   const navigate = useNavigate()
 
   return (
-    <PageTransition>
-      <div className="splash-screen">
+    <div className="splash-screen">
         <div className="splash-circle splash-circle-top" />
         <div className="splash-circle splash-circle-bottom-left" />
         <div className="splash-circle splash-circle-bottom-right" />
@@ -56,6 +55,5 @@ export default function SplashPage() {
           </motion.div>
         </motion.div>
       </div>
-    </PageTransition>
   )
 }

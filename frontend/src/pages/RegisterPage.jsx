@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { registerUser } from '../services/api'
-import PageTransition from '../components/PageTransition'
 import '../styles/main.css'
 
 function validate(fields) {
@@ -66,7 +65,6 @@ export default function RegisterPage() {
   }
 
   return (
-    <PageTransition>
     <div className="auth-screen">
       <div className="auth-circle auth-circle-top" />
       <div className="auth-circle auth-circle-bottom-left" />
@@ -167,6 +165,5 @@ export default function RegisterPage() {
         </div>
       </motion.div>
     </div>
-    </PageTransition>
   )
 }
