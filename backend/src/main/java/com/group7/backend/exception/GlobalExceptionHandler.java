@@ -2,6 +2,7 @@ package com.group7.backend.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -60,6 +61,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MatchingNotAllowedException.class)
     public ResponseEntity<Map<String, String>> handleMatchingNotAllowed(MatchingNotAllowedException ex) {
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
+    }
+
+    @ExceptionHandler(AuthorizationDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleAuthorizationDenied(AuthorizationDeniedException ex) {
+        return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", "Access denied");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

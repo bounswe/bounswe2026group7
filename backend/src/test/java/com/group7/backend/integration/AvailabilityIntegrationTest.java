@@ -38,10 +38,12 @@ class AvailabilityIntegrationTest {
     @Autowired private PasswordResetTokenRepository passwordResetTokenRepository;
     @Autowired private MentorshipRequestRepository mentorshipRequestRepository;
     @Autowired private AvailabilitySlotRepository availabilitySlotRepository;
+        @Autowired private MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
     @MockitoBean private EmailService emailService;
 
     @BeforeEach
     void cleanDb() {
+                menteeAvailabilitySlotRepository.deleteAll();
         availabilitySlotRepository.deleteAll();
         mentorshipRequestRepository.deleteAll();
         passwordResetTokenRepository.deleteAll();
