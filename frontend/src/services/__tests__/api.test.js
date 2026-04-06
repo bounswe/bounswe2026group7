@@ -33,9 +33,12 @@ describe('API - Mentorship Features', () => {
   })
 
   it('getMatchingMentors appends keyword to query', async () => {
+    localStorage.getItem.mockReturnValue('test-token')
     global.fetch.mockResolvedValue({ ok: true, json: async () => [] })
     await getMatchingMentors('react')
-    expect(global.fetch).toHaveBeenCalledWith('/api/matching/mentors?keyword=react', expect.any(Object))
+    expect(global.fetch).toHaveBeenCalledWith('/api/matching/mentors?keyword=react', {
+      headers: { Authorization: 'Bearer test-token' }
+    })
   })
 
   it('getSentMentorshipRequests calls /api/mentorship-requests/sent with auth header', async () => {

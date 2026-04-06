@@ -83,4 +83,15 @@ describe('HomePage Component', () => {
     expect(btn).toBeDisabled()
     expect(btn).toHaveTextContent(/request sent/i)
   })
+
+  it('Send Request buttons are not shown when user has an active mentor (403)', async () => {
+    api.getMatchingMentors.mockRejectedValue(new Error('403 Active mentor already exists'))
+    renderComponent()
+
+    await waitFor(() => {
+      expect(api.getMatchingMentors).toHaveBeenCalled()
+    })
+
+    expect(screen.queryByRole('button', { name: /send request/i })).not.toBeInTheDocument()
+  })
 })

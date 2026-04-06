@@ -24,6 +24,8 @@ function mockFetchFailure(body) {
   })
 }
 
+describe('API - Auth', () => {
+
 describe('registerUser', () => {
   it('sends POST to /api/auth/register with correct body', async () => {
     mockFetchSuccess({})
@@ -171,4 +173,6 @@ describe('handleResponse error fallbacks', () => {
     await expect(loginUser({ email: 'a@b.com', password: 'x' }))
       .rejects.toThrow('Service Unavailable')
   })
+})
+
 })
