@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -30,8 +31,29 @@ const SIDEBAR_LINKS = [
 export default function MainLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { role } = useAuth()
+  const { role, logout } = useAuth()
   const currentPath = location.pathname
+
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  function handleLogout() {
+    setDropdownOpen(false)
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   const initials = 'ÖA'
   const displayName = 'Övgü Su Afşar'
@@ -62,7 +84,66 @@ export default function MainLayout({ children }) {
           })}
         </div>
         <div className="nav-right">
-          <div className="avatar-sm">{initials}</div>
+          <div className="user-menu-container" ref={dropdownRef} style={{ position: 'relative' }}>
+            <div 
+              className="avatar-sm" 
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              style={{ cursor: 'pointer' }}
+            >
+              {initials}
+            </div>
+            {dropdownOpen && (
+              <div 
+                className="profile-dropdown" 
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '120%',
+                  backgroundColor: 'var(--card-bg, #fff)',
+                  border: '1px solid var(--border, #e5e7eb)',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  padding: '8px 0',
+                  zIndex: 50,
+                  minWidth: '150px'
+                }}
+              >
+                <button 
+                  onClick={() => { setDropdownOpen(false); navigate('/profile'); }}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '8px 16px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-main, #111827)'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--hover-bg, #f3f4f6)'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  Profile
+                </button>
+                <div style={{ height: '1px', backgroundColor: 'var(--border, #e5e7eb)', margin: '4px 0' }} />
+                <button 
+                  onClick={handleLogout}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '8px 16px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#dc2626'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--hover-bg, #f3f4f6)'}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  Log Out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
