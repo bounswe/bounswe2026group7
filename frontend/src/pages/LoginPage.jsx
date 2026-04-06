@@ -28,6 +28,12 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
 
   const registered = location.state?.registered
+  const [exiting, setExiting] = useState(false)
+
+  function handleBack() {
+    setExiting(true)
+    setTimeout(() => navigate('/'), 260)
+  }
 
   function handleChange(name, value) {
     setFields(prev => ({ ...prev, [name]: value }))
@@ -63,11 +69,13 @@ export default function LoginPage() {
       <motion.div
         className="auth-card"
         initial={{ opacity: 0, y: 28, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.38, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.05 }}
+        animate={exiting
+          ? { opacity: 0, y: -20, scale: 0.97 }
+          : { opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.26, ease: [0.25, 0.46, 0.45, 0.94], delay: exiting ? 0 : 0.05 }}
       >
         <div className="auth-brand">
-          <button className="auth-back" onClick={() => navigate('/')} aria-label="Back">←</button>
+          <button className="auth-back" onClick={handleBack} aria-label="Back">←</button>
           <span className="auth-brand-name">MentorNet</span>
         </div>
 

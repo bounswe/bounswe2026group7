@@ -35,12 +35,6 @@ export default function SplashPage() {
             Build something meaningful together.
           </motion.div>
 
-          <motion.div className="splash-dots" variants={fadeIn}>
-            <span className="splash-dot active" />
-            <span className="splash-dot" />
-            <span className="splash-dot" />
-          </motion.div>
-
           <motion.div className="splash-btns" variants={fadeUp}>
             <button className="btn-primary" onClick={() => navigate('/register')}>
               Get Started
