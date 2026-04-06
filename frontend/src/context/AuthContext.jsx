@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
     role: null,
     userId: null,
   })
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token')
@@ -16,6 +17,7 @@ export function AuthProvider({ children }) {
     if (token) {
       setAuth({ token, role, userId })
     }
+    setIsLoading(false)
   }, [])
 
   function login(token, role, userId) {
@@ -33,7 +35,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ ...auth, login, logout }}>
+    <AuthContext.Provider value={{ ...auth, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )
