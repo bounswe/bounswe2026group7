@@ -235,7 +235,7 @@ class ProfileIntegrationTest {
         update.setMentoringGoals("Guide students through career transitions");
         update.setMentorshipDuration(6);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -265,7 +265,7 @@ class ProfileIntegrationTest {
         MentorProfileRequest update = new MentorProfileRequest();
         update.setMaxMenteeCapacity(0);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -289,7 +289,7 @@ class ProfileIntegrationTest {
         update.setBackgroundInfo("3rd year student with internship at a cloud company");
         update.setProfileVisibility(false);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -321,7 +321,7 @@ class ProfileIntegrationTest {
         update.setLastName("FullName");
         update.setProfilePhoto("https://example.com/avatar.jpg");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -343,7 +343,7 @@ class ProfileIntegrationTest {
         update1.setExpertise("Backend");
         update1.setField("CS");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update1)))
@@ -353,7 +353,7 @@ class ProfileIntegrationTest {
         MentorProfileRequest update2 = new MentorProfileRequest();
         update2.setExpertise("Full Stack");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update2)))
@@ -371,7 +371,7 @@ class ProfileIntegrationTest {
         update.setFirstName("UpdatedFirst");
         update.setBio("Also updating bio");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -385,7 +385,7 @@ class ProfileIntegrationTest {
     void partialUpdate_emptyBody_doesNotChangeAnything() throws Exception {
         String token = registerAndLogin("Ayse", "Demir", "mentor@test.com", true);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
@@ -401,7 +401,7 @@ class ProfileIntegrationTest {
         String token = registerAndLogin("mentor@test.com", true);
 
         // Send JSON with both mentor and mentee fields — mentee fields should be ignored for a mentor
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"bio\": \"My bio\", \"goals\": \"This should be ignored\", \"major\": \"This too\"}"))
@@ -422,7 +422,7 @@ class ProfileIntegrationTest {
         String token = registerAndLogin("mentee@test.com", false);
 
         // Send JSON with both mentee and mentor fields — mentor fields should be ignored for a mentee
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"goals\": \"My goals\", \"bio\": \"This should be ignored\", \"expertise\": \"This too\"}"))
@@ -446,7 +446,7 @@ class ProfileIntegrationTest {
 
         MentorProfileRequest u1 = new MentorProfileRequest();
         u1.setBio("Version 1");
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(u1)))
@@ -454,7 +454,7 @@ class ProfileIntegrationTest {
 
         MentorProfileRequest u2 = new MentorProfileRequest();
         u2.setExpertise("Backend");
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(u2)))
@@ -462,7 +462,7 @@ class ProfileIntegrationTest {
 
         MentorProfileRequest u3 = new MentorProfileRequest();
         u3.setBio("Version 2");
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(u3)))
@@ -592,7 +592,7 @@ class ProfileIntegrationTest {
         update.setBio("Updated via PATCH");
         update.setExpertise("Full Stack");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + mentorToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -617,7 +617,7 @@ class ProfileIntegrationTest {
         MenteeProfileRequest update = new MenteeProfileRequest();
         update.setFirstName("");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -633,7 +633,7 @@ class ProfileIntegrationTest {
         MenteeProfileRequest update = new MenteeProfileRequest();
         update.setLastName("");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -648,7 +648,7 @@ class ProfileIntegrationTest {
         MenteeProfileRequest update = new MenteeProfileRequest();
         update.setFirstName("A".repeat(101));
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -663,7 +663,7 @@ class ProfileIntegrationTest {
         MentorProfileRequest update = new MentorProfileRequest();
         update.setBio("A".repeat(1001));
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -678,7 +678,7 @@ class ProfileIntegrationTest {
         MentorProfileRequest update = new MentorProfileRequest();
         update.setMaxMenteeCapacity(-1);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -693,7 +693,7 @@ class ProfileIntegrationTest {
         MentorProfileRequest update = new MentorProfileRequest();
         update.setMentorshipDuration(0);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -710,7 +710,7 @@ class ProfileIntegrationTest {
         update.setLastName("");
         update.setMaxMenteeCapacity(-1);
 
-        MvcResult result = mockMvc.perform(patch("/api/users/me")
+        MvcResult result = mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -736,7 +736,7 @@ class ProfileIntegrationTest {
         MentorProfileRequest update = new MentorProfileRequest();
         update.setInterests(List.of("AI", "Systems", "Databases"));
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -758,7 +758,7 @@ class ProfileIntegrationTest {
         MenteeProfileRequest update = new MenteeProfileRequest();
         update.setSkills(List.of("Python", "Java", "SQL", "Docker"));
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -777,7 +777,7 @@ class ProfileIntegrationTest {
         MentorProfileRequest update = new MentorProfileRequest();
         update.setPreferredMenteeSkills(List.of("Java", "Spring", "PostgreSQL"));
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -795,7 +795,7 @@ class ProfileIntegrationTest {
 
         MentorProfileRequest update1 = new MentorProfileRequest();
         update1.setInterests(List.of("AI", "Systems", "Databases"));
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update1)))
@@ -803,7 +803,7 @@ class ProfileIntegrationTest {
 
         MentorProfileRequest update2 = new MentorProfileRequest();
         update2.setInterests(List.of("Security", "Networking"));
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update2)))
@@ -820,7 +820,7 @@ class ProfileIntegrationTest {
         // Set initial interests
         MentorProfileRequest update1 = new MentorProfileRequest();
         update1.setInterests(List.of("AI", "Systems"));
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update1)))
@@ -830,7 +830,7 @@ class ProfileIntegrationTest {
         // Clear with empty list
         MentorProfileRequest update2 = new MentorProfileRequest();
         update2.setInterests(List.of());
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update2)))
@@ -854,7 +854,7 @@ class ProfileIntegrationTest {
         MenteeProfileRequest update = new MenteeProfileRequest();
         update.setFirstName("A");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -870,7 +870,7 @@ class ProfileIntegrationTest {
         MenteeProfileRequest update = new MenteeProfileRequest();
         update.setFirstName(name100);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -886,7 +886,7 @@ class ProfileIntegrationTest {
         MentorProfileRequest update = new MentorProfileRequest();
         update.setBio(bio1000);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -907,7 +907,7 @@ class ProfileIntegrationTest {
         update.setLastName("Sarıoğlu");
         update.setBio("Türkçe karakterler: ş, ç, ğ, ı, ö, ü");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
@@ -932,7 +932,7 @@ class ProfileIntegrationTest {
         String token = registerAndLogin("original@test.com", false);
 
         // Try to change email and passwordHash through PATCH
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\": \"hacked@evil.com\", \"passwordHash\": \"stolen\", \"goals\": \"legit\"}"))
@@ -950,7 +950,7 @@ class ProfileIntegrationTest {
         String token = registerAndLogin("mentee@test.com", false);
 
         // Try to set cancelCount through PATCH (field not in DTO)
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"cancelCount\": 999, \"goals\": \"legit\"}"))
@@ -967,7 +967,7 @@ class ProfileIntegrationTest {
         String token = registerAndLogin("mentor@test.com", true);
 
         // Try to set currentMenteeCount through PATCH (field not in DTO)
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"currentMenteeCount\": 99, \"bio\": \"legit\"}"))
@@ -992,7 +992,7 @@ class ProfileIntegrationTest {
         update.setGoals("New goals");
         update.setMajor("Physics");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(update)))
