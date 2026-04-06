@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
 import { getAllMentors, getMatchingMentors, getSentMentorshipRequests, createMentorshipRequest } from '../services/api'
@@ -10,6 +11,7 @@ const FILTERS = ['All', 'Backend', 'Mobile', 'AI/ML', 'DevOps', 'Frontend', 'Dat
 export default function ExplorePage() {
   const { role } = useAuth()
   const isMentee = role === 'MENTEE'
+  const navigate = useNavigate()
 
   const [mentors, setMentors] = useState([])
   const [loading, setLoading] = useState(false)
@@ -148,15 +150,26 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      <div className="chips">
+      <div className="chips" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '24px' }}>
         {FILTERS.map(f => (
-          <div
+          <button
             key={f}
-            className={`chip${activeFilter === f ? ' active' : ''}`}
             onClick={() => setActiveFilter(f)}
+            style={{
+              padding: '6px 16px',
+              borderRadius: '20px',
+              border: activeFilter === f ? 'none' : '1px solid var(--border, #d1d5db)',
+              backgroundColor: activeFilter === f ? 'var(--accent, #10b981)' : 'transparent',
+              color: activeFilter === f ? '#ffffff' : 'var(--text-light, #6b7280)',
+              cursor: 'pointer',
+              fontWeight: 500,
+              fontSize: '14px',
+              transition: 'all 0.2s ease',
+              margin: 0
+            }}
           >
             {f}
-          </div>
+          </button>
         ))}
       </div>
 
@@ -177,32 +190,72 @@ export default function ExplorePage() {
               <div className="mentor-card" key={m.id}>
                 <div className="mc-header">
                   <div className="mc-info">
-                    <div className="mc-avatar">{m.firstName?.[0] ?? '?'}</div>
-                    <div>
-                      <div className="mc-name">{m.firstName}</div>
-                      <div className="mc-sub">
-                        {[m.expertise, m.affiliation].filter(Boolean).join(' · ')}
+                    <div 
+                      className="mc-avatar"
+                      style={{
+                        backgroundColor: 'var(--accent, #10b981)',
+                        color: '#ffffff',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {m.firstName?.[0] ?? '?'}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div>
+                        <div className="mc-name">{m.firstName}</div>
+                        <div className="mc-sub">
+                          {[m.expertise, m.affiliation].filter(Boolean).join(' · ')}
+                        </div>
                       </div>
+                      {tags.length > 0 && (
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {tags.map(tag => (
+                            <span 
+                              key={tag} 
+                              style={{
+                                display: 'inline-block',
+                                padding: '2px 8px',
+                                backgroundColor: '#f0fdf4',
+                                color: '#166534',
+                                borderRadius: '12px',
+                                fontSize: '11px',
+                                fontWeight: '600'
+                              }}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {atCapacity && <span className="badge-full">Full</span>}
                 </div>
-                {tags.length > 0 && (
-                  <div className="mc-tags">
-                    {tags.map(tag => <span className="tag" key={tag}>{tag}</span>)}
-                  </div>
-                )}
                 {m.bio && <div className="mc-bio">{m.bio}</div>}
                 <div className="mc-footer">
                   <div className="mentor-actions">
                     {isMentee && (
-                      <button
-                        className={`send-request-btn${alreadySent ? ' sent' : ''}`}
-                        disabled={btnDisabled}
-                        onClick={() => !btnDisabled && openRequestModal(m)}
-                      >
-                        {alreadySent ? 'Request Sent' : atCapacity ? 'At Capacity' : 'Send Request'}
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                        <button
+                          className={`send-request-btn${alreadySent ? ' sent' : ''}`}
+                          style={{ flex: 1 }}
+                          disabled={btnDisabled}
+                          onClick={() => !btnDisabled && openRequestModal(m)}
+                        >
+                          {alreadySent ? 'Request Sent' : atCapacity ? 'At Capacity' : 'Send Request'}
+                        </button>
+                        <button
+                          className="auth-btn"
+                          style={{ margin: 0, padding: '8px 16px', background: 'var(--card-bg)', color: 'var(--text)', border: '1px solid var(--border)' }}
+                          onClick={() => navigate(`/profile/${m.id}`)}
+                        >
+                          Go Profile
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -56,9 +57,12 @@ function ViewField({ label, value, visible }) {
 }
 
 export default function ProfilePage() {
+  const { id } = useParams()
   const { role } = useAuth()
   const isMentor = role === 'MENTOR'
-  const defaults = isMentor ? MENTOR_DEFAULTS : MENTEE_DEFAULTS
+  const isViewingOther = Boolean(id)
+
+  const defaults = isMentor && !isViewingOther ? MENTOR_DEFAULTS : MENTEE_DEFAULTS
 
   const [form, setForm] = useState({ ...defaults })
   const [errors, setErrors] = useState({})
@@ -92,7 +96,11 @@ export default function ProfilePage() {
     // TODO: connect to API
   }
 
-  const initials = form.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const effectiveName = (isViewingOther && isMentor) 
+    ? form.name.split(' ').slice(0, -1).join(' ') || form.name.split(' ')[0]
+    : form.name
+
+  const initials = effectiveName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
   return (
     <MainLayout>
@@ -105,9 +113,12 @@ export default function ProfilePage() {
         {/* Left panel — view (#98) */}
         <div>
           <div className="profile-card-hero">
-            <div className="profile-avatar-lg">{initials}</div>
-            <div className="profile-name">{form.name}</div>
-            <div className="profile-role">{isMentor ? 'Mentor' : 'Mentee'}</div>
+            <div className="profile-avatar-lg" style={{
+              backgroundColor: isViewingOther ? 'var(--accent, #10b981)' : undefined,
+              color: isViewingOther ? '#ffffff' : undefined
+            }}>{initials}</div>
+            <div className="profile-name">{effectiveName}</div>
+            <div className="profile-role">{isViewingOther ? 'Mentee' : (isMentor ? 'Mentor' : 'Mentee')}</div>
             <div className="profile-badge">Active Mentorship: 1</div>
           </div>
 
@@ -139,8 +150,9 @@ export default function ProfilePage() {
         </div>
 
         {/* Right panel — edit (#100) */}
-        <div className="card">
-          <div className="section-label">Edit Information</div>
+        {!isViewingOther && (
+          <div className="card">
+            <div className="section-label">Edit Information</div>
 
           <form onSubmit={handleSave} noValidate>
             <div className="form-field">
@@ -240,6 +252,7 @@ export default function ProfilePage() {
             </button>
           </form>
         </div>
+        )}
 
       </div>
     </MainLayout>
