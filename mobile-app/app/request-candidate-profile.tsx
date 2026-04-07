@@ -32,12 +32,24 @@ export default function RequestCandidateProfileScreen() {
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    if (!menteeId) { setLoading(false); return; }
-    apiClient.get(`/users/${menteeId}`)
-      .then((res) => setProfile(res.data))
-      .catch((err) => console.error('Profile fetch error:', err))
-      .finally(() => setLoading(false));
-  }, [menteeId]);
+  const fetchProfile = async () => {
+    if (!menteeId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await apiClient.get(`/users/${menteeId}`);
+      setProfile(res.data);
+    } catch (error) {
+      console.error('Profile fetch error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchProfile();
+}, [menteeId]);
 
   const handleAccept = () => {
     Alert.alert(

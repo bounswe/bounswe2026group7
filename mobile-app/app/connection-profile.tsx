@@ -63,18 +63,30 @@ export default function ConnectionProfileScreen() {
   const mentoringGoals = parseJsonList(params.mentoringGoals);
   const preferences = parseJsonList(params.preferences);
 
-  useEffect(() => {
-    if (!id) return;
-    apiClient.get(`/users/${id}`).then((res) => {
+ useEffect(() => {
+  if (!id) return;
+
+  apiClient
+    .get(`/users/${id}`)
+    .then((res: any) => {
       const d = res.data;
+
       if (d.bio) setAbout(d.bio);
       else if (d.backgroundInfo) setAbout(d.backgroundInfo);
+
       if (d.major) setDepartment(d.major);
       if (d.field) setTitle(d.field);
-      if (d.interests?.length) setInterests(d.interests);
-      if (d.goals) setGoals([d.goals]);
-    }).catch(() => {});
-  }, [id]);
+
+      if (Array.isArray(d.interests) && d.interests.length) {
+        setInterests(d.interests);
+      }
+
+      if (d.goals) {
+        setGoals(Array.isArray(d.goals) ? d.goals : [d.goals]);
+      }
+    })
+    .catch(() => {});
+}, [id]);
 
   const stat1Label = parseString(params.stat1Label);
   const stat1Value = parseString(params.stat1Value);
