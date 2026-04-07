@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import Avatar from './Avatar'
+import usePresence from '../hooks/usePresence'
 import {
   Home, Compass, MessageCircle, CheckSquare, CalendarDays,
   Clock, User,
@@ -34,6 +36,7 @@ export default function MainLayout({ children }) {
 
 
   const { role, logout, firstName, lastName, profilePhoto } = useAuth()
+  const presence = usePresence()
   const currentPath = location.pathname
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -60,14 +63,6 @@ export default function MainLayout({ children }) {
   const initials = [firstName?.[0], lastName?.[0]].filter(Boolean).join('').toUpperCase() || '?'
   const roleLabel = role === 'MENTOR' ? 'Mentor' : 'Mentee'
 
-  const avatar = profilePhoto
-    ? <img src={profilePhoto} alt={initials} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
-    : initials
-
-  const avatarSm = profilePhoto
-    ? <img src={profilePhoto} alt={initials} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
-    : initials
-
   return (
     <>
       <nav className="topnav">
@@ -92,65 +87,74 @@ export default function MainLayout({ children }) {
           })}
         </div>
         <div className="nav-right">
-          <div className="user-menu-container" ref={dropdownRef} style={{ position: 'relative' }}>
-            <div
-              className="avatar-sm"
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              style={{ cursor: 'pointer' }}
+          <div className="ud-wrap" ref={dropdownRef}>
+            <button
+              className={`ud-trigger${dropdownOpen ? ' open' : ''}`}
+              onClick={() => setDropdownOpen(v => !v)}
+              aria-expanded={dropdownOpen}
+              aria-haspopup="true"
             >
-              {avatarSm}
-            </div>
-            {dropdownOpen && (
-              <div
-                className="profile-dropdown"
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  top: '120%',
-                  backgroundColor: 'var(--card-bg, #fff)',
-                  border: '1px solid var(--border, #e5e7eb)',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                  padding: '8px 0',
-                  zIndex: 50,
-                  minWidth: '150px'
-                }}
-              >
-                <button
-                  onClick={() => { setDropdownOpen(false); navigate('/profile') }}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '8px 16px',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--text-main, #111827)'
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--hover-bg, #f3f4f6)'}
-                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  Profile
+              <Avatar src={profilePhoto} initials={initials} size="sm" status={presence} />
+            </button>
+
+            <div className={`ud-panel${dropdownOpen ? ' ud-panel--open' : ''}`} role="menu">
+              {/* Identity */}
+              <div className="ud-identity">
+                <Avatar src={profilePhoto} initials={initials} size="md" status={presence} />
+                <div>
+                  <p className="ud-name">{displayName}</p>
+                  <p className="ud-sub">
+                    <span className="ud-sub-dot" />
+                    {roleLabel} · active
+                  </p>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="ud-stats">
+                {(role === 'MENTOR' ? [
+                  { num: 2, label: 'Mentees' },
+                  { num: 5, label: 'Sessions' },
+                  { num: 4, label: 'Requests' },
+                ] : [
+                  { num: 5, label: 'Tasks' },
+                  { num: 3, label: 'Sessions' },
+                  { num: 2, label: 'Requests' },
+                ]).map((s, i) => (
+                  <div key={s.label} className={`ud-stat${i > 0 ? ' ud-stat--sep' : ''}`}>
+                    <span className="ud-stat-num">{s.num}</span>
+                    <span className="ud-stat-lbl">{s.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="ud-divider" />
+
+              {/* Menu */}
+              <div className="ud-menu">
+                <button className="ud-item" role="menuitem" onClick={() => { setDropdownOpen(false); navigate('/profile') }}>
+                  <span className="ud-item-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+                    </svg>
+                  </span>
+                  View profile
                 </button>
-                <div style={{ height: '1px', backgroundColor: 'var(--border, #e5e7eb)', margin: '4px 0' }} />
-                <button
-                  onClick={handleLogout}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '8px 16px',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: '#dc2626'
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--hover-bg, #f3f4f6)'}
-                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  Log Out
+
+                <div className="ud-divider" />
+
+                <button className="ud-item ud-item--danger" role="menuitem" onClick={handleLogout}>
+                  <span className="ud-item-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                  </span>
+                  Log out
                 </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </nav>
@@ -158,7 +162,7 @@ export default function MainLayout({ children }) {
       <div className="main-layout">
         <aside className="sidebar">
           <div className="sidebar-user">
-            <div className="sidebar-avatar">{avatar}</div>
+            <Avatar src={profilePhoto} initials={initials} size="md" status={presence} className="sidebar-avatar" />
             <div className="sidebar-name">{displayName}</div>
             <div className="sidebar-role">{roleLabel}</div>
             <div className="sidebar-badge">Active Mentorship: 1</div>

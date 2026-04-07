@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import MainLayout from '../components/MainLayout'
+import Avatar from '../components/Avatar'
+import usePresence from '../hooks/usePresence'
 import { useAuth } from '../context/AuthContext'
 import { getOwnProfile, updateOwnProfile } from '../services/api'
 import '../styles/main.css'
@@ -80,6 +82,7 @@ function ViewField({ label, value, visible, chips = false }) {
 export default function ProfilePage() {
   const { role, setProfileData } = useAuth()
   const isMentor = role === 'MENTOR'
+  const presence = usePresence()
 
   const [form, setForm] = useState(null)
   const [errors, setErrors] = useState({})
@@ -196,10 +199,7 @@ export default function ProfilePage() {
         {/* Left panel — view */}
         <div>
           <div className="profile-card-hero">
-            {form.profilePhoto
-              ? <img src={form.profilePhoto} alt={initials} className="profile-avatar-lg" style={{ objectFit: 'cover' }} />
-              : <div className="profile-avatar-lg">{initials}</div>
-            }
+            <Avatar src={form.profilePhoto} initials={initials} size="lg" status={presence} className="profile-avatar-lg" />
             <div className="profile-name">{form.name}</div>
             <div className="profile-role">{isMentor ? 'Mentor' : 'Mentee'}</div>
           </div>
