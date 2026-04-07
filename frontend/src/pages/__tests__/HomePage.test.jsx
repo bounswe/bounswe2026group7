@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import HomePage from '../HomePage'
 import * as api from '../../services/api'
@@ -9,89 +9,116 @@ vi.mock('../../services/api')
 vi.mock('../../context/AuthContext')
 
 describe('HomePage Component', () => {
-  const mockRecommended = [
-    { id: 1, firstName: 'Charlie', expertise: 'Node.js', currentMenteeCount: 1, maxMenteeCapacity: 5 },
-    { id: 2, firstName: 'Dana', expertise: 'Docker', currentMenteeCount: 3, maxMenteeCapacity: 3 } // At capacity
-  ]
-
   beforeEach(() => {
     vi.clearAllMocks()
-    api.getMatchingMentors.mockResolvedValue(mockRecommended)
-    api.getSentMentorshipRequests.mockResolvedValue({ content: [] })
-    AuthContext.useAuth.mockReturnValue({ role: 'MENTEE' })
+    // Shared mocks needed by all renders (NotificationBell + both branches)
+    api.getNotifications.mockResolvedValue([])
+    api.getActiveMentorships.mockResolvedValue([])
+    api.getMatchingMentors.mockResolvedValue([])
+    api.getReceivedMentorshipRequests.mockResolvedValue({ content: [] })
+    api.getOwnProfile.mockResolvedValue({ currentMenteeCount: 2, maxMenteeCapacity: 5 })
+    AuthContext.useAuth.mockReturnValue({ role: 'MENTEE', firstName: 'Test', lastName: 'User' })
   })
 
-  const renderComponent = () => {
-    return render(
-      <MemoryRouter>
-        <HomePage />
-      </MemoryRouter>
-    )
+  const renderComponent = async () => {
+    let result
+    await act(async () => {
+      result = render(
+        <MemoryRouter>
+          <HomePage />
+        </MemoryRouter>
+      )
+    })
+    return result
   }
 
-  it('for MENTOR role, does not render recommended mentors and instead renders incoming requests', async () => {
-    AuthContext.useAuth.mockReturnValue({ role: 'MENTOR' })
-    renderComponent()
+  it('for MENTOR role, renders Dashboard with Incoming Requests and Active Mentorships sections', async () => {
+    AuthContext.useAuth.mockReturnValue({ role: 'MENTOR', firstName: 'Test', lastName: 'Mentor' })
+    await renderComponent()
 
-    expect(screen.queryByText(/recommended for you/i)).not.toBeInTheDocument()
-    expect(screen.getAllByText(/incoming requests/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/active mentorships/i)).toBeInTheDocument()
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(screen.getByText('Incoming Requests')).toBeInTheDocument()
+    expect(screen.getByText('Active Mentorships')).toBeInTheDocument()
   })
 
-  it('for MENTEE role, renders Recommended section and displays mentor cards', async () => {
-    renderComponent()
+  it('for MENTOR, shows mentor stats row', async () => {
+    AuthContext.useAuth.mockReturnValue({ role: 'MENTOR', firstName: 'Test', lastName: 'Mentor' })
+    await renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText(/active mentees/i)).toBeInTheDocument()
+      expect(screen.getByText(/capacity/i)).toBeInTheDocument()
+    })
+  })
+
+  it('for MENTOR with a pending request, shows the mentee name in Incoming Requests', async () => {
+    AuthContext.useAuth.mockReturnValue({ role: 'MENTOR', firstName: 'Test', lastName: 'Mentor' })
+    api.getReceivedMentorshipRequests.mockResolvedValue({
+      content: [{ id: 1, status: 'PENDING', menteeFirstName: 'Bob', createdAt: new Date().toISOString(), message: 'Hi!' }]
+    })
+    await renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Bob')).toBeInTheDocument()
+    })
+  })
+
+  it('for MENTOR with an active mentorship, shows the mentee in Active Mentorships', async () => {
+    AuthContext.useAuth.mockReturnValue({ role: 'MENTOR', firstName: 'Test', lastName: 'Mentor' })
+    api.getActiveMentorships.mockResolvedValue([{
+      id: 1,
+      status: 'ACTIVE',
+      menteeFirstName: 'Carol',
+      menteeId: 5,
+      duration: 6,
+      startDate: new Date().toISOString(),
+    }])
+    await renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Carol')).toBeInTheDocument()
+    })
+  })
+
+  it('for MENTEE with no active mentor, shows prompt to Go to Explore', async () => {
+    await renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText(/find your perfect mentor/i)).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /go to explore/i })).toBeInTheDocument()
+  })
+
+  it('for MENTEE with an active mentor, shows the active mentorship hero card', async () => {
+    api.getActiveMentorships.mockResolvedValue([{
+      id: 1,
+      status: 'ACTIVE',
+      mentorFirstName: 'Alice',
+      mentorId: 10,
+      duration: 3,
+      startDate: new Date(Date.now() - 30 * 86400000).toISOString(),
+      endDate: new Date(Date.now() + 60 * 86400000).toISOString(),
+    }])
+    await renderComponent()
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument()
+      expect(screen.getByText(/your mentor/i)).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /view mentor profile/i })).toBeInTheDocument()
+  })
+
+  it('for MENTEE, does not render incoming requests or active mentorships sections', async () => {
+    await renderComponent()
+
     expect(screen.queryByText(/incoming requests/i)).not.toBeInTheDocument()
-
-    await waitFor(() => {
-      expect(screen.getByText(/recommended for you/i)).toBeInTheDocument()
-      expect(screen.getByText('Charlie')).toBeInTheDocument()
-    })
+    expect(screen.queryByText(/dashboard/i)).not.toBeInTheDocument()
   })
 
-  it('for MENTEE with active mentor (403 error), hides recommended section', async () => {
-    api.getMatchingMentors.mockRejectedValue(new Error('403 Active mentor already exists'))
-    renderComponent()
+  it('for MENTOR, does not render find-your-mentor prompt', async () => {
+    AuthContext.useAuth.mockReturnValue({ role: 'MENTOR', firstName: 'Test', lastName: 'Mentor' })
+    await renderComponent()
 
-    await waitFor(() => {
-      expect(api.getMatchingMentors).toHaveBeenCalled()
-    })
-    expect(screen.queryByText(/recommended for you/i)).not.toBeInTheDocument()
-  })
-
-  it('Send Request button disables for at-capacity mentors and shows "At Capacity"', async () => {
-    renderComponent()
-    await waitFor(() => {
-      expect(screen.getByText('Dana')).toBeInTheDocument()
-    })
-
-    const danaCard = screen.getByText('Dana').closest('.mentor-card')
-    const btn = danaCard.querySelector('button')
-    expect(btn).toBeDisabled()
-    expect(btn).toHaveTextContent(/at capacity/i)
-  })
-
-  it('Send Request button shows "Request Sent" for already requested mentors', async () => {
-    api.getSentMentorshipRequests.mockResolvedValue({ content: [{ mentorId: 1, status: 'PENDING' }] })
-    renderComponent()
-
-    await waitFor(() => {
-      expect(screen.getByText('Charlie')).toBeInTheDocument()
-    })
-
-    const charlieCard = screen.getByText('Charlie').closest('.mentor-card')
-    const btn = charlieCard.querySelector('button')
-    expect(btn).toBeDisabled()
-    expect(btn).toHaveTextContent(/request sent/i)
-  })
-
-  it('Send Request buttons are not shown when user has an active mentor (403)', async () => {
-    api.getMatchingMentors.mockRejectedValue(new Error('403 Active mentor already exists'))
-    renderComponent()
-
-    await waitFor(() => {
-      expect(api.getMatchingMentors).toHaveBeenCalled()
-    })
-
-    expect(screen.queryByRole('button', { name: /send request/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/find your perfect mentor/i)).not.toBeInTheDocument()
   })
 })

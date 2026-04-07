@@ -12,7 +12,7 @@ import {
 function mockFetchSuccess(data) {
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
-    json: () => Promise.resolve(data),
+    text: () => Promise.resolve(JSON.stringify(data)),
   })
 }
 
@@ -20,7 +20,7 @@ function mockFetchFailure(body) {
   global.fetch = vi.fn().mockResolvedValue({
     ok: false,
     statusText: 'Bad Request',
-    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
   })
 }
 
@@ -168,7 +168,7 @@ describe('handleResponse error fallbacks', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       statusText: 'Service Unavailable',
-      json: () => Promise.reject(new Error('not json')),
+      text: () => Promise.resolve('not json'),
     })
     await expect(loginUser({ email: 'a@b.com', password: 'x' }))
       .rejects.toThrow('Service Unavailable')
