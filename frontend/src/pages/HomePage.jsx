@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
-import RequestMentorshipModal from '../components/RequestMentorshipModal'
 import {
   getMatchingMentors,
-  getSentMentorshipRequests,
-  createMentorshipRequest,
   getReceivedMentorshipRequests,
   acceptMentorshipRequest,
   rejectMentorshipRequest,
@@ -29,12 +26,9 @@ export default function HomePage() {
   const isMentee = role === 'MENTEE'
 
   // ── Mentee state ──────────────────────────────────────────────────────────
-  const [recommended, setRecommended] = useState([])
-  const [requestSentIds, setRequestSentIds] = useState(new Set())
-  const [selectedMentor, setSelectedMentor] = useState(null)
-  const [modalLoading, setModalLoading] = useState(false)
-  const [modalError, setModalError] = useState('')
   const [hasActiveMentor, setHasActiveMentor] = useState(false)
+  const [activeMentorship, setActiveMentorship] = useState(null)
+  const [menteeLoading, setMenteeLoading] = useState(true)
 
   // ── Mentor state ──────────────────────────────────────────────────────────
   const [receivedRequests, setReceivedRequests] = useState([])
@@ -48,31 +42,28 @@ export default function HomePage() {
   // ── Load mentee data ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isMentee) return
-    async function loadRecommended() {
+    async function loadMenteeData() {
+      setMenteeLoading(true)
       try {
-        const [mentorData, sentData] = await Promise.allSettled([
+        const [mentorshipsData, matchData] = await Promise.allSettled([
+          getActiveMentorships(),
           getMatchingMentors(),
-          getSentMentorshipRequests(),
         ])
-        if (mentorData.status === 'fulfilled') {
-          setRecommended(mentorData.value)
-        } else {
-          const msg = mentorData.reason?.message || ''
-          if (msg.includes('403')) setHasActiveMentor(true)
+        if (mentorshipsData.status === 'fulfilled') {
+          const active = (mentorshipsData.value || []).find(m => m.status === 'ACTIVE')
+          if (active) { setActiveMentorship(active); setHasActiveMentor(true) }
         }
-        if (sentData.status === 'fulfilled') {
-          const pending = new Set(
-            (sentData.value.content || [])
-              .filter(r => r.status === 'PENDING')
-              .map(r => r.mentorId)
-          )
-          setRequestSentIds(pending)
+        if (matchData.status === 'rejected') {
+          const msg = matchData.reason?.message || ''
+          if (msg.includes('403')) setHasActiveMentor(true)
         }
       } catch {
         // silently ignore
+      } finally {
+        setMenteeLoading(false)
       }
     }
-    loadRecommended()
+    loadMenteeData()
   }, [isMentee])
 
   // ── Load mentor data ───────────────────────────────────────────────────────
@@ -105,27 +96,6 @@ export default function HomePage() {
     setTimeout(() => el.remove(), 3500)
   }
 
-  // ── Mentee request handlers ────────────────────────────────────────────────
-  const openRequestModal = (mentor) => { setSelectedMentor(mentor); setModalError('') }
-  const closeRequestModal = () => { if (!modalLoading) { setSelectedMentor(null); setModalError('') } }
-
-  const handleSendRequest = async (message) => {
-    if (!selectedMentor || modalLoading) return
-    setModalLoading(true)
-    setModalError('')
-    try {
-      await createMentorshipRequest({ mentorId: selectedMentor.id, message })
-      setRequestSentIds(prev => new Set(prev).add(selectedMentor.id))
-      setSelectedMentor(null)
-      showToast('Request sent successfully.', 'success')
-    } catch (err) {
-      setModalError(err.message || 'Failed to send request. Please try again.')
-      showToast('Unable to send request.', 'error')
-    } finally {
-      setModalLoading(false)
-    }
-  }
-
   // ── Mentor request handlers ────────────────────────────────────────────────
   const handleReject = async (id) => {
     setActionLoading(true)
@@ -144,8 +114,9 @@ export default function HomePage() {
     if (!acceptingId) return
     setActionLoading(true)
     try {
-      await acceptMentorshipRequest(acceptingId, selectedDuration)
+      const newMentorship = await acceptMentorshipRequest(acceptingId, selectedDuration)
       setReceivedRequests(prev => prev.filter(r => r.id !== acceptingId))
+      setActiveMentorships(prev => [newMentorship, ...prev])
       setMentorStats(prev => prev ? { ...prev, currentMenteeCount: (prev.currentMenteeCount || 0) + 1 } : prev)
       setAcceptingId(null)
       setSelectedDuration(3)
@@ -176,73 +147,91 @@ export default function HomePage() {
   // ──────────────────────────────────────────────────────────────────────────
   return (
     <MainLayout>
-      <RequestMentorshipModal
-        visible={Boolean(selectedMentor)}
-        onClose={closeRequestModal}
-        onSubmit={handleSendRequest}
-        loading={modalLoading}
-        error={modalError}
-        mentorName={selectedMentor?.firstName}
-      />
 
       {isMentee ? (
         <>
           <div className="page-header">
             <div>
               <div className="page-title">Home</div>
-              <div className="page-sub">Your recommended mentors and activity</div>
+              <div className="page-sub">
+                {hasActiveMentor ? 'Your active mentorship' : 'Find your mentor on the Explore page'}
+              </div>
             </div>
           </div>
 
-          {!hasActiveMentor && recommended.length > 0 && (
-            <div style={{ marginBottom: '32px' }}>
-              <div className="section-label">Recommended for You</div>
-              <div className="mentors-grid">
-                {recommended.map(m => {
-                  const tags = (m.interests || []).slice(0, 3)
-                  const alreadySent = requestSentIds.has(m.id)
-                  const atCapacity = m.maxMenteeCapacity != null && m.currentMenteeCount >= m.maxMenteeCapacity
-                  const btnDisabled = alreadySent || atCapacity
-                  return (
-                    <div className="mentor-card" key={m.id}>
-                      <div className="mc-header">
-                        <div className="mc-info">
-                          <div className="mc-avatar">{m.firstName?.[0] ?? '?'}</div>
-                          <div>
-                            <div className="mc-name">{m.firstName}</div>
-                            <div className="mc-sub">
-                              {[m.expertise, m.affiliation].filter(Boolean).join(' · ')}
-                            </div>
-                          </div>
-                        </div>
-                        {atCapacity && <span className="badge-full">Full</span>}
-                      </div>
-                      {tags.length > 0 && (
-                        <div className="mc-tags">
-                          {tags.map(tag => <span className="tag" key={tag}>{tag}</span>)}
-                        </div>
-                      )}
-                      <div className="mc-footer">
-                        <div className="mentor-actions">
-                          <button
-                            className={`send-request-btn${alreadySent ? ' sent' : ''}`}
-                            disabled={btnDisabled}
-                            onClick={() => !btnDisabled && openRequestModal(m)}
-                          >
-                            {alreadySent ? 'Request Sent' : atCapacity ? 'At Capacity' : 'Send Request'}
-                          </button>
-                          <button
-                            className="view-profile-btn"
-                            onClick={() => navigate(`/users/${m.id}`)}
-                          >
-                            View Profile
-                          </button>
-                        </div>
-                      </div>
+          {/* ── Loading skeleton ── */}
+          {menteeLoading ? (
+            <div className="home-loading-skeleton">
+              <div className="skeleton-block" style={{ height: '180px', borderRadius: '20px' }} />
+            </div>
+          ) : activeMentorship && (() => {
+            const start = new Date(activeMentorship.startDate)
+            const end = new Date(activeMentorship.endDate)
+            const now = new Date()
+            const totalMs = end - start
+            const elapsedMs = Math.min(now - start, totalMs)
+            const progress = Math.round((elapsedMs / totalMs) * 100)
+            const daysLeft = Math.max(0, Math.ceil((end - now) / 86400000))
+            return (
+              <div className="active-mentorship-hero">
+                <div className="amh-glow" />
+                <div className="amh-top">
+                  <div className="amh-avatar">{activeMentorship.mentorFirstName?.[0] ?? '?'}</div>
+                  <div className="amh-info">
+                    <div className="amh-label">Your Mentor</div>
+                    <div className="amh-name">{activeMentorship.mentorFirstName}</div>
+                    <div className="amh-meta">
+                      {activeMentorship.duration} month{activeMentorship.duration !== 1 ? 's' : ''} · started {start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </div>
-                  )
-                })}
+                  </div>
+                  <span className="amh-badge">Active</span>
+                </div>
+
+                {activeMentorship.sharedGoal && (
+                  <div className="amh-goal">
+                    <span className="amh-goal-label">Shared Goal</span>
+                    <span className="amh-goal-text">"{activeMentorship.sharedGoal}"</span>
+                  </div>
+                )}
+
+                <div className="amh-progress-section">
+                  <div className="amh-progress-labels">
+                    <span>Progress</span>
+                    <span>{daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining</span>
+                  </div>
+                  <div className="amh-progress-track">
+                    <div className="amh-progress-fill" style={{ width: `${progress}%` }} />
+                  </div>
+                  <div className="amh-progress-pct">{progress}% complete</div>
+                </div>
+
+                <div className="amh-actions">
+                  <button className="amh-btn-primary" onClick={() => navigate(`/users/${activeMentorship.mentorId}`)}>
+                    View Mentor Profile
+                  </button>
+                </div>
               </div>
+            )
+          })()}
+
+          {/* ── No active mentor: prompt to explore ── */}
+          {!menteeLoading && !hasActiveMentor && (
+            <div className="home-no-mentor">
+              <div className="hnm-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </div>
+              <div className="hnm-text">
+                <div className="hnm-title">Find your perfect mentor</div>
+                <div className="hnm-sub">Browse all mentors or use AI matching to find your top 5 picks on the Explore page.</div>
+              </div>
+              <button className="hnm-btn" onClick={() => navigate('/explore')}>
+                Go to Explore
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
             </div>
           )}
         </>
