@@ -118,6 +118,27 @@ export async function getOwnProfile() {
   return handleResponse(res)
 }
 
+export async function uploadProfilePhoto(file) {
+  const token = localStorage.getItem('auth_token')
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`${BASE_URL}/users/me/photo`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  return handleResponse(res)
+}
+
+export async function deleteProfilePhoto() {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/users/me/photo`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 export async function updateOwnProfile(data, role) {
   const token = localStorage.getItem('auth_token')
   const endpoint = role === 'MENTOR' ? '/users/me/mentor' : '/users/me/mentee'

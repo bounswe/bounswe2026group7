@@ -3,7 +3,7 @@ import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import usePresence from '../hooks/usePresence'
 import { useAuth } from '../context/AuthContext'
-import { getOwnProfile, updateOwnProfile } from '../services/api'
+import { getOwnProfile, updateOwnProfile, uploadProfilePhoto, deleteProfilePhoto } from '../services/api'
 import '../styles/main.css'
 
 function mapResponseToForm(data) {
@@ -90,6 +90,8 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoError, setPhotoError] = useState('')
 
   useEffect(() => {
     getOwnProfile()
@@ -134,7 +136,6 @@ export default function ProfilePage() {
       const payload = {
         firstName,
         lastName,
-        profilePhoto: form.profilePhoto || null,
         interests: toList(form.interests),
         ...(isMentor ? {
           bio: form.bio || null,
@@ -199,9 +200,88 @@ export default function ProfilePage() {
         {/* Left panel — view */}
         <div>
           <div className="profile-card-hero">
-            <Avatar src={form.profilePhoto} initials={initials} size="lg" status={presence} className="profile-avatar-lg" />
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <Avatar src={form.profilePhoto} initials={initials} size="lg" status={presence} className="profile-avatar-lg" />
+              {photoUploading && (
+                <div style={{
+                  position: 'absolute', inset: 0, borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2"
+                    style={{ animation: 'spin 0.8s linear infinite' }}>
+                    <polyline points="23 4 23 10 17 10" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                  </svg>
+                </div>
+              )}
+            </div>
             <div className="profile-name">{form.name}</div>
             <div className="profile-role">{isMentor ? 'Mentor' : 'Mentee'}</div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '10px', justifyContent: 'center' }}>
+              <input
+                id="photo-upload-input"
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files[0]
+                  if (!file) return
+                  e.target.value = ''
+                  if (file.size > 5 * 1024 * 1024) {
+                    setPhotoError('File must be under 5MB.')
+                    return
+                  }
+                  setPhotoError('')
+                  setPhotoUploading(true)
+                  try {
+                    const updated = await uploadProfilePhoto(file)
+                    setForm(prev => ({ ...prev, profilePhoto: updated.profilePhoto }))
+                    setProfileData(updated.firstName, updated.lastName, updated.profilePhoto)
+                  } catch (err) {
+                    setPhotoError(err.message || 'Failed to upload photo.')
+                  } finally {
+                    setPhotoUploading(false)
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="view-profile-btn"
+                style={{ fontSize: '12px', padding: '5px 12px' }}
+                disabled={photoUploading}
+                onClick={() => document.getElementById('photo-upload-input').click()}
+              >
+                Change Photo
+              </button>
+              {form.profilePhoto && (
+                <button
+                  type="button"
+                  className="btn-decline"
+                  style={{ fontSize: '12px', padding: '5px 12px' }}
+                  disabled={photoUploading}
+                  onClick={async () => {
+                    setPhotoError('')
+                    setPhotoUploading(true)
+                    try {
+                      const updated = await deleteProfilePhoto()
+                      setForm(prev => ({ ...prev, profilePhoto: '' }))
+                      setProfileData(updated.firstName, updated.lastName, updated.profilePhoto)
+                    } catch (err) {
+                      setPhotoError(err.message || 'Failed to remove photo.')
+                    } finally {
+                      setPhotoUploading(false)
+                    }
+                  }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {photoError && (
+              <div style={{ color: 'var(--red-text)', fontSize: '12px', marginTop: '6px', textAlign: 'center' }}>
+                {photoError}
+              </div>
+            )}
           </div>
 
           <div className="card">
@@ -248,17 +328,6 @@ export default function ProfilePage() {
                 onChange={e => handleChange('name', e.target.value)}
               />
               {errors.name && <div style={{ color: 'var(--red-text)', fontSize: '13px', marginTop: '4px' }}>{errors.name}</div>}
-            </div>
-
-            <div className="form-field">
-              <label className="form-label">Profile Photo URL</label>
-              <input
-                className="form-input"
-                type="url"
-                value={form.profilePhoto}
-                onChange={e => handleChange('profilePhoto', e.target.value)}
-                placeholder="https://example.com/photo.jpg"
-              />
             </div>
 
             <div className="form-field">
