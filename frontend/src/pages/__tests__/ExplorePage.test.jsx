@@ -20,6 +20,9 @@ describe('ExplorePage Component', () => {
     api.getAllMentors.mockResolvedValue(mockMentors)
     api.getSentMentorshipRequests.mockResolvedValue({ content: [] })
     api.getMatchingMentors.mockResolvedValue([])
+    api.getMatchingMentees.mockResolvedValue([])
+    api.getActiveMentorships.mockResolvedValue([])
+    api.getNotifications.mockResolvedValue([])
     AuthContext.useAuth.mockReturnValue({ role: 'MENTEE' })
   })
 
@@ -31,18 +34,18 @@ describe('ExplorePage Component', () => {
     )
   }
 
-  it('shows non-mentee message for MENTOR role and does not render Send Request button', async () => {
+  it('for MENTOR role, renders Find Mentees page and does not render Send Request button', async () => {
     AuthContext.useAuth.mockReturnValue({ role: 'MENTOR' })
     renderComponent()
-    
-    expect(screen.getByText(/this page is for mentees/i)).toBeInTheDocument()
+
+    expect(screen.getByText('Find Mentees')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /send request/i })).not.toBeInTheDocument()
   })
 
   it('shows loading state and then renders mentor cards', async () => {
     renderComponent()
-    expect(screen.getByText(/loading mentors/i)).toBeInTheDocument()
-    
+    expect(screen.getByText('Loading...')).toBeInTheDocument()
+
     await waitFor(() => {
       expect(screen.getByText('Bob')).toBeInTheDocument()
       expect(screen.getByText('Alice')).toBeInTheDocument()
@@ -72,22 +75,25 @@ describe('ExplorePage Component', () => {
     expect(sentBtn).toHaveTextContent('Request Sent')
   })
 
-  it('shows active mentor banner when matching API returns 403 and disables send request', async () => {
-    api.getMatchingMentors.mockRejectedValue(new Error('403 Forbidden: You already have a mentor'))
+  it('shows active mentor banner when mentee has an active mentorship', async () => {
+    api.getActiveMentorships.mockResolvedValue([{ id: 1, status: 'ACTIVE', mentorId: 10 }])
     renderComponent()
-    
+
     await waitFor(() => {
       expect(screen.getByText(/already have an active mentor/i)).toBeInTheDocument()
     })
+    await waitFor(() => {
+      expect(screen.getByText('Bob')).toBeInTheDocument()
+    })
     const bobCard = screen.getByText('Bob').closest('.mentor-card')
     const btn = bobCard.querySelector('button')
-    expect(btn).toBeDisabled() // disabled because hasActiveMentor
+    expect(btn).toBeDisabled()
   })
 
   it('clicking Send Request opens modal, sending request shows toast & updates UI', async () => {
     api.createMentorshipRequest.mockResolvedValue({ id: 100 })
     renderComponent()
-    
+
     await waitFor(() => {
       expect(screen.getByText('Bob')).toBeInTheDocument()
     })
@@ -97,11 +103,12 @@ describe('ExplorePage Component', () => {
     fireEvent.click(btn)
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('dialog', { name: /send mentorship request/i })).toBeInTheDocument()
       expect(screen.getAllByText(/Bob/).length).toBeGreaterThan(0)
     })
 
-    const submitBtn = screen.getByRole('dialog').querySelector('button[type="submit"]')
+    const modal = screen.getByRole('dialog', { name: /send mentorship request/i })
+    const submitBtn = modal.querySelector('button[type="submit"]')
     fireEvent.click(submitBtn)
 
     await waitFor(() => {
@@ -110,7 +117,7 @@ describe('ExplorePage Component', () => {
       expect(btn).toBeDisabled()
     })
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: /send mentorship request/i })).not.toBeInTheDocument()
     expect(document.querySelector('.toast-success')).toHaveTextContent(/Request sent successfully/i)
   })
 
@@ -125,7 +132,7 @@ describe('ExplorePage Component', () => {
 
     expect(screen.queryByText('Bob')).not.toBeInTheDocument()
     expect(screen.getByText('Alice')).toBeInTheDocument()
-    
+
     fireEvent.change(searchInput, { target: { value: 'react' } })
     expect(screen.getByText('Bob')).toBeInTheDocument()
     expect(screen.queryByText('Alice')).not.toBeInTheDocument()
