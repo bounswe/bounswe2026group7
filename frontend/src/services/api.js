@@ -1,10 +1,13 @@
 const BASE_URL = '/api'
 
 async function handleResponse(res) {
-  if (res.ok) return res.json()
+  if (res.ok) {
+    const text = await res.text()
+    return text ? JSON.parse(text) : null
+  }
   let message
   try {
-    const body = await res.json()
+    const body = JSON.parse(await res.text())
     message = body.message || body.error || JSON.stringify(body)
   } catch {
     message = res.statusText
@@ -181,6 +184,17 @@ export async function rejectMentorshipRequest(id) {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentorship-requests/${id}/reject`, {
     method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMatchingMentees(keyword) {
+  const token = localStorage.getItem('auth_token')
+  const url = keyword
+    ? `${BASE_URL}/matching/mentees?keyword=${encodeURIComponent(keyword)}`
+    : `${BASE_URL}/matching/mentees`
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   })
   return handleResponse(res)
