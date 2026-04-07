@@ -47,6 +47,9 @@ class MentorshipRequestServiceTest {
     @Mock
     private MentorRepository mentorRepository;
 
+    @Mock
+    private NotificationEventPublisher notificationEventPublisher;
+
     @InjectMocks
     private MentorshipRequestService mentorshipRequestService;
 
@@ -98,6 +101,7 @@ class MentorshipRequestServiceTest {
         assertThat(response.getMentorFirstName()).isEqualTo("Ahmet");
         assertThat(response.getMessage()).isEqualTo("I'd love to learn from you!");
         assertThat(response.getStatus()).isEqualTo("PENDING");
+        verify(notificationEventPublisher).publishRequestReceived(2L, "Elif");
     }
 
     @Test

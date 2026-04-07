@@ -23,6 +23,15 @@ public class NotificationEventPublisher {
         );
     }
 
+    public void publishRequestReceived(Long recipientId, String menteeFirstName) {
+        publish(
+                recipientId,
+                NotificationType.REQUEST_RECEIVED,
+                "New mentorship request",
+                menteeFirstName + " sent you a mentorship request."
+        );
+    }
+
     public void publishRequestRejected(Long recipientId, String mentorFirstName) {
         publish(
                 recipientId,
