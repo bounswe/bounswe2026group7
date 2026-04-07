@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Avatar from './Avatar'
+import NotificationBell from './NotificationBell'
 import usePresence from '../hooks/usePresence'
 import {
   Home, Compass, MessageCircle, CheckSquare, CalendarDays,
@@ -87,6 +88,7 @@ export default function MainLayout({ children }) {
           })}
         </div>
         <div className="nav-right">
+          <NotificationBell />
           <div className="ud-wrap" ref={dropdownRef}>
             <button
               className={`ud-trigger${dropdownOpen ? ' open' : ''}`}
