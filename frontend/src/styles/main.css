@@ -1415,3 +1415,8 @@
   border-color: var(--green-dark); background: var(--green-pale); color: var(--green-dark);
   font-weight: 600;
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

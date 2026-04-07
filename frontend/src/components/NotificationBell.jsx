@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../services/api'
 
 function timeAgo(iso) {
@@ -25,6 +25,7 @@ function TypeIcon({ type }) {
       </svg>
     )
   }
+  // REQUEST_RECEIVED and any other type
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
       <circle cx="12" cy="8" r="4" />
@@ -43,11 +44,25 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [filter, setFilter] = useState('all')
+  const [loading, setLoading] = useState(false)
   const bellRef = useRef(null)
 
-  useEffect(() => {
-    getNotifications().then(setNotifications).catch(() => {})
+  const fetchNotifications = useCallback(() => {
+    setLoading(true)
+    getNotifications()
+      .then(data => setNotifications(Array.isArray(data) ? data : []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    fetchNotifications()
+  }, [fetchNotifications])
+
+  // Re-fetch when panel opens
+  useEffect(() => {
+    if (open) fetchNotifications()
+  }, [open, fetchNotifications])
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -63,13 +78,17 @@ export default function NotificationBell() {
   const displayed = filter === 'unread' ? notifications.filter(n => !n.read) : notifications
 
   function handleMarkRead(id) {
+    // Optimistic update
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-    markNotificationAsRead(id).catch(() => {})
+    markNotificationAsRead(id).catch(() => {
+      // Revert on failure
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: false } : n))
+    })
   }
 
   function handleMarkAllRead() {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-    markAllNotificationsAsRead().catch(() => {})
+    markAllNotificationsAsRead().catch(() => fetchNotifications())
   }
 
   return (
@@ -90,18 +109,34 @@ export default function NotificationBell() {
       </button>
 
       <div className={`notif-panel${open ? ' notif-panel--open' : ''}`} role="dialog" aria-label="Notifications">
+        {/* Header */}
         <div className="notif-header">
           <div className="notif-header-left">
             <span className="notif-title">Notifications</span>
             {unreadCount > 0 && <span className="notif-count">{unreadCount} new</span>}
           </div>
-          {unreadCount > 0 && (
-            <button className="notif-mark-all" onClick={handleMarkAllRead}>
-              Mark all read
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {unreadCount > 0 && (
+              <button className="notif-mark-all" onClick={handleMarkAllRead}>
+                Mark all read
+              </button>
+            )}
+            <button
+              className="notif-mark-all"
+              onClick={fetchNotifications}
+              title="Refresh"
+              style={{ padding: '4px 6px' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                style={{ display: 'block', animation: loading ? 'spin 0.8s linear infinite' : 'none' }}>
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
             </button>
-          )}
+          </div>
         </div>
 
+        {/* Tabs */}
         <div className="notif-tabs">
           <button
             className={`notif-tab${filter === 'all' ? ' notif-tab--active' : ''}`}
@@ -117,8 +152,18 @@ export default function NotificationBell() {
           </button>
         </div>
 
+        {/* List */}
         <div className="notif-list">
-          {displayed.length === 0 ? (
+          {loading && notifications.length === 0 ? (
+            <div className="notif-empty">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+                style={{ opacity: 0.3, animation: 'spin 0.8s linear infinite' }}>
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              <p>Loading…</p>
+            </div>
+          ) : displayed.length === 0 ? (
             <div className="notif-empty">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.25 }}>
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
