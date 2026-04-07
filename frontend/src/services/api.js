@@ -75,8 +75,8 @@ export async function getMatchingMentors(keyword) {
   const headers = {}
   if (token) headers.Authorization = `Bearer ${token}`
   const url = keyword
-    ? `${BASE_URL}/matching/mentors?keyword=${encodeURIComponent(keyword)}`
-    : `${BASE_URL}/matching/mentors`
+    ? `${BASE_URL}/matching/mentors/all?keyword=${encodeURIComponent(keyword)}`
+    : `${BASE_URL}/matching/mentors/all`
   const res = await fetch(url, { headers })
   return handleResponse(res)
 }
@@ -85,7 +85,7 @@ export async function getAllMentors() {
   const token = localStorage.getItem('auth_token')
   const headers = {}
   if (token) headers.Authorization = `Bearer ${token}`
-  const res = await fetch(`${BASE_URL}/users/mentors`, { headers })
+  const res = await fetch(`${BASE_URL}/users/mentors/all`, { headers })
   return handleResponse(res)
 }
 
