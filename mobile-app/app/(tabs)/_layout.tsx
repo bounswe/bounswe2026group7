@@ -1,8 +1,12 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Text } from 'react-native';
+import { useRole } from '../../components/RoleContext';
 
 export default function TabLayout() {
+  const { role } = useRole();
+  const isMentor = role === 'mentor';
+
   return (
     <Tabs
       screenOptions={{
@@ -33,8 +37,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🔍</Text>,
+          title: isMentor ? 'Requests' : 'Explore',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>{isMentor ? '📋' : '🔍'}</Text>,
         }}
       />
 
