@@ -14,13 +14,13 @@ import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-
-import java.util.List;
 
 @Service
 public class UserService {
@@ -41,34 +41,30 @@ public class UserService {
     // ── Existing methods ────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ProfileResponse> getAllUsersFiltered(Long requesterId) {
+    public Page<ProfileResponse> getAllUsersFiltered(Long requesterId, Pageable pageable) {
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + requesterId));
 
         // Mentees can only see mentors (not other mentees)
         if (requester instanceof Mentee) {
-            return mentorRepository.findAll().stream()
-                    .map(m -> (ProfileResponse) MentorResponse.from(m))
-                    .toList();
+            return mentorRepository.findAll(pageable)
+                    .map(m -> (ProfileResponse) MentorResponse.from(m));
         }
 
-        return userRepository.findAll().stream()
-                .map(this::mapToResponse)
-                .toList();
+        return userRepository.findAll(pageable)
+                .map(this::mapToResponse);
     }
 
     @Transactional(readOnly = true)
-    public List<MentorResponse> getAllMentors() {
-        return mentorRepository.findAll().stream()
-                .map(MentorResponse::from)
-                .toList();
+    public Page<MentorResponse> getAllMentors(Pageable pageable) {
+        return mentorRepository.findAll(pageable)
+                .map(MentorResponse::from);
     }
 
     @Transactional(readOnly = true)
-    public List<MenteeResponse> getAllMentees() {
-        return menteeRepository.findAll().stream()
-                .map(MenteeResponse::from)
-                .toList();
+    public Page<MenteeResponse> getAllMentees(Pageable pageable) {
+        return menteeRepository.findAll(pageable)
+                .map(MenteeResponse::from);
     }
 
     @Transactional
