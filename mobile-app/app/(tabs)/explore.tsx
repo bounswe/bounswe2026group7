@@ -50,9 +50,13 @@ export default function ExploreScreen() {
   return <MenteeExploreContent />;
 }
 
+const PAGE_SIZE = 5;
+
 function MenteeExploreContent() {
   const [mentors, setMentors] = useState<MentorCard[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(0);
+  const scrollRef = React.useRef<ScrollView>(null);
 
   useEffect(() => {
     const fetchMentors = async () => {
@@ -95,6 +99,14 @@ function MenteeExploreContent() {
     fetchMentors();
   }, []);
 
+  const totalPages = Math.ceil(mentors.length / PAGE_SIZE);
+  const pagedMentors = mentors.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
   const openMentorProfile = (mentor: MentorCard) => {
     router.push({
       pathname: '/mentor-public-profile',
@@ -127,8 +139,8 @@ function MenteeExploreContent() {
       {loading ? (
         <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
       ) : (
-        <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-          {mentors.map((mentor) => (
+        <ScrollView ref={scrollRef} style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+          {pagedMentors.map((mentor) => (
             <View key={mentor.id} style={styles.card}>
               <View style={styles.cardTopRow}>
                 <View style={[styles.avatar, { backgroundColor: mentor.avatarBg }]}>
@@ -161,6 +173,22 @@ function MenteeExploreContent() {
               </View>
             </View>
           ))}
+
+          {totalPages > 1 && (
+            <View style={styles.paginationRow}>
+              {Array.from({ length: totalPages }, (_, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={[styles.pageButton, currentPage === i && styles.pageButtonActive]}
+                  onPress={() => goToPage(i)}
+                >
+                  <Text style={[styles.pageButtonText, currentPage === i && styles.pageButtonTextActive]}>
+                    {i + 1}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </ScrollView>
       )}
     </View>
@@ -832,5 +860,40 @@ const styles = StyleSheet.create({
     color: '#2F563C',
     fontSize: 14,
     fontWeight: '700',
+  },
+
+  paginationRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+
+  pageButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F8F6F2',
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  pageButtonActive: {
+    backgroundColor: '#456B50',
+    borderColor: '#456B50',
+  },
+
+  pageButtonText: {
+    color: '#7E7368',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  pageButtonTextActive: {
+    color: '#F8F6F2',
   },
 });

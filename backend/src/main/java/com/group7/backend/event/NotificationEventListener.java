@@ -12,7 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 
 @Component
 public class NotificationEventListener {
@@ -39,7 +40,7 @@ public class NotificationEventListener {
                     event.recipientId(),
                     NotificationType.MATCH_FOUND,
                     event.body(),
-                    LocalDateTime.now().minusHours(12)
+                    OffsetDateTime.now(ZoneId.of("Europe/Istanbul")).minusHours(24)
             );
             if (existsRecent) {
                 return;

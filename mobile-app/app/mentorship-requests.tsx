@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import apiClient from '../api/client';
+import { useRole } from '../components/RoleContext';
 
 const AVATAR_COLORS = [
   { bg: '#D6E8DC', text: '#2F563C' },
@@ -43,13 +44,17 @@ type IncomingRequest = {
 
 type ActiveMentorship = {
   id: number;
-  menteeId: number;
-  menteeFirstName: string;
+  mentorId?: number;
+  mentorFirstName?: string;
+  menteeId?: number;
+  menteeFirstName?: string;
   startDate: string;
   endDate: string;
 };
 
 export default function MentorshipRequestsScreen() {
+  const { role } = useRole();
+  const isMentor = role === 'mentor';
   const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([]);
   const [activeMentorships, setActiveMentorships] = useState<ActiveMentorship[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +63,7 @@ export default function MentorshipRequestsScreen() {
     try {
       setLoading(true);
       const [requestsRes, mentorshipsRes] = await Promise.all([
-        apiClient.get('/mentorship-requests/received'),
+        apiClient.get(isMentor ? '/mentorship-requests/received' : '/mentorship-requests/sent'),
         apiClient.get('/mentorships'),
       ]);
 
@@ -73,13 +78,14 @@ export default function MentorshipRequestsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isMentor]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   const openCandidateProfile = (item: IncomingRequest) => {
+    if (!isMentor) return;
     const colors = getAvatarColors(item.menteeId);
     router.push({
       pathname: '/request-candidate-profile',
@@ -117,14 +123,14 @@ export default function MentorshipRequestsScreen() {
         <View style={styles.headerTopRow}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.replace('/(tabs)/profile')}
+            onPress={() => router.back()}
           >
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.title}>
-          Mentorship{'\n'}
+          {isMentor ? 'Mentorship' : 'My'}{'\n'}
           <Text style={styles.titleItalic}>Requests.</Text>
         </Text>
       </View>
@@ -134,7 +140,7 @@ export default function MentorshipRequestsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sectionTitle}>INCOMING</Text>
+        <Text style={styles.sectionTitle}>{isMentor ? 'INCOMING' : 'PENDING'}</Text>
 
         {incomingRequests.length === 0 ? (
           <View style={styles.emptyState}>
@@ -142,17 +148,18 @@ export default function MentorshipRequestsScreen() {
           </View>
         ) : (
           incomingRequests.map((item) => {
-            const colors = getAvatarColors(item.menteeId);
+            const displayName = isMentor ? item.menteeFirstName : 'Request Pending';
+            const colors = getAvatarColors(isMentor ? item.menteeId : item.id);
             return (
               <View key={item.id} style={styles.requestCard}>
                 <View style={styles.topRow}>
                   <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
                     <Text style={[styles.avatarText, { color: colors.text }]}>
-                      {item.menteeFirstName.substring(0, 2).toUpperCase()}
+                      {displayName.substring(0, 2).toUpperCase()}
                     </Text>
                   </View>
                   <View style={styles.infoArea}>
-                    <Text style={styles.name}>{item.menteeFirstName}</Text>
+                    <Text style={styles.name}>{displayName}</Text>
                     <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
                   </View>
                 </View>
@@ -161,12 +168,18 @@ export default function MentorshipRequestsScreen() {
                   <Text style={styles.message}>{item.message}</Text>
                 )}
 
-                <TouchableOpacity
-                  style={styles.viewProfileButton}
-                  onPress={() => openCandidateProfile(item)}
-                >
-                  <Text style={styles.viewProfileButtonText}>View Profile</Text>
-                </TouchableOpacity>
+                {isMentor ? (
+                  <TouchableOpacity
+                    style={styles.viewProfileButton}
+                    onPress={() => openCandidateProfile(item)}
+                  >
+                    <Text style={styles.viewProfileButtonText}>View Profile</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.pendingBadge}>
+                    <Text style={styles.pendingBadgeText}>Awaiting mentor response</Text>
+                  </View>
+                )}
               </View>
             );
           })
@@ -180,7 +193,11 @@ export default function MentorshipRequestsScreen() {
           </View>
         ) : (
           activeMentorships.map((item) => {
-            const colors = getAvatarColors(item.menteeId);
+            const counterpartId = isMentor ? item.menteeId ?? item.id : item.mentorId ?? item.id;
+            const counterpartName = isMentor
+              ? item.menteeFirstName || 'Mentee'
+              : item.mentorFirstName || 'Mentor';
+            const colors = getAvatarColors(counterpartId);
             const start = new Date(item.startDate).getTime();
             const end = new Date(item.endDate).getTime();
             const now = Date.now();
@@ -193,12 +210,12 @@ export default function MentorshipRequestsScreen() {
                 <View style={styles.topRow}>
                   <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
                     <Text style={[styles.avatarText, { color: colors.text }]}>
-                      {item.menteeFirstName.substring(0, 2).toUpperCase()}
+                      {counterpartName.substring(0, 2).toUpperCase()}
                     </Text>
                   </View>
                   <View style={styles.infoArea}>
-                    <Text style={styles.name}>{item.menteeFirstName}</Text>
-                    <Text style={styles.subtitle}>Mentee · Active</Text>
+                    <Text style={styles.name}>{counterpartName}</Text>
+                    <Text style={styles.subtitle}>{isMentor ? 'Mentee · Active' : 'Mentor · Active'}</Text>
                   </View>
                   <View style={styles.activeBadge}>
                     <Text style={styles.activeBadgeText}>Active</Text>
@@ -308,6 +325,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   viewProfileButtonText: { color: '#2F563C', fontSize: 15, fontWeight: '700' },
+  pendingBadge: {
+    backgroundColor: '#F1E1BB',
+    borderRadius: 18,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  pendingBadgeText: { color: '#8A5D12', fontSize: 14, fontWeight: '700' },
   activeBadge: {
     backgroundColor: '#D7E8DA',
     paddingHorizontal: 14,

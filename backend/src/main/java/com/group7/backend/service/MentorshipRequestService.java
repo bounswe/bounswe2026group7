@@ -27,13 +27,16 @@ public class MentorshipRequestService {
     private final MentorshipRequestRepository mentorshipRequestRepository;
     private final MenteeRepository menteeRepository;
     private final MentorRepository mentorRepository;
+    private final NotificationEventPublisher notificationEventPublisher;
 
     public MentorshipRequestService(MentorshipRequestRepository mentorshipRequestRepository,
                                     MenteeRepository menteeRepository,
-                                    MentorRepository mentorRepository) {
+                                    MentorRepository mentorRepository,
+                                    NotificationEventPublisher notificationEventPublisher) {
         this.mentorshipRequestRepository = mentorshipRequestRepository;
         this.menteeRepository = menteeRepository;
         this.mentorRepository = mentorRepository;
+        this.notificationEventPublisher = notificationEventPublisher;
     }
 
     @Transactional
@@ -68,6 +71,7 @@ public class MentorshipRequestService {
 
         try {
             MentorshipRequest saved = mentorshipRequestRepository.save(request);
+            notificationEventPublisher.publishRequestReceived(mentor.getId(), mentee.getFirstName());
             log.info("Mentorship request created: requestId={}, menteeId={}, mentorId={}",
                     saved.getId(), menteeId, dto.getMentorId());
             return MentorshipRequestResponse.from(saved);

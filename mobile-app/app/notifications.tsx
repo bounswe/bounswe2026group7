@@ -57,6 +57,19 @@ export default function NotificationsScreen() {
     fetchNotifications();
   }, [fetchNotifications]);
 
+  useEffect(() => {
+    const clearUnreadOnOpen = async () => {
+      try {
+        await apiClient.patch('/notifications/read-all');
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      } catch (err) {
+        console.error('Failed to clear unread notifications on open:', err);
+      }
+    };
+
+    clearUnreadOnOpen();
+  }, []);
+
   const markAsRead = async (id: number) => {
     try {
       await apiClient.patch(`/notifications/${id}/read`);

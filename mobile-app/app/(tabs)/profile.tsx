@@ -16,6 +16,8 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
+type AppRole = 'mentor' | 'mentee';
+
 // İsme göre baş harfleri hesaplayan yardımcı fonksiyon
 const getInitials = (name: string) => {
   if (!name) return 'U';
@@ -32,8 +34,20 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     try {
-      await SecureStore.deleteItemAsync('userToken');
-      await SecureStore.deleteItemAsync('userId');
+      const [userId, savedRole] = await Promise.all([
+        SecureStore.getItemAsync('userId'),
+        SecureStore.getItemAsync('userRole'),
+      ]);
+      if (userId && (savedRole === 'mentor' || savedRole === 'mentee')) {
+        await SecureStore.deleteItemAsync(getAvatarStorageKey(savedRole, userId)).catch(() => undefined);
+      }
+      await Promise.allSettled([
+        SecureStore.deleteItemAsync('mentorAvatarUri'),
+        SecureStore.deleteItemAsync('menteeAvatarUri'),
+        SecureStore.deleteItemAsync('userToken'),
+        SecureStore.deleteItemAsync('userId'),
+        SecureStore.deleteItemAsync('userRole'),
+      ]);
       clearRole();
       router.replace('/login');
     } catch {
@@ -105,7 +119,7 @@ type SentRequest = {
   createdAt: string;
 };
 
-async function pickAvatar(storageKey: string): Promise<string | null> {
+async function pickAvatar(): Promise<string | null> {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (status !== 'granted') {
     Alert.alert('Permission needed', 'Please allow access to your photo library.');
@@ -118,9 +132,44 @@ async function pickAvatar(storageKey: string): Promise<string | null> {
     quality: 0.7,
   });
   if (result.canceled || !result.assets[0]) return null;
-  const uri = result.assets[0].uri;
-  await SecureStore.setItemAsync(storageKey, uri);
-  return uri;
+  return result.assets[0].uri;
+}
+
+const getAvatarStorageKey = (role: AppRole, userId: string) => `${role}AvatarUri_${userId}`;
+
+async function loadCachedAvatar(role: AppRole, userId: string) {
+  return SecureStore.getItemAsync(getAvatarStorageKey(role, userId));
+}
+
+async function cacheAvatar(role: AppRole, userId: string, uri: string) {
+  await SecureStore.setItemAsync(getAvatarStorageKey(role, userId), uri);
+}
+
+async function uploadProfilePhoto(uri: string) {
+  const extension = uri.split('.').pop()?.toLowerCase();
+  const type =
+    extension === 'png'
+      ? 'image/png'
+      : extension === 'webp'
+        ? 'image/webp'
+        : extension === 'gif'
+          ? 'image/gif'
+          : 'image/jpeg';
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri,
+    name: `profile-photo.${extension || 'jpg'}`,
+    type,
+  } as any);
+
+  const response = await apiClient.post('/users/me/photo', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+
+  return response.data?.profilePhoto || uri;
 }
 
 // --- MENTEE PROFILI ---
@@ -171,10 +220,9 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
     const fetchAll = async () => {
       try {
         const userId = await SecureStore.getItemAsync('userId');
-        if (!userId) return;
-        const profileRes = await apiClient.get(`/users/${userId}`);
+        const profileRes = await apiClient.get('/users/me');
         const data = profileRes.data;
-        setFullName(`${data.firstName} ${data.lastName}`);
+        setFullName([data.firstName, data.lastName].filter(Boolean).join(' '));
         setDepartment(data.major || '');
         setAboutMe(data.backgroundInfo || '');
         setGoals(data.goals || '');
@@ -185,14 +233,20 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
         if (data.skills) setSkills(data.skills);
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
-        } else {
-          const local = await SecureStore.getItemAsync('menteeAvatarUri');
+          if (userId) {
+            await cacheAvatar('mentee', userId, data.profilePhoto);
+          }
+        } else if (userId) {
+          const local = await loadCachedAvatar('mentee', userId);
           if (local) setProfilePhoto(local);
         }
       } catch (error) {
         console.error('Error fetching mentee profile:', error);
-        const local = await SecureStore.getItemAsync('menteeAvatarUri');
-        if (local) setProfilePhoto(local);
+        const userId = await SecureStore.getItemAsync('userId');
+        if (userId) {
+          const local = await loadCachedAvatar('mentee', userId);
+          if (local) setProfilePhoto(local);
+        }
       }
 
       try {
@@ -217,8 +271,19 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
           <TouchableOpacity
             style={styles.avatarCircle}
             onPress={async () => {
-              const uri = await pickAvatar('menteeAvatarUri');
-              if (uri) setProfilePhoto(uri);
+              const userId = await SecureStore.getItemAsync('userId');
+              if (!userId) return;
+              const uri = await pickAvatar();
+              if (!uri) return;
+              try {
+                const savedPhoto = await uploadProfilePhoto(uri);
+                await cacheAvatar('mentee', userId, savedPhoto);
+                setProfilePhoto(savedPhoto);
+              } catch {
+                await cacheAvatar('mentee', userId, uri);
+                setProfilePhoto(uri);
+                Alert.alert('Warning', 'Photo was updated locally but could not be uploaded to the server.');
+              }
             }}
           >
             {profilePhoto ? (
@@ -246,7 +311,7 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.quickActionButton}
-              onPress={() => router.push('/(tabs)/explore')}
+              onPress={() => router.navigate('/explore')}
             >
               <Text style={styles.quickActionIcon}>🔍</Text>
               <Text style={styles.quickActionText}>Find Mentor</Text>
@@ -360,10 +425,9 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
     const fetchProfileData = async () => {
       try {
         const userId = await SecureStore.getItemAsync('userId');
-        if (!userId) return;
-        const response = await apiClient.get(`/users/${userId}`);
+        const response = await apiClient.get('/users/me');
         const data = response.data;
-        setDisplayName(`${data.firstName} ${data.lastName}`);
+        setDisplayName([data.firstName, data.lastName].filter(Boolean).join(' '));
         setTitle(data.field || '');
         setBio(data.bio || '');
         setExpertise(data.expertise || '');
@@ -376,14 +440,20 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
         if (data.mentorshipDuration != null) setMentorshipDuration(String(data.mentorshipDuration));
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
-        } else {
-          const local = await SecureStore.getItemAsync('mentorAvatarUri');
+          if (userId) {
+            await cacheAvatar('mentor', userId, data.profilePhoto);
+          }
+        } else if (userId) {
+          const local = await loadCachedAvatar('mentor', userId);
           if (local) setProfilePhoto(local);
         }
       } catch (error) {
         console.error('Error fetching mentor profile:', error);
-        const local = await SecureStore.getItemAsync('mentorAvatarUri');
-        if (local) setProfilePhoto(local);
+        const userId = await SecureStore.getItemAsync('userId');
+        if (userId) {
+          const local = await loadCachedAvatar('mentor', userId);
+          if (local) setProfilePhoto(local);
+        }
       }
     };
     fetchProfileData();
@@ -427,8 +497,19 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
           <TouchableOpacity
             style={styles.avatarCircle}
             onPress={async () => {
-              const uri = await pickAvatar('mentorAvatarUri');
-              if (uri) setProfilePhoto(uri);
+              const userId = await SecureStore.getItemAsync('userId');
+              if (!userId) return;
+              const uri = await pickAvatar();
+              if (!uri) return;
+              try {
+                const savedPhoto = await uploadProfilePhoto(uri);
+                await cacheAvatar('mentor', userId, savedPhoto);
+                setProfilePhoto(savedPhoto);
+              } catch {
+                await cacheAvatar('mentor', userId, uri);
+                setProfilePhoto(uri);
+                Alert.alert('Warning', 'Photo was updated locally but could not be uploaded to the server.');
+              }
             }}
           >
             {profilePhoto ? (

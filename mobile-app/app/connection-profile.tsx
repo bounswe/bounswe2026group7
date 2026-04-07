@@ -311,7 +311,7 @@ export default function ConnectionProfileScreen() {
           <View style={styles.actionsGrid}>
             <TouchableOpacity
               style={styles.actionButtonPrimary}
-              onPress={() => router.push({ pathname: '/(tabs)/messages', params: { openWith: name } })}
+              onPress={() => router.navigate({ pathname: '/messages', params: { openWith: name } })}
             >
               <Text style={styles.actionButtonPrimaryText}>Open Messages</Text>
             </TouchableOpacity>

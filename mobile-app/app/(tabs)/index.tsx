@@ -93,6 +93,21 @@ export default function HomeScreen() {
       .catch(() => {});
   }, [fetchMentorships]);
 
+  const openNotifications = async () => {
+    router.push('/notifications' as any);
+
+    if (unreadCount <= 0) return;
+
+    setUnreadCount(0);
+    try {
+      await apiClient.patch('/notifications/read-all');
+    } catch {
+      apiClient.get('/notifications?unreadOnly=true')
+        .then((res) => setUnreadCount(res.data.length))
+        .catch(() => {});
+    }
+  };
+
   const openConnectionProfile = (item: ConnectionCard) => {
     const colors = getAvatarColors(item.connectedUserId);
     const initials = item.connectedUserFirstName.substring(0, 2).toUpperCase();
@@ -149,7 +164,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.notificationButton}
-            onPress={() => router.push('/notifications' as any)}
+            onPress={openNotifications}
           >
             <Text style={styles.notificationIcon}>🔔</Text>
             {unreadCount > 0 && (

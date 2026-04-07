@@ -1,10 +1,13 @@
 const BASE_URL = '/api'
 
 async function handleResponse(res) {
-  if (res.ok) return res.json()
+  if (res.ok) {
+    const text = await res.text()
+    return text ? JSON.parse(text) : null
+  }
   let message
   try {
-    const body = await res.json()
+    const body = JSON.parse(await res.text())
     message = body.message || body.error || JSON.stringify(body)
   } catch {
     message = res.statusText
@@ -115,9 +118,10 @@ export async function getOwnProfile() {
   return handleResponse(res)
 }
 
-export async function updateOwnProfile(data) {
+export async function updateOwnProfile(data, role) {
   const token = localStorage.getItem('auth_token')
-  const res = await fetch(`${BASE_URL}/users/me`, {
+  const endpoint = role === 'MENTOR' ? '/users/me/mentor' : '/users/me/mentee'
+  const res = await fetch(`${BASE_URL}${endpoint}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(data),
@@ -128,6 +132,78 @@ export async function updateOwnProfile(data) {
 export async function getUserById(id) {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/users/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getNotifications(unreadOnly = false) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/notifications?unreadOnly=${unreadOnly}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function markNotificationAsRead(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/notifications/${id}/read`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function markAllNotificationsAsRead() {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/notifications/read-all`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getReceivedMentorshipRequests(page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorship-requests/received?page=${page}&size=${size}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function acceptMentorshipRequest(id, duration) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorship-requests/${id}/accept`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ duration }),
+  })
+  return handleResponse(res)
+}
+
+export async function rejectMentorshipRequest(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorship-requests/${id}/reject`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMatchingMentees(keyword) {
+  const token = localStorage.getItem('auth_token')
+  const url = keyword
+    ? `${BASE_URL}/matching/mentees?keyword=${encodeURIComponent(keyword)}`
+    : `${BASE_URL}/matching/mentees`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getActiveMentorships() {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   return handleResponse(res)

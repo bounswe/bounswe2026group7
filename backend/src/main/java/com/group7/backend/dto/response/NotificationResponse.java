@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Getter
 @Setter
@@ -33,10 +33,10 @@ public class NotificationResponse {
     private boolean isRead;
 
     @Schema(description = "When notification was read")
-    private LocalDateTime readAt;
+    private OffsetDateTime readAt;
 
     @Schema(description = "When notification was created")
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 
     public static NotificationResponse from(Notification notification) {
         NotificationResponse response = new NotificationResponse();
