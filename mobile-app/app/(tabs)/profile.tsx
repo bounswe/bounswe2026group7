@@ -522,7 +522,7 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             </View>
           </TouchableOpacity>
           <Text style={styles.name}>{displayName || 'Loading...'}</Text>
-          <Text style={styles.roleText}>{title}</Text>
+          <Text style={styles.roleText}>{title ? `Mentor • ${title}` : 'Mentor'}</Text>
         </View>
 
         <View style={styles.body}>

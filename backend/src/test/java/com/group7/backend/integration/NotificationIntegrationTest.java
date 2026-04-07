@@ -200,7 +200,7 @@ class NotificationIntegrationTest {
         mockMvc.perform(get("/api/matching/mentors")
                         .header("Authorization", "Bearer " + menteeToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].firstName").value("Ayse"));
+                .andExpect(jsonPath("$.content[0].firstName").value("Ayse"));
 
         Notification created = waitForNotification(mentee.getId(), NotificationType.MATCH_FOUND);
         assertThat(created).isNotNull();

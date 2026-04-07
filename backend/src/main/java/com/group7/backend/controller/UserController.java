@@ -9,21 +9,21 @@ import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
@@ -130,12 +130,15 @@ public class UserController {
 
     @GetMapping
     @Operation(summary = "List users",
-            description = "Returns user profiles. Mentees only see mentors; mentors see all users.")
-    @ApiResponse(responseCode = "200", description = "List of users",
-            content = @Content(array = @ArraySchema(schema = @Schema(oneOf = {MentorResponse.class, MenteeResponse.class}))))
-    public List<ProfileResponse> getAllUsers(Authentication authentication) {
+            description = "Returns paginated user profiles. Mentees only see mentors; mentors see all users.")
+    @ApiResponse(responseCode = "200", description = "Paginated list of users")
+    public ResponseEntity<Page<ProfileResponse>> getAllUsers(
+            @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
-        return userService.getAllUsersFiltered(requesterId);
+        Pageable pageable = clampPageable(page, size);
+        return ResponseEntity.ok(userService.getAllUsersFiltered(requesterId, pageable));
     }
 
     @GetMapping("/{id:\\d+}")
@@ -155,20 +158,26 @@ public class UserController {
     }
 
     @GetMapping("/mentors")
-    @Operation(summary = "List mentors", description = "Returns all mentor profiles.")
-    @ApiResponse(responseCode = "200", description = "List of mentors",
-            content = @Content(array = @ArraySchema(schema = @Schema(implementation = MentorResponse.class))))
-    public List<MentorResponse> getAllMentors() {
-        return userService.getAllMentors();
+    @Operation(summary = "List mentors",
+            description = "Returns paginated mentor profiles. Supports page and size query parameters.")
+    @ApiResponse(responseCode = "200", description = "Paginated list of mentors")
+    public ResponseEntity<Page<MentorResponse>> getAllMentors(
+            @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = clampPageable(page, size);
+        return ResponseEntity.ok(userService.getAllMentors(pageable));
     }
 
     @GetMapping("/mentees")
     @PreAuthorize("hasRole('MENTOR')")
-    @Operation(summary = "List mentees", description = "Returns all mentee profiles. Mentor-only.")
-    @ApiResponse(responseCode = "200", description = "List of mentees",
-            content = @Content(array = @ArraySchema(schema = @Schema(implementation = MenteeResponse.class))))
-    public List<MenteeResponse> getAllMentees() {
-        return userService.getAllMentees();
+    @Operation(summary = "List mentees",
+            description = "Returns paginated mentee profiles. Mentor-only. Supports page and size query parameters.")
+    @ApiResponse(responseCode = "200", description = "Paginated list of mentees")
+    public ResponseEntity<Page<MenteeResponse>> getAllMentees(
+            @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = clampPageable(page, size);
+        return ResponseEntity.ok(userService.getAllMentees(pageable));
     }
 
     // ── Delete ──────────────────────────────────────────────
@@ -188,5 +197,10 @@ public class UserController {
         }
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private Pageable clampPageable(int page, int size) {
+        int clampedSize = Math.min(Math.max(size, 1), 100);
+        return PageRequest.of(Math.max(page, 0), clampedSize);
     }
 }
