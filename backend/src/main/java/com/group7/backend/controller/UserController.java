@@ -25,6 +25,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/users")
 @Tag(name = "Profiles", description = "User, mentor, and mentee profile endpoints")
@@ -166,6 +168,14 @@ public class UserController {
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = clampPageable(page, size);
         return ResponseEntity.ok(userService.getAllMentors(pageable));
+    }
+
+    @GetMapping("/mentors/all")
+    @Operation(summary = "List all mentors (unpaginated)",
+            description = "Returns all mentor profiles as a plain list. Use /mentors for paginated results.")
+    @ApiResponse(responseCode = "200", description = "List of all mentors")
+    public ResponseEntity<List<MentorResponse>> getAllMentorsUnpaginated() {
+        return ResponseEntity.ok(userService.getAllMentorsList());
     }
 
     @GetMapping("/mentees")

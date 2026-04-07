@@ -45,6 +45,15 @@ public class MatchingService {
 
     @Transactional(readOnly = true)
     public Page<MentorMatchResponse> getTopMentors(Long menteeId, String keyword, Pageable pageable) {
+        return paginateList(rankMentors(menteeId, keyword), pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorMatchResponse> getTopMentorsList(Long menteeId, String keyword) {
+        return rankMentors(menteeId, keyword);
+    }
+
+    private List<MentorMatchResponse> rankMentors(Long menteeId, String keyword) {
         Mentee mentee = menteeRepository.findById(menteeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Mentee not found"));
 
@@ -66,7 +75,7 @@ public class MatchingService {
             notificationEventPublisher.publishMatchFound(menteeId, matches.get(0).getFirstName());
         }
 
-        return paginateList(matches, pageable);
+        return matches;
     }
 
     @Transactional(readOnly = true)
