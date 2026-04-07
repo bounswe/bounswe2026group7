@@ -1368,3 +1368,50 @@
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--green-mid); flex-shrink: 0; margin-top: 6px;
 }
+
+/* ── MENTOR DASHBOARD STATS ── */
+.mentor-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.mentor-stat-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.mentor-stat-num {
+  font-size: 28px; font-weight: 700; color: var(--green-dark); line-height: 1;
+}
+.mentor-stat-lbl {
+  font-size: 12px; color: var(--text-muted); font-weight: 500; text-align: center;
+}
+
+/* Duration picker */
+.duration-picker {
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+.duration-label {
+  font-size: 13px; color: var(--text-muted); margin-bottom: 10px;
+}
+.duration-options {
+  display: flex; gap: 8px; margin-bottom: 12px;
+}
+.duration-btn {
+  flex: 1; padding: 8px 0; border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: #fff; color: var(--text);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: all 0.15s; font-family: inherit;
+}
+.duration-btn:hover { border-color: var(--green-mid); color: var(--green-dark); }
+.duration-btn--active {
+  border-color: var(--green-dark); background: var(--green-pale); color: var(--green-dark);
+  font-weight: 600;
+}
