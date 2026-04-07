@@ -17,6 +17,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -53,9 +56,11 @@ class MatchingServiceTest {
 
     private Mentee mentee;
     private Mentor mentor;
+    private Pageable pageable;
 
     @BeforeEach
     void setUp() {
+        pageable = PageRequest.of(0, 20);
         mentee = new Mentee();
         mentee.setMajor("Computer Science");
         mentee.setGoals("career machine learning");
@@ -186,9 +191,9 @@ class MatchingServiceTest {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findAll()).thenReturn(List.of(mentor));
 
-        List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, pageable);
 
-        assertThat(result).isEmpty();
+        assertThat(result.getContent()).isEmpty();
     }
 
     // ── Active mentor check ──────────────────────────────────────────────────
@@ -198,7 +203,7 @@ class MatchingServiceTest {
         mentee.setActiveMentorId(99L);
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
 
-        assertThatThrownBy(() -> matchingService.getTopMentors(1L, null))
+        assertThatThrownBy(() -> matchingService.getTopMentors(1L, null, pageable))
                 .isInstanceOf(com.group7.backend.exception.MatchingNotAllowedException.class)
                 .hasMessageContaining("active mentor");
     }
@@ -209,14 +214,14 @@ class MatchingServiceTest {
     void menteeNotFoundThrows() {
         when(menteeRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> matchingService.getTopMentors(99L, null))
+        assertThatThrownBy(() -> matchingService.getTopMentors(99L, null, pageable))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
     // ── Top 5 limit ──────────────────────────────────────────────────────────
 
     @Test
-    void returnsAtMostFiveMentors() {
+    void paginationReturnsRequestedPageSize() {
         List<Mentor> sixMentors = java.util.stream.IntStream.range(0, 6).mapToObj(i -> {
             Mentor m = new Mentor();
             m.setMaxMenteeCapacity(3);
@@ -227,9 +232,44 @@ class MatchingServiceTest {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findAll()).thenReturn(sixMentors);
 
-        List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
+        Pageable smallPage = PageRequest.of(0, 3);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, smallPage);
 
-        assertThat(result).hasSize(5);
+        assertThat(result.getContent()).hasSize(3);
+        assertThat(result.getTotalElements()).isEqualTo(6);
+        assertThat(result.getTotalPages()).isEqualTo(2);
+    }
+
+    @Test
+    void paginationReturnsSecondPage() {
+        List<Mentor> sixMentors = java.util.stream.IntStream.range(0, 6).mapToObj(i -> {
+            Mentor m = new Mentor();
+            m.setMaxMenteeCapacity(3);
+            m.setCurrentMenteeCount(0);
+            return m;
+        }).toList();
+
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        when(mentorRepository.findAll()).thenReturn(sixMentors);
+
+        Pageable secondPage = PageRequest.of(1, 4);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, secondPage);
+
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(6);
+        assertThat(result.getNumber()).isEqualTo(1);
+    }
+
+    @Test
+    void paginationBeyondTotalReturnsEmptyPage() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
+
+        Pageable farPage = PageRequest.of(10, 20);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, farPage);
+
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isEqualTo(1);
     }
 
     // ── Keyword filter ───────────────────────────────────────────────────────
@@ -239,10 +279,10 @@ class MatchingServiceTest {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findAll()).thenReturn(List.of(mentor));
 
-        List<MentorMatchResponse> result = matchingService.getTopMentors(1L, "Java");
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, "Java", pageable);
 
-        assertThat(result).hasSize(1);
-        verify(notificationEventPublisher).publishMatchFound(1L, result.get(0).getFirstName());
+        assertThat(result.getContent()).hasSize(1);
+        verify(notificationEventPublisher).publishMatchFound(1L, result.getContent().get(0).getFirstName());
     }
 
     @Test
@@ -250,9 +290,9 @@ class MatchingServiceTest {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findAll()).thenReturn(List.of(mentor));
 
-        List<MentorMatchResponse> result = matchingService.getTopMentors(1L, "rust");
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, "rust", pageable);
 
-        assertThat(result).isEmpty();
+        assertThat(result.getContent()).isEmpty();
     }
 
     @Test
@@ -260,9 +300,9 @@ class MatchingServiceTest {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findAll()).thenReturn(List.of(mentor));
 
-        List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     // ── Ordering ─────────────────────────────────────────────────────────────
@@ -281,9 +321,9 @@ class MatchingServiceTest {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorRepository.findAll()).thenReturn(List.of(lowScore, mentor));
 
-        List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, pageable);
 
-        assertThat(result.get(0).getMatchScore()).isGreaterThanOrEqualTo(result.get(1).getMatchScore());
+        assertThat(result.getContent().get(0).getMatchScore()).isGreaterThanOrEqualTo(result.getContent().get(1).getMatchScore());
     }
 
     @Test
@@ -330,11 +370,11 @@ class MatchingServiceTest {
     when(menteeAvailabilitySlotRepository.findByMenteeId(1L)).thenReturn(List.of(
         menteeSlot(DayOfWeek.MONDAY, "10:30", "11:30")));
 
-    List<MentorMatchResponse> result = matchingService.getTopMentors(1L, null);
+    Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, pageable);
 
-    assertThat(result).hasSize(2);
-    assertThat(result.get(0).getId()).isEqualTo(2L);
-    assertThat(result.get(0).getMatchScore()).isGreaterThan(result.get(1).getMatchScore());
+    assertThat(result.getContent()).hasSize(2);
+    assertThat(result.getContent().get(0).getId()).isEqualTo(2L);
+    assertThat(result.getContent().get(0).getMatchScore()).isGreaterThan(result.getContent().get(1).getMatchScore());
     }
 
     // ── Candidate mentees: preference matching ──────────────────────────────
@@ -412,9 +452,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee, activeMentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     // ── Candidate mentees: capacity check ───────────────────────────────────
@@ -424,7 +464,7 @@ class MatchingServiceTest {
         mentor.setCurrentMenteeCount(3); // full
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
 
-        assertThatThrownBy(() -> matchingService.getCandidateMentees(1L, null))
+        assertThatThrownBy(() -> matchingService.getCandidateMentees(1L, null, pageable))
                 .isInstanceOf(com.group7.backend.exception.MatchingNotAllowedException.class)
                 .hasMessageContaining("capacity");
     }
@@ -435,7 +475,7 @@ class MatchingServiceTest {
     void candidateMenteesMentorNotFoundThrows() {
         when(mentorRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> matchingService.getCandidateMentees(99L, null))
+        assertThatThrownBy(() -> matchingService.getCandidateMentees(99L, null, pageable))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -446,9 +486,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "machine");
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "machine", pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     @Test
@@ -456,9 +496,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "rust");
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "rust", pageable);
 
-        assertThat(result).isEmpty();
+        assertThat(result.getContent()).isEmpty();
     }
 
     @Test
@@ -466,9 +506,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     // ── Candidate mentees: case insensitivity ───────────────────────────────
@@ -513,9 +553,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "Computer");
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "Computer", pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     @Test
@@ -523,9 +563,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "Java");
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "Java", pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     @Test
@@ -533,9 +573,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "AI");
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "AI", pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     @Test
@@ -543,9 +583,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "backend");
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "backend", pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     @Test
@@ -553,9 +593,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "MACHINE");
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "MACHINE", pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     @Test
@@ -563,9 +603,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "");
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "", pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     // ── Candidate mentees: multiple mentees filtering ───────────────────────
@@ -580,10 +620,10 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee, nonMatching));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getMajor()).isEqualTo("Computer Science");
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getMajor()).isEqualTo("Computer Science");
     }
 
     @Test
@@ -595,9 +635,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee, secondMatch));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
 
-        assertThat(result).hasSize(2);
+        assertThat(result.getContent()).hasSize(2);
     }
 
     @Test
@@ -613,9 +653,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee, active1, active2));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     // ── Candidate mentees: capacity edge cases ──────────────────────────────
@@ -626,7 +666,7 @@ class MatchingServiceTest {
         mentor.setCurrentMenteeCount(2);
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
 
-        assertThatThrownBy(() -> matchingService.getCandidateMentees(1L, null))
+        assertThatThrownBy(() -> matchingService.getCandidateMentees(1L, null, pageable))
                 .isInstanceOf(com.group7.backend.exception.MatchingNotAllowedException.class);
     }
 
@@ -637,9 +677,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
 
-        assertThat(result).hasSize(1);
+        assertThat(result.getContent()).hasSize(1);
     }
 
     // ── Candidate mentees: DTO mapping ──────────────────────────────────────
@@ -653,10 +693,10 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(mentee));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null);
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
 
-        assertThat(result).hasSize(1);
-        MenteeCandidateResponse dto = result.get(0);
+        assertThat(result.getContent()).hasSize(1);
+        MenteeCandidateResponse dto = result.getContent().get(0);
         assertThat(dto.getFirstName()).isEqualTo("Elif");
         assertThat(dto.getGoals()).isEqualTo("career machine learning");
         assertThat(dto.getMajor()).isEqualTo("Computer Science");
@@ -680,9 +720,9 @@ class MatchingServiceTest {
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(menteeRepository.findAll()).thenReturn(List.of(matchingWithKeyword, matchingWithoutKeyword));
 
-        List<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "machine");
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "machine", pageable);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getGoals()).isEqualTo("machine learning research");
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getGoals()).isEqualTo("machine learning research");
     }
 }
