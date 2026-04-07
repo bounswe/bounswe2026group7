@@ -22,7 +22,7 @@ describe('API - Mentorship Features', () => {
     localStorage.getItem.mockReturnValue('test-token')
     global.fetch.mockResolvedValue({
       ok: true,
-      json: async () => [{ id: 1, name: 'Mentor A' }]
+      text: async () => JSON.stringify([{ id: 1, name: 'Mentor A' }])
     })
 
     const mentors = await getMatchingMentors()
@@ -34,7 +34,7 @@ describe('API - Mentorship Features', () => {
 
   it('getMatchingMentors appends keyword to query', async () => {
     localStorage.getItem.mockReturnValue('test-token')
-    global.fetch.mockResolvedValue({ ok: true, json: async () => [] })
+    global.fetch.mockResolvedValue({ ok: true, text: async () => JSON.stringify([]) })
     await getMatchingMentors('react')
     expect(global.fetch).toHaveBeenCalledWith('/api/matching/mentors?keyword=react', {
       headers: { Authorization: 'Bearer test-token' }
@@ -43,7 +43,7 @@ describe('API - Mentorship Features', () => {
 
   it('getSentMentorshipRequests calls /api/mentorship-requests/sent with auth header', async () => {
     localStorage.getItem.mockReturnValue('test-token-2')
-    global.fetch.mockResolvedValue({ ok: true, json: async () => ({ content: [] }) })
+    global.fetch.mockResolvedValue({ ok: true, text: async () => JSON.stringify({ content: [] }) })
     await getSentMentorshipRequests()
     expect(global.fetch).toHaveBeenCalledWith('/api/mentorship-requests/sent', {
       headers: { Authorization: 'Bearer test-token-2' }
@@ -52,7 +52,7 @@ describe('API - Mentorship Features', () => {
 
   it('getAllMentors calls /api/users/mentors with auth header', async () => {
     localStorage.getItem.mockReturnValue('test-token-3')
-    global.fetch.mockResolvedValue({ ok: true, json: async () => [] })
+    global.fetch.mockResolvedValue({ ok: true, text: async () => JSON.stringify([]) })
     await getAllMentors()
     expect(global.fetch).toHaveBeenCalledWith('/api/users/mentors', {
       headers: { Authorization: 'Bearer test-token-3' }
@@ -61,7 +61,7 @@ describe('API - Mentorship Features', () => {
 
   it('createMentorshipRequest calls /api/mentorship-requests correctly', async () => {
     localStorage.getItem.mockReturnValue('test-token-4')
-    global.fetch.mockResolvedValue({ ok: true, json: async () => ({ id: 10 }) })
+    global.fetch.mockResolvedValue({ ok: true, text: async () => JSON.stringify({ id: 10 }) })
     const payload = { mentorId: 5, message: 'Hello' }
     const res = await createMentorshipRequest(payload)
 
