@@ -13,7 +13,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,7 +46,7 @@ class NotificationServiceTest {
         notification.setTitle("Mentorship request accepted");
         notification.setBody("Ahmet accepted your mentorship request.");
         notification.setRead(false);
-        notification.setCreatedAt(LocalDateTime.now());
+        notification.setCreatedAt(OffsetDateTime.now(ZoneId.of("Europe/Istanbul")));
     }
 
     @Test
