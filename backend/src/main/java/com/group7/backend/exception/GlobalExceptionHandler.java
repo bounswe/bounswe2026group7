@@ -1,5 +1,9 @@
 package com.group7.backend.exception;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -12,65 +16,97 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<Map<String, String>> handleResourceNotFound(ResourceNotFoundException ex) {
+    public ResponseEntity<Map<String, String>> handleResourceNotFound(ResourceNotFoundException ex,
+                                                                      HttpServletRequest request) {
+        log.warn("Not found: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage());
     }
 
     @ExceptionHandler(ProfileNotVisibleException.class)
-    public ResponseEntity<Map<String, String>> handleProfileNotVisible(ProfileNotVisibleException ex) {
+    public ResponseEntity<Map<String, String>> handleProfileNotVisible(ProfileNotVisibleException ex,
+                                                                       HttpServletRequest request) {
+        log.warn("Forbidden profile access: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
     }
 
     @ExceptionHandler(MentorshipRequestException.class)
-    public ResponseEntity<Map<String, String>> handleMentorshipRequest(MentorshipRequestException ex) {
+    public ResponseEntity<Map<String, String>> handleMentorshipRequest(MentorshipRequestException ex,
+                                                                       HttpServletRequest request) {
+        log.warn("Mentorship request conflict: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
     @ExceptionHandler(OverlappingSlotException.class)
-    public ResponseEntity<Map<String, String>> handleOverlappingSlot(OverlappingSlotException ex) {
+    public ResponseEntity<Map<String, String>> handleOverlappingSlot(OverlappingSlotException ex,
+                                                                     HttpServletRequest request) {
+        log.warn("Overlapping slot conflict: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
     @ExceptionHandler(AuthenticationFailedException.class)
-    public ResponseEntity<Map<String, String>> handleAuthenticationFailed(AuthenticationFailedException ex) {
+    public ResponseEntity<Map<String, String>> handleAuthenticationFailed(AuthenticationFailedException ex,
+                                                                         HttpServletRequest request) {
+        log.warn("Authentication failure: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
     }
 
     @ExceptionHandler(DuplicateEmailException.class)
-    public ResponseEntity<Map<String, String>> handleDuplicateEmail(DuplicateEmailException ex) {
+    public ResponseEntity<Map<String, String>> handleDuplicateEmail(DuplicateEmailException ex,
+                                                                    HttpServletRequest request) {
+        log.warn("Duplicate email conflict: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
     @ExceptionHandler(InvalidTokenException.class)
-    public ResponseEntity<Map<String, String>> handleInvalidToken(InvalidTokenException ex) {
+    public ResponseEntity<Map<String, String>> handleInvalidToken(InvalidTokenException ex,
+                                                                  HttpServletRequest request) {
+        log.warn("Invalid token: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
     }
 
     @ExceptionHandler(RateLimitExceededException.class)
-    public ResponseEntity<Map<String, String>> handleRateLimit(RateLimitExceededException ex) {
+    public ResponseEntity<Map<String, String>> handleRateLimit(RateLimitExceededException ex,
+                                                               HttpServletRequest request) {
+        log.warn("Rate limit exceeded: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", ex.getMessage());
     }
 
     @ExceptionHandler(EmailSendException.class)
-    public ResponseEntity<Map<String, String>> handleEmailSend(EmailSendException ex) {
+    public ResponseEntity<Map<String, String>> handleEmailSend(EmailSendException ex,
+                                                               HttpServletRequest request) {
+        log.error("Email send failure: method={}, path={}", request.getMethod(), request.getRequestURI(), ex);
         return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "Failed to send email. Please try again later.");
     }
 
     @ExceptionHandler(MatchingNotAllowedException.class)
-    public ResponseEntity<Map<String, String>> handleMatchingNotAllowed(MatchingNotAllowedException ex) {
+    public ResponseEntity<Map<String, String>> handleMatchingNotAllowed(MatchingNotAllowedException ex,
+                                                                        HttpServletRequest request) {
+        log.warn("Matching not allowed: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidationErrors(MethodArgumentNotValidException ex) {
+    public ResponseEntity<Map<String, Object>> handleValidationErrors(MethodArgumentNotValidException ex,
+                                                                      HttpServletRequest request) {
         Map<String, String> fieldErrors = new HashMap<>();
         ex.getBindingResult().getFieldErrors().forEach(error ->
                 fieldErrors.put(error.getField(), error.getDefaultMessage())
         );
+        log.warn("Validation failed: method={}, path={}, fieldErrorCount={}",
+                request.getMethod(), request.getRequestURI(), fieldErrors.size());
 
         Map<String, Object> body = Map.of("error", "Validation Failed", "messages", fieldErrors);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleAccessDenied(AccessDeniedException ex,
+                                                                   HttpServletRequest request) {
+        log.warn("Access denied: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", "Access denied");
     }
 
     private ResponseEntity<Map<String, String>> buildErrorResponse(HttpStatus status, String error, String message) {
