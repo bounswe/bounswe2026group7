@@ -31,9 +31,10 @@ const SIDEBAR_LINKS = [
 export default function MainLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { role, logout } = useAuth()
-  const currentPath = location.pathname
 
+
+  const { role, logout, firstName, lastName, profilePhoto } = useAuth()
+  const currentPath = location.pathname
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
 
@@ -55,10 +56,17 @@ export default function MainLayout({ children }) {
     navigate('/login', { replace: true })
   }
 
-  const initials = 'ÖA'
-  const displayName = 'Övgü Su Afşar'
-  const department = 'Computer Engineering'
+  const displayName = [firstName, lastName].filter(Boolean).join(' ') || 'User'
+  const initials = [firstName?.[0], lastName?.[0]].filter(Boolean).join('').toUpperCase() || '?'
   const roleLabel = role === 'MENTOR' ? 'Mentor' : 'Mentee'
+
+  const avatar = profilePhoto
+    ? <img src={profilePhoto} alt={initials} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+    : initials
+
+  const avatarSm = profilePhoto
+    ? <img src={profilePhoto} alt={initials} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+    : initials
 
   return (
     <>
@@ -85,16 +93,16 @@ export default function MainLayout({ children }) {
         </div>
         <div className="nav-right">
           <div className="user-menu-container" ref={dropdownRef} style={{ position: 'relative' }}>
-            <div 
-              className="avatar-sm" 
+            <div
+              className="avatar-sm"
               onClick={() => setDropdownOpen(!dropdownOpen)}
               style={{ cursor: 'pointer' }}
             >
-              {initials}
+              {avatarSm}
             </div>
             {dropdownOpen && (
-              <div 
-                className="profile-dropdown" 
+              <div
+                className="profile-dropdown"
                 style={{
                   position: 'absolute',
                   right: 0,
@@ -108,8 +116,8 @@ export default function MainLayout({ children }) {
                   minWidth: '150px'
                 }}
               >
-                <button 
-                  onClick={() => { setDropdownOpen(false); navigate('/profile'); }}
+                <button
+                  onClick={() => { setDropdownOpen(false); navigate('/profile') }}
                   style={{
                     width: '100%',
                     textAlign: 'left',
@@ -125,7 +133,7 @@ export default function MainLayout({ children }) {
                   Profile
                 </button>
                 <div style={{ height: '1px', backgroundColor: 'var(--border, #e5e7eb)', margin: '4px 0' }} />
-                <button 
+                <button
                   onClick={handleLogout}
                   style={{
                     width: '100%',
@@ -150,9 +158,9 @@ export default function MainLayout({ children }) {
       <div className="main-layout">
         <aside className="sidebar">
           <div className="sidebar-user">
-            <div className="sidebar-avatar">{initials}</div>
+            <div className="sidebar-avatar">{avatar}</div>
             <div className="sidebar-name">{displayName}</div>
-            <div className="sidebar-role">{roleLabel} · {department}</div>
+            <div className="sidebar-role">{roleLabel}</div>
             <div className="sidebar-badge">Active Mentorship: 1</div>
           </div>
           <nav className="sidebar-nav">

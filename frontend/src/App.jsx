@@ -10,6 +10,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ProtectedRoute from './components/ProtectedRoute'
+import UserProfilePage from './pages/UserProfilePage'
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
+          <Route path="/users/:id" element={<UserProfilePage />} />
         </Route>
       </Routes>
     </BrowserRouter>
