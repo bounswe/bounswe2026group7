@@ -2,17 +2,16 @@ package com.group7.backend.service;
 
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.EmailSendException;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
+import com.resend.Resend;
+import com.resend.core.exception.ResendException;
+import com.resend.services.emails.model.CreateEmailOptions;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 @Service
 public class EmailService {
 
-    private final JavaMailSender mailSender;
+    private final Resend resend;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -23,23 +22,24 @@ public class EmailService {
     @Value("${app.mail.from}")
     private String fromAddress;
 
-    public EmailService(JavaMailSender mailSender) {
-        this.mailSender = mailSender;
+    public EmailService(@Value("${resend.api-key}") String apiKey) {
+        this.resend = new Resend(apiKey);
     }
 
     public void sendVerificationEmail(User user, String token) {
         String verifyLink = baseUrl + "/api/auth/verify-email?token=" + token;
         String html = buildVerificationEmailHtml(user.getFirstName(), verifyLink);
 
+        CreateEmailOptions request = CreateEmailOptions.builder()
+                .from(fromAddress)
+                .to(user.getEmail())
+                .subject("Verify your MentorNet account")
+                .html(html)
+                .build();
+
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setFrom(fromAddress);
-            helper.setTo(user.getEmail());
-            helper.setSubject("Verify your Group7 account");
-            helper.setText(html, true);
-            mailSender.send(message);
-        } catch (MessagingException e) {
+            resend.emails().send(request);
+        } catch (ResendException e) {
             throw new EmailSendException("Failed to send verification email", e);
         }
     }
@@ -48,15 +48,16 @@ public class EmailService {
         String resetLink = frontendUrl + "/reset-password?token=" + token;
         String html = buildPasswordResetEmailHtml(user.getFirstName(), resetLink);
 
+        CreateEmailOptions request = CreateEmailOptions.builder()
+                .from(fromAddress)
+                .to(user.getEmail())
+                .subject("Reset your MentorNet password")
+                .html(html)
+                .build();
+
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            helper.setFrom(fromAddress);
-            helper.setTo(user.getEmail());
-            helper.setSubject("Reset your Group7 password");
-            helper.setText(html, true);
-            mailSender.send(message);
-        } catch (MessagingException e) {
+            resend.emails().send(request);
+        } catch (ResendException e) {
             throw new EmailSendException("Failed to send password reset email", e);
         }
     }
@@ -75,7 +76,7 @@ public class EmailService {
                             <td>
                               <h2 style="color: #333333;">Reset your password, %s</h2>
                               <p style="color: #555555; font-size: 16px;">
-                                We received a request to reset the password for your Group7 account.
+                                We received a request to reset the password for your MentorNet account.
                                 Click the button below to choose a new password. This link will expire in 1 hour.
                               </p>
                               <div style="text-align: center; margin: 32px 0;">
@@ -117,7 +118,7 @@ public class EmailService {
                                style="background-color: #ffffff; border-radius: 8px; padding: 40px;">
                           <tr>
                             <td>
-                              <h2 style="color: #333333;">Welcome to Group7, %s!</h2>
+                              <h2 style="color: #333333;">Welcome to MentorNet, %s!</h2>
                               <p style="color: #555555; font-size: 16px;">
                                 Thanks for signing up. Please verify your email address to activate your account.
                                 This link will expire in 24 hours.

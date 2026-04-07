@@ -17,14 +17,6 @@ services:
     networks:
       - group7_net
 
-  mailhog:
-    image: mailhog/mailhog:v1.0.1
-    ports:
-      - "${MAILHOG_UI_PORT:-8025}:8025"
-      - "${MAILHOG_SMTP_PORT:-1025}:1025"
-    networks:
-      - group7_net
-
   backend:
     build: ./backend
     ports:
@@ -36,20 +28,13 @@ services:
       JWT_SECRET: ${JWT_SECRET:-bXlTdXBlclNlY3JldEtleUZvckdyb3VwN0JhY2tlbmRBcHBsaWNhdGlvbjIwMjY=}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
       APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:5173}
-      APP_MAIL_FROM: ${APP_MAIL_FROM:-noreply@group7.com}
+      APP_MAIL_FROM: ${APP_MAIL_FROM:-onboarding@resend.dev}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
-      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-mailhog}
-      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-1025}
-      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
-      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
-      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:-false}
-      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY:-re_test_placeholder}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:8000}
     depends_on:
       db:
         condition: service_healthy
-      mailhog:
-        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q 'UP'"]
       interval: 10s
