@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
     lastName: null,
     profilePhoto: null,
   })
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token')
@@ -26,7 +27,9 @@ export function AuthProvider({ children }) {
           lastName: data.lastName,
           profilePhoto: data.profilePhoto,
         }))
-      }).catch(() => {})
+      }).catch(() => {}).finally(() => setIsLoading(false))
+    } else {
+      setIsLoading(false)
     }
   }, [])
 
@@ -57,7 +60,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ ...auth, login, logout, setProfileData }}>
+    <AuthContext.Provider value={{ ...auth, isLoading, login, logout, setProfileData }}>
       {children}
     </AuthContext.Provider>
   )
