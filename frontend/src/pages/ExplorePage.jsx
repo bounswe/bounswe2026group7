@@ -1,13 +1,136 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
-import { getAllMentors, getMatchingMentors, getMatchingMentees, getSentMentorshipRequests, createMentorshipRequest } from '../services/api'
+import { getAllMentors, getMatchingMentors, getMatchingMentees, getActiveMentorships, getSentMentorshipRequests, createMentorshipRequest } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
 
 const FILTERS = ['All', 'Backend', 'Mobile', 'AI/ML', 'DevOps', 'Frontend', 'Data']
 
+// ── Score ring SVG ────────────────────────────────────────────────────────────
+function ScoreRing({ score, animate }) {
+  const r = 16
+  const circ = 2 * Math.PI * r
+  const dash = animate ? (score / 100) * circ : 0
+  return (
+    <svg width="44" height="44" viewBox="0 0 44 44" style={{ flexShrink: 0 }}>
+      <circle cx="22" cy="22" r={r} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="3" />
+      <circle
+        cx="22" cy="22" r={r}
+        fill="none"
+        stroke="url(#scoreGrad)"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={`${dash} ${circ}`}
+        strokeDashoffset={circ / 4}
+        style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(0.34,1,0.64,1)' }}
+      />
+      <defs>
+        <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#a8f0c6" />
+          <stop offset="100%" stopColor="#34d399" />
+        </linearGradient>
+      </defs>
+      <text x="22" y="27" textAnchor="middle" fontSize="10" fontWeight="700" fill="white">
+        {animate ? score : '–'}
+      </text>
+    </svg>
+  )
+}
+
+// ── Match card (dark, animated) ───────────────────────────────────────────────
+function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequest, onViewProfile }) {
+  const [scoreAnimate, setScoreAnimate] = useState(false)
+
+  useEffect(() => {
+    if (visible) {
+      const t = setTimeout(() => setScoreAnimate(true), rank * 120 + 400)
+      return () => clearTimeout(t)
+    } else {
+      setScoreAnimate(false)
+    }
+  }, [visible, rank])
+
+  const full = mentor.maxMenteeCapacity != null && mentor.currentMenteeCount >= mentor.maxMenteeCapacity
+  const locked = hasActiveMentor && !alreadySent
+  const btnDisabled = alreadySent || hasActiveMentor || full
+  const tags = (mentor.interests || []).slice(0, 3)
+
+  return (
+    <div
+      className="match-card"
+      style={{
+        animationDelay: `${rank * 110}ms`,
+        animationName: visible ? 'matchCardIn' : 'none',
+      }}
+    >
+      <div className="match-rank">#{rank + 1}</div>
+
+      <div className="match-card-header">
+        <div className="match-avatar">{mentor.firstName?.[0] ?? '?'}</div>
+        <div className="match-header-info">
+          <p className="match-name">{mentor.firstName}</p>
+          <p className="match-role">{[mentor.expertise, mentor.affiliation].filter(Boolean).join(' · ')}</p>
+        </div>
+        <ScoreRing score={mentor.matchScore ?? 0} animate={scoreAnimate} />
+      </div>
+
+      {tags.length > 0 && (
+        <div className="match-tags">
+          {tags.map(t => <span key={t} className="match-tag">{t}</span>)}
+        </div>
+      )}
+
+      {mentor.bio && <p className="match-bio">{mentor.bio}</p>}
+
+      <div className="match-actions">
+        <button
+          className={`match-btn-primary${alreadySent ? ' match-btn--sent' : ''}${locked ? ' match-btn--locked' : ''}`}
+          disabled={btnDisabled}
+          onClick={() => !btnDisabled && onRequest(mentor)}
+          title={locked ? 'You already have an active mentor' : undefined}
+        >
+          {alreadySent ? 'Request Sent' : full ? 'At Capacity' : locked ? 'Already Mentored' : 'Send Request'}
+        </button>
+        <button className="match-btn-ghost" onClick={() => onViewProfile(mentor.id)}>
+          View Profile
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── AI button ─────────────────────────────────────────────────────────────────
+function AiMatchButton({ state, matchCount, onClick }) {
+  if (state === 'idle') return (
+    <button className="ai-btn ai-btn--idle" onClick={onClick}>
+      <span className="ai-btn-sparkle">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+      </span>
+      Find my best matches
+      <span className="ai-btn-badge">AI</span>
+    </button>
+  )
+  if (state === 'loading') return (
+    <button className="ai-btn ai-btn--loading" disabled>
+      <span className="ai-spinner-sm" />
+      Analysing your profile…
+    </button>
+  )
+  return (
+    <button className="ai-btn ai-btn--done" onClick={onClick}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+      {matchCount} match{matchCount !== 1 ? 'es' : ''} found · Refresh
+    </button>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function ExplorePage() {
   const navigate = useNavigate()
   const { role } = useAuth()
@@ -15,6 +138,7 @@ export default function ExplorePage() {
 
   const [mentors, setMentors] = useState([])
   const [mentees, setMentees] = useState([])
+  const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(false)
   const [hasActiveMentor, setHasActiveMentor] = useState(false)
   const [atCapacity, setAtCapacity] = useState(false)
@@ -24,15 +148,19 @@ export default function ExplorePage() {
   const [requestSentIds, setRequestSentIds] = useState(new Set())
   const [modalLoading, setModalLoading] = useState(false)
   const [modalError, setModalError] = useState('')
+  const [aiState, setAiState] = useState('idle') // idle | loading | done
+  const [showMatches, setShowMatches] = useState(false)
+  const matchSectionRef = useRef(null)
 
   useEffect(() => {
     async function init() {
       setLoading(true)
       try {
         if (isMentee) {
-          const [mentorData, sentData] = await Promise.allSettled([
+          const [mentorData, sentData, mentorshipsData] = await Promise.allSettled([
             getAllMentors(),
             getSentMentorshipRequests(),
+            getActiveMentorships(),
           ])
           if (mentorData.status === 'fulfilled') setMentors(mentorData.value)
           if (sentData.status === 'fulfilled' && sentData.value) {
@@ -43,14 +171,11 @@ export default function ExplorePage() {
             )
             setRequestSentIds(pending)
           }
-          // Check if mentee already has an active mentor (403 from matching endpoint)
-          try {
-            await getMatchingMentors()
-          } catch (err) {
-            if ((err?.message || '').includes('403')) setHasActiveMentor(true)
+          if (mentorshipsData.status === 'fulfilled') {
+            const active = (mentorshipsData.value || []).find(m => m.status === 'ACTIVE')
+            if (active) setHasActiveMentor(true)
           }
         } else {
-          // Mentor: load candidate mentees (req 1.1.1.2.5, 1.1.2.2)
           try {
             const data = await getMatchingMentees()
             setMentees(Array.isArray(data) ? data : [])
@@ -64,6 +189,25 @@ export default function ExplorePage() {
     }
     init()
   }, [isMentee])
+
+  const handleAiClick = async () => {
+    if (aiState === 'done') {
+      setShowMatches(false)
+      setTimeout(() => setAiState('idle'), 300)
+      return
+    }
+    setAiState('loading')
+    try {
+      const data = await getMatchingMentors()
+      const list = Array.isArray(data) ? data : []
+      setMatches(list)
+      setAiState('done')
+      setShowMatches(true)
+      setTimeout(() => matchSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    } catch {
+      setAiState('idle')
+    }
+  }
 
   const filtered = isMentee
     ? mentors.filter(m => {
@@ -100,30 +244,20 @@ export default function ExplorePage() {
       })
 
   const showToast = (message, type = 'success') => {
-    const notification = document.createElement('div')
-    notification.className = `toast toast-${type}`
-    notification.textContent = message
-    document.body.appendChild(notification)
-    setTimeout(() => notification.remove(), 3500)
+    const el = document.createElement('div')
+    el.className = `toast toast-${type}`
+    el.textContent = message
+    document.body.appendChild(el)
+    setTimeout(() => el.remove(), 3500)
   }
 
-  const openRequestModal = (mentor) => {
-    setSelectedMentor(mentor)
-    setModalError('')
-  }
-
-  const closeRequestModal = () => {
-    if (!modalLoading) {
-      setSelectedMentor(null)
-      setModalError('')
-    }
-  }
+  const openRequestModal = (mentor) => { setSelectedMentor(mentor); setModalError('') }
+  const closeRequestModal = () => { if (!modalLoading) { setSelectedMentor(null); setModalError('') } }
 
   const handleSendRequest = async (message) => {
     if (!selectedMentor || modalLoading) return
     setModalLoading(true)
     setModalError('')
-
     try {
       await createMentorshipRequest({ mentorId: selectedMentor.id, message })
       setRequestSentIds(prev => new Set(prev).add(selectedMentor.id))
@@ -148,13 +282,16 @@ export default function ExplorePage() {
         mentorName={selectedMentor?.firstName}
       />
 
-      <div className="page-header">
+      <div className="page-header" style={{ alignItems: 'flex-start' }}>
         <div>
           <div className="page-title">{isMentee ? 'Find a Mentor' : 'Find Mentees'}</div>
           <div className="page-sub">
             {isMentee ? 'Browse and connect with mentors' : 'Candidate mentees matched to your profile'}
           </div>
         </div>
+        {isMentee && !hasActiveMentor && (
+          <AiMatchButton state={aiState} matchCount={matches.length} onClick={handleAiClick} />
+        )}
       </div>
 
       {hasActiveMentor && (
@@ -162,10 +299,9 @@ export default function ExplorePage() {
           You already have an active mentor. Sending new requests is disabled.
         </div>
       )}
-
       {atCapacity && (
         <div className="active-mentor-banner">
-          You have reached your maximum mentee capacity. You cannot accept new mentees.
+          You have reached your maximum mentee capacity.
         </div>
       )}
 
@@ -183,16 +319,59 @@ export default function ExplorePage() {
 
       <div className="chips">
         {FILTERS.map(f => (
-          <div
-            key={f}
-            className={`chip${activeFilter === f ? ' active' : ''}`}
-            onClick={() => setActiveFilter(f)}
-          >
+          <div key={f} className={`chip${activeFilter === f ? ' active' : ''}`} onClick={() => setActiveFilter(f)}>
             {f}
           </div>
         ))}
       </div>
 
+      {/* ── Best matches section ── */}
+      {isMentee && showMatches && matches.length > 0 && (
+        <div ref={matchSectionRef} className="matches-section">
+          <div className="matches-header">
+            <div className="matches-header-left">
+              <div className="matches-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </div>
+              <div>
+                <p className="matches-title">Your top {matches.length} match{matches.length !== 1 ? 'es' : ''}</p>
+                <p className="matches-sub">Ranked by profile compatibility</p>
+              </div>
+            </div>
+            <button className="matches-dismiss" onClick={() => { setShowMatches(false); setTimeout(() => setAiState('idle'), 300) }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Dismiss
+            </button>
+          </div>
+
+          <div className="matches-grid">
+            {matches.map((m, i) => (
+              <MatchCard
+                key={m.id}
+                mentor={m}
+                rank={i}
+                visible={showMatches}
+                alreadySent={requestSentIds.has(m.id)}
+                hasActiveMentor={hasActiveMentor}
+                onRequest={openRequestModal}
+                onViewProfile={(id) => navigate(`/users/${id}`)}
+              />
+            ))}
+          </div>
+
+          <div className="matches-divider">
+            <span className="matches-divider-line" />
+            <span className="matches-divider-label">All mentors</span>
+            <span className="matches-divider-line" />
+          </div>
+        </div>
+      )}
+
+      {/* ── Regular grid ── */}
       {loading ? (
         <div className="empty-state">Loading...</div>
       ) : filtered.length === 0 ? (
@@ -213,9 +392,7 @@ export default function ExplorePage() {
                     <div className="mc-avatar">{m.firstName?.[0] ?? '?'}</div>
                     <div>
                       <div className="mc-name">{m.firstName}</div>
-                      <div className="mc-sub">
-                        {[m.expertise, m.affiliation].filter(Boolean).join(' · ')}
-                      </div>
+                      <div className="mc-sub">{[m.expertise, m.affiliation].filter(Boolean).join(' · ')}</div>
                     </div>
                   </div>
                   {full && <span className="badge-full">Full</span>}
@@ -229,11 +406,12 @@ export default function ExplorePage() {
                 <div className="mc-footer">
                   <div className="mentor-actions">
                     <button
-                      className={`send-request-btn${alreadySent ? ' sent' : ''}`}
+                      className={`send-request-btn${alreadySent ? ' sent' : ''}${hasActiveMentor && !alreadySent ? ' locked' : ''}`}
                       disabled={btnDisabled}
                       onClick={() => !btnDisabled && openRequestModal(m)}
+                      title={hasActiveMentor && !alreadySent ? 'You already have an active mentor' : undefined}
                     >
-                      {alreadySent ? 'Request Sent' : full ? 'At Capacity' : 'Send Request'}
+                      {alreadySent ? 'Request Sent' : full ? 'At Capacity' : hasActiveMentor ? 'Already Mentored' : 'Send Request'}
                     </button>
                     <button className="view-profile-btn" onClick={() => navigate(`/users/${m.id}`)}>
                       View Profile
@@ -245,7 +423,6 @@ export default function ExplorePage() {
           })}
         </div>
       ) : (
-        /* Mentor view: candidate mentees — first name only, no photo (req 1.1.2.6) */
         <div className="mentors-grid">
           {filtered.map(m => {
             const tags = (m.interests || []).slice(0, 3)
@@ -257,15 +434,11 @@ export default function ExplorePage() {
                     <div className="mc-avatar">{m.firstName?.[0] ?? '?'}</div>
                     <div>
                       <div className="mc-name">{m.firstName}</div>
-                      <div className="mc-sub">
-                        {[m.major, m.careerInterest].filter(Boolean).join(' · ')}
-                      </div>
+                      <div className="mc-sub">{[m.major, m.careerInterest].filter(Boolean).join(' · ')}</div>
                     </div>
                   </div>
                 </div>
-                {m.goals && (
-                  <div className="mc-bio" style={{ fontStyle: 'italic' }}>"{m.goals}"</div>
-                )}
+                {m.goals && <div className="mc-bio" style={{ fontStyle: 'italic' }}>"{m.goals}"</div>}
                 {tags.length > 0 && (
                   <div className="mc-tags">
                     {tags.map(tag => <span className="tag" key={tag}>{tag}</span>)}
@@ -274,9 +447,7 @@ export default function ExplorePage() {
                 )}
                 <div className="mc-footer">
                   <div className="mentor-actions">
-                    <button className="view-profile-btn" onClick={() => navigate(`/users/${m.id}`)}>
-                      View Profile
-                    </button>
+                    <button className="view-profile-btn" onClick={() => navigate(`/users/${m.id}`)}>View Profile</button>
                   </div>
                 </div>
               </div>
