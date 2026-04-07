@@ -132,3 +132,64 @@ export async function getUserById(id) {
   })
   return handleResponse(res)
 }
+
+export async function getNotifications(unreadOnly = false) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/notifications?unreadOnly=${unreadOnly}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function markNotificationAsRead(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/notifications/${id}/read`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function markAllNotificationsAsRead() {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/notifications/read-all`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getReceivedMentorshipRequests(page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorship-requests/received?page=${page}&size=${size}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function acceptMentorshipRequest(id, duration) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorship-requests/${id}/accept`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ duration }),
+  })
+  return handleResponse(res)
+}
+
+export async function rejectMentorshipRequest(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorship-requests/${id}/reject`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getActiveMentorships() {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
