@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
+import Avatar from '../components/Avatar'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
 import { getUserById, createMentorshipRequest, getSentMentorshipRequests } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -134,10 +135,7 @@ export default function UserProfilePage() {
         {/* Left — avatar + summary */}
         <div>
           <div className="profile-card-hero">
-            {avatarSrc
-              ? <img src={avatarSrc} alt={initials} className="profile-avatar-lg" style={{ objectFit: 'cover' }} />
-              : <div className="profile-avatar-lg">{initials}</div>
-            }
+            <Avatar src={avatarSrc} initials={initials} size="lg" className="profile-avatar-lg" />
             <div className="profile-name">{displayName}</div>
             <div className="profile-role">{isMentorProfile ? 'Mentor' : 'Mentee'}</div>
             {isMentorProfile && profile.maxMenteeCapacity != null && (

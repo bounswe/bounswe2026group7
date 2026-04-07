@@ -374,7 +374,193 @@
   background: var(--green-light);
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 13px; color: #fff;
+  overflow: hidden;
+}
+
+/* ── USER DROPDOWN ── */
+.ud-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.ud-trigger {
+  position: relative;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
   cursor: pointer;
+  padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.ud-trigger .av { pointer-events: none; }
+.ud-trigger:hover .av-inner { box-shadow: 0 0 0 3px rgba(106,158,114,0.35); }
+.ud-trigger:active .av-inner { filter: brightness(0.9); }
+
+/* Panel */
+.ud-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 236px;
+  background: #fff;
+  border: 0.5px solid rgba(0,0,0,0.12);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(27,58,45,0.13), 0 2px 8px rgba(0,0,0,0.07);
+  overflow: hidden;
+  transform-origin: top right;
+  transform: scale(0.93) translateY(-6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.14s ease;
+  z-index: 999;
+}
+.ud-panel--open {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Identity */
+.ud-identity {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 14px 12px;
+}
+
+.ud-name {
+  font-size: 14px; font-weight: 600;
+  color: var(--text-dark); line-height: 1.2;
+}
+.ud-sub {
+  font-size: 11.5px; color: var(--text-muted);
+  margin-top: 3px;
+  display: flex; align-items: center; gap: 5px;
+}
+.ud-sub-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green-light);
+  flex-shrink: 0;
+}
+
+/* Stats */
+.ud-stats {
+  display: flex;
+  margin: 0 12px 12px;
+  background: var(--green-bg);
+  border-radius: 9px;
+  overflow: hidden;
+  border: 0.5px solid var(--green-pale);
+}
+.ud-stat {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 10px 0; gap: 2px;
+}
+.ud-stat--sep { border-left: 0.5px solid var(--green-pale); }
+.ud-stat-num {
+  font-size: 17px; font-weight: 700;
+  color: var(--text-dark); line-height: 1;
+}
+.ud-stat-lbl {
+  font-size: 10px; color: var(--green-mid);
+  font-weight: 500; letter-spacing: 0.02em;
+}
+
+/* Divider */
+.ud-divider { height: 0.5px; background: rgba(0,0,0,0.07); }
+
+/* Menu items */
+.ud-menu { padding: 5px 0; }
+.ud-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 14px;
+  font-size: 13.5px; font-weight: 450;
+  color: var(--text-dark);
+  background: none; border: none;
+  cursor: pointer; text-align: left;
+  transition: background 0.1s;
+  font-family: 'DM Sans', sans-serif;
+}
+.ud-item:hover { background: var(--green-bg); }
+.ud-item-icon {
+  display: flex; align-items: center;
+  color: var(--text-muted); flex-shrink: 0;
+}
+.ud-item--danger { color: #c0392b; }
+.ud-item--danger:hover { background: #fdf2f2; }
+.ud-item--danger .ud-item-icon { color: #c0392b; opacity: 0.8; }
+
+/* ── AVATAR COMPONENT ── */
+.av {
+  position: relative;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* Sizes */
+.av--sm  { width: 36px;  height: 36px; }
+.av--md  { width: 44px;  height: 44px; }
+.av--lg  { width: 90px;  height: 90px; }
+
+/* Inner circle — clips photo, gradient bg for initials */
+.av-inner {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: linear-gradient(135deg, #2e5438 0%, #4a7a52 100%);
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.92);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.av--sm  .av-inner { font-size: 13px; }
+.av--md  .av-inner { font-size: 16px; }
+.av--lg  .av-inner { font-size: 32px; }
+.av-inner img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Status ring */
+.av-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(106,158,114,0.5);
+  pointer-events: none;
+}
+.av--online .av-ring {
+  border-color: rgba(76,175,118,0.7);
+  animation: av-ring-pulse 2.8s ease-in-out infinite;
+}
+.av--away .av-ring {
+  border-color: rgba(214,162,50,0.5);
+  animation: none;
+}
+@keyframes av-ring-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50%       { opacity: 0.25; transform: scale(1.08); }
+}
+
+/* Status dot */
+.av-dot {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+}
+.av--sm  .av-dot { width: 9px;  height: 9px;  bottom: 1px; right: 1px; border-width: 1.5px; }
+.av--md  .av-dot { width: 10px; height: 10px; bottom: 1px; right: 1px; border-width: 2px; }
+.av--lg  .av-dot { width: 16px; height: 16px; bottom: 3px; right: 3px; border-width: 3px; }
+.av-dot { border-style: solid; }
+.av-dot--online {
+  background: #4caf76;
+  border-color: #fff;
+  box-shadow: 0 0 0 1px rgba(76,175,118,0.3);
+}
+.av-dot--away {
+  background: #d6a232;
+  border-color: #fff;
+  box-shadow: 0 0 0 1px rgba(214,162,50,0.25);
 }
 
 /* ── MAIN LAYOUT ── */
@@ -396,14 +582,11 @@
   padding: 0 24px 28px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
-.sidebar-avatar {
-  width: 48px; height: 48px; border-radius: 50%;
-  background: var(--green-mid);
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 16px; color: #fff;
-  margin-bottom: 10px;
-}
+.sidebar-avatar { margin-bottom: 10px; }
 .sidebar-name { font-weight: 600; font-size: 15px; }
 .sidebar-role { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .sidebar-badge {
@@ -683,16 +866,7 @@
   bottom: -20px; left: -30px;
   pointer-events: none;
 }
-.profile-avatar-lg {
-  width: 90px; height: 90px; border-radius: 50%;
-  background: rgba(255,255,255,0.18);
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 26px; color: #fff;
-  margin: 0 auto 16px;
-  border: 3px solid rgba(255,255,255,0.38);
-  position: relative; z-index: 1;
-  overflow: hidden;
-}
+.profile-avatar-lg { margin: 0 auto 16px; }
 .profile-name { font-size: 20px; font-weight: 700; position: relative; z-index: 1; }
 .profile-role { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 4px; position: relative; z-index: 1; }
 .profile-badge {
