@@ -187,7 +187,7 @@ export default function AvailabilitySchedulingScreen() {
         <View style={styles.headerTopRow}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.replace('/(tabs)/profile')}
+            onPress={() => router.back()}
           >
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
