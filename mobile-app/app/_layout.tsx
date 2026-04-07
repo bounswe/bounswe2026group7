@@ -20,6 +20,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
 
+          <Stack.Screen name="notifications" options={{ headerShown: false }} />
           <Stack.Screen name="availability-scheduling" options={{ headerShown: false }} />
           <Stack.Screen name="meetings-sessions" options={{ headerShown: false }} />
           <Stack.Screen name="mentorship-requests" options={{ headerShown: false }} />

@@ -49,6 +49,7 @@ export default function HomeScreen() {
 
   const [connections, setConnections] = useState<ConnectionCard[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchMentorships = useCallback(async () => {
     try {
@@ -87,6 +88,9 @@ export default function HomeScreen() {
 
   useEffect(() => {
     fetchMentorships();
+    apiClient.get('/notifications?unreadOnly=true')
+      .then((res) => setUnreadCount(res.data.length))
+      .catch(() => {});
   }, [fetchMentorships]);
 
   const openConnectionProfile = (item: ConnectionCard) => {
@@ -145,10 +149,16 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.notificationButton}
-            onPress={() => console.log('Navigate to Notifications')}
+            onPress={() => router.push('/notifications' as any)}
           >
             <Text style={styles.notificationIcon}>🔔</Text>
-            <View style={styles.notificationDot} />
+            {unreadCount > 0 && (
+              <View style={styles.notificationDot}>
+                {unreadCount < 10 && (
+                  <Text style={styles.notificationDotText}>{unreadCount}</Text>
+                )}
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -274,14 +284,22 @@ const styles = StyleSheet.create({
   notificationIcon: { fontSize: 20 },
   notificationDot: {
     position: 'absolute',
-    top: 10,
-    right: 12,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#E76F51',
     borderWidth: 1.5,
     borderColor: '#456B50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  notificationDotText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   title: {
     color: '#F7F4EE',
