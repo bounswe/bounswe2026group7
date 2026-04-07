@@ -3,7 +3,9 @@ package com.group7.backend.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.config.JwtAuthenticationFilter;
 import com.group7.backend.config.SecurityConfig;
-import com.group7.backend.dto.request.UpdateProfileRequest;
+import com.group7.backend.dto.request.EditProfileRequest;
+import com.group7.backend.dto.request.MentorProfileRequest;
+import com.group7.backend.dto.request.MenteeProfileRequest;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.exception.ProfileNotVisibleException;
@@ -273,13 +275,13 @@ class ProfileControllerTest {
                 .andExpect(jsonPath("$.message").value("Mentees cannot view other mentee profiles"));
     }
 
-    // ── PATCH /api/users/me — Happy paths ───────────────────
+    // ── PATCH /api/users/me/mentor and /me/mentee — Happy paths ───────────────────
 
     @Test
     void updateOwnProfile_mentorFields_returns200() throws Exception {
         mockValidToken(1L, "MENTOR");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setBio("Updated bio");
         request.setExpertise("Full Stack");
         request.setInterests(List.of("AI", "ML", "Cloud"));
@@ -289,9 +291,9 @@ class ProfileControllerTest {
         response.setExpertise("Full Stack");
         response.setInterests(List.of("AI", "ML", "Cloud"));
 
-        when(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).thenReturn(response);
+        when(userService.updateProfile(eq(1L), any(EditProfileRequest.class))).thenReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -305,33 +307,30 @@ class ProfileControllerTest {
     void updateOwnProfile_commonFields_returns200() throws Exception {
         mockValidToken(1L, "MENTOR");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setFirstName("NewFirst");
         request.setLastName("NewLast");
-        request.setProfilePhoto("https://example.com/new-photo.jpg");
 
         MentorResponse response = buildMentorResponse();
         response.setFirstName("NewFirst");
         response.setLastName("NewLast");
-        response.setProfilePhoto("https://example.com/new-photo.jpg");
 
-        when(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).thenReturn(response);
+        when(userService.updateProfile(eq(1L), any(EditProfileRequest.class))).thenReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.firstName").value("NewFirst"))
-                .andExpect(jsonPath("$.lastName").value("NewLast"))
-                .andExpect(jsonPath("$.profilePhoto").value("https://example.com/new-photo.jpg"));
+                .andExpect(jsonPath("$.lastName").value("NewLast"));
     }
 
     @Test
     void updateOwnProfile_menteeFields_returns200() throws Exception {
         mockValidToken(2L, "MENTEE");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MenteeProfileRequest request = new MenteeProfileRequest();
         request.setGoals("Learn distributed systems");
         request.setSkills(List.of("Java", "Spring", "Docker"));
         request.setProfileVisibility(false);
@@ -341,9 +340,9 @@ class ProfileControllerTest {
         response.setSkills(List.of("Java", "Spring", "Docker"));
         response.setProfileVisibility(false);
 
-        when(userService.updateProfile(eq(2L), any(UpdateProfileRequest.class))).thenReturn(response);
+        when(userService.updateProfile(eq(2L), any(EditProfileRequest.class))).thenReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -358,25 +357,25 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MentorResponse response = buildMentorResponse();
-        when(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).thenReturn(response);
+        when(userService.updateProfile(eq(1L), any(EditProfileRequest.class))).thenReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isOk());
     }
 
-    // ── PATCH /api/users/me — Validation errors ─────────────
+    // ── PATCH /api/users/me/mentor — Validation errors ─────────────
 
     @Test
     void updateOwnProfile_blankFirstName_returns400() throws Exception {
         mockValidToken(1L, "MENTOR");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setFirstName("");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -389,10 +388,10 @@ class ProfileControllerTest {
     void updateOwnProfile_blankLastName_returns400() throws Exception {
         mockValidToken(1L, "MENTOR");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setLastName("");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -404,10 +403,10 @@ class ProfileControllerTest {
     void updateOwnProfile_firstNameTooLong_returns400() throws Exception {
         mockValidToken(1L, "MENTOR");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setFirstName("A".repeat(101));
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -419,10 +418,10 @@ class ProfileControllerTest {
     void updateOwnProfile_bioTooLong_returns400() throws Exception {
         mockValidToken(1L, "MENTOR");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setBio("A".repeat(1001));
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -434,10 +433,10 @@ class ProfileControllerTest {
     void updateOwnProfile_negativeMenteeCapacity_returns400() throws Exception {
         mockValidToken(1L, "MENTOR");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setMaxMenteeCapacity(-1);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -449,10 +448,10 @@ class ProfileControllerTest {
     void updateOwnProfile_zeroMentorshipDuration_returns400() throws Exception {
         mockValidToken(1L, "MENTOR");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setMentorshipDuration(0);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -464,12 +463,12 @@ class ProfileControllerTest {
     void updateOwnProfile_multipleValidationErrors_returnsAll() throws Exception {
         mockValidToken(1L, "MENTOR");
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setFirstName("");
         request.setLastName("");
         request.setMaxMenteeCapacity(-5);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -483,10 +482,10 @@ class ProfileControllerTest {
 
     @Test
     void updateOwnProfile_noToken_returns403() throws Exception {
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setBio("Trying to update");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden());
@@ -496,10 +495,10 @@ class ProfileControllerTest {
     void updateOwnProfile_invalidToken_returns403() throws Exception {
         when(jwtService.isTokenValid("bad-token")).thenReturn(false);
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setBio("Trying to update");
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer bad-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -513,9 +512,9 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MentorResponse response = buildMentorResponse();
-        when(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).thenReturn(response);
+        when(userService.updateProfile(eq(1L), any(EditProfileRequest.class))).thenReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"bio\": \"Just updating bio\"}"))
@@ -530,9 +529,9 @@ class ProfileControllerTest {
 
         MentorResponse response = buildMentorResponse();
         response.setFirstName("A");
-        when(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).thenReturn(response);
+        when(userService.updateProfile(eq(1L), any(EditProfileRequest.class))).thenReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"firstName\": \"A\"}"))
@@ -547,9 +546,9 @@ class ProfileControllerTest {
         String name100 = "A".repeat(100);
         MentorResponse response = buildMentorResponse();
         response.setFirstName(name100);
-        when(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).thenReturn(response);
+        when(userService.updateProfile(eq(1L), any(EditProfileRequest.class))).thenReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"firstName\": \"" + name100 + "\"}"))
@@ -563,12 +562,12 @@ class ProfileControllerTest {
         String bio1000 = "A".repeat(1000);
         MentorResponse response = buildMentorResponse();
         response.setBio(bio1000);
-        when(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).thenReturn(response);
+        when(userService.updateProfile(eq(1L), any(EditProfileRequest.class))).thenReturn(response);
 
-        UpdateProfileRequest request = new UpdateProfileRequest();
+        MentorProfileRequest request = new MentorProfileRequest();
         request.setBio(bio1000);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -582,10 +581,10 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MentorResponse response = buildMentorResponse();
-        when(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).thenReturn(response);
+        when(userService.updateProfile(eq(1L), any(EditProfileRequest.class))).thenReturn(response);
 
-        // Send fields that don't exist on UpdateProfileRequest — Jackson should ignore them
-        mockMvc.perform(patch("/api/users/me")
+        // Send fields that don't exist on MentorProfileRequest — Jackson should ignore them
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TEST_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\": \"hack@evil.com\", \"passwordHash\": \"stolen\", \"bio\": \"legit update\"}"))
@@ -599,7 +598,7 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MentorResponse mentorResp = buildMentorResponse();
-        when(userService.getAllUsers()).thenReturn(List.of(mentorResp));
+        when(userService.getAllUsersFiltered(1L)).thenReturn(List.of(mentorResp));
 
         mockMvc.perform(get("/api/users")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
