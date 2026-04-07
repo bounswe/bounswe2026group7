@@ -139,7 +139,7 @@ class PhotoUploadControllerTest {
         MentorResponse response = buildMentorResponse("http://localhost:8080/api/uploads/photos/existing.jpg");
         when(userService.updateProfile(eq(1L), any())).thenReturn(response);
 
-        mockMvc.perform(patch("/api/users/me")
+        mockMvc.perform(patch("/api/users/me/mentor")
                         .header("Authorization", "Bearer " + TOKEN)
                         .contentType("application/json")
                         .content("{\"profilePhoto\":\"javascript:alert(1)\",\"bio\":\"test\"}"))
