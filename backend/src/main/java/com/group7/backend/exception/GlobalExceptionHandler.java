@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -86,6 +87,11 @@ public class GlobalExceptionHandler {
                                                                         HttpServletRequest request) {
         log.warn("Matching not allowed: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
+    }
+
+    @ExceptionHandler(AuthorizationDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleAuthorizationDenied(AuthorizationDeniedException ex) {
+        return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", "Access denied");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
