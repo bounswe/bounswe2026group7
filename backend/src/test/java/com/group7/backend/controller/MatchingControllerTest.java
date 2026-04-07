@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -58,24 +60,27 @@ class MatchingControllerTest {
         MentorMatchResponse match = new MentorMatchResponse();
         match.setFirstName("Ahmet");
         match.setMatchScore(10);
-        when(matchingService.getTopMentors(eq(1L), any())).thenReturn(List.of(match));
+        when(matchingService.getTopMentors(eq(1L), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(match)));
 
         mockMvc.perform(get("/api/matching/mentors")
                         .header("Authorization", "Bearer mentee-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].firstName").value("Ahmet"))
-                .andExpect(jsonPath("$[0].matchScore").value(10));
+                .andExpect(jsonPath("$.content[0].firstName").value("Ahmet"))
+                .andExpect(jsonPath("$.content[0].matchScore").value(10))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test
     void getTopMentorsWithKeywordReturns200() throws Exception {
         mockValidMenteeJwt("mentee-token", 1L);
-        when(matchingService.getTopMentors(eq(1L), eq("java"))).thenReturn(List.of());
+        when(matchingService.getTopMentors(eq(1L), eq("java"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/matching/mentors?keyword=java")
                         .header("Authorization", "Bearer mentee-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
+                .andExpect(jsonPath("$.content").isArray());
     }
 
     @Test
@@ -96,7 +101,7 @@ class MatchingControllerTest {
     @Test
     void getTopMentorsReturns403WhenAlreadyHasMentor() throws Exception {
         mockValidMenteeJwt("mentee-token", 1L);
-        when(matchingService.getTopMentors(eq(1L), any()))
+        when(matchingService.getTopMentors(eq(1L), any(), any(Pageable.class)))
                 .thenThrow(new com.group7.backend.exception.MatchingNotAllowedException(
                         "You already have an active mentor"));
 
@@ -113,24 +118,27 @@ class MatchingControllerTest {
         MenteeCandidateResponse candidate = new MenteeCandidateResponse();
         candidate.setFirstName("Elif");
         candidate.setMajor("Computer Science");
-        when(matchingService.getCandidateMentees(eq(2L), any())).thenReturn(List.of(candidate));
+        when(matchingService.getCandidateMentees(eq(2L), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(candidate)));
 
         mockMvc.perform(get("/api/matching/mentees")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].firstName").value("Elif"))
-                .andExpect(jsonPath("$[0].major").value("Computer Science"));
+                .andExpect(jsonPath("$.content[0].firstName").value("Elif"))
+                .andExpect(jsonPath("$.content[0].major").value("Computer Science"))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test
     void getCandidateMenteesWithKeywordReturns200() throws Exception {
         mockValidMentorJwt("mentor-token", 2L);
-        when(matchingService.getCandidateMentees(eq(2L), eq("java"))).thenReturn(List.of());
+        when(matchingService.getCandidateMentees(eq(2L), eq("java"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/matching/mentees?keyword=java")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
+                .andExpect(jsonPath("$.content").isArray());
     }
 
     @Test
@@ -151,7 +159,7 @@ class MatchingControllerTest {
     @Test
     void getCandidateMenteesReturns403WhenAtCapacity() throws Exception {
         mockValidMentorJwt("mentor-token", 2L);
-        when(matchingService.getCandidateMentees(eq(2L), any()))
+        when(matchingService.getCandidateMentees(eq(2L), any(), any(Pageable.class)))
                 .thenThrow(new com.group7.backend.exception.MatchingNotAllowedException(
                         "You have reached your maximum mentee capacity"));
 
@@ -163,7 +171,7 @@ class MatchingControllerTest {
     @Test
     void getCandidateMenteesReturns404WhenMentorNotFound() throws Exception {
         mockValidMentorJwt("mentor-token", 2L);
-        when(matchingService.getCandidateMentees(eq(2L), any()))
+        when(matchingService.getCandidateMentees(eq(2L), any(), any(Pageable.class)))
                 .thenThrow(new com.group7.backend.exception.ResourceNotFoundException("Mentor not found"));
 
         mockMvc.perform(get("/api/matching/mentees")
@@ -172,15 +180,17 @@ class MatchingControllerTest {
     }
 
     @Test
-    void getCandidateMenteesReturnsEmptyArrayWhenNoCandidates() throws Exception {
+    void getCandidateMenteesReturnsEmptyPageWhenNoCandidates() throws Exception {
         mockValidMentorJwt("mentor-token", 2L);
-        when(matchingService.getCandidateMentees(eq(2L), any())).thenReturn(List.of());
+        when(matchingService.getCandidateMentees(eq(2L), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/matching/mentees")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$").isEmpty());
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test
@@ -192,19 +202,20 @@ class MatchingControllerTest {
         candidate.setMajor("CS");
         candidate.setInterests(List.of("AI"));
         candidate.setSkills(List.of("Java"));
-        when(matchingService.getCandidateMentees(eq(2L), any())).thenReturn(List.of(candidate));
+        when(matchingService.getCandidateMentees(eq(2L), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(candidate)));
 
         mockMvc.perform(get("/api/matching/mentees")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].firstName").value("Elif"))
-                .andExpect(jsonPath("$[0].goals").value("Learn AI"))
-                .andExpect(jsonPath("$[0].interests[0]").value("AI"))
-                .andExpect(jsonPath("$[0].skills[0]").value("Java"))
-                .andExpect(jsonPath("$[0].lastName").doesNotExist())
-                .andExpect(jsonPath("$[0].profilePhoto").doesNotExist())
-                .andExpect(jsonPath("$[0].email").doesNotExist())
-                .andExpect(jsonPath("$[0].passwordHash").doesNotExist());
+                .andExpect(jsonPath("$.content[0].firstName").value("Elif"))
+                .andExpect(jsonPath("$.content[0].goals").value("Learn AI"))
+                .andExpect(jsonPath("$.content[0].interests[0]").value("AI"))
+                .andExpect(jsonPath("$.content[0].skills[0]").value("Java"))
+                .andExpect(jsonPath("$.content[0].lastName").doesNotExist())
+                .andExpect(jsonPath("$.content[0].profilePhoto").doesNotExist())
+                .andExpect(jsonPath("$.content[0].email").doesNotExist())
+                .andExpect(jsonPath("$.content[0].passwordHash").doesNotExist());
     }
 
     @Test
@@ -214,20 +225,22 @@ class MatchingControllerTest {
         c1.setFirstName("Elif");
         MenteeCandidateResponse c2 = new MenteeCandidateResponse();
         c2.setFirstName("Ayse");
-        when(matchingService.getCandidateMentees(eq(2L), any())).thenReturn(List.of(c1, c2));
+        when(matchingService.getCandidateMentees(eq(2L), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(c1, c2)));
 
         mockMvc.perform(get("/api/matching/mentees")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].firstName").value("Elif"))
-                .andExpect(jsonPath("$[1].firstName").value("Ayse"));
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].firstName").value("Elif"))
+                .andExpect(jsonPath("$.content[1].firstName").value("Ayse"))
+                .andExpect(jsonPath("$.totalElements").value(2));
     }
 
     @Test
     void getCandidateMenteesCapacityErrorResponseFormat() throws Exception {
         mockValidMentorJwt("mentor-token", 2L);
-        when(matchingService.getCandidateMentees(eq(2L), any()))
+        when(matchingService.getCandidateMentees(eq(2L), any(), any(Pageable.class)))
                 .thenThrow(new com.group7.backend.exception.MatchingNotAllowedException(
                         "You have reached your maximum mentee capacity"));
 

@@ -11,6 +11,9 @@ import com.group7.backend.repository.AvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
 import com.group7.backend.repository.MentorRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,7 +44,7 @@ public class MatchingService {
     }
 
     @Transactional(readOnly = true)
-    public List<MentorMatchResponse> getTopMentors(Long menteeId, String keyword) {
+    public Page<MentorMatchResponse> getTopMentors(Long menteeId, String keyword, Pageable pageable) {
         Mentee mentee = menteeRepository.findById(menteeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Mentee not found"));
 
@@ -54,21 +57,20 @@ public class MatchingService {
         List<MentorMatchResponse> matches = mentors.stream()
                 .filter(m -> m.getCurrentMenteeCount() < m.getMaxMenteeCapacity())
                 .filter(m -> matchesKeyword(m, keyword))
-            .map(m -> MentorMatchResponse.from(m,
-                calculateScore(m, mentee) + calculateAvailabilityScore(m.getId(), mentee.getId())))
+                .map(m -> MentorMatchResponse.from(m,
+                        calculateScore(m, mentee) + calculateAvailabilityScore(m.getId(), mentee.getId())))
                 .sorted(Comparator.comparingInt(MentorMatchResponse::getMatchScore).reversed())
-                .limit(5)
                 .toList();
 
         if (!matches.isEmpty()) {
             notificationEventPublisher.publishMatchFound(menteeId, matches.get(0).getFirstName());
         }
 
-        return matches;
+        return paginateList(matches, pageable);
     }
 
     @Transactional(readOnly = true)
-    public List<MenteeCandidateResponse> getCandidateMentees(Long mentorId, String keyword) {
+    public Page<MenteeCandidateResponse> getCandidateMentees(Long mentorId, String keyword, Pageable pageable) {
         Mentor mentor = mentorRepository.findById(mentorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Mentor not found"));
 
@@ -89,7 +91,7 @@ public class MatchingService {
             notificationEventPublisher.publishMatchFound(mentorId, candidates.get(0).getFirstName());
         }
 
-        return candidates;
+        return paginateList(candidates, pageable);
     }
 
     boolean matchesMentorPreferences(Mentor mentor, Mentee mentee) {
@@ -259,5 +261,14 @@ public class MatchingService {
 
     private List<String> nullSafe(List<String> list) {
         return list == null ? Collections.emptyList() : list;
+    }
+
+    private <T> Page<T> paginateList(List<T> list, Pageable pageable) {
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), list.size());
+        List<T> pageContent = start >= list.size()
+                ? List.of()
+                : list.subList(start, end);
+        return new PageImpl<>(pageContent, pageable, list.size());
     }
 }
