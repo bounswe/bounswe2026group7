@@ -11,6 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 8000,
+    allowedHosts: ['mymentornet.org', 'www.mymentornet.org'],
     proxy: {
       '/api': {
         target: process.env.VITE_BACKEND_URL || 'http://localhost:8080',
