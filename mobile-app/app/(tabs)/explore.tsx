@@ -62,7 +62,7 @@ function MenteeExploreContent() {
     const fetchMentors = async () => {
       try {
         const res = await apiClient.get('/users/mentors');
-        const data: any[] = res.data;
+        const data: any[] = res.data.content ?? res.data;
 
         const mappedMentors = data.map((m: any) => {
           const fullName = m.lastName ? `${m.firstName} ${m.lastName}` : m.firstName;
