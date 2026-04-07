@@ -13,6 +13,7 @@
       "bundleIdentifier": "com.anonymous.mobile-app"
     },
     "android": {
+      "package": "com.group7.mobileapp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -40,7 +41,13 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you set a profile picture."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
