@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/matching")
 @Tag(name = "Matching", description = "Matching endpoints for mentors and mentees")
@@ -52,6 +54,22 @@ public class MatchingController {
         Long menteeId = (Long) authentication.getCredentials();
         Pageable pageable = clampPageable(page, size);
         return ResponseEntity.ok(matchingService.getTopMentors(menteeId, keyword, pageable));
+    }
+
+    @GetMapping("/mentors/all")
+    @PreAuthorize("hasRole('MENTEE')")
+    @Operation(summary = "Get all mentor matches (unpaginated)",
+            description = "Returns all ranked mentors as a plain list. Use /mentors for paginated results.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Ranked mentor list"),
+            @ApiResponse(responseCode = "403", description = "Not a mentee, or mentee already has an active mentor", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentee profile not found", content = @Content)
+    })
+    public ResponseEntity<List<MentorMatchResponse>> getTopMentorsUnpaginated(
+            @Parameter(description = "Optional keyword to filter mentors") @RequestParam(required = false) String keyword,
+            Authentication authentication) {
+        Long menteeId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(matchingService.getTopMentorsList(menteeId, keyword));
     }
 
     @GetMapping("/mentees")

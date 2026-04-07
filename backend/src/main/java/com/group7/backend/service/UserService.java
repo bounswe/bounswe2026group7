@@ -16,6 +16,8 @@ import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,6 +61,13 @@ public class UserService {
     public Page<MentorResponse> getAllMentors(Pageable pageable) {
         return mentorRepository.findAll(pageable)
                 .map(MentorResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorResponse> getAllMentorsList() {
+        return mentorRepository.findAll().stream()
+                .map(MentorResponse::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)

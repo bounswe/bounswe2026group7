@@ -157,7 +157,7 @@ export default function ProfilePage() {
         }),
       }
 
-      const updated = await updateOwnProfile(payload, role)
+      const updated = await updateOwnProfile(payload)
       setProfileData(updated.firstName, updated.lastName, updated.profilePhoto)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
