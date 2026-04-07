@@ -21,6 +21,8 @@ services:
       VERIFICATION_RESEND_MAX_PER_HOUR: ${VERIFICATION_RESEND_MAX_PER_HOUR:-3}
       PASSWORD_RESET_TOKEN_EXPIRY_HOURS: ${PASSWORD_RESET_TOKEN_EXPIRY_HOURS:-1}
       PASSWORD_RESET_MAX_REQUESTS_PER_HOUR: ${PASSWORD_RESET_MAX_REQUESTS_PER_HOUR:-5}
+    volumes:
+      - uploads_data:/app/uploads
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q 'UP'"]
       interval: 10s
@@ -40,6 +42,9 @@ services:
         condition: service_healthy
     networks:
       - group7_net
+
+volumes:
+  uploads_data:
 
 networks:
   group7_net:

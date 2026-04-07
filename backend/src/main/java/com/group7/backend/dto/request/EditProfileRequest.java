@@ -1,7 +1,6 @@
 package com.group7.backend.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
@@ -20,8 +19,5 @@ public class EditProfileRequest {
     @Schema(description = "Last name", example = "Sarioglu")
     private String lastName;
 
-    @Size(max = 2048, message = "Profile photo URL must not exceed 2048 characters")
-    @Pattern(regexp = "^https?://.*", message = "Profile photo must be a valid HTTP(S) URL")
-    @Schema(description = "Profile photo URL", example = "https://example.com/photo.jpg")
-    private String profilePhoto;
+    // profilePhoto is set exclusively via POST /api/users/me/photo
 }

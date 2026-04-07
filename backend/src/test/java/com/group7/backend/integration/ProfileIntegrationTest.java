@@ -319,7 +319,6 @@ class ProfileIntegrationTest {
         MenteeProfileRequest update = new MenteeProfileRequest();
         update.setFirstName("New");
         update.setLastName("FullName");
-        update.setProfilePhoto("https://example.com/avatar.jpg");
 
         mockMvc.perform(patch("/api/users/me/mentee")
                         .header("Authorization", "Bearer " + token)
@@ -327,8 +326,7 @@ class ProfileIntegrationTest {
                         .content(objectMapper.writeValueAsString(update)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.firstName").value("New"))
-                .andExpect(jsonPath("$.lastName").value("FullName"))
-                .andExpect(jsonPath("$.profilePhoto").value("https://example.com/avatar.jpg"));
+                .andExpect(jsonPath("$.lastName").value("FullName"));
     }
 
     // ── Partial update behavior ─────────────────────────────
