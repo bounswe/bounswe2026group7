@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 
 export default function OnboardingScreen() {
   return (
@@ -15,9 +15,11 @@ export default function OnboardingScreen() {
 
       <View style={styles.centerContent}>
         <View style={styles.iconBox}>
-          <View style={styles.playCircle}>
-            <Text style={styles.playIcon}>▶</Text>
-          </View>
+          <Image
+            source={require('../assets/images/splash-icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
 
         <Text style={styles.title}>
@@ -116,28 +118,15 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   iconBox: {
-    width: 138,
-    height: 138,
-    borderRadius: 34,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    width: 168,
+    height: 168,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 46,
   },
-  playCircle: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#F5F4F1',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  playIcon: {
-    fontSize: 28,
-    color: '#5F8465',
-    marginLeft: 3,
+  logoImage: {
+    width: 168,
+    height: 168,
   },
   title: {
     color: '#F7F4EE',

@@ -44,15 +44,19 @@ export default function ExploreScreen() {
   const isMentor = role === 'mentor';
 
   if (isMentor) {
-    return <MentorExploreContent />;
+    return <MentorRequestsContent />;
   }
 
   return <MenteeExploreContent />;
 }
 
+const PAGE_SIZE = 5;
+
 function MenteeExploreContent() {
   const [mentors, setMentors] = useState<MentorCard[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(0);
+  const scrollRef = React.useRef<ScrollView>(null);
 
   useEffect(() => {
     const fetchMentors = async () => {
@@ -95,6 +99,14 @@ function MenteeExploreContent() {
     fetchMentors();
   }, []);
 
+  const totalPages = Math.ceil(mentors.length / PAGE_SIZE);
+  const pagedMentors = mentors.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
   const openMentorProfile = (mentor: MentorCard) => {
     router.push({
       pathname: '/mentor-public-profile',
@@ -127,8 +139,8 @@ function MenteeExploreContent() {
       {loading ? (
         <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
       ) : (
-        <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-          {mentors.map((mentor) => (
+        <ScrollView ref={scrollRef} style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+          {pagedMentors.map((mentor) => (
             <View key={mentor.id} style={styles.card}>
               <View style={styles.cardTopRow}>
                 <View style={[styles.avatar, { backgroundColor: mentor.avatarBg }]}>
@@ -161,6 +173,22 @@ function MenteeExploreContent() {
               </View>
             </View>
           ))}
+
+          {totalPages > 1 && (
+            <View style={styles.paginationRow}>
+              {Array.from({ length: totalPages }, (_, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={[styles.pageButton, currentPage === i && styles.pageButtonActive]}
+                  onPress={() => goToPage(i)}
+                >
+                  <Text style={[styles.pageButtonText, currentPage === i && styles.pageButtonTextActive]}>
+                    {i + 1}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </ScrollView>
       )}
     </View>
@@ -179,91 +207,104 @@ type MenteeCard = {
   meetingFreqPref: string;
 };
 
-function MentorExploreContent() {
-  const [mentees, setMentees] = useState<MenteeCard[]>([]);
+const AVATAR_COLORS_LIST = [
+  { bg: '#D6E8DC', text: '#2F563C' },
+  { bg: '#DFD9C9', text: '#66582F' },
+  { bg: '#CCD6E5', text: '#4A5D7A' },
+  { bg: '#E2D1E6', text: '#6D3F72' },
+  { bg: '#F1E1BB', text: '#8A5D12' },
+  { bg: '#D8E5F1', text: '#315A7A' },
+];
+
+const formatTime = (isoString: string) => {
+  const date = new Date(isoString);
+  const diffMs = Date.now() - date.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  return 'Just now';
+};
+
+function MentorRequestsContent() {
+  const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiClient.get('/matching/mentees')
+    apiClient.get('/mentorship-requests/received')
       .then((res) => {
-        const data = res.data;
-        const mapped = data.map((m: any) => ({
-          id: String(m.id),
-          initials: m.firstName.substring(0, 2).toUpperCase(),
-          firstName: m.firstName,
-          major: m.major || '',
-          goals: m.goals || '',
-          careerInterest: m.careerInterest || '',
-          interests: m.interests || [],
-          skills: m.skills || [],
-          meetingFreqPref: m.meetingFreqPref || '',
-        }));
-        setMentees(mapped);
+        const pending = (res.data.content ?? res.data).filter((r: any) => r.status === 'PENDING');
+        setIncomingRequests(pending);
       })
-      .catch((err) => console.error('Mentee fetch error:', err))
+      .catch((err) => console.error('Requests fetch error:', err))
       .finally(() => setLoading(false));
   }, []);
 
-  const AVATAR_COLORS = [
-    { bg: '#D6E8DC', text: '#2F563C' },
-    { bg: '#DFD9C9', text: '#66582F' },
-    { bg: '#CCD6E5', text: '#4A5D7A' },
-    { bg: '#E2D1E6', text: '#6D3F72' },
-    { bg: '#F1E1BB', text: '#8A5D12' },
-    { bg: '#D8E5F1', text: '#315A7A' },
-  ];
+  const openCandidateProfile = (item: any) => {
+    const colors = AVATAR_COLORS_LIST[item.menteeId % AVATAR_COLORS_LIST.length];
+    router.push({
+      pathname: '/request-candidate-profile',
+      params: {
+        requestId: String(item.id),
+        menteeId: String(item.menteeId),
+        menteeFirstName: item.menteeFirstName,
+        hiddenInitial: item.menteeFirstName?.substring(0, 2).toUpperCase(),
+        avatarBg: colors.bg,
+        avatarText: colors.text,
+        time: formatTime(item.createdAt),
+        message: item.message || '',
+      },
+    });
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.fixedHeader}>
         <View style={styles.topCircle} />
-        <Text style={styles.title}>Find a{'\n'}<Text style={styles.titleItalic}>Mentee.</Text></Text>
-        <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput placeholder="Search mentees..." placeholderTextColor="rgba(255,255,255,0.45)" style={styles.searchInput} />
-        </View>
+        <Text style={styles.title}>Mentee{'\n'}<Text style={styles.titleItalic}>Requests.</Text></Text>
       </View>
 
       {loading ? (
         <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
       ) : (
         <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-          {mentees.length === 0 && (
+          {incomingRequests.length === 0 && (
             <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <Text style={{ color: '#9A8F82', fontSize: 15 }}>No candidate mentees found.</Text>
+              <Text style={{ color: '#9A8F82', fontSize: 15 }}>No pending requests.</Text>
             </View>
           )}
-          {mentees.map((mentee, idx) => {
-            const colors = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+          {incomingRequests.map((item, idx) => {
+            const colors = AVATAR_COLORS_LIST[idx % AVATAR_COLORS_LIST.length];
             return (
-              <View key={mentee.id} style={styles.card}>
+              <View key={item.id} style={styles.card}>
                 <View style={styles.cardTopRow}>
                   <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
-                    <Text style={[styles.avatarText, { color: colors.text }]}>{mentee.initials}</Text>
+                    <Text style={[styles.avatarText, { color: colors.text }]}>
+                      {item.menteeFirstName?.substring(0, 2).toUpperCase()}
+                    </Text>
                   </View>
                   <View style={styles.cardInfo}>
-                    <Text style={styles.cardName}>{mentee.firstName}</Text>
-                    <Text style={styles.cardRole}>{mentee.major || 'Student'}</Text>
+                    <Text style={styles.cardName}>{item.menteeFirstName}</Text>
+                    <Text style={styles.cardRole}>{formatTime(item.createdAt)}</Text>
                   </View>
-                  {!!mentee.meetingFreqPref && (
-                    <View style={styles.statusBadge}>
-                      <Text style={styles.statusBadgeText}>{mentee.meetingFreqPref}</Text>
-                    </View>
-                  )}
+                  <View style={[styles.statusBadge, { backgroundColor: '#F1E1BB' }]}>
+                    <Text style={[styles.statusBadgeText, { color: '#8A5D12' }]}>Pending</Text>
+                  </View>
                 </View>
-                <View style={styles.tagsRow}>
-                  {mentee.interests.slice(0, 3).map((tag, i) => (
-                    <View key={i} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>
-                  ))}
-                </View>
-                {!!mentee.goals && (
+                {!!item.message && (
                   <>
                     <View style={styles.divider} />
                     <Text style={{ color: '#7E7368', fontSize: 13, lineHeight: 18 }} numberOfLines={2}>
-                      {mentee.goals}
+                      {item.message}
                     </Text>
                   </>
                 )}
+                <TouchableOpacity
+                  style={[styles.viewButton, { marginTop: 14 }]}
+                  onPress={() => openCandidateProfile(item)}
+                >
+                  <Text style={styles.viewButtonText}>View Profile</Text>
+                </TouchableOpacity>
               </View>
             );
           })}
@@ -819,5 +860,40 @@ const styles = StyleSheet.create({
     color: '#2F563C',
     fontSize: 14,
     fontWeight: '700',
+  },
+
+  paginationRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+
+  pageButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F8F6F2',
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  pageButtonActive: {
+    backgroundColor: '#456B50',
+    borderColor: '#456B50',
+  },
+
+  pageButtonText: {
+    color: '#7E7368',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  pageButtonTextActive: {
+    color: '#F8F6F2',
   },
 });

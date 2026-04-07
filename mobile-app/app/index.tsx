@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Image } from 'react-native';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 
@@ -57,7 +57,11 @@ export default function SplashScreen() {
         ]}
       >
         <View style={styles.logoContainer}>
-          <Text style={styles.logoLetter}>M</Text>
+          <Image
+            source={require('../assets/images/splash-icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
         <Text style={styles.title}>MentorNet</Text>
         <Text style={styles.subtitle}>
@@ -108,26 +112,15 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 32,
-    backgroundColor: '#F8F8F6',
+    width: 124,
+    height: 124,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
   },
-  logoLetter: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: '#456B50',
+  logoImage: {
+    width: 124,
+    height: 124,
   },
   title: {
     fontSize: 42,

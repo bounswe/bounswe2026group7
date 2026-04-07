@@ -1019,8 +1019,9 @@ class ProfileIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        JsonNode users = objectMapper.readTree(result.getResponse().getContentAsString());
-        for (JsonNode user : users) {
+        JsonNode page = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertNotNull(page.get("totalElements"), "Page response should contain totalElements");
+        for (JsonNode user : page.get("content")) {
             assertNull(user.get("passwordHash"), "passwordHash should not be in list response");
         }
     }
@@ -1034,8 +1035,9 @@ class ProfileIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        JsonNode mentors = objectMapper.readTree(result.getResponse().getContentAsString());
-        for (JsonNode mentor : mentors) {
+        JsonNode page = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertNotNull(page.get("totalElements"), "Page response should contain totalElements");
+        for (JsonNode mentor : page.get("content")) {
             assertNull(mentor.get("passwordHash"), "passwordHash should not be in mentors list");
             assertNotNull(mentor.get("role"), "role should be present");
         }
@@ -1051,8 +1053,9 @@ class ProfileIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        JsonNode mentees = objectMapper.readTree(result.getResponse().getContentAsString());
-        for (JsonNode mentee : mentees) {
+        JsonNode page = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertNotNull(page.get("totalElements"), "Page response should contain totalElements");
+        for (JsonNode mentee : page.get("content")) {
             assertNull(mentee.get("passwordHash"), "passwordHash should not be in mentees list");
             assertNotNull(mentee.get("role"), "role should be present");
         }

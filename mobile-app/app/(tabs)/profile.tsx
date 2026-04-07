@@ -135,7 +135,7 @@ async function pickAvatar(): Promise<string | null> {
   return result.assets[0].uri;
 }
 
-const getAvatarStorageKey = (role: AppRole, userId: string) => `${role}AvatarUri:${userId}`;
+const getAvatarStorageKey = (role: AppRole, userId: string) => `${role}AvatarUri_${userId}`;
 
 async function loadCachedAvatar(role: AppRole, userId: string) {
   return SecureStore.getItemAsync(getAvatarStorageKey(role, userId));
@@ -177,8 +177,14 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   const [fullName, setFullName] = useState('');
   const [department, setDepartment] = useState('');
   const [aboutMe, setAboutMe] = useState('');
+  const [goals, setGoals] = useState('');
+  const [careerInterest, setCareerInterest] = useState('');
+  const [meetingFreqPref, setMeetingFreqPref] = useState('');
+  const [profileVisibility, setProfileVisibility] = useState(true);
   const [interestInput, setInterestInput] = useState('');
   const [interests, setInterests] = useState<string[]>([]);
+  const [skillInput, setSkillInput] = useState('');
+  const [skills, setSkills] = useState<string[]>([]);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [sentRequests, setSentRequests] = useState<SentRequest[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
@@ -193,7 +199,12 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
         lastName: fullNameParts.length > 1 ? fullNameParts.slice(1).join(' ') : '',
         major: department,
         backgroundInfo: aboutMe,
-        interests: interests
+        goals,
+        careerInterest,
+        meetingFreqPref: meetingFreqPref || undefined,
+        profileVisibility,
+        interests,
+        skills,
       };
 
       await apiClient.patch('/users/me/mentee', updateData);
@@ -214,7 +225,12 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
         setFullName([data.firstName, data.lastName].filter(Boolean).join(' '));
         setDepartment(data.major || '');
         setAboutMe(data.backgroundInfo || '');
+        setGoals(data.goals || '');
+        setCareerInterest(data.careerInterest || '');
+        setMeetingFreqPref(data.meetingFreqPref || '');
+        if (data.profileVisibility != null) setProfileVisibility(data.profileVisibility);
         if (data.interests) setInterests(data.interests);
+        if (data.skills) setSkills(data.skills);
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
           if (userId) {
@@ -305,20 +321,43 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
           <View style={styles.formCardMentee}>
             <Text style={styles.inputLabel}>Full Name</Text>
             <TextInput style={styles.input} value={fullName} onChangeText={setFullName} />
-            <Text style={styles.inputLabel}>Department</Text>
-            <TextInput style={styles.input} value={department} onChangeText={setDepartment} />
-            <Text style={styles.inputLabel}>About Me</Text>
-            <TextInput style={[styles.input, styles.aboutInput]} value={aboutMe} onChangeText={setAboutMe} multiline />
-            
-            <TokenEditor 
-              label="Interests" 
-              placeholder="Add interest" 
-              values={interests} 
-              inputValue={interestInput} 
-              setInputValue={setInterestInput} 
-              onAdd={() => { if(interestInput) setInterests([...interests, interestInput]); setInterestInput(''); }} 
-              onRemove={(t) => setInterests(interests.filter(i => i !== t))} 
+            <Text style={styles.inputLabel}>Major</Text>
+            <TextInput style={styles.input} value={department} onChangeText={setDepartment} placeholder="e.g. Computer Engineering" placeholderTextColor="#B5ADA3" />
+            <Text style={styles.inputLabel}>Background</Text>
+            <TextInput style={[styles.input, styles.aboutInput]} value={aboutMe} onChangeText={setAboutMe} multiline placeholder="Your educational and professional background..." placeholderTextColor="#B5ADA3" />
+            <Text style={styles.inputLabel}>Goals</Text>
+            <TextInput style={[styles.input, styles.aboutInput]} value={goals} onChangeText={setGoals} multiline placeholder="What do you want to achieve..." placeholderTextColor="#B5ADA3" />
+            <Text style={styles.inputLabel}>Career Interest</Text>
+            <TextInput style={styles.input} value={careerInterest} onChangeText={setCareerInterest} placeholder="e.g. Data Science" placeholderTextColor="#B5ADA3" />
+            <Text style={styles.inputLabel}>Meeting Frequency Preference</Text>
+            <TextInput style={styles.input} value={meetingFreqPref} onChangeText={setMeetingFreqPref} placeholder="e.g. Weekly" placeholderTextColor="#B5ADA3" />
+            <TokenEditor
+              label="Interests"
+              placeholder="Add interest"
+              values={interests}
+              inputValue={interestInput}
+              setInputValue={setInterestInput}
+              onAdd={() => { if (interestInput.trim()) setInterests([...interests, interestInput.trim()]); setInterestInput(''); }}
+              onRemove={(t) => setInterests(interests.filter(i => i !== t))}
             />
+            <TokenEditor
+              label="Skills"
+              placeholder="e.g. JavaScript, Python"
+              values={skills}
+              inputValue={skillInput}
+              setInputValue={setSkillInput}
+              onAdd={() => { if (skillInput.trim()) setSkills([...skills, skillInput.trim()]); setSkillInput(''); }}
+              onRemove={(t) => setSkills(skills.filter(s => s !== t))}
+            />
+            <View style={styles.visibilityRow}>
+              <Text style={styles.inputLabel}>Profile Visibility</Text>
+              <TouchableOpacity
+                style={[styles.toggleButton, profileVisibility && styles.toggleButtonOn]}
+                onPress={() => setProfileVisibility(!profileVisibility)}
+              >
+                <Text style={styles.toggleButtonText}>{profileVisibility ? 'Public' : 'Private'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           <TouchableOpacity style={styles.saveButtonMentee} onPress={handleSave}>
             <Text style={styles.saveButtonText}>Save Changes</Text>
@@ -370,9 +409,16 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
   const [displayName, setDisplayName] = useState('');
   const [title, setTitle] = useState('');
   const [bio, setBio] = useState('');
+  const [expertise, setExpertise] = useState('');
+  const [affiliation, setAffiliation] = useState('');
+  const [mentoringGoals, setMentoringGoals] = useState('');
+  const [preferredMenteeMajor, setPreferredMenteeMajor] = useState('');
+  const [preferredMenteeSkills, setPreferredMenteeSkills] = useState<string[]>([]);
+  const [skillInput, setSkillInput] = useState('');
   const [interests, setInterests] = useState<string[]>([]);
   const [interestInput, setInterestInput] = useState('');
   const [maxMenteeCapacity, setMaxMenteeCapacity] = useState('3');
+  const [mentorshipDuration, setMentorshipDuration] = useState('');
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
   useEffect(() => {
@@ -384,8 +430,14 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
         setDisplayName([data.firstName, data.lastName].filter(Boolean).join(' '));
         setTitle(data.field || '');
         setBio(data.bio || '');
+        setExpertise(data.expertise || '');
+        setAffiliation(data.affiliation || '');
+        setMentoringGoals(data.mentoringGoals || '');
+        setPreferredMenteeMajor(data.preferredMenteeMajor || '');
+        if (data.preferredMenteeSkills) setPreferredMenteeSkills(data.preferredMenteeSkills);
         if (data.interests) setInterests(data.interests);
         if (data.maxMenteeCapacity != null) setMaxMenteeCapacity(String(data.maxMenteeCapacity));
+        if (data.mentorshipDuration != null) setMentorshipDuration(String(data.mentorshipDuration));
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
           if (userId) {
@@ -415,13 +467,20 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
     }
     try {
       const nameParts = displayName.trim().split(' ');
+      const duration = parseInt(mentorshipDuration, 10);
       await apiClient.patch('/users/me/mentor', {
         firstName: nameParts[0],
         lastName: nameParts.length > 1 ? nameParts.slice(1).join(' ') : '',
         field: title,
-        bio: bio,
-        interests: interests,
+        bio,
+        expertise,
+        affiliation,
+        mentoringGoals,
+        preferredMenteeMajor,
+        preferredMenteeSkills,
+        interests,
         maxMenteeCapacity: capacity,
+        ...(mentorshipDuration && !isNaN(duration) ? { mentorshipDuration: duration } : {}),
       });
       Alert.alert('Başarılı', 'Profilin güncellendi!');
     } catch (error: any) {
@@ -463,7 +522,7 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             </View>
           </TouchableOpacity>
           <Text style={styles.name}>{displayName || 'Loading...'}</Text>
-          <Text style={styles.roleText}>{title}</Text>
+          <Text style={styles.roleText}>{title ? `Mentor • ${title}` : 'Mentor'}</Text>
         </View>
 
         <View style={styles.body}>
@@ -471,7 +530,7 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
           <View style={styles.quickActionsRow}>
             <TouchableOpacity
               style={styles.quickActionButton}
-              onPress={() => router.push('/mentorship-requests')}
+              onPress={() => router.push('/(tabs)/explore' as any)}
             >
               <Text style={styles.quickActionIcon}>📋</Text>
               <Text style={styles.quickActionText}>Requests</Text>
@@ -488,10 +547,36 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
           <View style={styles.formCardMentor}>
             <Text style={styles.inputLabel}>Display Name</Text>
             <TextInput style={styles.input} value={displayName} onChangeText={setDisplayName} />
-            <Text style={styles.inputLabel}>Title / Field</Text>
-            <TextInput style={styles.input} value={title} onChangeText={setTitle} />
+            <Text style={styles.inputLabel}>Field</Text>
+            <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="e.g. Computer Science" placeholderTextColor="#B5ADA3" />
+            <Text style={styles.inputLabel}>Expertise</Text>
+            <TextInput style={styles.input} value={expertise} onChangeText={setExpertise} placeholder="e.g. Backend Development" placeholderTextColor="#B5ADA3" />
+            <Text style={styles.inputLabel}>Affiliation</Text>
+            <TextInput style={styles.input} value={affiliation} onChangeText={setAffiliation} placeholder="e.g. Boğaziçi University" placeholderTextColor="#B5ADA3" />
             <Text style={styles.inputLabel}>Bio</Text>
-            <TextInput style={[styles.input, styles.bigInput]} value={bio} onChangeText={setBio} multiline />
+            <TextInput style={[styles.input, styles.bigInput]} value={bio} onChangeText={setBio} multiline placeholder="Short bio about yourself..." placeholderTextColor="#B5ADA3" />
+            <Text style={styles.inputLabel}>Mentoring Goals</Text>
+            <TextInput style={[styles.input, styles.bigInput]} value={mentoringGoals} onChangeText={setMentoringGoals} multiline placeholder="What do you want to help mentees achieve..." placeholderTextColor="#B5ADA3" />
+            <Text style={styles.inputLabel}>Preferred Mentee Major</Text>
+            <TextInput style={styles.input} value={preferredMenteeMajor} onChangeText={setPreferredMenteeMajor} placeholder="e.g. Computer Engineering" placeholderTextColor="#B5ADA3" />
+            <TokenEditor
+              label="Preferred Mentee Skills"
+              placeholder="e.g. Java, Python"
+              values={preferredMenteeSkills}
+              inputValue={skillInput}
+              setInputValue={setSkillInput}
+              onAdd={() => { if (skillInput.trim()) setPreferredMenteeSkills([...preferredMenteeSkills, skillInput.trim()]); setSkillInput(''); }}
+              onRemove={(t) => setPreferredMenteeSkills(preferredMenteeSkills.filter(s => s !== t))}
+            />
+            <TokenEditor
+              label="Interests"
+              placeholder="Add interest"
+              values={interests}
+              inputValue={interestInput}
+              setInputValue={setInterestInput}
+              onAdd={() => { if (interestInput.trim()) setInterests([...interests, interestInput.trim()]); setInterestInput(''); }}
+              onRemove={(t) => setInterests(interests.filter(i => i !== t))}
+            />
             <Text style={styles.inputLabel}>Max Mentee Capacity</Text>
             <TextInput
               style={styles.input}
@@ -501,14 +586,14 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
               placeholder="e.g. 3"
               placeholderTextColor="#B5ADA3"
             />
-            <TokenEditor
-              label="Interests / Expertise"
-              placeholder="Add expertise"
-              values={interests}
-              inputValue={interestInput}
-              setInputValue={setInterestInput}
-              onAdd={() => { if (interestInput.trim()) setInterests([...interests, interestInput.trim()]); setInterestInput(''); }}
-              onRemove={(t) => setInterests(interests.filter(i => i !== t))}
+            <Text style={styles.inputLabel}>Mentorship Duration (months)</Text>
+            <TextInput
+              style={styles.input}
+              value={mentorshipDuration}
+              onChangeText={setMentorshipDuration}
+              keyboardType="number-pad"
+              placeholder="e.g. 3"
+              placeholderTextColor="#B5ADA3"
             />
           </View>
           <TouchableOpacity style={styles.saveButtonMentor} onPress={handleSave}>
@@ -606,6 +691,26 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#F8F6F2',
     fontSize: 17,
+    fontWeight: '700',
+  },
+  visibilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  toggleButton: {
+    backgroundColor: '#E2DACE',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  toggleButtonOn: {
+    backgroundColor: '#D7E8DA',
+  },
+  toggleButtonText: {
+    color: '#2F563C',
+    fontSize: 13,
     fontWeight: '700',
   },
 });

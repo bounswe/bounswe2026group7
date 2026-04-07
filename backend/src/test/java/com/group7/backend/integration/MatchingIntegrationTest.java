@@ -139,10 +139,11 @@ class MatchingIntegrationTest {
         MvcResult result = mockMvc.perform(get("/api/matching/mentors")
                         .header("Authorization", "Bearer " + menteeToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.content").isArray())
                 .andReturn();
 
-        var matches = objectMapper.readTree(result.getResponse().getContentAsString());
+        var page = objectMapper.readTree(result.getResponse().getContentAsString());
+        var matches = page.get("content");
         assertThat(matches.size()).isGreaterThan(0);
         assertThat(matches.get(0).get("matchScore").asInt()).isGreaterThan(0);
         // lastName should NOT be present in response
@@ -166,7 +167,7 @@ class MatchingIntegrationTest {
         mockMvc.perform(get("/api/matching/mentors")
                         .header("Authorization", "Bearer " + menteeToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isEmpty());
+                .andExpect(jsonPath("$.content").isEmpty());
     }
 
     @Test
@@ -185,13 +186,13 @@ class MatchingIntegrationTest {
         mockMvc.perform(get("/api/matching/mentors?keyword=java")
                         .header("Authorization", "Bearer " + menteeToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isEmpty());
+                .andExpect(jsonPath("$.content").isEmpty());
 
         // keyword "python" should match
         mockMvc.perform(get("/api/matching/mentors?keyword=python")
                         .header("Authorization", "Bearer " + menteeToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0]").exists());
+                .andExpect(jsonPath("$.content[0]").exists());
     }
 
     @Test
@@ -225,7 +226,7 @@ class MatchingIntegrationTest {
     }
 
     @Test
-    void returnsAtMostFiveMentors() throws Exception {
+    void paginationReturnsRequestedPageSize() throws Exception {
         // Register 6 mentors
         for (int i = 1; i <= 6; i++) {
             String email = "mentor6" + i + "@example.com";
@@ -239,13 +240,15 @@ class MatchingIntegrationTest {
 
         String menteeToken = registerAndLogin("mentee6@example.com", false);
 
-        MvcResult result = mockMvc.perform(get("/api/matching/mentors")
+        MvcResult result = mockMvc.perform(get("/api/matching/mentors?page=0&size=3")
                         .header("Authorization", "Bearer " + menteeToken))
                 .andExpect(status().isOk())
                 .andReturn();
 
-        var matches = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertThat(matches.size()).isLessThanOrEqualTo(5);
+        var page = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(page.get("content").size()).isLessThanOrEqualTo(3);
+        assertThat(page.get("totalElements").asInt()).isGreaterThanOrEqualTo(6);
+        assertThat(page.get("totalPages").asInt()).isGreaterThanOrEqualTo(2);
     }
 
     @Test
@@ -309,7 +312,8 @@ class MatchingIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        var matches = objectMapper.readTree(result.getResponse().getContentAsString());
+        var page = objectMapper.readTree(result.getResponse().getContentAsString());
+        var matches = page.get("content");
         assertThat(matches.size()).isGreaterThanOrEqualTo(2);
         assertThat(matches.get(0).get("id").asLong()).isEqualTo(mentorA.getId());
         assertThat(matches.get(0).get("matchScore").asInt())
@@ -343,10 +347,11 @@ class MatchingIntegrationTest {
         MvcResult result = mockMvc.perform(get("/api/matching/mentees")
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.content").isArray())
                 .andReturn();
 
-        var candidates = objectMapper.readTree(result.getResponse().getContentAsString());
+        var page = objectMapper.readTree(result.getResponse().getContentAsString());
+        var candidates = page.get("content");
         assertThat(candidates.size()).isGreaterThan(0);
         assertThat(candidates.get(0).has("lastName")).isFalse();
         assertThat(candidates.get(0).has("profilePhoto")).isFalse();
@@ -374,7 +379,7 @@ class MatchingIntegrationTest {
         mockMvc.perform(get("/api/matching/mentees")
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isEmpty());
+                .andExpect(jsonPath("$.content").isEmpty());
     }
 
     @Test
@@ -399,13 +404,13 @@ class MatchingIntegrationTest {
         mockMvc.perform(get("/api/matching/mentees?keyword=machine")
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0]").exists());
+                .andExpect(jsonPath("$.content[0]").exists());
 
         // keyword "rust" should not match
         mockMvc.perform(get("/api/matching/mentees?keyword=rust")
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isEmpty());
+                .andExpect(jsonPath("$.content").isEmpty());
     }
 
     @Test
@@ -468,7 +473,8 @@ class MatchingIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        var candidates = objectMapper.readTree(result.getResponse().getContentAsString());
+        var page = objectMapper.readTree(result.getResponse().getContentAsString());
+        var candidates = page.get("content");
         assertThat(candidates.size()).isEqualTo(1);
         assertThat(candidates.get(0).get("firstName").asText()).isEqualTo("Test");
     }
@@ -500,8 +506,8 @@ class MatchingIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        var candidates = objectMapper.readTree(result.getResponse().getContentAsString());
-        var candidate = candidates.get(0);
+        var page = objectMapper.readTree(result.getResponse().getContentAsString());
+        var candidate = page.get("content").get(0);
         assertThat(candidate.get("id").asLong()).isPositive();
         assertThat(candidate.get("firstName").asText()).isEqualTo("Test");
         assertThat(candidate.get("goals").asText()).isEqualTo("Learn machine learning");
@@ -560,12 +566,12 @@ class MatchingIntegrationTest {
         mockMvc.perform(get("/api/matching/mentees?keyword=machine")
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0]").exists());
+                .andExpect(jsonPath("$.content[0]").exists());
 
         // uppercase keyword should also match
         mockMvc.perform(get("/api/matching/mentees?keyword=MACHINE")
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0]").exists());
+                .andExpect(jsonPath("$.content[0]").exists());
     }
 }

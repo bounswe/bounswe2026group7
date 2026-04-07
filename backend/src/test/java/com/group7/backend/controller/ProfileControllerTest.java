@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -598,13 +600,15 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MentorResponse mentorResp = buildMentorResponse();
-        when(userService.getAllUsersFiltered(1L)).thenReturn(List.of(mentorResp));
+        when(userService.getAllUsersFiltered(eq(1L), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(mentorResp)));
 
         mockMvc.perform(get("/api/users")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].passwordHash").doesNotExist())
-                .andExpect(jsonPath("$[0].firstName").value("Ayse"));
+                .andExpect(jsonPath("$.content[0].passwordHash").doesNotExist())
+                .andExpect(jsonPath("$.content[0].firstName").value("Ayse"))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test
@@ -612,13 +616,15 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MentorResponse mentorResp = buildMentorResponse();
-        when(userService.getAllMentors()).thenReturn(List.of(mentorResp));
+        when(userService.getAllMentors(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(mentorResp)));
 
         mockMvc.perform(get("/api/users/mentors")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].passwordHash").doesNotExist())
-                .andExpect(jsonPath("$[0].role").value("MENTOR"));
+                .andExpect(jsonPath("$.content[0].passwordHash").doesNotExist())
+                .andExpect(jsonPath("$.content[0].role").value("MENTOR"))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test
@@ -626,12 +632,14 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MenteeResponse menteeResp = buildMenteeResponse();
-        when(userService.getAllMentees()).thenReturn(List.of(menteeResp));
+        when(userService.getAllMentees(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(menteeResp)));
 
         mockMvc.perform(get("/api/users/mentees")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].passwordHash").doesNotExist())
-                .andExpect(jsonPath("$[0].role").value("MENTEE"));
+                .andExpect(jsonPath("$.content[0].passwordHash").doesNotExist())
+                .andExpect(jsonPath("$.content[0].role").value("MENTEE"))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 }
