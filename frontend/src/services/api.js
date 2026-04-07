@@ -106,3 +106,29 @@ export async function createMentorshipRequest({ mentorId, message }) {
   })
   return handleResponse(res)
 }
+
+export async function getOwnProfile() {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/users/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function updateOwnProfile(data) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/users/me`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  })
+  return handleResponse(res)
+}
+
+export async function getUserById(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/users/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}

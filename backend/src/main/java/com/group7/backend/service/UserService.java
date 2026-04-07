@@ -1,6 +1,8 @@
 package com.group7.backend.service;
 
-import com.group7.backend.dto.request.UpdateProfileRequest;
+import com.group7.backend.dto.request.EditProfileRequest;
+import com.group7.backend.dto.request.MenteeProfileRequest;
+import com.group7.backend.dto.request.MentorProfileRequest;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
@@ -39,7 +41,17 @@ public class UserService {
     // ── Existing methods ────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ProfileResponse> getAllUsers() {
+    public List<ProfileResponse> getAllUsersFiltered(Long requesterId) {
+        User requester = userRepository.findById(requesterId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + requesterId));
+
+        // Mentees can only see mentors (not other mentees)
+        if (requester instanceof Mentee) {
+            return mentorRepository.findAll().stream()
+                    .map(m -> (ProfileResponse) MentorResponse.from(m))
+                    .toList();
+        }
+
         return userRepository.findAll().stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -102,7 +114,7 @@ public class UserService {
     }
 
     @Transactional
-    public ProfileResponse updateProfile(Long userId, UpdateProfileRequest request) {
+    public ProfileResponse updateProfile(Long userId, EditProfileRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
@@ -116,10 +128,10 @@ public class UserService {
         }
 
         // Apply role-specific fields
-        if (user instanceof Mentor mentor) {
-            applyMentorFields(mentor, request);
-        } else if (user instanceof Mentee mentee) {
-            applyMenteeFields(mentee, request);
+        if (user instanceof Mentor mentor && request instanceof MentorProfileRequest mentorReq) {
+            applyMentorFields(mentor, mentorReq);
+        } else if (user instanceof Mentee mentee && request instanceof MenteeProfileRequest menteeReq) {
+            applyMenteeFields(mentee, menteeReq);
         }
 
         User saved = userRepository.save(user);
@@ -185,7 +197,7 @@ public class UserService {
         throw new IllegalStateException("Unknown user type: " + user.getClass().getSimpleName());
     }
 
-    private void applyMentorFields(Mentor mentor, UpdateProfileRequest request) {
+    private void applyMentorFields(Mentor mentor, MentorProfileRequest request) {
         if (request.getBio() != null) {
             mentor.setBio(request.getBio());
         }
@@ -218,7 +230,7 @@ public class UserService {
         }
     }
 
-    private void applyMenteeFields(Mentee mentee, UpdateProfileRequest request) {
+    private void applyMenteeFields(Mentee mentee, MenteeProfileRequest request) {
         if (request.getProfileVisibility() != null) {
             mentee.setProfileVisibility(request.getProfileVisibility());
         }

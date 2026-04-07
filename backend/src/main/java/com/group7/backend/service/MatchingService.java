@@ -3,14 +3,18 @@ package com.group7.backend.service;
 import com.group7.backend.dto.response.MenteeCandidateResponse;
 import com.group7.backend.dto.response.MentorMatchResponse;
 import com.group7.backend.entity.Mentee;
+import com.group7.backend.entity.MenteeAvailabilitySlot;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.exception.MatchingNotAllowedException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.AvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeRepository;
+import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
 import com.group7.backend.repository.MentorRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -20,13 +24,19 @@ public class MatchingService {
 
     private final MenteeRepository menteeRepository;
     private final MentorRepository mentorRepository;
+    private final AvailabilitySlotRepository availabilitySlotRepository;
+    private final MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
     private final NotificationEventPublisher notificationEventPublisher;
 
     public MatchingService(MenteeRepository menteeRepository,
                            MentorRepository mentorRepository,
+                           AvailabilitySlotRepository availabilitySlotRepository,
+                           MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository,
                            NotificationEventPublisher notificationEventPublisher) {
         this.menteeRepository = menteeRepository;
         this.mentorRepository = mentorRepository;
+        this.availabilitySlotRepository = availabilitySlotRepository;
+        this.menteeAvailabilitySlotRepository = menteeAvailabilitySlotRepository;
         this.notificationEventPublisher = notificationEventPublisher;
     }
 
@@ -44,7 +54,8 @@ public class MatchingService {
         List<MentorMatchResponse> matches = mentors.stream()
                 .filter(m -> m.getCurrentMenteeCount() < m.getMaxMenteeCapacity())
                 .filter(m -> matchesKeyword(m, keyword))
-                .map(m -> MentorMatchResponse.from(m, calculateScore(m, mentee)))
+            .map(m -> MentorMatchResponse.from(m,
+                calculateScore(m, mentee) + calculateAvailabilityScore(m.getId(), mentee.getId())))
                 .sorted(Comparator.comparingInt(MentorMatchResponse::getMatchScore).reversed())
                 .limit(5)
                 .toList();
@@ -180,6 +191,44 @@ public class MatchingService {
         }
 
         return score;
+    }
+
+    int calculateAvailabilityScore(Long mentorId, Long menteeId) {
+        if (mentorId == null || menteeId == null) {
+            return 0;
+        }
+
+        var mentorSlots = availabilitySlotRepository.findByMentorId(mentorId);
+        var menteeSlots = menteeAvailabilitySlotRepository.findByMenteeId(menteeId);
+
+        if (mentorSlots.isEmpty() || menteeSlots.isEmpty()) {
+            return 0;
+        }
+
+        long overlapMinutes = 0;
+        for (var mentorSlot : mentorSlots) {
+            for (MenteeAvailabilitySlot menteeSlot : menteeSlots) {
+                if (mentorSlot.getDayOfWeek() != menteeSlot.getDayOfWeek()) {
+                    continue;
+                }
+                overlapMinutes += overlapMinutes(
+                        mentorSlot.getStartTime(),
+                        mentorSlot.getEndTime(),
+                        menteeSlot.getStartTime(),
+                        menteeSlot.getEndTime());
+            }
+        }
+
+        return (int) Math.min(12, overlapMinutes / 30);
+    }
+
+    private long overlapMinutes(LocalTime start1, LocalTime end1, LocalTime start2, LocalTime end2) {
+        LocalTime start = start1.isAfter(start2) ? start1 : start2;
+        LocalTime end = end1.isBefore(end2) ? end1 : end2;
+        if (!start.isBefore(end)) {
+            return 0;
+        }
+        return java.time.Duration.between(start, end).toMinutes();
     }
 
     private boolean matchesKeyword(Mentor mentor, String keyword) {

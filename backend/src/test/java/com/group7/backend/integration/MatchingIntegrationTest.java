@@ -6,6 +6,7 @@ import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.repository.MenteeRepository;
+import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
 import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.repository.PasswordResetTokenRepository;
 import com.group7.backend.repository.UserRepository;
@@ -58,11 +59,15 @@ class MatchingIntegrationTest {
     @Autowired
     private MenteeRepository menteeRepository;
 
+        @Autowired
+        private MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
+
     @MockitoBean
     private EmailService emailService;
 
     @BeforeEach
     void cleanDb() {
+                menteeAvailabilitySlotRepository.deleteAll();
         passwordResetTokenRepository.deleteAll();
         verificationTokenRepository.deleteAll();
         userRepository.deleteAll();
@@ -241,6 +246,74 @@ class MatchingIntegrationTest {
 
         var matches = objectMapper.readTree(result.getResponse().getContentAsString());
         assertThat(matches.size()).isLessThanOrEqualTo(5);
+    }
+
+    @Test
+    void availabilityOverlapAffectsRanking() throws Exception {
+        String mentorTokenA = registerAndLogin("overlap_mentor_a@example.com", true);
+        Mentor mentorA = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("overlap_mentor_a@example.com"))
+                .findFirst().orElseThrow();
+        mentorA.setField("Computer Science");
+        mentorA.setExpertise("Java backend");
+        mentorA.setPreferredMenteeMajor("Computer Science");
+        mentorA.setPreferredMenteeSkills(List.of("Java"));
+        mentorA.setInterests(List.of("AI"));
+        mentorA.setMaxMenteeCapacity(3);
+        mentorRepository.save(mentorA);
+
+        String mentorTokenB = registerAndLogin("overlap_mentor_b@example.com", true);
+        Mentor mentorB = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("overlap_mentor_b@example.com"))
+                .findFirst().orElseThrow();
+        mentorB.setField("Computer Science");
+        mentorB.setExpertise("Java backend");
+        mentorB.setPreferredMenteeMajor("Computer Science");
+        mentorB.setPreferredMenteeSkills(List.of("Java"));
+        mentorB.setInterests(List.of("AI"));
+        mentorB.setMaxMenteeCapacity(3);
+        mentorRepository.save(mentorB);
+
+        String menteeToken = registerAndLogin("overlap_mentee@example.com", false);
+        Mentee mentee = menteeRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals("overlap_mentee@example.com"))
+                .findFirst().orElseThrow();
+        mentee.setMajor("Computer Science");
+        mentee.setSkills(List.of("Java"));
+        mentee.setInterests(List.of("AI"));
+        menteeRepository.save(mentee);
+
+        mockMvc.perform(post("/api/availability")
+                        .header("Authorization", "Bearer " + mentorTokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                java.util.Map.of("dayOfWeek", "MONDAY", "startTime", "10:00", "endTime", "12:00"))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/availability")
+                        .header("Authorization", "Bearer " + mentorTokenB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                java.util.Map.of("dayOfWeek", "MONDAY", "startTime", "14:00", "endTime", "16:00"))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/mentee-availability")
+                        .header("Authorization", "Bearer " + menteeToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                java.util.Map.of("dayOfWeek", "MONDAY", "startTime", "10:30", "endTime", "11:30"))))
+                .andExpect(status().isCreated());
+
+        MvcResult result = mockMvc.perform(get("/api/matching/mentors")
+                        .header("Authorization", "Bearer " + menteeToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        var matches = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(matches.size()).isGreaterThanOrEqualTo(2);
+        assertThat(matches.get(0).get("id").asLong()).isEqualTo(mentorA.getId());
+        assertThat(matches.get(0).get("matchScore").asInt())
+                .isGreaterThan(matches.get(1).get("matchScore").asInt());
     }
 
     // ── Candidate mentees (mentor-side) ─────────────────────────────────────

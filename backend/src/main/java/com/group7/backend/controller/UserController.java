@@ -1,6 +1,7 @@
 package com.group7.backend.controller;
 
-import com.group7.backend.dto.request.UpdateProfileRequest;
+import com.group7.backend.dto.request.MenteeProfileRequest;
+import com.group7.backend.dto.request.MentorProfileRequest;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
@@ -17,6 +18,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,7 +36,7 @@ public class UserController {
         this.userService = userService;
     }
 
-    // ── Profile CRUD endpoints ──────────────────────────────
+    // ── Get own profile ─────────────────────────────────────
 
     @GetMapping("/me")
     @Operation(summary = "Get own profile",
@@ -47,27 +49,47 @@ public class UserController {
     })
     public ResponseEntity<ProfileResponse> getOwnProfile(Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
-        ProfileResponse profile = userService.getOwnProfile(userId);
-        return ResponseEntity.ok(profile);
+        return ResponseEntity.ok(userService.getOwnProfile(userId));
     }
 
-    @PatchMapping("/me")
-    @Operation(summary = "Update own profile",
-            description = "Partially updates the authenticated user's profile. "
-                    + "Only non-null fields are applied. "
-                    + "Mentor-specific fields are ignored for mentees and vice versa.")
+    // ── Update profile (role-specific endpoints) ────────────
+
+    @PatchMapping("/me/mentor")
+    @PreAuthorize("hasRole('MENTOR')")
+    @Operation(summary = "Update mentor profile",
+            description = "Partially updates the authenticated mentor's profile. Only non-null fields are applied.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Profile updated",
-                    content = @Content(schema = @Schema(oneOf = {MentorResponse.class, MenteeResponse.class}))),
+                    content = @Content(schema = @Schema(implementation = MentorResponse.class))),
             @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
             @ApiResponse(responseCode = "401", description = "Not authenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Not a mentor", content = @Content),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
-    public ResponseEntity<ProfileResponse> updateOwnProfile(@Valid @RequestBody UpdateProfileRequest request,
-                                                           Authentication authentication) {
+    public ResponseEntity<ProfileResponse> updateMentorProfile(
+            @Valid @RequestBody MentorProfileRequest request,
+            Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
-        ProfileResponse updated = userService.updateProfile(userId, request);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(userService.updateProfile(userId, request));
+    }
+
+    @PatchMapping("/me/mentee")
+    @PreAuthorize("hasRole('MENTEE')")
+    @Operation(summary = "Update mentee profile",
+            description = "Partially updates the authenticated mentee's profile. Only non-null fields are applied.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Profile updated",
+                    content = @Content(schema = @Schema(implementation = MenteeResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Not authenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Not a mentee", content = @Content),
+            @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
+    })
+    public ResponseEntity<ProfileResponse> updateMenteeProfile(
+            @Valid @RequestBody MenteeProfileRequest request,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(userService.updateProfile(userId, request));
     }
 
     // ── Photo upload ─────────────────────────────────────────
@@ -104,31 +126,32 @@ public class UserController {
         return ResponseEntity.ok(updated);
     }
 
-    // ── Existing endpoints ──────────────────────────────────
+    // ── Lookup endpoints ────────────────────────────────────
 
     @GetMapping
-    @Operation(summary = "List users", description = "Returns all user profiles with role-specific fields.")
+    @Operation(summary = "List users",
+            description = "Returns user profiles. Mentees only see mentors; mentors see all users.")
     @ApiResponse(responseCode = "200", description = "List of users",
             content = @Content(array = @ArraySchema(schema = @Schema(oneOf = {MentorResponse.class, MenteeResponse.class}))))
-    public List<ProfileResponse> getAllUsers() {
-        return userService.getAllUsers();
+    public List<ProfileResponse> getAllUsers(Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        return userService.getAllUsersFiltered(requesterId);
     }
 
     @GetMapping("/{id:\\d+}")
-    @Operation(summary = "Get user profile by ID",
-            description = "Returns the profile of the specified user. "
-                    + "Mentees cannot view other mentee profiles.")
+    @Operation(summary = "Get user by ID",
+            description = "Returns the profile of the specified user. Mentees cannot view other mentee profiles.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Profile found",
+            @ApiResponse(responseCode = "200", description = "Profile retrieved",
                     content = @Content(schema = @Schema(oneOf = {MentorResponse.class, MenteeResponse.class}))),
-            @ApiResponse(responseCode = "403", description = "Not allowed to view this profile", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Profile not visible", content = @Content),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
-    public ResponseEntity<ProfileResponse> getUserById(@Parameter(description = "User id") @PathVariable Long id,
-                                                       Authentication authentication) {
+    public ResponseEntity<ProfileResponse> getUserById(
+            @Parameter(description = "User ID") @PathVariable Long id,
+            Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
-        ProfileResponse profile = userService.getProfileById(id, requesterId);
-        return ResponseEntity.ok(profile);
+        return ResponseEntity.ok(userService.getProfileById(id, requesterId));
     }
 
     @GetMapping("/mentors")
@@ -140,24 +163,27 @@ public class UserController {
     }
 
     @GetMapping("/mentees")
-    @Operation(summary = "List mentees", description = "Returns all mentee profiles.")
+    @PreAuthorize("hasRole('MENTOR')")
+    @Operation(summary = "List mentees", description = "Returns all mentee profiles. Mentor-only.")
     @ApiResponse(responseCode = "200", description = "List of mentees",
             content = @Content(array = @ArraySchema(schema = @Schema(implementation = MenteeResponse.class))))
     public List<MenteeResponse> getAllMentees() {
         return userService.getAllMentees();
     }
 
+    // ── Delete ──────────────────────────────────────────────
+
     @DeleteMapping("/{id:\\d+}")
-    @Operation(summary = "Delete user", description = "Deletes the authenticated user's own account. Users can only delete themselves.")
+    @Operation(summary = "Delete own account",
+            description = "Deletes the authenticated user's own account. Users can only delete themselves.")
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "User deleted"),
+            @ApiResponse(responseCode = "204", description = "Account deleted"),
             @ApiResponse(responseCode = "403", description = "Cannot delete another user's account", content = @Content),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
-    public ResponseEntity<Void> deleteUser(@Parameter(description = "User id") @PathVariable Long id,
-                                           Authentication authentication) {
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id, Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
-        if (!requesterId.equals(id)) {
+        if (!id.equals(requesterId)) {
             throw new ProfileNotVisibleException("You can only delete your own account");
         }
         userService.deleteUser(id);

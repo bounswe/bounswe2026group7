@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
 import { getAllMentors, getMatchingMentors, getSentMentorshipRequests, createMentorshipRequest } from '../services/api'
@@ -8,6 +9,7 @@ import '../styles/main.css'
 const FILTERS = ['All', 'Backend', 'Mobile', 'AI/ML', 'DevOps', 'Frontend', 'Data']
 
 export default function ExplorePage() {
+  const navigate = useNavigate()
   const { role } = useAuth()
   const isMentee = role === 'MENTEE'
 
@@ -204,6 +206,12 @@ export default function ExplorePage() {
                         {alreadySent ? 'Request Sent' : atCapacity ? 'At Capacity' : 'Send Request'}
                       </button>
                     )}
+                    <button
+                      className="view-profile-btn"
+                      onClick={() => navigate(`/users/${m.id}`)}
+                    >
+                      View Profile
+                    </button>
                   </div>
                 </div>
               </div>
