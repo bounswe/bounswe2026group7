@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-group7db}
+      POSTGRES_USER: ${POSTGRES_USER:-group7}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-group7pass}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-group7} -d ${POSTGRES_DB:-group7db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - group7_net
+
+  backend:
+    build: ./backend
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-group7db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-group7}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-group7pass}
+      JWT_SECRET: ${JWT_SECRET:-bXlTdXBlclNlY3JldEtleUZvckdyb3VwN0JhY2tlbmRBcHBsaWNhdGlvbjIwMjY=}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:5173}
+      APP_MAIL_FROM: ${APP_MAIL_FROM:-onboarding@resend.dev}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      RESEND_API_KEY: ${RESEND_API_KEY:-re_test_placeholder}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:8000}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - group7_net
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-8000}:8000"
+    environment:
+      VITE_BACKEND_URL: http://backend:8080
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - group7_net
+
+volumes:
+  db_data:
+  uploads_data:
+
+networks:
+  group7_net:

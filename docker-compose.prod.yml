@@ -1,0 +1,50 @@
+services:
+  # No database service — uses DigitalOcean Managed PostgreSQL
+
+  backend:
+    build: ./backend
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      APP_BASE_URL: ${APP_BASE_URL}
+      APP_FRONTEND_URL: ${APP_FRONTEND_URL}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS}
+      APP_MAIL_FROM: ${APP_MAIL_FROM}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      VERIFICATION_TOKEN_EXPIRY_HOURS: ${VERIFICATION_TOKEN_EXPIRY_HOURS:-24}
+      VERIFICATION_RESEND_MAX_PER_HOUR: ${VERIFICATION_RESEND_MAX_PER_HOUR:-3}
+      PASSWORD_RESET_TOKEN_EXPIRY_HOURS: ${PASSWORD_RESET_TOKEN_EXPIRY_HOURS:-1}
+      PASSWORD_RESET_MAX_REQUESTS_PER_HOUR: ${PASSWORD_RESET_MAX_REQUESTS_PER_HOUR:-5}
+    volumes:
+      - uploads_data:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - group7_net
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-80}:8000"
+    environment:
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://backend:8080}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - group7_net
+
+volumes:
+  uploads_data:
+
+networks:
+  group7_net:

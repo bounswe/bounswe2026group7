@@ -1,1 +1,36 @@
 uml-diagrams/
+
+# Backend - Spring Boot
+backend/target/
+backend/*.class
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# notes folder (amin's folder to learn unknown things - please don't touch [-_-]  )
+notes/*
+
+**/node_modules/
+**/node_modules/*
+mentornet-mobile/node_modules/
+mobile-app/node_modules/
+.expo/
+dist/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.env

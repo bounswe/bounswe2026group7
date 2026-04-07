@@ -1,0 +1,3 @@
+ALTER TABLE notifications
+    ALTER COLUMN read_at   TYPE TIMESTAMPTZ USING read_at AT TIME ZONE 'UTC',
+    ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
