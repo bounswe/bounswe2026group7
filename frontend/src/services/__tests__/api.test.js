@@ -26,7 +26,7 @@ describe('API - Mentorship Features', () => {
     })
 
     const mentors = await getMatchingMentors()
-    expect(global.fetch).toHaveBeenCalledWith('/api/matching/mentors', {
+    expect(global.fetch).toHaveBeenCalledWith('/api/matching/mentors/all', {
       headers: { Authorization: 'Bearer test-token' }
     })
     expect(mentors).toEqual([{ id: 1, name: 'Mentor A' }])
@@ -36,7 +36,7 @@ describe('API - Mentorship Features', () => {
     localStorage.getItem.mockReturnValue('test-token')
     global.fetch.mockResolvedValue({ ok: true, text: async () => JSON.stringify([]) })
     await getMatchingMentors('react')
-    expect(global.fetch).toHaveBeenCalledWith('/api/matching/mentors?keyword=react', {
+    expect(global.fetch).toHaveBeenCalledWith('/api/matching/mentors/all?keyword=react', {
       headers: { Authorization: 'Bearer test-token' }
     })
   })
@@ -54,7 +54,7 @@ describe('API - Mentorship Features', () => {
     localStorage.getItem.mockReturnValue('test-token-3')
     global.fetch.mockResolvedValue({ ok: true, text: async () => JSON.stringify([]) })
     await getAllMentors()
-    expect(global.fetch).toHaveBeenCalledWith('/api/users/mentors', {
+    expect(global.fetch).toHaveBeenCalledWith('/api/users/mentors/all', {
       headers: { Authorization: 'Bearer test-token-3' }
     })
   })
