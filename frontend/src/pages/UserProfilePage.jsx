@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
-import { getUserById, createMentorshipRequest, getSentMentorshipRequests } from '../services/api'
+import { getUserById, createMentorshipRequest, getSentMentorshipRequests, getActiveMentorships, getMentorAvailability } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
 
@@ -41,6 +41,8 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const [canSeePhoto, setCanSeePhoto] = useState(false)
+  const [availability, setAvailability] = useState([])
   const [modalVisible, setModalVisible] = useState(false)
   const [requestLoading, setRequestLoading] = useState(false)
   const [requestError, setRequestError] = useState('')
@@ -57,11 +59,25 @@ export default function UserProfilePage() {
         setLoading(false)
       })
 
+    getMentorAvailability(id)
+      .then(data => { if (Array.isArray(data) && data.length > 0) setAvailability(data) })
+      .catch(() => {})
+
     if (isMentee) {
       getSentMentorshipRequests()
         .then(data => {
           const sent = (data.content || []).some(r => String(r.mentorId) === String(id))
           setRequestSent(sent)
+        })
+        .catch(() => {})
+    }
+
+    if (!isMentee) {
+      // Mentor viewing a mentee: only show photo if there's an active mentorship
+      getActiveMentorships()
+        .then(data => {
+          const active = (data || []).some(m => m.status === 'ACTIVE' && String(m.menteeId) === String(id))
+          setCanSeePhoto(active)
         })
         .catch(() => {})
     }
@@ -115,7 +131,7 @@ export default function UserProfilePage() {
     ? [profile.firstName, profile.lastName].filter(Boolean).join(' ')
     : profile.firstName
 
-  const avatarSrc = isMentorProfile ? profile.profilePhoto : null
+  const avatarSrc = isMentorProfile ? profile.profilePhoto : (canSeePhoto ? profile.profilePhoto : null)
 
   return (
     <MainLayout>
@@ -191,6 +207,31 @@ export default function UserProfilePage() {
               <ProfileField label="Mentoring Goals" value={profile.mentoringGoals} />
               <ProfileField label="Preferred Mentee Major" value={profile.preferredMenteeMajor} />
               <ProfileField label="Preferred Mentee Skills" value={profile.preferredMenteeSkills} chips />
+
+              {availability.length > 0 && (
+                <>
+                  <div className="divider" />
+                  <div style={{ marginBottom: '18px' }}>
+                    <div className="section-label" style={{ marginBottom: '10px' }}>Weekly Availability</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {availability.map((slot, i) => {
+                        const fmt = t => {
+                          if (!t) return ''
+                          if (typeof t === 'string') return t.slice(0, 5)
+                          return `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}`
+                        }
+                        const day = slot.dayOfWeek.charAt(0) + slot.dayOfWeek.slice(1).toLowerCase()
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: 'var(--text-mid)' }}>
+                            <span style={{ width: '90px', fontWeight: 500, color: 'var(--text-main)' }}>{day}</span>
+                            <span>{fmt(slot.startTime)} – {fmt(slot.endTime)}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           ) : (
             <>

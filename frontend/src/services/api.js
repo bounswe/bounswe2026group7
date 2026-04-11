@@ -141,7 +141,8 @@ export async function deleteProfilePhoto() {
 
 export async function updateOwnProfile(data, role) {
   const token = localStorage.getItem('auth_token')
-  const res = await fetch(`${BASE_URL}/users/me`, {
+  const endpoint = role === 'MENTOR' ? '/users/me/mentor' : '/users/me/mentee'
+  const res = await fetch(`${BASE_URL}${endpoint}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(data),
@@ -225,6 +226,42 @@ export async function getActiveMentorships() {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentorships`, {
     headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMentorAvailability(mentorId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/availability/${mentorId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function saveMentorAvailability(data) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/availability`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  })
+  return handleResponse(res)
+}
+
+export async function getMenteeAvailability() {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentee-availability`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function saveMenteeAvailability(data) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentee-availability`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
   })
   return handleResponse(res)
 }
