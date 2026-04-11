@@ -1,31 +1,44 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import MainLayout from '../components/MainLayout'
+import { useAuth } from '../context/AuthContext'
+import {
+  getMentorAvailability,
+  saveMentorAvailability,
+  getMenteeAvailability,
+  saveMenteeAvailability,
+} from '../services/api'
 import '../styles/main.css'
 
-const INITIAL_DAYS = [
-  { key: 'Mon', label: 'Mon', start: '09:00', end: '18:00', on: true },
-  { key: 'Tue', label: 'Tue', start: '09:00', end: '18:00', on: true },
-  { key: 'Wed', label: 'Wed', start: '09:00', end: '18:00', on: true },
-  { key: 'Thu', label: 'Thu', start: '09:00', end: '18:00', on: true },
-  { key: 'Fri', label: 'Fri', start: '09:00', end: '18:00', on: true },
-  { key: 'Sat', label: 'Sat', start: '09:00', end: '18:00', on: false },
-  { key: 'Sun', label: 'Sun', start: '09:00', end: '18:00', on: false },
+const DAYS = [
+  { key: 'MONDAY',    label: 'Mon' },
+  { key: 'TUESDAY',   label: 'Tue' },
+  { key: 'WEDNESDAY', label: 'Wed' },
+  { key: 'THURSDAY',  label: 'Thu' },
+  { key: 'FRIDAY',    label: 'Fri' },
+  { key: 'SATURDAY',  label: 'Sat' },
+  { key: 'SUNDAY',    label: 'Sun' },
 ]
 
-const DURATIONS = [
-  { label: '30 min', value: 30 },
-  { label: '45 min', value: 45 },
-  { label: '60 min', value: 60 },
-  { label: '90 min', value: 90 },
-]
+// API returns LocalTime as { hour, minute, second, nano } — convert to "HH:mm"
+function timeObjToStr(t) {
+  if (!t) return '09:00'
+  if (typeof t === 'string') return t.slice(0, 5)
+  return `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`
+}
 
-const USER_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
+function makeDefaultSlots() {
+  return DAYS.map(({ key, label }) => ({
+    key, label,
+    start: '09:00',
+    end: '18:00',
+    on: key !== 'SATURDAY' && key !== 'SUNDAY',
+  }))
+}
 
 function DayRow({ day, onToggle, onTimeChange }) {
   return (
     <div className={`day-row${day.on ? '' : ' off'}`}>
       <div className={`day-chip${day.on ? '' : ' off'}`}>{day.label}</div>
-
       <div className="time-range">
         {day.on ? (
           <>
@@ -34,7 +47,6 @@ function DayRow({ day, onToggle, onTimeChange }) {
               className="time-input"
               value={day.start}
               onChange={e => onTimeChange(day.key, 'start', e.target.value)}
-              title="Start time"
             />
             <span className="time-sep">–</span>
             <input
@@ -42,14 +54,12 @@ function DayRow({ day, onToggle, onTimeChange }) {
               className="time-input"
               value={day.end}
               onChange={e => onTimeChange(day.key, 'end', e.target.value)}
-              title="End time"
             />
           </>
         ) : (
           <span className="time-pill off">Not available</span>
         )}
       </div>
-
       <button
         className={`toggle${day.on ? '' : ' off'}`}
         onClick={() => onToggle(day.key)}
@@ -60,58 +70,106 @@ function DayRow({ day, onToggle, onTimeChange }) {
 }
 
 export default function AvailabilityPage() {
-  const [days, setDays] = useState(INITIAL_DAYS)
-  const [duration, setDuration] = useState(60)
-  const [status, setStatus] = useState(null) // null | 'success' | string (error)
+  const { role, userId } = useAuth()
+  const isMentor = role === 'MENTOR'
+
+  const [slots, setSlots] = useState(makeDefaultSlots())
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState(null)
+
+  useEffect(() => {
+    if (!userId) return
+    setLoading(true)
+    const fetch = isMentor ? getMentorAvailability(userId) : getMenteeAvailability()
+    fetch
+      .then(data => {
+        if (!data || data.length === 0) return
+        // Build map: dayOfWeek → first slot (UI supports one slot per day)
+        const map = {}
+        for (const slot of data) {
+          if (!map[slot.dayOfWeek]) map[slot.dayOfWeek] = slot
+        }
+        setSlots(DAYS.map(({ key, label }) => {
+          const s = map[key]
+          return {
+            key, label,
+            start: s ? timeObjToStr(s.startTime) : '09:00',
+            end:   s ? timeObjToStr(s.endTime)   : '18:00',
+            on: !!s,
+          }
+        }))
+      })
+      .catch(() => {}) // keep defaults on error
+      .finally(() => setLoading(false))
+  }, [isMentor, userId])
 
   function toggleDay(key) {
-    setDays(prev => prev.map(d => d.key === key ? { ...d, on: !d.on } : d))
+    setSlots(prev => prev.map(d => d.key === key ? { ...d, on: !d.on } : d))
     setStatus(null)
   }
 
   function updateTime(key, field, value) {
-    setDays(prev => prev.map(d => d.key === key ? { ...d, [field]: value } : d))
+    setSlots(prev => prev.map(d => d.key === key ? { ...d, [field]: value } : d))
     setStatus(null)
   }
 
   function validate() {
-    for (const d of days) {
+    if (!slots.some(d => d.on)) return 'Please enable at least one day.'
+    for (const d of slots) {
       if (!d.on) continue
       if (!d.start || !d.end) return `${d.label}: start and end time are required.`
       if (d.start >= d.end) return `${d.label}: end time must be after start time.`
     }
-    if (!days.some(d => d.on)) return 'Please enable at least one day.'
     return null
   }
 
-  function handleSave() {
+  async function handleSave() {
     const error = validate()
-    if (error) {
-      setStatus(error)
-      return
-    }
+    if (error) { setStatus(error); return }
 
-    const payload = {
-      timezone: USER_TIMEZONE,
-      sessionDurationMinutes: duration,
-      availability: days
-        .filter(d => d.on)
-        .map(({ key, start, end }) => ({ day: key, start, end })),
+    setSaving(true)
+    setStatus(null)
+    try {
+      const payload = {
+        slots: slots
+          .filter(d => d.on)
+          .map(({ key, start, end }) => ({
+            dayOfWeek: key,
+            startTime: start,
+            endTime: end,
+            recurring: true,
+          })),
+      }
+      if (isMentor) {
+        await saveMentorAvailability(payload)
+      } else {
+        await saveMenteeAvailability(payload)
+      }
+      setStatus('success')
+      setTimeout(() => setStatus(null), 3000)
+    } catch (err) {
+      const msg = err.message || ''
+      if (msg.includes('409') || msg.toLowerCase().includes('overlap')) {
+        setStatus('Overlapping slots or invalid time range.')
+      } else {
+        setStatus(msg || 'Failed to save availability.')
+      }
+    } finally {
+      setSaving(false)
     }
-
-    // TODO: POST payload to backend API
-    console.log('Availability payload:', JSON.stringify(payload, null, 2))
-    setStatus('success')
   }
 
   return (
     <MainLayout>
       <div className="page-header">
         <div>
-          <div className="page-title">Edit Availability</div>
-          <div className="page-sub">Timezone: {USER_TIMEZONE}</div>
+          <div className="page-title">Availability</div>
+          <div className="page-sub">Set your weekly recurring availability</div>
         </div>
-        <button className="action-btn" onClick={handleSave}>Save</button>
+        <button className="action-btn" onClick={handleSave} disabled={saving || loading}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
       </div>
 
       {status === 'success' && (
@@ -120,7 +178,7 @@ export default function AvailabilityPage() {
           border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
           padding: '12px 16px', marginBottom: '24px', fontSize: '14px', fontWeight: 500,
         }}>
-          ✓ Availability saved successfully.
+          Availability saved successfully.
         </div>
       )}
       {status && status !== 'success' && (
@@ -133,13 +191,17 @@ export default function AvailabilityPage() {
         </div>
       )}
 
-      <div className="avail-layout">
-        <div className="card">
+      {loading ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          Loading availability...
+        </div>
+      ) : (
+        <div className="card" style={{ maxWidth: '560px' }}>
           <div className="section-label">Weekly Schedule</div>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-            Toggle days on or off, then click the time fields to adjust your hours.
+            Toggle days on or off and set your available hours. All slots repeat weekly.
           </p>
-          {days.map(d => (
+          {slots.map(d => (
             <DayRow
               key={d.key}
               day={d}
@@ -148,27 +210,7 @@ export default function AvailabilityPage() {
             />
           ))}
         </div>
-
-        <div>
-          <div className="card">
-            <div className="section-label">Session Duration</div>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Default length per mentoring session.
-            </p>
-            <div className="duration-grid">
-              {DURATIONS.map(d => (
-                <div
-                  key={d.value}
-                  className={`dur-btn${duration === d.value ? ' active' : ''}`}
-                  onClick={() => { setDuration(d.value); setStatus(null) }}
-                >
-                  {d.label}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
     </MainLayout>
   )
 }

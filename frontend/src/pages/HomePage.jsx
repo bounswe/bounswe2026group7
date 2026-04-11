@@ -8,7 +8,9 @@ import {
   rejectMentorshipRequest,
   getActiveMentorships,
   getOwnProfile,
+  getUserById,
 } from '../services/api'
+import Avatar from '../components/Avatar'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
 
@@ -28,6 +30,7 @@ export default function HomePage() {
   // ── Mentee state ──────────────────────────────────────────────────────────
   const [hasActiveMentor, setHasActiveMentor] = useState(false)
   const [activeMentorship, setActiveMentorship] = useState(null)
+  const [activeMentorPhoto, setActiveMentorPhoto] = useState(null)
   const [menteeLoading, setMenteeLoading] = useState(true)
 
   // ── Mentor state ──────────────────────────────────────────────────────────
@@ -36,6 +39,8 @@ export default function HomePage() {
   const [mentorStats, setMentorStats] = useState(null)
   const [acceptingId, setAcceptingId] = useState(null)   // request being accepted
   const [selectedDuration, setSelectedDuration] = useState(3)
+  const [menteeProfiles, setMenteeProfiles] = useState({})
+  const [activeMenteePhotos, setActiveMenteePhotos] = useState({})
   const [actionLoading, setActionLoading] = useState(false)
   const [mentorLoading, setMentorLoading] = useState(false)
 
@@ -51,7 +56,11 @@ export default function HomePage() {
         ])
         if (mentorshipsData.status === 'fulfilled') {
           const active = (mentorshipsData.value || []).find(m => m.status === 'ACTIVE')
-          if (active) { setActiveMentorship(active); setHasActiveMentor(true) }
+          if (active) {
+            setActiveMentorship(active)
+            setHasActiveMentor(true)
+            getUserById(active.mentorId).then(p => setActiveMentorPhoto(p?.profilePhoto || null)).catch(() => {})
+          }
         }
         if (matchData.status === 'rejected') {
           const msg = matchData.reason?.message || ''
@@ -76,10 +85,32 @@ export default function HomePage() {
       getOwnProfile(),
     ]).then(([reqs, mentorships, profile]) => {
       if (reqs.status === 'fulfilled') {
-        setReceivedRequests(reqs.value.content || [])
+        const requests = reqs.value.content || []
+        setReceivedRequests(requests)
+        const pending = requests.filter(r => r.status === 'PENDING')
+        if (pending.length > 0) {
+          Promise.allSettled(pending.map(r => getUserById(r.menteeId))).then(results => {
+            const profiles = {}
+            results.forEach((res, i) => {
+              if (res.status === 'fulfilled') profiles[pending[i].menteeId] = res.value
+            })
+            setMenteeProfiles(profiles)
+          })
+        }
       }
       if (mentorships.status === 'fulfilled') {
-        setActiveMentorships(mentorships.value || [])
+        const ms = mentorships.value || []
+        setActiveMentorships(ms)
+        const active = ms.filter(m => m.status === 'ACTIVE')
+        if (active.length > 0) {
+          Promise.allSettled(active.map(m => getUserById(m.menteeId))).then(results => {
+            const photos = {}
+            results.forEach((res, i) => {
+              if (res.status === 'fulfilled') photos[active[i].menteeId] = res.value?.profilePhoto || null
+            })
+            setActiveMenteePhotos(photos)
+          })
+        }
       }
       if (profile.status === 'fulfilled') {
         setMentorStats(profile.value)
@@ -176,7 +207,12 @@ export default function HomePage() {
               <div className="active-mentorship-hero">
                 <div className="amh-glow" />
                 <div className="amh-top">
-                  <div className="amh-avatar">{activeMentorship.mentorFirstName?.[0] ?? '?'}</div>
+                  <div className="amh-avatar">
+                    {activeMentorPhoto
+                      ? <img src={activeMentorPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                      : activeMentorship.mentorFirstName?.[0] ?? '?'
+                    }
+                  </div>
                   <div className="amh-info">
                     <div className="amh-label">Your Mentor</div>
                     <div className="amh-name">{activeMentorship.mentorFirstName}</div>
@@ -271,79 +307,91 @@ export default function HomePage() {
                     No pending requests
                   </div>
                 ) : (
-                  pendingRequests.map(req => (
-                    <div className="request-card" key={req.id}>
-                      <div className="req-header">
-                        <div className="req-avatar">
-                          {req.menteeFirstName?.[0] ?? '?'}
-                        </div>
-                        <div>
-                          {/* Privacy: first name only per req 1.1.2.6 */}
-                          <div className="req-name">{req.menteeFirstName}</div>
-                          <div className="req-time">{timeAgo(req.createdAt)}</div>
-                        </div>
-                      </div>
-                      {req.message && <div className="req-msg">{req.message}</div>}
-
-                      {/* Duration picker shown when accepting this request */}
-                      {acceptingId === req.id ? (
-                        <div className="duration-picker">
-                          <p className="duration-label">Select mentorship duration:</p>
-                          <div className="duration-options">
-                            {[1, 3, 6].map(d => (
-                              <button
-                                key={d}
-                                className={`duration-btn${selectedDuration === d ? ' duration-btn--active' : ''}`}
-                                onClick={() => setSelectedDuration(d)}
-                              >
-                                {d} {d === 1 ? 'month' : 'months'}
-                              </button>
-                            ))}
+                  pendingRequests.map(req => {
+                    const profile = menteeProfiles[req.menteeId]
+                    return (
+                      <div className="request-card" key={req.id}>
+                        <div className="req-header">
+                          <div className="req-avatar">{req.menteeFirstName?.[0] ?? '?'}</div>
+                          <div>
+                            <div className="req-name">{req.menteeFirstName}</div>
+                            <div className="req-time">{timeAgo(req.createdAt)}</div>
                           </div>
+                        </div>
+
+                        {profile && (profile.goals || profile.interests?.length > 0 || profile.backgroundInfo) && (
+                          <div className="req-profile-info">
+                            {profile.goals && (
+                              <div className="req-profile-field">
+                                <span className="req-profile-label">Goals</span>
+                                <span className="req-profile-value">{profile.goals}</span>
+                              </div>
+                            )}
+                            {profile.interests?.length > 0 && (
+                              <div className="req-profile-field">
+                                <span className="req-profile-label">Interests</span>
+                                <div className="req-profile-chips">
+                                  {profile.interests.map(i => <span className="req-chip" key={i}>{i}</span>)}
+                                </div>
+                              </div>
+                            )}
+                            {profile.backgroundInfo && (
+                              <div className="req-profile-field">
+                                <span className="req-profile-label">Background</span>
+                                <span className="req-profile-value">{profile.backgroundInfo}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {req.message && (
+                          <div className="req-msg">"{req.message}"</div>
+                        )}
+
+                        {acceptingId === req.id ? (
+                          <div className="duration-picker">
+                            <p className="duration-label">Select mentorship duration:</p>
+                            <div className="duration-options">
+                              {[1, 3, 6].map(d => (
+                                <button
+                                  key={d}
+                                  className={`duration-btn${selectedDuration === d ? ' duration-btn--active' : ''}`}
+                                  onClick={() => setSelectedDuration(d)}
+                                >
+                                  {d} {d === 1 ? 'month' : 'months'}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="req-actions">
+                              <button className="btn-accept" onClick={handleAcceptConfirm} disabled={actionLoading}>
+                                {actionLoading ? 'Confirming…' : 'Confirm'}
+                              </button>
+                              <button className="btn-decline" onClick={() => setAcceptingId(null)} disabled={actionLoading}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
                           <div className="req-actions">
                             <button
                               className="btn-accept"
-                              onClick={handleAcceptConfirm}
+                              onClick={() => { setAcceptingId(req.id); setSelectedDuration(3) }}
                               disabled={actionLoading}
                             >
-                              {actionLoading ? 'Confirming…' : 'Confirm'}
+                              Accept
                             </button>
                             <button
                               className="btn-decline"
-                              onClick={() => setAcceptingId(null)}
+                              onClick={() => handleReject(req.id)}
                               disabled={actionLoading}
                             >
-                              Cancel
+                              Decline
                             </button>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="req-actions">
-                          <button
-                            className="btn-accept"
-                            onClick={() => { setAcceptingId(req.id); setSelectedDuration(3) }}
-                            disabled={actionLoading}
-                          >
-                            Accept
-                          </button>
-                          <button
-                            className="btn-decline"
-                            onClick={() => handleReject(req.id)}
-                            disabled={actionLoading}
-                          >
-                            Decline
-                          </button>
-                          <button
-                            className="view-profile-btn"
-                            style={{ fontSize: '13px', padding: '7px 14px' }}
-                            onClick={() => navigate(`/profile/${req.menteeId}`)}
-                          >
-                            View Profile
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))
+                        )}
+                      </div>
+                    )
+                  })
                 )}
               </div>
 
@@ -359,7 +407,11 @@ export default function HomePage() {
                     <div className="active-mentorship" key={m.id}>
                       <div className="am-header">
                         <div className="am-info">
-                          <div className="req-avatar">{m.menteeFirstName?.[0] ?? '?'}</div>
+                          <Avatar
+                            src={activeMenteePhotos[m.menteeId] || null}
+                            initials={m.menteeFirstName?.[0]?.toUpperCase() ?? '?'}
+                            size="md"
+                          />
                           <div>
                             <div className="req-name">{m.menteeFirstName}</div>
                             <div className="req-time">
