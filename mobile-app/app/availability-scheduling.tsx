@@ -15,9 +15,21 @@ import apiClient from '../api/client';
 type DayItem = {
   key: string;
   short: string;
-  active: boolean;
-  start?: string;
-  end?: string;
+  slots: AvailabilitySlotItem[];
+};
+
+type AvailabilitySlotItem = {
+  id: string;
+  start: string;
+  end: string;
+};
+
+type ApiAvailabilitySlot = {
+  id?: number;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  recurring?: boolean;
 };
 
 const TIME_OPTIONS = [
@@ -46,48 +58,76 @@ const DAY_KEY_TO_API: Record<string, string> = {
   sun: 'SUNDAY',
 };
 
+const API_DAY_TO_KEY = Object.fromEntries(
+  Object.entries(DAY_KEY_TO_API).map(([key, value]) => [value, key])
+) as Record<string, string>;
 
 const DEFAULT_DAYS: DayItem[] = [
-  { key: 'mon', short: 'Mon', active: false },
-  { key: 'tue', short: 'Tue', active: false },
-  { key: 'wed', short: 'Wed', active: false },
-  { key: 'thu', short: 'Thu', active: false },
-  { key: 'fri', short: 'Fri', active: false },
-  { key: 'sat', short: 'Sat', active: false },
-  { key: 'sun', short: 'Sun', active: false },
+  { key: 'mon', short: 'Mon', slots: [] },
+  { key: 'tue', short: 'Tue', slots: [] },
+  { key: 'wed', short: 'Wed', slots: [] },
+  { key: 'thu', short: 'Thu', slots: [] },
+  { key: 'fri', short: 'Fri', slots: [] },
+  { key: 'sat', short: 'Sat', slots: [] },
+  { key: 'sun', short: 'Sun', slots: [] },
 ];
+
+const createSlot = (dayKey: string, start = '09:00', end = '10:00'): AvailabilitySlotItem => ({
+  id: `${dayKey}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  start,
+  end,
+});
+
+const normalizeTime = (value: string) => value.substring(0, 5);
+
+const mapApiSlotsToDays = (slots: ApiAvailabilitySlot[]) =>
+  DEFAULT_DAYS.map((day) => {
+    const daySlots = slots
+      .filter((slot) => API_DAY_TO_KEY[slot.dayOfWeek] === day.key)
+      .sort((a, b) => normalizeTime(a.startTime).localeCompare(normalizeTime(b.startTime)))
+      .map((slot, index) => ({
+        id: slot.id ? String(slot.id) : `${day.key}-loaded-${index}`,
+        start: normalizeTime(slot.startTime),
+        end: normalizeTime(slot.endTime),
+      }));
+
+    return { ...day, slots: daySlots };
+  });
+
+const hasOverlap = (slots: AvailabilitySlotItem[]) => {
+  const sorted = [...slots].sort(
+    (a, b) => TIME_OPTIONS.indexOf(a.start) - TIME_OPTIONS.indexOf(b.start)
+  );
+
+  return sorted.some((slot, index) => {
+    const next = sorted[index + 1];
+    if (!next) return false;
+    return TIME_OPTIONS.indexOf(slot.end) > TIME_OPTIONS.indexOf(next.start);
+  });
+};
 
 export default function AvailabilitySchedulingScreen() {
   const [days, setDays] = useState<DayItem[]>(DEFAULT_DAYS);
   const [selectedDuration, setSelectedDuration] = useState('60 min');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     const loadAvailability = async () => {
       try {
+        setLoadError('');
         const userId = await SecureStore.getItemAsync('userId');
-        if (!userId) return;
+        if (!userId) {
+          setLoadError('Could not find your session. Please log in again.');
+          return;
+        }
         const res = await apiClient.get(`/availability/${userId}`);
-        const slots: any[] = res.data;
-
-        setDays((prev) =>
-          prev.map((day) => {
-            const apiDay = DAY_KEY_TO_API[day.key];
-            const slot = slots.find((s) => s.dayOfWeek === apiDay);
-            if (slot) {
-              return {
-                ...day,
-                active: true,
-                start: slot.startTime.substring(0, 5),
-                end: slot.endTime.substring(0, 5),
-              };
-            }
-            return { ...day, active: false, start: undefined, end: undefined };
-          })
-        );
-      } catch (err) {
-        console.error('Availability load error:', err);
+        const slots: ApiAvailabilitySlot[] = res.data;
+        setDays(mapApiSlotsToDays(slots));
+      } catch (error: any) {
+        console.error('Availability load error:', error);
+        setLoadError(error.response?.data?.message || 'Could not load availability.');
       } finally {
         setLoading(false);
       }
@@ -97,16 +137,13 @@ export default function AvailabilitySchedulingScreen() {
 
   const toggleDay = (key: string) => {
     setDays((prev) =>
-      prev.map((day) =>
-        day.key === key
-          ? {
-              ...day,
-              active: !day.active,
-              start: !day.active ? '09:00' : undefined,
-              end: !day.active ? '18:00' : undefined,
-            }
-          : day
-      )
+      prev.map((day) => {
+        if (day.key !== key) return day;
+        return {
+          ...day,
+          slots: day.slots.length > 0 ? [] : [createSlot(day.key, '09:00', '18:00')],
+        };
+      })
     );
   };
 
@@ -119,50 +156,87 @@ export default function AvailabilitySchedulingScreen() {
     return TIME_OPTIONS[nextIndex];
   };
 
-  const updateTime = (key: string, type: 'start' | 'end') => {
+  const addSlot = (key: string) => {
     setDays((prev) =>
       prev.map((day) => {
-        if (day.key !== key || !day.active) return day;
+        if (day.key !== key) return day;
 
-        const nextValue = getNextTime(
-          type === 'start' ? day.start : day.end,
-          type
-        );
+        const availableStart = TIME_OPTIONS.find((time, index) => {
+          const end = TIME_OPTIONS[index + 1];
+          if (!end) return false;
+          return !hasOverlap([...day.slots, createSlot(day.key, time, end)]);
+        });
 
-        if (type === 'start') {
-          return { ...day, start: nextValue };
+        if (!availableStart) {
+          Alert.alert('No Available Time', `There is no free one-hour slot left for ${day.short}.`);
+          return day;
         }
 
-        return { ...day, end: nextValue };
+        const startIndex = TIME_OPTIONS.indexOf(availableStart);
+        return {
+          ...day,
+          slots: [...day.slots, createSlot(day.key, availableStart, TIME_OPTIONS[startIndex + 1])],
+        };
+      })
+    );
+  };
+
+  const removeSlot = (key: string, slotId: string) => {
+    setDays((prev) =>
+      prev.map((day) =>
+        day.key === key
+          ? { ...day, slots: day.slots.filter((slot) => slot.id !== slotId) }
+          : day
+      )
+    );
+  };
+
+  const updateTime = (key: string, slotId: string, type: 'start' | 'end') => {
+    setDays((prev) =>
+      prev.map((day) => {
+        if (day.key !== key) return day;
+
+        return {
+          ...day,
+          slots: day.slots.map((slot) => {
+            if (slot.id !== slotId) return slot;
+            const nextValue = getNextTime(type === 'start' ? slot.start : slot.end, type);
+            return type === 'start' ? { ...slot, start: nextValue } : { ...slot, end: nextValue };
+          }),
+        };
       })
     );
   };
 
   const handleUpdateAvailability = async () => {
-    const invalidDay = days.find((day) => {
-      if (!day.active || !day.start || !day.end) return false;
-      const startIndex = TIME_OPTIONS.indexOf(day.start);
-      const endIndex = TIME_OPTIONS.indexOf(day.end);
-      return startIndex >= endIndex;
-    });
+    const invalidDay = days.find((day) =>
+      day.slots.some((slot) => TIME_OPTIONS.indexOf(slot.start) >= TIME_OPTIONS.indexOf(slot.end))
+    );
 
     if (invalidDay) {
       Alert.alert('Invalid Time Slot', `For ${invalidDay.short}, the end time must be after the start time.`);
       return;
     }
 
+    const overlappingDay = days.find((day) => hasOverlap(day.slots));
+
+    if (overlappingDay) {
+      Alert.alert('Overlapping Time Slots', `For ${overlappingDay.short}, availability slots cannot overlap.`);
+      return;
+    }
+
     const slots = days
-      .filter((day) => day.active && day.start && day.end)
-      .map((day) => ({
+      .flatMap((day) => day.slots.map((slot) => ({
         dayOfWeek: DAY_KEY_TO_API[day.key],
-        startTime: day.start,
-        endTime: day.end,
+        startTime: slot.start,
+        endTime: slot.end,
         recurring: true,
-      }));
+      })));
 
     setSaving(true);
     try {
-      await apiClient.put('/availability', { slots });
+      const res = await apiClient.put('/availability', { slots });
+      setDays(mapApiSlotsToDays(res.data));
       Alert.alert('Success', 'Availability successfully updated!');
     } catch (error: any) {
       const msg = error.response?.data?.message || 'Could not save availability.';
@@ -218,20 +292,27 @@ export default function AvailabilitySchedulingScreen() {
       >
         <Text style={styles.sectionTitle}>WEEKLY SCHEDULE</Text>
 
+        {!!loadError && (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTitle}>Could not load availability</Text>
+            <Text style={styles.errorText}>{loadError}</Text>
+          </View>
+        )}
+
         <View style={styles.scheduleCard}>
           {days.map((day, index) => (
             <View key={day.key}>
-              <View style={styles.dayRow}>
+              <View style={styles.dayHeaderRow}>
                 <View
                   style={[
                     styles.dayCircle,
-                    day.active ? styles.dayCircleActive : styles.dayCircleInactive,
+                    day.slots.length > 0 ? styles.dayCircleActive : styles.dayCircleInactive,
                   ]}
                 >
                   <Text
                     style={[
                       styles.dayCircleText,
-                      day.active
+                      day.slots.length > 0
                         ? styles.dayCircleTextActive
                         : styles.dayCircleTextInactive,
                     ]}
@@ -241,47 +322,83 @@ export default function AvailabilitySchedulingScreen() {
                 </View>
 
                 <View style={styles.timeArea}>
-                  {day.active ? (
-                    <View style={styles.timeRow}>
-                      <TouchableOpacity
-                        style={styles.timeBadge}
-                        onPress={() => updateTime(day.key, 'start')}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.timeBadgeText}>{day.start}</Text>
-                      </TouchableOpacity>
-
-                      <Text style={styles.hyphen}>–</Text>
-
-                      <TouchableOpacity
-                        style={styles.timeBadge}
-                        onPress={() => updateTime(day.key, 'end')}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.timeBadgeText}>{day.end}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <Text style={styles.notAvailableText}>Not available</Text>
-                  )}
+                  <Text style={styles.dayTitle}>{day.short}</Text>
+                  <Text style={styles.notAvailableText}>
+                    {day.slots.length > 0
+                      ? `${day.slots.length} slot${day.slots.length > 1 ? 's' : ''} available`
+                      : 'Not available'}
+                  </Text>
                 </View>
 
                 <TouchableOpacity
                   style={[
                     styles.toggleTrack,
-                    day.active ? styles.toggleTrackActive : styles.toggleTrackInactive,
+                    day.slots.length > 0 ? styles.toggleTrackActive : styles.toggleTrackInactive,
                   ]}
                   onPress={() => toggleDay(day.key)}
                   activeOpacity={0.8}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: day.slots.length > 0 }}
+                  accessibilityLabel={`${day.short} availability`}
                 >
                   <View
                     style={[
                       styles.toggleThumb,
-                      day.active ? styles.toggleThumbRight : styles.toggleThumbLeft,
+                      day.slots.length > 0 ? styles.toggleThumbRight : styles.toggleThumbLeft,
                     ]}
                   />
                 </TouchableOpacity>
               </View>
+
+              {day.slots.length > 0 && (
+                <View style={styles.slotsArea}>
+                  {day.slots.map((slot) => (
+                    <View key={slot.id} style={styles.slotRow}>
+                      <View style={styles.timeRow}>
+                        <TouchableOpacity
+                          style={styles.timeBadge}
+                          onPress={() => updateTime(day.key, slot.id, 'start')}
+                          activeOpacity={0.8}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Change ${day.short} slot start time`}
+                        >
+                          <Text style={styles.timeBadgeText}>{slot.start}</Text>
+                        </TouchableOpacity>
+
+                        <Text style={styles.hyphen}>–</Text>
+
+                        <TouchableOpacity
+                          style={styles.timeBadge}
+                          onPress={() => updateTime(day.key, slot.id, 'end')}
+                          activeOpacity={0.8}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Change ${day.short} slot end time`}
+                        >
+                          <Text style={styles.timeBadgeText}>{slot.end}</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.removeSlotButton}
+                        onPress={() => removeSlot(day.key, slot.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${day.short} availability slot`}
+                      >
+                        <Text style={styles.removeSlotText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+
+                  <TouchableOpacity
+                    style={styles.addSlotButton}
+                    onPress={() => addSlot(day.key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add availability slot for ${day.short}`}
+                  >
+                    <Text style={styles.addSlotText}>+ Add time slot</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               {index !== days.length - 1 && <View style={styles.rowDivider} />}
             </View>
@@ -289,7 +406,7 @@ export default function AvailabilitySchedulingScreen() {
         </View>
 
         <Text style={styles.helperText}>
-          Tap the time boxes to change available hours.
+          Toggle a day to make yourself available. Tap time boxes to adjust hours, add more slots, or remove slots.
         </Text>
 
         <Text style={styles.sectionTitle}>SESSION DURATION</Text>
@@ -436,7 +553,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginBottom: 12,
   },
-  dayRow: {
+  errorCard: {
+    backgroundColor: '#FDF0EF',
+    borderWidth: 1,
+    borderColor: '#F4C7C3',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    color: '#8A2F2A',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  errorText: {
+    color: '#A85E58',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  dayHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 72,
@@ -470,6 +607,23 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  dayTitle: {
+    color: '#23372B',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  slotsArea: {
+    paddingLeft: 70,
+    paddingBottom: 6,
+    gap: 10,
+  },
+  slotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -498,6 +652,31 @@ const styles = StyleSheet.create({
     color: '#B5ADA3',
     fontSize: 14,
     fontWeight: '500',
+  },
+  addSlotButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EEF5EF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#CFE2D2',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  addSlotText: {
+    color: '#2F563C',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  removeSlotButton: {
+    backgroundColor: '#FDF0EF',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  removeSlotText: {
+    color: '#B84A45',
+    fontSize: 12,
+    fontWeight: '700',
   },
   toggleTrack: {
     width: 46,
