@@ -100,3 +100,32 @@ export async function endMentorship(id) {
   await fakeDelay(500)
   return { id, status: 'COMPLETED' }
 }
+
+// Aggregates tasks / meetings across every mentorship passed in. Each item is
+// tagged with a small `mentorship` descriptor so the global page can show
+// which mentorship an item belongs to.
+export async function getTasksAcrossMentorships(mentorships) {
+  const pairs = await Promise.all(
+    (mentorships || []).map(async m => {
+      const tasks = await getTasks(m.id)
+      return tasks.map(t => ({
+        ...t,
+        mentorship: { id: m.id, mentorFirstName: m.mentorFirstName, menteeFirstName: m.menteeFirstName },
+      }))
+    })
+  )
+  return pairs.flat()
+}
+
+export async function getMeetingsAcrossMentorships(mentorships) {
+  const pairs = await Promise.all(
+    (mentorships || []).map(async m => {
+      const meetings = await getMeetings(m.id)
+      return meetings.map(mt => ({
+        ...mt,
+        mentorship: { id: m.id, mentorFirstName: m.mentorFirstName, menteeFirstName: m.menteeFirstName },
+      }))
+    })
+  )
+  return pairs.flat()
+}

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import '../styles/main.css'
 
-const SOON = new Set(['/messages', '/tasks', '/schedule'])
+const SOON = new Set()
 
 const NAV_TABS = [
   { label: 'Home', path: '/home' },

@@ -2012,6 +2012,11 @@
   color: var(--text-muted);
   text-decoration: line-through;
 }
+.md-task-ment {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 12px;
+}
 
 /* ── MESSAGES SUB-PAGE ── */
 .md-message-thread {

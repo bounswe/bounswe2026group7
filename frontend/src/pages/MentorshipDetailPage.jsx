@@ -349,7 +349,7 @@ export default function MentorshipDetailPage() {
           <div className="section-label" style={{ marginBottom: 0 }}>Upcoming Meeting</div>
           <button
             className="md-link-btn"
-            onClick={() => navigate(`/mentorships/${mentorship.id}/meetings`)}
+            onClick={() => navigate(`/schedule?mentorshipId=${mentorship.id}`)}
           >
             See all
           </button>
@@ -375,7 +375,7 @@ export default function MentorshipDetailPage() {
             </span>
           </div>
         ) : (
-          <div className="md-goal-empty">No upcoming meetings. Schedule one from the Meetings page.</div>
+          <div className="md-goal-empty">No upcoming meetings. Schedule one from the Schedule page.</div>
         )}
       </section>
 
@@ -389,15 +389,15 @@ export default function MentorshipDetailPage() {
         </button>
         <button
           className="md-action-btn"
-          onClick={() => navigate(`/mentorships/${mentorship.id}/meetings`)}
+          onClick={() => navigate(`/schedule?mentorshipId=${mentorship.id}`)}
         >
-          Meetings
+          Schedule
         </button>
         <button
           className="md-action-btn"
-          onClick={() => navigate(`/mentorships/${mentorship.id}/tasks`)}
+          onClick={() => navigate(`/tasks?mentorshipId=${mentorship.id}`)}
         >
-          Tasks
+          My Tasks
         </button>
         <button
           className="md-action-btn md-action-danger"
