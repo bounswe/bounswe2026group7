@@ -228,3 +228,26 @@ export async function getActiveMentorships() {
   })
   return handleResponse(res)
 }
+
+// Backend has no GET /api/mentorships/{id} yet — fetch the user's list and
+// filter client-side. If the id isn't in the list, the caller treats it as 403.
+export async function getMentorshipById(id) {
+  const list = await getActiveMentorships()
+  const match = (list || []).find(m => String(m.id) === String(id))
+  if (!match) {
+    const err = new Error('Forbidden')
+    err.status = 403
+    throw err
+  }
+  return match
+}
+
+export async function updateSharedGoal(id, sharedGoal) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/goal`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ sharedGoal }),
+  })
+  return handleResponse(res)
+}
