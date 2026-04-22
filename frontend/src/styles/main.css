@@ -1956,3 +1956,69 @@
   .md-hero { flex-wrap: wrap; }
   .md-hero-info { min-width: 60%; }
 }
+
+/* ── TASKS SUB-PAGE ── */
+.md-task-list { display: flex; flex-direction: column; gap: 10px; }
+.md-task-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.md-task-item:hover { background: var(--green-bg); }
+.md-task-check {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green-dark);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.md-task-title {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-dark);
+}
+.md-task-due {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.md-task-done .md-task-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+/* ── MESSAGES SUB-PAGE ── */
+.md-message-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 40px;
+}
+.md-message-bubble {
+  max-width: 75%;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  align-self: flex-start;
+}
+.md-message-mine {
+  align-self: flex-end;
+  background: var(--green-dark);
+  color: #fff;
+  border-color: var(--green-dark);
+}
+.md-message-text { font-size: 14px; line-height: 1.5; }
+.md-message-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-align: right;
+}
+.md-message-mine .md-message-time { color: rgba(255,255,255,0.7); }
