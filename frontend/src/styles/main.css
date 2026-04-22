@@ -1498,6 +1498,26 @@
   transition: all 0.2s; font-family: inherit;
 }
 .amh-btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.amh-btn-secondary {
+  padding: 10px 24px; border-radius: 999px;
+  background: #fff; color: var(--green-dark);
+  font-size: 14px; font-weight: 600; border: 1px solid var(--green-dark); cursor: pointer;
+  transition: all 0.2s; font-family: inherit;
+}
+.amh-btn-secondary:hover { background: var(--green-pale); transform: translateY(-1px); }
+
+.clickable-card {
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+.clickable-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card);
+}
+.clickable-card:focus-visible {
+  outline: 2px solid var(--green-mid);
+  outline-offset: 2px;
+}
 
 /* ── LOCKED send-request-btn (mentee has active mentor) ── */
 .send-request-btn.locked {
