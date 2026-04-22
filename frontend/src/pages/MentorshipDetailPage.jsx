@@ -391,7 +391,7 @@ export default function MentorshipDetailPage() {
           className="md-action-btn"
           onClick={() => navigate(`/schedule?mentorshipId=${mentorship.id}`)}
         >
-          Schedule
+          Meetings
         </button>
         <button
           className="md-action-btn"

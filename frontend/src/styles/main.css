@@ -2047,3 +2047,37 @@
   text-align: right;
 }
 .md-message-mine .md-message-time { color: rgba(255,255,255,0.7); }
+
+/* ── MESSAGES CONVERSATION LIST ── */
+.md-conv-list { display: flex; flex-direction: column; gap: 8px; }
+.md-conv-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+.md-conv-item:hover { background: var(--green-bg); transform: translateY(-1px); }
+.md-conv-info { flex: 1; min-width: 0; }
+.md-conv-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.md-conv-name { font-size: 15px; font-weight: 600; color: var(--text-dark); }
+.md-conv-time { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+.md-conv-preview {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
