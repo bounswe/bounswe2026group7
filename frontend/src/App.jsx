@@ -11,6 +11,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import UserProfilePage from './pages/UserProfilePage'
+import MentorshipDetailPage from './pages/MentorshipDetailPage'
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/users/:id" element={<UserProfilePage />} />
+          <Route path="/mentorships/:id" element={<MentorshipDetailPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
