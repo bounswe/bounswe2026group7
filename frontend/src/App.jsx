@@ -11,6 +11,10 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import UserProfilePage from './pages/UserProfilePage'
+import MentorshipDetailPage from './pages/MentorshipDetailPage'
+import MessagesPage from './pages/MessagesPage'
+import TasksPage from './pages/TasksPage'
+import SchedulePage from './pages/SchedulePage'
 
 export default function App() {
   return (
@@ -29,6 +33,10 @@ export default function App() {
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/users/:id" element={<UserProfilePage />} />
+          <Route path="/mentorships/:id" element={<MentorshipDetailPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/schedule" element={<SchedulePage />} />
         </Route>
       </Routes>
     </BrowserRouter>
