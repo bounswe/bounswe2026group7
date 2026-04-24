@@ -1369,6 +1369,21 @@
   background: var(--green-mid); flex-shrink: 0; margin-top: 6px;
 }
 
+.notif-see-all {
+  width: 100%;
+  padding: 11px 16px;
+  background: #fff;
+  border: none;
+  border-top: 0.5px solid rgba(0,0,0,0.08);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green-dark);
+  cursor: pointer;
+  transition: background 0.12s;
+  text-align: center;
+}
+.notif-see-all:hover { background: var(--green-pale); }
+
 /* ── MENTOR DASHBOARD STATS ── */
 .mentor-stats-row {
   display: grid;
