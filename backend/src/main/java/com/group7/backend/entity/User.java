@@ -37,6 +37,10 @@ public abstract class User {
     @Column(nullable = false)
     private Boolean isEmailVerified = false;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
