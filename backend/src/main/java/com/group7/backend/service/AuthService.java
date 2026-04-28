@@ -4,6 +4,7 @@ import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.dto.response.AuthResponse;
 import com.group7.backend.dto.response.UserResponse;
+import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.User;
@@ -131,7 +132,7 @@ public class AuthService {
             throw new AuthenticationFailedException("Email not verified. Please check your inbox.");
         }
 
-        String role = (user instanceof Mentor) ? "MENTOR" : "MENTEE";
+        String role = roleNameOf(user);
         String token = jwtService.generateToken(user.getId(), user.getEmail(), role);
         log.info("Authentication succeeded: userId={}, role={}", user.getId(), role);
 
@@ -239,6 +240,13 @@ public class AuthService {
         if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
             throw new InvalidTokenException("Reset token has expired. Please request a new one.");
         }
+    }
+
+    private static String roleNameOf(User user) {
+        if (user instanceof Mentor) return "MENTOR";
+        if (user instanceof Mentee) return "MENTEE";
+        if (user instanceof Admin)  return "ADMIN";
+        throw new IllegalStateException("Unknown user subtype: " + user.getClass().getSimpleName());
     }
 
     private String createVerificationToken(User user) {
