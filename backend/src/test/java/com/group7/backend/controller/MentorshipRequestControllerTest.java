@@ -20,7 +20,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -74,7 +75,7 @@ class MentorshipRequestControllerTest {
         r.setMentorFirstName("Ahmet");
         r.setMessage("Hello!");
         r.setStatus("PENDING");
-        r.setCreatedAt(LocalDateTime.of(2026, 4, 3, 12, 0));
+        r.setCreatedAt(OffsetDateTime.of(2026, 4, 3, 12, 0, 0, 0, ZoneOffset.UTC));
         return r;
     }
 

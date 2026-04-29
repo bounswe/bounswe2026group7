@@ -3,7 +3,7 @@ package com.group7.backend.dto.response;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Getter
 @Setter
@@ -24,7 +24,7 @@ public class UserResponse {
     @Schema(description = "Whether email is verified")
     private Boolean isEmailVerified;
     @Schema(description = "Creation timestamp")
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
     @Schema(description = "Role", example = "MENTEE")
     private String role;
 }

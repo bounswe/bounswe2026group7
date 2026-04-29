@@ -24,7 +24,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -88,7 +89,7 @@ class MentorshipRequestServiceTest {
         when(mentorshipRequestRepository.save(any(MentorshipRequest.class))).thenAnswer(invocation -> {
             MentorshipRequest req = invocation.getArgument(0);
             req.setId(10L);
-            req.setCreatedAt(LocalDateTime.now());
+            req.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
             return req;
         });
 
@@ -113,7 +114,7 @@ class MentorshipRequestServiceTest {
         when(mentorshipRequestRepository.save(any(MentorshipRequest.class))).thenAnswer(invocation -> {
             MentorshipRequest req = invocation.getArgument(0);
             req.setId(10L);
-            req.setCreatedAt(LocalDateTime.now());
+            req.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
             return req;
         });
 
@@ -138,7 +139,7 @@ class MentorshipRequestServiceTest {
         when(mentorshipRequestRepository.save(any(MentorshipRequest.class))).thenAnswer(invocation -> {
             MentorshipRequest req = invocation.getArgument(0);
             req.setId(10L);
-            req.setCreatedAt(LocalDateTime.now());
+            req.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
             return req;
         });
 
@@ -226,7 +227,7 @@ class MentorshipRequestServiceTest {
         req.setMentee(mentee);
         req.setMentor(mentor);
         req.setStatus(MentorshipRequestStatus.PENDING);
-        req.setCreatedAt(LocalDateTime.now());
+        req.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
 
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         when(mentorshipRequestRepository.findByMenteeIdWithUsers(eq(1L), any(Pageable.class)))
@@ -255,7 +256,7 @@ class MentorshipRequestServiceTest {
         req.setMentee(mentee);
         req.setMentor(mentor);
         req.setStatus(MentorshipRequestStatus.PENDING);
-        req.setCreatedAt(LocalDateTime.now());
+        req.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
 
         when(mentorRepository.findById(2L)).thenReturn(Optional.of(mentor));
         when(mentorshipRequestRepository.findByMentorIdWithUsers(eq(2L), any(Pageable.class)))

@@ -13,7 +13,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -26,13 +27,16 @@ public class MentorshipService {
     private final MentorshipRepository mentorshipRepository;
     private final MentorshipRequestRepository mentorshipRequestRepository;
     private final NotificationEventPublisher notificationEventPublisher;
+    private final Clock clock;
 
     public MentorshipService(MentorshipRepository mentorshipRepository,
                              MentorshipRequestRepository mentorshipRequestRepository,
-                             NotificationEventPublisher notificationEventPublisher) {
+                             NotificationEventPublisher notificationEventPublisher,
+                             Clock clock) {
         this.mentorshipRepository = mentorshipRepository;
         this.mentorshipRequestRepository = mentorshipRequestRepository;
         this.notificationEventPublisher = notificationEventPublisher;
+        this.clock = clock;
     }
 
     @Transactional
@@ -66,7 +70,7 @@ public class MentorshipService {
 
         request.setStatus(MentorshipRequestStatus.ACCEPTED);
 
-        LocalDateTime now = LocalDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(clock);
         Mentorship mentorship = new Mentorship();
         mentorship.setMentor(mentor);
         mentorship.setMentee(mentee);
