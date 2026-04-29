@@ -71,11 +71,26 @@ public class MatchingService {
                 .sorted(Comparator.comparingInt(MentorMatchResponse::getMatchScore).reversed())
                 .toList();
 
-        if (!matches.isEmpty()) {
-            notificationEventPublisher.publishMatchFound(menteeId, matches.get(0).getFirstName());
-        }
-
         return matches;
+    }
+
+    /**
+     * Ranks mentors for a mentee without checking active mentor constraint.
+     * Used by the scheduler to calculate matches for notification purposes.
+     */
+    @Transactional(readOnly = true)
+    public List<MentorMatchResponse> getTopMentorsForScheduler(Long menteeId) {
+        Mentee mentee = menteeRepository.findById(menteeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentee not found"));
+
+        List<Mentor> mentors = mentorRepository.findAll();
+
+        return mentors.stream()
+                .filter(m -> m.getCurrentMenteeCount() < m.getMaxMenteeCapacity())
+                .map(m -> MentorMatchResponse.from(m,
+                        calculateScore(m, mentee) + calculateAvailabilityScore(m.getId(), mentee.getId())))
+                .sorted(Comparator.comparingInt(MentorMatchResponse::getMatchScore).reversed())
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -96,11 +111,25 @@ public class MatchingService {
                 .map(MenteeCandidateResponse::from)
                 .toList();
 
-        if (!candidates.isEmpty()) {
-            notificationEventPublisher.publishMatchFound(mentorId, candidates.get(0).getFirstName());
-        }
-
         return paginateList(candidates, pageable);
+    }
+
+    /**
+     * Gets candidate mentees for a mentor without checking capacity constraint.
+     * Used by the scheduler to calculate matches for notification purposes.
+     */
+    @Transactional(readOnly = true)
+    public List<MenteeCandidateResponse> getCandidateMenteesForScheduler(Long mentorId) {
+        Mentor mentor = mentorRepository.findById(mentorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentor not found"));
+
+        List<Mentee> mentees = menteeRepository.findAll();
+
+        return mentees.stream()
+                .filter(m -> m.getActiveMentorId() == null)
+                .filter(m -> matchesMentorPreferences(mentor, m))
+                .map(MenteeCandidateResponse::from)
+                .toList();
     }
 
     boolean matchesMentorPreferences(Mentor mentor, Mentee mentee) {

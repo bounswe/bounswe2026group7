@@ -177,7 +177,7 @@ class NotificationIntegrationTest {
     }
 
     @Test
-    void matchingEndpointCreatesMatchFoundNotification() throws Exception {
+    void matchingEndpointDoesNotCreateMatchFoundNotification() throws Exception {
         registerAndLogin("notif_mentor2@test.com", true);
         Mentor mentor = mentorRepository.findAll().stream()
                 .filter(m -> m.getEmail().equals("notif_mentor2@test.com"))
@@ -202,8 +202,12 @@ class NotificationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].firstName").value("Ayse"));
 
-        Notification created = waitForNotification(mentee.getId(), NotificationType.MATCH_FOUND);
-        assertThat(created).isNotNull();
+        // Wait a short amount of time to ensure no async notification is published
+        Thread.sleep(500);
+
+        List<Notification> notifications = notificationRepository.findForUser(mentee.getId(), false);
+        boolean hasMatchFound = notifications.stream().anyMatch(n -> n.getType() == NotificationType.MATCH_FOUND);
+        assertThat(hasMatchFound).isFalse();
     }
 
         @Test

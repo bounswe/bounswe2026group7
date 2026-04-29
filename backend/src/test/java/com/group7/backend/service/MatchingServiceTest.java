@@ -29,6 +29,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -282,7 +284,7 @@ class MatchingServiceTest {
         Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, "Java", pageable);
 
         assertThat(result.getContent()).hasSize(1);
-        verify(notificationEventPublisher).publishMatchFound(1L, result.getContent().get(0).getFirstName());
+        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
     }
 
     @Test
