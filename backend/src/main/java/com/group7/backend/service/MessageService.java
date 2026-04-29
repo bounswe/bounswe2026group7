@@ -2,7 +2,8 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.request.SendMessageRequest;
 import com.group7.backend.dto.response.MessageResponse;
-import com.group7.backend.entity.Mentorship;
+import com.group7.backend.entity.Conversation;
+import com.group7.backend.entity.ConversationKind;
 import com.group7.backend.entity.MentorshipStatus;
 import com.group7.backend.entity.Message;
 import com.group7.backend.entity.User;
@@ -10,7 +11,8 @@ import com.group7.backend.event.MessageSentEvent;
 import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
-import com.group7.backend.repository.MentorshipRepository;
+import com.group7.backend.repository.ConversationParticipantRepository;
+import com.group7.backend.repository.ConversationRepository;
 import com.group7.backend.repository.MessageRepository;
 import com.group7.backend.repository.UserRepository;
 import org.slf4j.Logger;
@@ -25,13 +27,16 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 
 /**
- * Domain service for the messaging feature. Has zero WebSocket types — broadcast
- * is decoupled via {@link MessageSentEvent} and a transactional event listener,
- * mirroring the existing notification flow.
+ * Per-message operations. Operates on {@code conversationId} — agnostic of
+ * whether the conversation is mentorship-scoped or mentor-pair-scoped.
  *
- * <p>Authorization rule: only the mentor or mentee of the mentorship may
- * read/write its messages, and writes require the mentorship to be in
- * {@link MentorshipStatus#ACTIVE}.
+ * <p>Authorization rule: the caller must be a participant of the conversation.
+ * For {@link ConversationKind#MENTORSHIP} conversations, sends additionally
+ * require the underlying mentorship to be {@link MentorshipStatus#ACTIVE} —
+ * history reads still succeed on completed mentorships.
+ *
+ * <p>Has zero WebSocket types — broadcast is decoupled via
+ * {@link MessageSentEvent} and a transactional event listener.
  */
 @Service
 public class MessageService {
@@ -39,20 +44,23 @@ public class MessageService {
     private static final Logger log = LoggerFactory.getLogger(MessageService.class);
 
     private final MessageRepository messageRepository;
-    private final MentorshipRepository mentorshipRepository;
+    private final ConversationRepository conversationRepository;
+    private final ConversationParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final NotificationEventPublisher notificationEventPublisher;
     private final Clock clock;
 
     public MessageService(MessageRepository messageRepository,
-                          MentorshipRepository mentorshipRepository,
+                          ConversationRepository conversationRepository,
+                          ConversationParticipantRepository participantRepository,
                           UserRepository userRepository,
                           ApplicationEventPublisher applicationEventPublisher,
                           NotificationEventPublisher notificationEventPublisher,
                           Clock clock) {
         this.messageRepository = messageRepository;
-        this.mentorshipRepository = mentorshipRepository;
+        this.conversationRepository = conversationRepository;
+        this.participantRepository = participantRepository;
         this.userRepository = userRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.notificationEventPublisher = notificationEventPublisher;
@@ -60,75 +68,82 @@ public class MessageService {
     }
 
     @Transactional
-    public MessageResponse send(Long senderId, Long mentorshipId, SendMessageRequest request) {
-        Mentorship mentorship = loadAndAuthorize(mentorshipId, senderId);
-        if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
-            throw new MentorshipRequestException(
-                    "Cannot send messages on a mentorship that is not active");
-        }
+    public MessageResponse send(Long senderId, Long conversationId, SendMessageRequest request) {
+        Conversation conversation = loadAndAuthorize(conversationId, senderId);
+        assertSendable(conversation);
 
         User sender = userRepository.findById(senderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sender not found"));
 
         Message message = new Message();
-        message.setMentorship(mentorship);
+        message.setConversation(conversation);
         message.setSender(sender);
         message.setContent(request.getContent());
         message.setAttachmentUrl(request.getAttachmentUrl());
         message.setSentAt(OffsetDateTime.now(clock));
         Message saved = messageRepository.save(message);
 
-        Long recipientId = recipientIdOf(mentorship, senderId);
+        Long recipientId = participantRepository
+                .findOtherParticipantUserIds(conversation.getId(), senderId)
+                .stream()
+                .findFirst()
+                .orElse(null);
         applicationEventPublisher.publishEvent(
-                new MessageSentEvent(saved.getId(), mentorship.getId(), senderId, recipientId));
-        notificationEventPublisher.publishNewMessage(recipientId, sender.getFirstName());
+                new MessageSentEvent(saved.getId(), conversation.getId(), senderId, recipientId));
+        if (recipientId != null) {
+            notificationEventPublisher.publishNewMessage(recipientId, sender.getFirstName());
+        }
 
-        log.info("Message sent: messageId={}, mentorshipId={}, senderId={}",
-                saved.getId(), mentorship.getId(), senderId);
+        log.info("Message sent: messageId={}, conversationId={}, senderId={}",
+                saved.getId(), conversation.getId(), senderId);
         return MessageResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
-    public Page<MessageResponse> list(Long requesterId, Long mentorshipId, Pageable pageable) {
-        loadAndAuthorize(mentorshipId, requesterId);
+    public Page<MessageResponse> list(Long requesterId, Long conversationId, Pageable pageable) {
+        loadAndAuthorize(conversationId, requesterId);
         return messageRepository
-                .findByMentorshipIdOrderBySentAtDescIdDesc(mentorshipId, pageable)
+                .findByConversationIdOrderBySentAtDescIdDesc(conversationId, pageable)
                 .map(MessageResponse::from);
     }
 
     @Transactional
-    public int markAllRead(Long requesterId, Long mentorshipId) {
-        loadAndAuthorize(mentorshipId, requesterId);
+    public int markAllRead(Long requesterId, Long conversationId) {
+        loadAndAuthorize(conversationId, requesterId);
         int updated = messageRepository.markAllAsReadForReader(
-                mentorshipId, requesterId, OffsetDateTime.now(clock));
-        log.info("Marked messages as read: mentorshipId={}, readerId={}, count={}",
-                mentorshipId, requesterId, updated);
+                conversationId, requesterId, OffsetDateTime.now(clock));
+        log.info("Marked messages as read: conversationId={}, readerId={}, count={}",
+                conversationId, requesterId, updated);
         return updated;
     }
 
     /**
-     * Loads the mentorship and asserts {@code userId} is one of its participants.
+     * Loads the conversation and asserts {@code userId} is one of its participants.
      * Throws {@link ResourceNotFoundException} (404) if missing,
      * {@link ProfileNotVisibleException} (403) if not a participant.
      */
-    private Mentorship loadAndAuthorize(Long mentorshipId, Long userId) {
-        Mentorship mentorship = mentorshipRepository.findById(mentorshipId)
-                .orElseThrow(() -> new ResourceNotFoundException("Mentorship not found"));
-        if (!isParticipant(mentorship, userId)) {
+    private Conversation loadAndAuthorize(Long conversationId, Long userId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found"));
+        if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
             throw new ProfileNotVisibleException(
-                    "You are not a participant of this mentorship");
+                    "You are not a participant of this conversation");
         }
-        return mentorship;
+        return conversation;
     }
 
-    private static boolean isParticipant(Mentorship mentorship, Long userId) {
-        return mentorship.getMentor().getId().equals(userId)
-                || mentorship.getMentee().getId().equals(userId);
+    /**
+     * For mentorship-scoped conversations, sending requires the mentorship to
+     * be active. Other kinds (mentor pair) have no per-send gate.
+     */
+    private static void assertSendable(Conversation conversation) {
+        if (conversation.getKind() == ConversationKind.MENTORSHIP) {
+            if (conversation.getMentorship() == null
+                    || conversation.getMentorship().getStatus() != MentorshipStatus.ACTIVE) {
+                throw new MentorshipRequestException(
+                        "Cannot send messages on a mentorship that is not active");
+            }
+        }
     }
 
-    private static Long recipientIdOf(Mentorship mentorship, Long senderId) {
-        Long mentorId = mentorship.getMentor().getId();
-        Long menteeId = mentorship.getMentee().getId();
-        return mentorId.equals(senderId) ? menteeId : mentorId;
-    }
 }

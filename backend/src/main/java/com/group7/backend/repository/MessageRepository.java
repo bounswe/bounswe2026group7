@@ -13,22 +13,35 @@ import java.time.OffsetDateTime;
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
     @Query("SELECT m FROM Message m JOIN FETCH m.sender "
-            + "WHERE m.mentorship.id = :mentorshipId "
+            + "WHERE m.conversation.id = :conversationId "
             + "ORDER BY m.sentAt DESC, m.id DESC")
-    Page<Message> findByMentorshipIdOrderBySentAtDescIdDesc(
-            @Param("mentorshipId") Long mentorshipId,
+    Page<Message> findByConversationIdOrderBySentAtDescIdDesc(
+            @Param("conversationId") Long conversationId,
             Pageable pageable);
 
     /**
-     * Marks every unread message in {@code mentorshipId} that was NOT sent by
-     * {@code readerId} as read. Returns the number of rows updated.
+     * Eager-fetches the message together with its sender, conversation, and (if any)
+     * the conversation's mentorship — so the broadcast listener can build a
+     * {@code MessageResponse} after the original transaction has closed without
+     * relying on Open-Session-in-View.
+     */
+    @Query("SELECT m FROM Message m "
+            + "JOIN FETCH m.sender "
+            + "JOIN FETCH m.conversation c "
+            + "LEFT JOIN FETCH c.mentorship "
+            + "WHERE m.id = :id")
+    java.util.Optional<Message> findByIdForBroadcast(@Param("id") Long id);
+
+    /**
+     * Marks every unread message in {@code conversationId} that was NOT sent
+     * by {@code readerId} as read. Returns the number of rows updated.
      */
     @Modifying
     @Query("UPDATE Message m SET m.readAt = :readAt "
-            + "WHERE m.mentorship.id = :mentorshipId "
+            + "WHERE m.conversation.id = :conversationId "
             + "AND m.readAt IS NULL "
             + "AND m.sender.id <> :readerId")
-    int markAllAsReadForReader(@Param("mentorshipId") Long mentorshipId,
+    int markAllAsReadForReader(@Param("conversationId") Long conversationId,
                                @Param("readerId") Long readerId,
                                @Param("readAt") OffsetDateTime readAt);
 }

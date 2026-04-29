@@ -9,9 +9,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 /**
- * A single chat message scoped to a mentorship. Append-only — no edit/delete
- * column today (issue #245 doesn't ask for it). The {@code readAt} column is
- * the only mutable field after persistence; bulk updated by the
+ * A single chat message scoped to a {@link Conversation}. Append-only — no
+ * edit/delete column today (issue #245 doesn't ask for it). The {@code readAt}
+ * column is the only mutable field after persistence; bulk updated by the
  * {@code PATCH /messages/read} endpoint.
  */
 @Entity
@@ -26,8 +26,8 @@ public class Message {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "mentorship_id", nullable = false)
-    private Mentorship mentorship;
+    @JoinColumn(name = "conversation_id", nullable = false)
+    private Conversation conversation;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sender_id", nullable = false)
