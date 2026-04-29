@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import apiClient from '../api/client';
+import { useRole } from '../components/RoleContext';
 
 type DayItem = {
   key: string;
@@ -58,16 +59,28 @@ const DEFAULT_DAYS: DayItem[] = [
 ];
 
 export default function AvailabilitySchedulingScreen() {
+  const { role } = useRole();
+  const isMentor = role === 'mentor';
   const [days, setDays] = useState<DayItem[]>(DEFAULT_DAYS);
-  const [selectedDuration, setSelectedDuration] = useState('60 min');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [bannerMessage, setBannerMessage] = useState<string | null>(null);
+  const [bannerTone, setBannerTone] = useState<'success' | 'error' | null>(null);
 
   useEffect(() => {
     const loadAvailability = async () => {
+      if (!isMentor) {
+        setLoading(false);
+        return;
+      }
+
       try {
         const userId = await SecureStore.getItemAsync('userId');
-        if (!userId) return;
+        if (!userId) {
+          setBannerTone('error');
+          setBannerMessage('Could not identify your account. Please sign in again.');
+          return;
+        }
         const res = await apiClient.get(`/availability/${userId}`);
         const slots: any[] = res.data;
 
@@ -88,14 +101,18 @@ export default function AvailabilitySchedulingScreen() {
         );
       } catch (err) {
         console.error('Availability load error:', err);
+        setBannerTone('error');
+        setBannerMessage('Could not load your current availability.');
       } finally {
         setLoading(false);
       }
     };
     loadAvailability();
-  }, []);
+  }, [isMentor]);
 
   const toggleDay = (key: string) => {
+    setBannerMessage(null);
+    setBannerTone(null);
     setDays((prev) =>
       prev.map((day) =>
         day.key === key
@@ -120,6 +137,8 @@ export default function AvailabilitySchedulingScreen() {
   };
 
   const updateTime = (key: string, type: 'start' | 'end') => {
+    setBannerMessage(null);
+    setBannerTone(null);
     setDays((prev) =>
       prev.map((day) => {
         if (day.key !== key || !day.active) return day;
@@ -139,6 +158,17 @@ export default function AvailabilitySchedulingScreen() {
   };
 
   const handleUpdateAvailability = async () => {
+    if (!isMentor) {
+      Alert.alert('Mentor only', 'This screen is only available for mentor accounts.');
+      return;
+    }
+
+    const activeDays = days.filter((day) => day.active && day.start && day.end);
+    if (activeDays.length === 0) {
+      Alert.alert('No Availability Selected', 'Please enable at least one time slot before saving.');
+      return;
+    }
+
     const invalidDay = days.find((day) => {
       if (!day.active || !day.start || !day.end) return false;
       const startIndex = TIME_OPTIONS.indexOf(day.start);
@@ -161,18 +191,21 @@ export default function AvailabilitySchedulingScreen() {
       }));
 
     setSaving(true);
+    setBannerMessage(null);
+    setBannerTone(null);
     try {
       await apiClient.put('/availability', { slots });
-      Alert.alert('Success', 'Availability successfully updated!');
+      setBannerTone('success');
+      setBannerMessage('Availability successfully updated and reflected on your profile.');
     } catch (error: any) {
       const msg = error.response?.data?.message || 'Could not save availability.';
+      setBannerTone('error');
+      setBannerMessage(msg);
       Alert.alert('Error', msg);
     } finally {
       setSaving(false);
     }
   };
-
-  const durations = ['30 min', '45 min', '60 min', '90 min'];
 
   return (
     <View style={styles.container}>
@@ -207,130 +240,137 @@ export default function AvailabilitySchedulingScreen() {
         </View>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
-      ) : null}
-
       <ScrollView
         style={styles.scrollArea}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {!isMentor ? (
+          <View style={styles.infoCard}>
+            <Text style={styles.infoTitle}>Mentor Availability</Text>
+            <Text style={styles.infoText}>
+              This editing screen is available only for mentor accounts. Mentees manage their own schedule in a separate flow.
+            </Text>
+          </View>
+        ) : loading ? (
+          <ActivityIndicator size="large" color="#456B50" style={styles.loader} />
+        ) : (
+          <>
+            {bannerMessage ? (
+              <View
+                style={[
+                  styles.banner,
+                  bannerTone === 'success' ? styles.bannerSuccess : styles.bannerError,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.bannerText,
+                    bannerTone === 'success' ? styles.bannerTextSuccess : styles.bannerTextError,
+                  ]}
+                >
+                  {bannerMessage}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>ACTIVE DAYS</Text>
+              <Text style={styles.summaryValue}>{days.filter((day) => day.active).length}/7</Text>
+              <Text style={styles.summaryHint}>
+                Tap a day to enable it, then tap each time chip to set the start and end hour.
+              </Text>
+            </View>
+
         <Text style={styles.sectionTitle}>WEEKLY SCHEDULE</Text>
 
-        <View style={styles.scheduleCard}>
-          {days.map((day, index) => (
-            <View key={day.key}>
-              <View style={styles.dayRow}>
-                <View
-                  style={[
-                    styles.dayCircle,
-                    day.active ? styles.dayCircleActive : styles.dayCircleInactive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.dayCircleText,
-                      day.active
-                        ? styles.dayCircleTextActive
-                        : styles.dayCircleTextInactive,
-                    ]}
-                  >
-                    {day.short}
-                  </Text>
-                </View>
-
-                <View style={styles.timeArea}>
-                  {day.active ? (
-                    <View style={styles.timeRow}>
-                      <TouchableOpacity
-                        style={styles.timeBadge}
-                        onPress={() => updateTime(day.key, 'start')}
-                        activeOpacity={0.8}
+            <View style={styles.scheduleCard}>
+              {days.map((day, index) => (
+                <View key={day.key}>
+                  <View style={styles.dayRow}>
+                    <TouchableOpacity
+                      activeOpacity={0.82}
+                      onPress={() => toggleDay(day.key)}
+                      style={[
+                        styles.dayCircle,
+                        day.active ? styles.dayCircleActive : styles.dayCircleInactive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dayCircleText,
+                          day.active
+                            ? styles.dayCircleTextActive
+                            : styles.dayCircleTextInactive,
+                        ]}
                       >
-                        <Text style={styles.timeBadgeText}>{day.start}</Text>
-                      </TouchableOpacity>
+                        {day.short}
+                      </Text>
+                    </TouchableOpacity>
 
-                      <Text style={styles.hyphen}>–</Text>
+                    <View style={styles.timeArea}>
+                      {day.active ? (
+                        <View style={styles.timeRow}>
+                          <TouchableOpacity
+                            style={styles.timeBadge}
+                            onPress={() => updateTime(day.key, 'start')}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.timeBadgeText}>{day.start}</Text>
+                          </TouchableOpacity>
 
-                      <TouchableOpacity
-                        style={styles.timeBadge}
-                        onPress={() => updateTime(day.key, 'end')}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.timeBadgeText}>{day.end}</Text>
-                      </TouchableOpacity>
+                          <Text style={styles.hyphen}>-</Text>
+
+                          <TouchableOpacity
+                            style={styles.timeBadge}
+                            onPress={() => updateTime(day.key, 'end')}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.timeBadgeText}>{day.end}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <Text style={styles.notAvailableText}>Not available</Text>
+                      )}
                     </View>
-                  ) : (
-                    <Text style={styles.notAvailableText}>Not available</Text>
-                  )}
+
+                    <TouchableOpacity
+                      style={[
+                        styles.toggleTrack,
+                        day.active ? styles.toggleTrackActive : styles.toggleTrackInactive,
+                      ]}
+                      onPress={() => toggleDay(day.key)}
+                      activeOpacity={0.8}
+                    >
+                      <View
+                        style={[
+                          styles.toggleThumb,
+                          day.active ? styles.toggleThumbRight : styles.toggleThumbLeft,
+                        ]}
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  {index !== days.length - 1 && <View style={styles.rowDivider} />}
                 </View>
-
-                <TouchableOpacity
-                  style={[
-                    styles.toggleTrack,
-                    day.active ? styles.toggleTrackActive : styles.toggleTrackInactive,
-                  ]}
-                  onPress={() => toggleDay(day.key)}
-                  activeOpacity={0.8}
-                >
-                  <View
-                    style={[
-                      styles.toggleThumb,
-                      day.active ? styles.toggleThumbRight : styles.toggleThumbLeft,
-                    ]}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {index !== days.length - 1 && <View style={styles.rowDivider} />}
+              ))}
             </View>
-          ))}
-        </View>
 
-        <Text style={styles.helperText}>
-          Tap the time boxes to change available hours.
-        </Text>
+            <Text style={styles.helperText}>
+              Removing a day clears that slot. The backend will reject overlapping or reversed time ranges automatically.
+            </Text>
 
-        <Text style={styles.sectionTitle}>SESSION DURATION</Text>
-
-        <View style={styles.durationCard}>
-          <View style={styles.durationRow}>
-            {durations.map((duration) => {
-              const selected = selectedDuration === duration;
-
-              return (
-                <TouchableOpacity
-                  key={duration}
-                  style={[
-                    styles.durationButton,
-                    selected && styles.durationButtonSelected,
-                  ]}
-                  onPress={() => setSelectedDuration(duration)}
-                >
-                  <Text
-                    style={[
-                      styles.durationButtonText,
-                      selected && styles.durationButtonTextSelected,
-                    ]}
-                  >
-                    {duration}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.updateButton, saving && { opacity: 0.6 }]}
-          onPress={handleUpdateAvailability}
-          disabled={saving}
-        >
-          <Text style={styles.updateButtonText}>
-            {saving ? 'Saving...' : 'Update Availability'}
-          </Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.updateButton, saving && { opacity: 0.6 }]}
+              onPress={handleUpdateAvailability}
+              disabled={saving}
+            >
+              <Text style={styles.updateButtonText}>
+                {saving ? 'Saving...' : 'Update Availability'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -421,6 +461,78 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 22,
     paddingBottom: 36,
+  },
+  loader: {
+    marginTop: 50,
+  },
+  banner: {
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+  },
+  bannerSuccess: {
+    backgroundColor: '#E6F2E8',
+    borderWidth: 1,
+    borderColor: '#BFD9C4',
+  },
+  bannerError: {
+    backgroundColor: '#F6E6E2',
+    borderWidth: 1,
+    borderColor: '#E7C3BA',
+  },
+  bannerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  bannerTextSuccess: {
+    color: '#2F563C',
+  },
+  bannerTextError: {
+    color: '#8C3E35',
+  },
+  summaryCard: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 26,
+    padding: 20,
+    marginBottom: 18,
+  },
+  summaryLabel: {
+    color: '#8B8176',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  summaryValue: {
+    color: '#23372B',
+    fontSize: 28,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  summaryHint: {
+    color: '#7C7267',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  infoCard: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 26,
+    padding: 22,
+  },
+  infoTitle: {
+    color: '#23372B',
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 10,
+  },
+  infoText: {
+    color: '#7C7267',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '500',
   },
   sectionTitle: {
     color: '#8B8176',
@@ -543,38 +655,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 22,
     marginLeft: 4,
-  },
-  durationCard: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 26,
-    padding: 18,
-    marginBottom: 26,
-  },
-  durationRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  durationButton: {
-    flex: 1,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#E1D7CA',
-    backgroundColor: '#FCFBF8',
-    paddingVertical: 18,
-    alignItems: 'center',
-  },
-  durationButtonSelected: {
-    borderColor: '#3F7653',
-    backgroundColor: '#E8F1EA',
-  },
-  durationButtonText: {
-    color: '#A29689',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  durationButtonTextSelected: {
-    color: '#2F563C',
+    lineHeight: 18,
   },
   updateButton: {
     backgroundColor: '#467853',
