@@ -48,7 +48,18 @@ public class JwtService {
     public boolean isTokenValid(String token) {
         try {
             Claims claims = extractAllClaims(token);
-            return !claims.getExpiration().before(new Date());
+            if (claims.getExpiration().before(new Date())) {
+                return false;
+            }
+            String subject = claims.getSubject();
+            if (subject == null || subject.isBlank()) {
+                return false;
+            }
+            if (claims.get("userId", Long.class) == null) {
+                return false;
+            }
+            String role = claims.get("role", String.class);
+            return role != null && !role.isBlank();
         } catch (Exception e) {
             return false;
         }
