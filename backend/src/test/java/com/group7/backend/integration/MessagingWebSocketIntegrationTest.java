@@ -206,7 +206,7 @@ class MessagingWebSocketIntegrationTest {
     }
 
     private String wsUrl() {
-        return "ws://localhost:" + port + "/ws";
+        return "ws://localhost:" + port + "/ws/chat";
     }
 
     private StompSession connect(String jwt) throws Exception {

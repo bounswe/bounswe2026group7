@@ -55,10 +55,10 @@ public class SecurityConfig {
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/api/uploads/photos/**").permitAll()
                 .requestMatchers("/api/uploads/attachments/**").permitAll()
-                // The /ws HTTP handshake is permitted; the JwtChannelInterceptor
-                // authenticates the STOMP CONNECT frame before any subscription
-                // or send is allowed.
-                .requestMatchers("/ws/**").permitAll()
+                // The /ws/chat HTTP handshake is permitted; the
+                // JwtChannelInterceptor authenticates the STOMP CONNECT frame
+                // before any subscription or send is allowed.
+                .requestMatchers("/ws/chat/**").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

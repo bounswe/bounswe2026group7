@@ -8,9 +8,18 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Maps {@link MessageResponse} to a Schema.org {@code Note} JSON-LD payload.
- * Auto-discovered by {@code JsonLdResponseBodyAdvice} via the
- * {@link JsonLdMapping} bean type.
+ * Maps {@link MessageResponse} to a W3C Activity Streams 2.0
+ * {@code Create} activity wrapping a {@code Note} object — matching the
+ * canonical AS 2.0 example documented in the project wiki's "Use of Standards"
+ * page (Sally posts a note).
+ *
+ * <p>Activity Streams 2.0 was the natural fit for chat messages over plain
+ * Schema.org because every message IS a {@code Create} activity (an actor
+ * publishing content), and the wiki specifically illustrates this pattern as
+ * the messaging idiom. Auto-discovered by {@code JsonLdResponseBodyAdvice}.
+ *
+ * <p>Reference: <a href="https://www.w3.org/TR/activitystreams-core/">W3C
+ * Activity Streams 2.0 Core</a> (Recommendation 23 May 2017).
  */
 @Component
 public class NoteMapping implements JsonLdMapping {
@@ -34,39 +43,77 @@ public class NoteMapping implements JsonLdMapping {
         MessageResponse message = (MessageResponse) body;
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("@context", JsonLdContext.SCHEMA_ORG);
-        result.put("@type", "Note");
+        result.put("@context", JsonLdContext.ACTIVITY_STREAMS);
+        result.put("@type", "Create");
         if (message.getId() != null) {
-            result.put("@id",
-                    baseUrl + "/api/mentorships/" + message.getMentorshipId()
-                            + "/messages/" + message.getId());
+            result.put("@id", activityIri(message));
         }
-        putIfPresent(result, "text", message.getContent());
-        if (message.getSenderId() != null) {
-            Map<String, Object> author = new LinkedHashMap<>();
-            author.put("@type", "Person");
-            author.put("@id", baseUrl + "/api/users/" + message.getSenderId());
-            putIfPresent(author, "givenName", message.getSenderFirstName());
-            putIfPresent(author, "familyName", message.getSenderLastName());
-            result.put("author", author);
-        }
+
+        result.put("actor", buildActor(message));
+        result.put("object", buildNote(message));
         if (message.getSentAt() != null) {
-            result.put("dateCreated", message.getSentAt().toString());
+            result.put("published", message.getSentAt().toString());
         }
-        if (message.getReadAt() != null) {
-            result.put("dateRead", message.getReadAt().toString());
-        }
-        putIfPresent(result, "associatedMedia", message.getAttachmentUrl());
         return result;
     }
 
-    private static void putIfPresent(Map<String, Object> map, String key, Object value) {
-        if (value == null) {
-            return;
+    private Map<String, Object> buildActor(MessageResponse message) {
+        Map<String, Object> actor = new LinkedHashMap<>();
+        actor.put("@type", "Person");
+        if (message.getSenderId() != null) {
+            actor.put("@id", baseUrl + "/api/users/" + message.getSenderId());
         }
-        if (value instanceof String s && s.isBlank()) {
-            return;
+        String displayName = displayName(message);
+        if (displayName != null) {
+            actor.put("name", displayName);
         }
-        map.put(key, value);
+        return actor;
+    }
+
+    private Map<String, Object> buildNote(MessageResponse message) {
+        Map<String, Object> note = new LinkedHashMap<>();
+        note.put("@type", "Note");
+        note.put("@id", noteIri(message));
+        if (message.getContent() != null && !message.getContent().isBlank()) {
+            note.put("content", message.getContent());
+        }
+        if (message.getSenderId() != null) {
+            note.put("attributedTo", baseUrl + "/api/users/" + message.getSenderId());
+        }
+        if (message.getSentAt() != null) {
+            note.put("published", message.getSentAt().toString());
+        }
+        if (message.getAttachmentUrl() != null && !message.getAttachmentUrl().isBlank()) {
+            // AS 2.0 'attachment' carries linked media for the Note.
+            Map<String, Object> attachment = new LinkedHashMap<>();
+            attachment.put("@type", "Document");
+            attachment.put("url", message.getAttachmentUrl());
+            note.put("attachment", attachment);
+        }
+        return note;
+    }
+
+    private String activityIri(MessageResponse message) {
+        return noteIri(message) + "#create";
+    }
+
+    private String noteIri(MessageResponse message) {
+        return baseUrl + "/api/mentorships/" + message.getMentorshipId()
+                + "/messages/" + message.getId();
+    }
+
+    private static String displayName(MessageResponse message) {
+        String first = message.getSenderFirstName();
+        String last = message.getSenderLastName();
+        if (first == null && last == null) {
+            return null;
+        }
+        if (first == null) {
+            return last;
+        }
+        if (last == null) {
+            return first;
+        }
+        return first + " " + last;
     }
 }

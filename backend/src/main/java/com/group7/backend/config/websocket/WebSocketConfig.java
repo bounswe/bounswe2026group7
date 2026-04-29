@@ -11,7 +11,8 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 /**
  * Wires the STOMP/WebSocket stack:
  * <ul>
- *   <li>Single endpoint at {@code /ws} (no SockJS — modern browsers don't need it).</li>
+ *   <li>Single endpoint at {@code /ws/chat} (no SockJS — modern browsers don't
+ *       need it). Path matches issue #245's specification.</li>
  *   <li>In-memory simple broker on {@code /topic} — single-replica deploy. Migration
  *       to a STOMP broker relay (RabbitMQ) is a one-line change when we scale.</li>
  *   <li>Application destination prefix {@code /app} for client SEND frames.</li>
@@ -34,7 +35,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws")
+        registry.addEndpoint("/ws/chat")
                 .setAllowedOriginPatterns(allowedOrigins);
     }
 
