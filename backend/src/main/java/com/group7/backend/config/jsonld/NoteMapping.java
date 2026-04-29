@@ -98,7 +98,7 @@ public class NoteMapping implements JsonLdMapping {
     }
 
     private String noteIri(MessageResponse message) {
-        return baseUrl + "/api/mentorships/" + message.getMentorshipId()
+        return baseUrl + "/api/conversations/" + message.getConversationId()
                 + "/messages/" + message.getId();
     }
 

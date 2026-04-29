@@ -1,14 +1,12 @@
 package com.group7.backend.config.websocket;
 
-import com.group7.backend.entity.Mentorship;
-import com.group7.backend.repository.MentorshipRepository;
+import com.group7.backend.repository.ConversationParticipantRepository;
 import com.group7.backend.service.JwtService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessagingException;
-import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
@@ -18,31 +16,30 @@ import org.springframework.stereotype.Component;
 
 import java.security.Principal;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Authenticates STOMP {@code CONNECT} frames against the project JWT and
- * authorises {@code SUBSCRIBE} frames against mentorship participation.
+ * authorises {@code SUBSCRIBE} frames against {@link com.group7.backend.entity.Conversation}
+ * participation.
  *
  * <p>The auth token is read from the {@code Authorization} STOMP native header
  * — never from URL query parameters — matching the Spring Framework reference's
- * recommended pattern. The resulting {@link Principal} is attached to the
- * STOMP session so {@code @MessageMapping} controllers and
- * {@code SimpMessagingTemplate.convertAndSendToUser} can use it.
+ * recommended pattern. The resulting {@link Principal} is attached to the STOMP
+ * session so {@code @MessageMapping} controllers can read it.
  */
 @Component
 public class JwtChannelInterceptor implements ChannelInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(JwtChannelInterceptor.class);
-    private static final String TOPIC_PREFIX = "/topic/mentorship/";
+    private static final String TOPIC_PREFIX = "/topic/conversation/";
 
     private final JwtService jwtService;
-    private final MentorshipRepository mentorshipRepository;
+    private final ConversationParticipantRepository participantRepository;
 
     public JwtChannelInterceptor(JwtService jwtService,
-                                 MentorshipRepository mentorshipRepository) {
+                                 ConversationParticipantRepository participantRepository) {
         this.jwtService = jwtService;
-        this.mentorshipRepository = mentorshipRepository;
+        this.participantRepository = participantRepository;
     }
 
     @Override
@@ -87,20 +84,17 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         }
         String destination = accessor.getDestination();
         if (destination == null || !destination.startsWith(TOPIC_PREFIX)) {
-            // Subscriptions to /user/queue/** and /topic/** outside our managed
-            // prefixes are decided elsewhere; only mentorship topics carry an
-            // ACL gate here.
+            // Subscriptions outside our managed prefix carry no ACL here.
             return;
         }
-        Long mentorshipId = parseMentorshipId(destination);
-        if (mentorshipId == null) {
+        Long conversationId = parseConversationId(destination);
+        if (conversationId == null) {
             throw new MessagingException("Malformed subscription destination: " + destination);
         }
         Long userId = (Long) auth.getCredentials();
-        Optional<Mentorship> mentorship = mentorshipRepository.findById(mentorshipId);
-        if (mentorship.isEmpty() || !isParticipant(mentorship.get(), userId)) {
+        if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
             log.warn("STOMP SUBSCRIBE rejected: userId={}, destination={}", userId, destination);
-            throw new MessagingException("You are not a participant of this mentorship");
+            throw new MessagingException("You are not a participant of this conversation");
         }
     }
 
@@ -111,16 +105,11 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         return header.substring(7).trim();
     }
 
-    private static Long parseMentorshipId(String destination) {
+    private static Long parseConversationId(String destination) {
         try {
             return Long.parseLong(destination.substring(TOPIC_PREFIX.length()));
         } catch (NumberFormatException e) {
             return null;
         }
-    }
-
-    private static boolean isParticipant(Mentorship mentorship, Long userId) {
-        return mentorship.getMentor().getId().equals(userId)
-                || mentorship.getMentee().getId().equals(userId);
     }
 }

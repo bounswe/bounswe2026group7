@@ -1,13 +1,16 @@
 package com.group7.backend.event;
 
 /**
- * Published from {@code MessageService.send} after persisting a message.
- * The transport-aware listener (WebSocket broadcast) consumes this event
- * AFTER_COMMIT — keeping the domain service free of WebSocket types.
+ * Published by {@code MessageService.send} after persisting a message.
+ * Transport-aware listeners (WebSocket broadcast) consume this AFTER_COMMIT —
+ * keeping the domain service free of WebSocket types.
+ *
+ * <p>{@code recipientId} may be {@code null} for non-1:1 conversations
+ * (forward-compatible with group chats); listeners must handle that case.
  */
 public record MessageSentEvent(
         Long messageId,
-        Long mentorshipId,
+        Long conversationId,
         Long senderId,
         Long recipientId
 ) {

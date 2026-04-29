@@ -34,8 +34,8 @@ public class ChatStompController {
         this.messageService = messageService;
     }
 
-    @MessageMapping("/chat.send/{mentorshipId}")
-    public void onSend(@DestinationVariable Long mentorshipId,
+    @MessageMapping("/chat.send/{conversationId}")
+    public void onSend(@DestinationVariable Long conversationId,
                        @Payload SendMessageRequest payload,
                        Principal principal) {
         if (!(principal instanceof UsernamePasswordAuthenticationToken auth)
@@ -43,6 +43,6 @@ public class ChatStompController {
             log.warn("STOMP send rejected: no authenticated principal");
             throw new MessagingException("Authentication required");
         }
-        messageService.send(senderId, mentorshipId, payload);
+        messageService.send(senderId, conversationId, payload);
     }
 }

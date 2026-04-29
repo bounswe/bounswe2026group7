@@ -2,6 +2,8 @@ package com.group7.backend.controller;
 
 import com.group7.backend.dto.request.SendMessageRequest;
 import com.group7.backend.dto.response.MessageResponse;
+import com.group7.backend.entity.Conversation;
+import com.group7.backend.service.ConversationService;
 import com.group7.backend.service.MessageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -25,15 +27,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Issue-spec REST surface for mentor-mentee chat. Each handler resolves the
+ * mentorship to its underlying {@link Conversation} via {@link ConversationService}
+ * before delegating to {@link MessageService} — the data model is conversation-
+ * centric but the API surface stays mentorship-centric per #245.
+ */
 @RestController
 @RequestMapping("/api/mentorships/{mentorshipId}/messages")
 @Tag(name = "Messages", description = "Mentor/mentee chat messages within a mentorship")
 public class MessageController {
 
     private final MessageService messageService;
+    private final ConversationService conversationService;
 
-    public MessageController(MessageService messageService) {
+    public MessageController(MessageService messageService,
+                             ConversationService conversationService) {
         this.messageService = messageService;
+        this.conversationService = conversationService;
     }
 
     @PostMapping
@@ -52,7 +63,8 @@ public class MessageController {
             @Valid @RequestBody SendMessageRequest request,
             Authentication authentication) {
         Long senderId = (Long) authentication.getCredentials();
-        MessageResponse created = messageService.send(senderId, mentorshipId, request);
+        Conversation conversation = conversationService.findOrCreateForMentorship(mentorshipId, senderId);
+        MessageResponse created = messageService.send(senderId, conversation.getId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
@@ -70,8 +82,9 @@ public class MessageController {
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
+        Conversation conversation = conversationService.findOrCreateForMentorship(mentorshipId, requesterId);
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(messageService.list(requesterId, mentorshipId, pageable));
+        return ResponseEntity.ok(messageService.list(requesterId, conversation.getId(), pageable));
     }
 
     @PatchMapping("/read")
@@ -87,7 +100,8 @@ public class MessageController {
             @PathVariable Long mentorshipId,
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
-        messageService.markAllRead(requesterId, mentorshipId);
+        Conversation conversation = conversationService.findOrCreateForMentorship(mentorshipId, requesterId);
+        messageService.markAllRead(requesterId, conversation.getId());
         return ResponseEntity.noContent().build();
     }
 }

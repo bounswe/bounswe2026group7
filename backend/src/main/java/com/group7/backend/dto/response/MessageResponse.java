@@ -1,5 +1,6 @@
 package com.group7.backend.dto.response;
 
+import com.group7.backend.entity.Conversation;
 import com.group7.backend.entity.Message;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
@@ -11,13 +12,16 @@ import java.time.OffsetDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
-@Schema(description = "A persisted chat message in a mentorship thread")
+@Schema(description = "A persisted chat message in a conversation")
 public class MessageResponse {
 
     @Schema(description = "Message ID", example = "1024")
     private Long id;
 
-    @Schema(description = "Mentorship the message belongs to", example = "42")
+    @Schema(description = "Conversation ID the message belongs to", example = "42")
+    private Long conversationId;
+
+    @Schema(description = "Mentorship ID — populated only for mentorship-scoped conversations", example = "17")
     private Long mentorshipId;
 
     @Schema(description = "Sender user ID", example = "7")
@@ -44,7 +48,11 @@ public class MessageResponse {
     public static MessageResponse from(Message message) {
         MessageResponse r = new MessageResponse();
         r.setId(message.getId());
-        r.setMentorshipId(message.getMentorship().getId());
+        Conversation conversation = message.getConversation();
+        r.setConversationId(conversation.getId());
+        if (conversation.getMentorship() != null) {
+            r.setMentorshipId(conversation.getMentorship().getId());
+        }
         r.setSenderId(message.getSender().getId());
         r.setSenderFirstName(message.getSender().getFirstName());
         r.setSenderLastName(message.getSender().getLastName());

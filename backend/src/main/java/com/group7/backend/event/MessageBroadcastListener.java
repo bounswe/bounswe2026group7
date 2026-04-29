@@ -22,7 +22,7 @@ public class MessageBroadcastListener {
 
     private static final Logger log = LoggerFactory.getLogger(MessageBroadcastListener.class);
 
-    static final String DESTINATION_PREFIX = "/topic/mentorship/";
+    static final String DESTINATION_PREFIX = "/topic/conversation/";
 
     private final MessageRepository messageRepository;
     private final SimpMessagingTemplate messagingTemplate;
@@ -35,12 +35,15 @@ public class MessageBroadcastListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onMessageSent(MessageSentEvent event) {
-        Message message = messageRepository.findById(event.messageId()).orElse(null);
+        // findByIdForBroadcast eager-fetches sender + conversation + mentorship so
+        // MessageResponse.from(message) does not depend on Open-Session-in-View
+        // for lazy initialization. Listener is robust to OSIV being disabled.
+        Message message = messageRepository.findByIdForBroadcast(event.messageId()).orElse(null);
         if (message == null) {
             log.warn("Message vanished before broadcast: messageId={}", event.messageId());
             return;
         }
-        String destination = DESTINATION_PREFIX + event.mentorshipId();
+        String destination = DESTINATION_PREFIX + event.conversationId();
         messagingTemplate.convertAndSend(destination, MessageResponse.from(message));
     }
 }
