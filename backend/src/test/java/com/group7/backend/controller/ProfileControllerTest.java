@@ -22,7 +22,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -65,7 +66,7 @@ class ProfileControllerTest {
         response.setEmail("ayse@example.com");
         response.setProfilePhoto("https://example.com/photo.jpg");
         response.setIsEmailVerified(false);
-        response.setCreatedAt(LocalDateTime.of(2026, 3, 15, 10, 0));
+        response.setCreatedAt(OffsetDateTime.of(2026, 3, 15, 10, 0, 0, 0, ZoneOffset.UTC));
         response.setRole("MENTOR");
         response.setBio("Expert in CS");
         response.setField("Computer Science");
@@ -89,7 +90,7 @@ class ProfileControllerTest {
         response.setEmail("ali@example.com");
         response.setProfilePhoto(null);
         response.setIsEmailVerified(false);
-        response.setCreatedAt(LocalDateTime.of(2026, 3, 16, 10, 0));
+        response.setCreatedAt(OffsetDateTime.of(2026, 3, 16, 10, 0, 0, 0, ZoneOffset.UTC));
         response.setRole("MENTEE");
         response.setProfileVisibility(true);
         response.setGoals("Learn AI");

@@ -22,11 +22,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -54,6 +57,9 @@ class AuthServiceTest {
 
     @Mock
     private EmailService emailService;
+
+    @Spy
+    private Clock clock = Clock.systemUTC();
 
     @InjectMocks
     private AuthService authService;
@@ -266,7 +272,7 @@ class AuthServiceTest {
         token.setToken("valid-token");
         token.setUser(user);
         token.setUsed(false);
-        token.setExpiresAt(LocalDateTime.now().plusHours(1));
+        token.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).plusHours(1));
 
         when(verificationTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(token));
 
@@ -287,7 +293,7 @@ class AuthServiceTest {
         token.setToken("expired-token");
         token.setUser(user);
         token.setUsed(false);
-        token.setExpiresAt(LocalDateTime.now().minusHours(1));
+        token.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).minusHours(1));
 
         when(verificationTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(token));
 
@@ -304,7 +310,7 @@ class AuthServiceTest {
         token.setToken("used-token");
         token.setUser(user);
         token.setUsed(true);
-        token.setExpiresAt(LocalDateTime.now().plusHours(1));
+        token.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).plusHours(1));
 
         when(verificationTokenRepository.findByToken("used-token")).thenReturn(Optional.of(token));
 
@@ -332,7 +338,7 @@ class AuthServiceTest {
         user.setIsEmailVerified(false);
 
         when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(user));
-        when(verificationTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(LocalDateTime.class)))
+        when(verificationTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(OffsetDateTime.class)))
                 .thenReturn(0L);
 
         authService.resendVerification("john@example.com");
@@ -349,7 +355,7 @@ class AuthServiceTest {
         user.setIsEmailVerified(false);
 
         when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(user));
-        when(verificationTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(LocalDateTime.class)))
+        when(verificationTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(OffsetDateTime.class)))
                 .thenReturn(3L);
 
         RateLimitExceededException ex = assertThrows(RateLimitExceededException.class,
@@ -380,7 +386,7 @@ class AuthServiceTest {
         user.setEmail("john@example.com");
 
         when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(user));
-        when(passwordResetTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(LocalDateTime.class)))
+        when(passwordResetTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(OffsetDateTime.class)))
                 .thenReturn(0L);
 
         authService.requestPasswordReset("john@example.com");
@@ -405,7 +411,7 @@ class AuthServiceTest {
         user.setEmail("john@example.com");
 
         when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(user));
-        when(passwordResetTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(LocalDateTime.class)))
+        when(passwordResetTokenRepository.countByUserIdAndCreatedAtAfter(eq(1L), any(OffsetDateTime.class)))
                 .thenReturn(5L);
 
         RateLimitExceededException ex = assertThrows(RateLimitExceededException.class,
@@ -425,7 +431,7 @@ class AuthServiceTest {
         token.setToken("valid-token");
         token.setUser(user);
         token.setUsed(false);
-        token.setExpiresAt(LocalDateTime.now().plusHours(1));
+        token.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).plusHours(1));
 
         when(passwordResetTokenRepository.findByToken("valid-token")).thenReturn(Optional.of(token));
         when(passwordEncoder.encode("NewPass1")).thenReturn("newHash");
@@ -446,7 +452,7 @@ class AuthServiceTest {
         token.setToken("expired-token");
         token.setUser(user);
         token.setUsed(false);
-        token.setExpiresAt(LocalDateTime.now().minusHours(1));
+        token.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).minusHours(1));
 
         when(passwordResetTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(token));
 
@@ -463,7 +469,7 @@ class AuthServiceTest {
         token.setToken("used-token");
         token.setUser(user);
         token.setUsed(true);
-        token.setExpiresAt(LocalDateTime.now().plusHours(1));
+        token.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).plusHours(1));
 
         when(passwordResetTokenRepository.findByToken("used-token")).thenReturn(Optional.of(token));
 

@@ -8,6 +8,9 @@ RUN mvn package -DskipTests -B
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
+# Force UTC system timezone — backend computes time exclusively in UTC.
+ENV TZ=UTC
+
 COPY --from=build /app/target/*.jar app.jar
 
 # Install a minimal HTTP client for container healthchecks

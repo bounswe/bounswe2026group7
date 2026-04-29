@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Getter
 @Setter
@@ -30,10 +30,10 @@ public class MentorshipResponse {
     private String menteeFirstName;
 
     @Schema(description = "Start date")
-    private LocalDateTime startDate;
+    private OffsetDateTime startDate;
 
     @Schema(description = "End date")
-    private LocalDateTime endDate;
+    private OffsetDateTime endDate;
 
     @Schema(description = "Duration in months", example = "3")
     private int duration;

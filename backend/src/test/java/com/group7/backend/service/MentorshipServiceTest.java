@@ -13,9 +13,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,6 +39,9 @@ class MentorshipServiceTest {
 
     @Mock
     private NotificationEventPublisher notificationEventPublisher;
+
+    @Spy
+    private Clock clock = Clock.systemUTC();
 
     @InjectMocks
     private MentorshipService mentorshipService;
@@ -62,7 +68,7 @@ class MentorshipServiceTest {
         request.setMentor(mentor);
         request.setMentee(mentee);
         request.setStatus(MentorshipRequestStatus.PENDING);
-        request.setCreatedAt(LocalDateTime.now());
+        request.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
 
         acceptDto = new AcceptRequestRequest();
         acceptDto.setDuration(3);
@@ -239,8 +245,8 @@ class MentorshipServiceTest {
         mentorship.setMentor(mentor);
         mentorship.setMentee(mentee);
         mentorship.setStatus(MentorshipStatus.ACTIVE);
-        mentorship.setStartDate(LocalDateTime.now());
-        mentorship.setEndDate(LocalDateTime.now().plusMonths(3));
+        mentorship.setStartDate(OffsetDateTime.now(ZoneOffset.UTC));
+        mentorship.setEndDate(OffsetDateTime.now(ZoneOffset.UTC).plusMonths(3));
         mentorship.setDuration(3);
 
         when(mentorshipRepository.findByUserIdAndStatus(1L, MentorshipStatus.ACTIVE))
@@ -261,8 +267,8 @@ class MentorshipServiceTest {
         mentorship.setMentor(mentor);
         mentorship.setMentee(mentee);
         mentorship.setStatus(MentorshipStatus.ACTIVE);
-        mentorship.setStartDate(LocalDateTime.now());
-        mentorship.setEndDate(LocalDateTime.now().plusMonths(3));
+        mentorship.setStartDate(OffsetDateTime.now(ZoneOffset.UTC));
+        mentorship.setEndDate(OffsetDateTime.now(ZoneOffset.UTC).plusMonths(3));
         mentorship.setDuration(3);
 
         when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
