@@ -1,6 +1,8 @@
 package com.group7.backend.event;
 
 import com.group7.backend.dto.response.MessageResponse;
+import com.group7.backend.entity.Conversation;
+import com.group7.backend.entity.ConversationKind;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.Mentorship;
@@ -48,36 +50,42 @@ class MessageBroadcastListenerTest {
         mentorship.setMentor(mentor);
         mentorship.setMentee(mentee);
 
+        Conversation conversation = new Conversation();
+        conversation.setId(900L);
+        conversation.setKind(ConversationKind.MENTORSHIP);
+        conversation.setMentorship(mentorship);
+
         message = new Message();
         message.setId(500L);
-        message.setMentorship(mentorship);
+        message.setConversation(conversation);
         message.setSender(mentor);
         message.setContent("Hello");
         message.setSentAt(OffsetDateTime.now());
     }
 
     @Test
-    void broadcastsMessageToTopicForMentorship() {
-        when(messageRepository.findById(500L)).thenReturn(Optional.of(message));
+    void broadcastsMessageToTopicForConversation() {
+        when(messageRepository.findByIdForBroadcast(500L)).thenReturn(Optional.of(message));
 
-        listener.onMessageSent(new MessageSentEvent(500L, 100L, 1L, 2L));
+        listener.onMessageSent(new MessageSentEvent(500L, 900L, 1L, 2L));
 
         ArgumentCaptor<String> destinationCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
         verify(messagingTemplate).convertAndSend(destinationCaptor.capture(), payloadCaptor.capture());
 
-        assertThat(destinationCaptor.getValue()).isEqualTo("/topic/mentorship/100");
+        assertThat(destinationCaptor.getValue()).isEqualTo("/topic/conversation/900");
         assertThat(payloadCaptor.getValue()).isInstanceOf(MessageResponse.class);
         MessageResponse payload = (MessageResponse) payloadCaptor.getValue();
         assertThat(payload.getId()).isEqualTo(500L);
+        assertThat(payload.getConversationId()).isEqualTo(900L);
         assertThat(payload.getContent()).isEqualTo("Hello");
     }
 
     @Test
     void doesNotBroadcastWhenMessageVanished() {
-        when(messageRepository.findById(500L)).thenReturn(Optional.empty());
+        when(messageRepository.findByIdForBroadcast(500L)).thenReturn(Optional.empty());
 
-        listener.onMessageSent(new MessageSentEvent(500L, 100L, 1L, 2L));
+        listener.onMessageSent(new MessageSentEvent(500L, 900L, 1L, 2L));
 
         verifyNoInteractions(messagingTemplate);
     }

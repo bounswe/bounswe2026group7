@@ -7,6 +7,7 @@ import com.group7.backend.dto.request.SendMessageRequest;
 import com.group7.backend.dto.response.MessageResponse;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.repository.*;
+import com.group7.backend.service.ConversationService;
 import com.group7.backend.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -71,6 +72,9 @@ class MessagingWebSocketIntegrationTest {
     @Autowired private MentorRepository mentorRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private MessageRepository messageRepository;
+    @Autowired private ConversationParticipantRepository conversationParticipantRepository;
+    @Autowired private ConversationRepository conversationRepository;
+    @Autowired private ConversationService conversationService;
     @Autowired(required = false) private MentorshipRepository mentorshipRepository;
     @MockitoBean private EmailService emailService;
 
@@ -79,6 +83,8 @@ class MessagingWebSocketIntegrationTest {
     @BeforeEach
     void setUp() {
         messageRepository.deleteAll();
+        conversationParticipantRepository.deleteAll();
+        conversationRepository.deleteAll();
         if (mentorshipRepository != null) mentorshipRepository.deleteAll();
         notificationRepository.deleteAll();
         mentorshipRequestRepository.deleteAll();
@@ -102,7 +108,7 @@ class MessagingWebSocketIntegrationTest {
         StompSession session = connect(fix.menteeToken);
 
         LinkedBlockingDeque<MessageResponse> received = new LinkedBlockingDeque<>();
-        session.subscribe("/topic/mentorship/" + fix.mentorshipId, new StompFrameHandler() {
+        session.subscribe("/topic/conversation/" + fix.conversationId, new StompFrameHandler() {
             @Override public Type getPayloadType(StompHeaders headers) { return MessageResponse.class; }
             @Override public void handleFrame(StompHeaders headers, Object payload) {
                 if (payload instanceof MessageResponse mr) {
@@ -132,6 +138,7 @@ class MessagingWebSocketIntegrationTest {
         MessageResponse delivered = received.poll(5, TimeUnit.SECONDS);
         assertThat(delivered).isNotNull();
         assertThat(delivered.getContent()).isEqualTo("Hello over websocket");
+        assertThat(delivered.getConversationId()).isEqualTo(fix.conversationId);
         assertThat(delivered.getMentorshipId()).isEqualTo(fix.mentorshipId);
         assertThat(delivered.getSenderId()).isEqualTo(fix.mentorId);
 
@@ -162,7 +169,7 @@ class MessagingWebSocketIntegrationTest {
 
         LinkedBlockingDeque<MessageResponse> received = new LinkedBlockingDeque<>();
         try {
-            session.subscribe("/topic/mentorship/" + fix.mentorshipId, new StompFrameHandler() {
+            session.subscribe("/topic/conversation/" + fix.conversationId, new StompFrameHandler() {
                 @Override public Type getPayloadType(StompHeaders headers) { return MessageResponse.class; }
                 @Override public void handleFrame(StompHeaders headers, Object payload) {
                     if (payload instanceof MessageResponse mr) {
@@ -202,7 +209,8 @@ class MessagingWebSocketIntegrationTest {
             String menteeToken,
             Long mentorId,
             Long menteeId,
-            Long mentorshipId) {
+            Long mentorshipId,
+            Long conversationId) {
     }
 
     private String wsUrl() {
@@ -246,7 +254,15 @@ class MessagingWebSocketIntegrationTest {
         Long mentorshipId = objectMapper.readTree(acceptResult.getResponse().getContentAsString())
                 .get("id").asLong();
 
-        return new Fixture(mentorToken, menteeToken, mentor.getId(), menteeId, mentorshipId);
+        // Bootstrap the conversation up-front so the WS subscriber can ACL-pass.
+        // In the production flow, the first REST/STOMP send creates it via
+        // ConversationService.findOrCreateForMentorship.
+        Long conversationId = conversationService
+                .findOrCreateForMentorship(mentorshipId, mentor.getId())
+                .getId();
+
+        return new Fixture(mentorToken, menteeToken, mentor.getId(), menteeId,
+                mentorshipId, conversationId);
     }
 
     private String registerAndLogin(String email, boolean isMentor) throws Exception {

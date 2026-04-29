@@ -53,12 +53,16 @@ class MessagingJsonLdContentNegotiationTest {
     @Autowired private MenteeRepository menteeRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private MessageRepository messageRepository;
+    @Autowired private ConversationParticipantRepository conversationParticipantRepository;
+    @Autowired private ConversationRepository conversationRepository;
     @Autowired(required = false) private MentorshipRepository mentorshipRepository;
     @MockitoBean private EmailService emailService;
 
     @BeforeEach
     void cleanDb() {
         messageRepository.deleteAll();
+        conversationParticipantRepository.deleteAll();
+        conversationRepository.deleteAll();
         if (mentorshipRepository != null) mentorshipRepository.deleteAll();
         notificationRepository.deleteAll();
         mentorshipRequestRepository.deleteAll();
@@ -102,7 +106,8 @@ class MessagingJsonLdContentNegotiationTest {
         JsonNode note = payload.get("object");
         assertThat(note.get("@type").asText()).isEqualTo("Note");
         assertThat(note.get("@id").asText())
-                .contains("/api/mentorships/" + fix.mentorshipId + "/messages/");
+                .contains("/api/conversations/")
+                .contains("/messages/");
         assertThat(note.get("content").asText()).isEqualTo("hello in JSON-LD");
         assertThat(note.get("attributedTo").asText()).contains("/api/users/" + fix.mentorId);
         assertThat(note.get("published").isMissingNode()).isFalse();

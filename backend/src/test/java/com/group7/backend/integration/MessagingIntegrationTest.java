@@ -54,12 +54,16 @@ class MessagingIntegrationTest {
     @Autowired private MenteeRepository menteeRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private MessageRepository messageRepository;
+    @Autowired private ConversationParticipantRepository conversationParticipantRepository;
+    @Autowired private ConversationRepository conversationRepository;
     @Autowired(required = false) private MentorshipRepository mentorshipRepository;
     @MockitoBean private EmailService emailService;
 
     @BeforeEach
     void cleanDb() {
         messageRepository.deleteAll();
+        conversationParticipantRepository.deleteAll();
+        conversationRepository.deleteAll();
         if (mentorshipRepository != null) mentorshipRepository.deleteAll();
         notificationRepository.deleteAll();
         mentorshipRequestRepository.deleteAll();
