@@ -6,6 +6,7 @@ import com.group7.backend.dto.request.MentorProfileRequest;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
+import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.User;
@@ -53,7 +54,7 @@ public class UserService {
                     .map(m -> (ProfileResponse) MentorResponse.from(m));
         }
 
-        return userRepository.findAll(pageable)
+        return userRepository.findAllNonAdmins(pageable)
                 .map(this::mapToResponse);
     }
 
@@ -113,6 +114,11 @@ public class UserService {
         // Mentees cannot view other mentee profiles (req 1.1.2.7)
         if (requester instanceof Mentee && target instanceof Mentee && !targetId.equals(requesterId)) {
             throw new ProfileNotVisibleException("Mentees cannot view other mentee profiles");
+        }
+
+        // Admins are not exposed via the user-profile graph
+        if (target instanceof Admin) {
+            throw new ProfileNotVisibleException("Admin profile is not visible");
         }
 
         return mapToResponse(target);
@@ -198,6 +204,11 @@ public class UserService {
             return MentorResponse.from(mentor);
         } else if (user instanceof Mentee mentee) {
             return MenteeResponse.from(mentee);
+        } else if (user instanceof Admin) {
+            // Defensive: admins are filtered upstream via findAllNonAdmins and
+            // rejected explicitly in getProfileById, so this path should be
+            // unreachable. Throw the same 403 mapping if a future caller forgets.
+            throw new ProfileNotVisibleException("Admin profile is not visible");
         }
         throw new IllegalStateException("Unknown user type: " + user.getClass().getSimpleName());
     }

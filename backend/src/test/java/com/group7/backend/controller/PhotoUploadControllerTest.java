@@ -14,7 +14,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -58,7 +59,7 @@ class PhotoUploadControllerTest {
         r.setEmail("user@test.com");
         r.setProfilePhoto(photoUrl);
         r.setIsEmailVerified(true);
-        r.setCreatedAt(LocalDateTime.now());
+        r.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         r.setRole("MENTOR");
         r.setInterests(List.of());
         r.setPreferredMenteeSkills(List.of());

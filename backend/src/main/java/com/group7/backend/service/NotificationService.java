@@ -7,17 +7,19 @@ import com.group7.backend.repository.NotificationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.util.List;
 
 @Service
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final Clock clock;
 
-    public NotificationService(NotificationRepository notificationRepository) {
+    public NotificationService(NotificationRepository notificationRepository, Clock clock) {
         this.notificationRepository = notificationRepository;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -35,7 +37,7 @@ public class NotificationService {
 
         if (!notification.isRead()) {
             notification.setRead(true);
-            notification.setReadAt(OffsetDateTime.now(ZoneId.of("Europe/Istanbul")));
+            notification.setReadAt(OffsetDateTime.now(clock));
         }
 
         return NotificationResponse.from(notificationRepository.save(notification));
@@ -43,6 +45,6 @@ public class NotificationService {
 
     @Transactional
     public int markAllAsRead(Long userId) {
-        return notificationRepository.markAllAsRead(userId, OffsetDateTime.now(ZoneId.of("Europe/Istanbul")));
+        return notificationRepository.markAllAsRead(userId, OffsetDateTime.now(clock));
     }
 }

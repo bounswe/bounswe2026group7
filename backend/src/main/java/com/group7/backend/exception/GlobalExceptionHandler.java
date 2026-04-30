@@ -3,9 +3,10 @@ package com.group7.backend.exception;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.access.AccessDeniedException;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -38,6 +39,18 @@ public class GlobalExceptionHandler {
                                                                        HttpServletRequest request) {
         log.warn("Mentorship request conflict: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
+    }
+
+    @ExceptionHandler(ConcurrencyFailureException.class)
+    public ResponseEntity<Map<String, String>> handleConcurrencyFailure(ConcurrencyFailureException ex,
+                                                                        HttpServletRequest request) {
+        // Covers ObjectOptimisticLockingFailureException (JPA @Version conflict)
+        // and CannotAcquireLockException / DeadlockLoserDataAccessException
+        // (Postgres-detected deadlocks during concurrent modification).
+        log.warn("Concurrent modification conflict: method={}, path={}, type={}",
+                request.getMethod(), request.getRequestURI(), ex.getClass().getSimpleName());
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict",
+                "This action conflicted with a concurrent update. Please retry.");
     }
 
     @ExceptionHandler(OverlappingSlotException.class)

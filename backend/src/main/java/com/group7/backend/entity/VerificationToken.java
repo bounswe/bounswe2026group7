@@ -3,7 +3,8 @@ package com.group7.backend.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "verification_tokens")
@@ -25,16 +26,16 @@ public class VerificationToken {
     private String token;
 
     @Column(nullable = false)
-    private LocalDateTime expiresAt;
+    private OffsetDateTime expiresAt;
 
     @Column(nullable = false)
     private Boolean used = false;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 }

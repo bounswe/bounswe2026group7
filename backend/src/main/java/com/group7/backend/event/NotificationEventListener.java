@@ -12,18 +12,22 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 
 @Component
 public class NotificationEventListener {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
-    public NotificationEventListener(NotificationRepository notificationRepository, UserRepository userRepository) {
+    public NotificationEventListener(NotificationRepository notificationRepository,
+                                     UserRepository userRepository,
+                                     Clock clock) {
         this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
+        this.clock = clock;
     }
 
     @Async
@@ -40,7 +44,7 @@ public class NotificationEventListener {
                     event.recipientId(),
                     NotificationType.MATCH_FOUND,
                     event.body(),
-                    OffsetDateTime.now(ZoneId.of("Europe/Istanbul")).minusHours(24)
+                    OffsetDateTime.now(clock).minusHours(24)
             );
             if (existsRecent) {
                 return;

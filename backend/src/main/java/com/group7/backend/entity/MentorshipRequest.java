@@ -5,7 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "mentorship_requests")
@@ -33,19 +34,20 @@ public class MentorshipRequest {
     private MentorshipRequestStatus status = MentorshipRequestStatus.PENDING;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 
     @Column(nullable = false)
-    private LocalDateTime updatedAt;
+    private OffsetDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        this.createdAt = now;
+        this.updatedAt = now;
     }
 
     @PreUpdate
     protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 }

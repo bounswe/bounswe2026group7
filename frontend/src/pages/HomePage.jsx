@@ -206,7 +206,16 @@ export default function HomePage() {
                 </div>
 
                 <div className="amh-actions">
-                  <button className="amh-btn-primary" onClick={() => navigate(`/users/${activeMentorship.mentorId}`)}>
+                  <button
+                    className="amh-btn-primary"
+                    onClick={() => navigate(`/mentorships/${activeMentorship.id}`)}
+                  >
+                    View Mentorship
+                  </button>
+                  <button
+                    className="amh-btn-secondary"
+                    onClick={() => navigate(`/users/${activeMentorship.mentorId}`)}
+                  >
                     View Mentor Profile
                   </button>
                 </div>
@@ -356,7 +365,19 @@ export default function HomePage() {
                   </div>
                 ) : (
                   activeMentorships.map(m => (
-                    <div className="active-mentorship" key={m.id}>
+                    <div
+                      className="active-mentorship clickable-card"
+                      key={m.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/mentorships/${m.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/mentorships/${m.id}`)
+                        }
+                      }}
+                    >
                       <div className="am-header">
                         <div className="am-info">
                           <div className="req-avatar">{m.menteeFirstName?.[0] ?? '?'}</div>
