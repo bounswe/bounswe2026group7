@@ -57,13 +57,19 @@ export function MentorshipProvider({ children }) {
       getOwnProfile(),
     ]).then(([reqs, mentorships, profile]) => {
       if (reqs.status === 'fulfilled') {
-        setReceivedRequests(reqs.value.content || [])
+        setReceivedRequests(reqs.value?.content || [])
+      } else {
+        setReceivedRequests([])
       }
       if (mentorships.status === 'fulfilled') {
         setActiveMentorships(mentorships.value || [])
+      } else {
+        setActiveMentorships([])
       }
       if (profile.status === 'fulfilled') {
         setMentorStats(profile.value)
+      } else {
+        setMentorStats(null)
       }
     }).finally(() => setMentorLoading(false))
   }, [isMentor])
