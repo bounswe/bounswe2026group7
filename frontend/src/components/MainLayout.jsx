@@ -31,7 +31,7 @@ const SIDEBAR_LINKS = [
   { label: 'Profile', path: '/profile', icon: User },
 ]
 
-export default function MainLayout({ children }) {
+export default function MainLayout({ children, activeMentorshipCount = null }) {
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -167,7 +167,11 @@ export default function MainLayout({ children }) {
             <Avatar src={profilePhoto} initials={initials} size="md" status={presence} className="sidebar-avatar" />
             <div className="sidebar-name">{displayName}</div>
             <div className="sidebar-role">{roleLabel}</div>
-            <div className="sidebar-badge">Active Mentorship: 1</div>
+            {activeMentorshipCount != null && (
+              <div className="sidebar-badge">
+                {role === 'MENTOR' ? 'Active Mentees' : 'Active Mentorship'}: {activeMentorshipCount}
+              </div>
+            )}
           </div>
           <nav className="sidebar-nav">
             {SIDEBAR_LINKS.map(link => {

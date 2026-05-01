@@ -145,8 +145,10 @@ export default function HomePage() {
     ? maxCapacity - activeMenteeCount : '-'
 
   // ──────────────────────────────────────────────────────────────────────────
+  const sidebarActiveCount = isMentee ? (activeMentorship ? 1 : 0) : activeMenteeCount
+
   return (
-    <MainLayout>
+    <MainLayout activeMentorshipCount={sidebarActiveCount}>
 
       {isMentee ? (
         <>
