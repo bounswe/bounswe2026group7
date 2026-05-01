@@ -8,12 +8,15 @@ import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.Mentorship;
 import com.group7.backend.entity.Message;
 import com.group7.backend.repository.MessageRepository;
+import com.group7.backend.service.AttachmentUrlBuilder;
+import com.group7.backend.service.MessageResponseMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
@@ -30,6 +33,8 @@ class MessageBroadcastListenerTest {
 
     @Mock private MessageRepository messageRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
+    @Spy private MessageResponseMapper responseMapper =
+            new MessageResponseMapper(new AttachmentUrlBuilder("http://localhost:8080"));
 
     @InjectMocks private MessageBroadcastListener listener;
 

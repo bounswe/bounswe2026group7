@@ -1,8 +1,8 @@
 package com.group7.backend.event;
 
-import com.group7.backend.dto.response.MessageResponse;
 import com.group7.backend.entity.Message;
 import com.group7.backend.repository.MessageRepository;
+import com.group7.backend.service.MessageResponseMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -26,11 +26,14 @@ public class MessageBroadcastListener {
 
     private final MessageRepository messageRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MessageResponseMapper responseMapper;
 
     public MessageBroadcastListener(MessageRepository messageRepository,
-                                    SimpMessagingTemplate messagingTemplate) {
+                                    SimpMessagingTemplate messagingTemplate,
+                                    MessageResponseMapper responseMapper) {
         this.messageRepository = messageRepository;
         this.messagingTemplate = messagingTemplate;
+        this.responseMapper = responseMapper;
     }
 
     // fallbackExecution stays at the default (false): the listener must run
@@ -41,15 +44,16 @@ public class MessageBroadcastListener {
     // see the message over the socket).
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onMessageSent(MessageSentEvent event) {
-        // findByIdForBroadcast eager-fetches sender + conversation + mentorship so
-        // MessageResponse.from(message) does not depend on Open-Session-in-View
-        // for lazy initialization. Listener is robust to OSIV being disabled.
+        // findByIdForBroadcast eager-fetches sender + conversation + mentorship
+        // + attachment so the response mapper can build a MessageResponse
+        // after the original transaction has closed without relying on
+        // Open-Session-in-View for lazy initialization.
         Message message = messageRepository.findByIdForBroadcast(event.messageId()).orElse(null);
         if (message == null) {
             log.warn("Message vanished before broadcast: messageId={}", event.messageId());
             return;
         }
         String destination = DESTINATION_PREFIX + event.conversationId();
-        messagingTemplate.convertAndSend(destination, MessageResponse.from(message));
+        messagingTemplate.convertAndSend(destination, responseMapper.toResponse(message));
     }
 }

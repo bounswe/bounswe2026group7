@@ -2,6 +2,7 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.request.SendMessageRequest;
 import com.group7.backend.dto.response.MessageResponse;
+import com.group7.backend.entity.Attachment;
 import com.group7.backend.entity.Conversation;
 import com.group7.backend.entity.ConversationKind;
 import com.group7.backend.entity.MentorshipStatus;
@@ -11,6 +12,7 @@ import com.group7.backend.event.MessageSentEvent;
 import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.AttachmentRepository;
 import com.group7.backend.repository.ConversationParticipantRepository;
 import com.group7.backend.repository.ConversationRepository;
 import com.group7.backend.repository.MessageRepository;
@@ -25,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Per-message operations. Operates on {@code conversationId} — agnostic of
@@ -47,6 +51,8 @@ public class MessageService {
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository participantRepository;
     private final UserRepository userRepository;
+    private final AttachmentRepository attachmentRepository;
+    private final MessageResponseMapper responseMapper;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final NotificationEventPublisher notificationEventPublisher;
     private final Clock clock;
@@ -55,6 +61,8 @@ public class MessageService {
                           ConversationRepository conversationRepository,
                           ConversationParticipantRepository participantRepository,
                           UserRepository userRepository,
+                          AttachmentRepository attachmentRepository,
+                          MessageResponseMapper responseMapper,
                           ApplicationEventPublisher applicationEventPublisher,
                           NotificationEventPublisher notificationEventPublisher,
                           Clock clock) {
@@ -62,6 +70,8 @@ public class MessageService {
         this.conversationRepository = conversationRepository;
         this.participantRepository = participantRepository;
         this.userRepository = userRepository;
+        this.attachmentRepository = attachmentRepository;
+        this.responseMapper = responseMapper;
         this.applicationEventPublisher = applicationEventPublisher;
         this.notificationEventPublisher = notificationEventPublisher;
         this.clock = clock;
@@ -79,7 +89,9 @@ public class MessageService {
         message.setConversation(conversation);
         message.setSender(sender);
         message.setContent(request.getContent());
-        message.setAttachmentUrl(request.getAttachmentUrl());
+        if (request.getAttachmentId() != null) {
+            message.setAttachment(loadAndAuthorizeAttachment(request.getAttachmentId(), senderId));
+        }
         message.setSentAt(OffsetDateTime.now(clock));
         Message saved = messageRepository.save(message);
 
@@ -96,7 +108,7 @@ public class MessageService {
 
         log.info("Message sent: messageId={}, conversationId={}, senderId={}",
                 saved.getId(), conversation.getId(), senderId);
-        return MessageResponse.from(saved);
+        return responseMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -104,7 +116,7 @@ public class MessageService {
         loadAndAuthorize(conversationId, requesterId);
         return messageRepository
                 .findByConversationIdOrderBySentAtDescIdDesc(conversationId, pageable)
-                .map(MessageResponse::from);
+                .map(responseMapper::toResponse);
     }
 
     @Transactional
@@ -130,6 +142,26 @@ public class MessageService {
                     "You are not a participant of this conversation");
         }
         return conversation;
+    }
+
+    /**
+     * Resolves the requested attachment and enforces the upload-time gate:
+     * the sender of a message must equal the uploader of the attachment.
+     * That makes "Eve forwards Alice's uploaded URL to Bob" impossible
+     * without Alice sending herself.
+     *
+     * @throws ResourceNotFoundException 404 — attachment id is unknown
+     * @throws ProfileNotVisibleException 403 — sender is not the uploader
+     */
+    private Attachment loadAndAuthorizeAttachment(UUID attachmentId, Long senderId) {
+        Attachment attachment = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found"));
+        Long uploaderId = attachment.getUploader() != null ? attachment.getUploader().getId() : null;
+        if (!Objects.equals(uploaderId, senderId)) {
+            throw new ProfileNotVisibleException(
+                    "You may only attach files you uploaded yourself");
+        }
+        return attachment;
     }
 
     /**

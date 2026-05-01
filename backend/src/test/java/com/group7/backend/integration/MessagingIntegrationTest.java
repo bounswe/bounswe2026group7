@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
@@ -161,7 +162,7 @@ class MessagingIntegrationTest {
     }
 
     @Test
-    void uploadAttachmentReturnsUrlReachableFromSendMessage() throws Exception {
+    void uploadAttachmentReturnsIdReachableFromSendMessage() throws Exception {
         Fixture fix = setupActiveMentorship("msg_m_d@test.com", "msg_e_d@test.com");
 
         byte[] pdf = pdfBody("payload");
@@ -172,22 +173,57 @@ class MessagingIntegrationTest {
                         .file(file)
                         .header("Authorization", "Bearer " + fix.mentorToken))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.downloadUrl").value(org.hamcrest.Matchers.containsString(
+                        "/api/uploads/attachments/")))
                 .andExpect(jsonPath("$.contentType").value("application/pdf"))
                 .andReturn();
-        String attachmentUrl = objectMapper
+        String attachmentId = objectMapper
                 .readTree(uploadResult.getResponse().getContentAsString())
-                .get("url").asText();
-        assertThat(attachmentUrl).contains("/api/uploads/attachments/");
+                .get("id").asText();
+        String downloadUrl = objectMapper
+                .readTree(uploadResult.getResponse().getContentAsString())
+                .get("downloadUrl").asText();
 
         SendMessageRequest body = new SendMessageRequest();
         body.setContent("here is the doc");
-        body.setAttachmentUrl(attachmentUrl);
+        body.setAttachmentId(UUID.fromString(attachmentId));
         mockMvc.perform(post("/api/mentorships/" + fix.mentorshipId + "/messages")
                         .header("Authorization", "Bearer " + fix.mentorToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.attachmentUrl").value(attachmentUrl));
+                .andExpect(jsonPath("$.attachment.id").value(attachmentId))
+                .andExpect(jsonPath("$.attachment.downloadUrl").value(downloadUrl))
+                .andExpect(jsonPath("$.attachment.contentType").value("application/pdf"));
+    }
+
+    @Test
+    void senderCannotAttachAFileTheyDidNotUpload() throws Exception {
+        Fixture fix = setupActiveMentorship("msg_m_e@test.com", "msg_e_e@test.com");
+
+        // Mentor uploads.
+        byte[] pdf = pdfBody("private");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "private.pdf", "application/pdf", pdf);
+        MvcResult uploadResult = mockMvc.perform(multipart("/api/messages/attachments")
+                        .file(file)
+                        .header("Authorization", "Bearer " + fix.mentorToken))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String attachmentId = objectMapper
+                .readTree(uploadResult.getResponse().getContentAsString())
+                .get("id").asText();
+
+        // Mentee tries to attach the mentor's upload to their own outgoing message.
+        SendMessageRequest body = new SendMessageRequest();
+        body.setContent("forwarded without permission");
+        body.setAttachmentId(UUID.fromString(attachmentId));
+        mockMvc.perform(post("/api/mentorships/" + fix.mentorshipId + "/messages")
+                        .header("Authorization", "Bearer " + fix.menteeToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isForbidden());
     }
 
     @Test

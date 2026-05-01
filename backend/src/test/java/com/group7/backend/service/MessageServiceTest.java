@@ -2,6 +2,7 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.request.SendMessageRequest;
 import com.group7.backend.dto.response.MessageResponse;
+import com.group7.backend.entity.Attachment;
 import com.group7.backend.entity.Conversation;
 import com.group7.backend.entity.ConversationKind;
 import com.group7.backend.entity.ConversationParticipant;
@@ -15,6 +16,7 @@ import com.group7.backend.event.MessageSentEvent;
 import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.AttachmentRepository;
 import com.group7.backend.repository.ConversationParticipantRepository;
 import com.group7.backend.repository.ConversationRepository;
 import com.group7.backend.repository.MessageRepository;
@@ -39,6 +41,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,6 +59,11 @@ class MessageServiceTest {
     @Mock private ConversationRepository conversationRepository;
     @Mock private ConversationParticipantRepository participantRepository;
     @Mock private UserRepository userRepository;
+    @Mock private AttachmentRepository attachmentRepository;
+    // A real mapper avoids stubbing the response shape on every send/list test;
+    // the mapper itself has no external dependencies that would need mocking.
+    @Spy private MessageResponseMapper responseMapper =
+            new MessageResponseMapper(new AttachmentUrlBuilder("http://localhost:8080"));
     @Mock private ApplicationEventPublisher applicationEventPublisher;
     @Mock private NotificationEventPublisher notificationEventPublisher;
 
@@ -221,6 +229,138 @@ class MessageServiceTest {
 
         verify(messageRepository, never())
                 .findByConversationIdOrderBySentAtDescIdDesc(any(), any(Pageable.class));
+    }
+
+    @Test
+    void send_withAttachmentIdOwnedBySender_persistsFkAndExposesSummary() {
+        UUID id = UUID.randomUUID();
+        Attachment a = new Attachment();
+        a.setId(id);
+        a.setFilename(id + ".pdf");
+        a.setContentType("application/pdf");
+        a.setSizeBytes(123);
+        a.setUploader(mentor);
+
+        when(conversationRepository.findById(900L)).thenReturn(Optional.of(conversation));
+        when(participantRepository.existsByConversationIdAndUserId(900L, 1L)).thenReturn(true);
+        when(participantRepository.findOtherParticipantUserIds(900L, 1L)).thenReturn(List.of(2L));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(attachmentRepository.findById(id)).thenReturn(Optional.of(a));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> {
+            Message m = inv.getArgument(0);
+            m.setId(600L);
+            return m;
+        });
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setContent("here is the doc");
+        req.setAttachmentId(id);
+
+        MessageResponse response = messageService.send(1L, 900L, req);
+
+        ArgumentCaptor<Message> persisted = ArgumentCaptor.forClass(Message.class);
+        verify(messageRepository).save(persisted.capture());
+        assertThat(persisted.getValue().getAttachment()).isSameAs(a);
+        assertThat(response.getAttachment().getId()).isEqualTo(id);
+        assertThat(response.getAttachment().getDownloadUrl())
+                .isEqualTo("http://localhost:8080/api/uploads/attachments/" + id);
+    }
+
+    @Test
+    void send_withUnknownAttachmentId_throwsNotFound() {
+        UUID id = UUID.randomUUID();
+        when(conversationRepository.findById(900L)).thenReturn(Optional.of(conversation));
+        when(participantRepository.existsByConversationIdAndUserId(900L, 1L)).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(attachmentRepository.findById(id)).thenReturn(Optional.empty());
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setContent("missing");
+        req.setAttachmentId(id);
+
+        assertThatThrownBy(() -> messageService.send(1L, 900L, req))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void send_withForeignUploader_throwsForbidden() {
+        UUID id = UUID.randomUUID();
+        Attachment a = new Attachment();
+        a.setId(id);
+        a.setFilename(id + ".pdf");
+        a.setContentType("application/pdf");
+        a.setSizeBytes(123);
+        a.setUploader(mentee); // uploader is the OTHER participant
+        when(conversationRepository.findById(900L)).thenReturn(Optional.of(conversation));
+        when(participantRepository.existsByConversationIdAndUserId(900L, 1L)).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(attachmentRepository.findById(id)).thenReturn(Optional.of(a));
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setContent("forwarded");
+        req.setAttachmentId(id);
+
+        assertThatThrownBy(() -> messageService.send(1L, 900L, req))
+                .isInstanceOf(ProfileNotVisibleException.class);
+
+        verify(messageRepository, never()).save(any());
+    }
+
+    @Test
+    void send_whenSenderRowMissing_throwsNotFound() {
+        when(conversationRepository.findById(900L)).thenReturn(Optional.of(conversation));
+        when(participantRepository.existsByConversationIdAndUserId(900L, 1L)).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setContent("ghost sender");
+
+        assertThatThrownBy(() -> messageService.send(1L, 900L, req))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void send_onMentorPairConversation_isAlwaysSendableRegardlessOfMentorshipStatus() {
+        // Cover the assertSendable branch where conversation.kind != MENTORSHIP.
+        Conversation pair = new Conversation();
+        pair.setId(901L);
+        pair.setKind(ConversationKind.MENTOR_PAIR);
+        // No mentorship attached.
+        when(conversationRepository.findById(901L)).thenReturn(Optional.of(pair));
+        when(participantRepository.existsByConversationIdAndUserId(901L, 1L)).thenReturn(true);
+        when(participantRepository.findOtherParticipantUserIds(901L, 1L)).thenReturn(List.of());
+        when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> {
+            Message m = inv.getArgument(0);
+            m.setId(700L);
+            return m;
+        });
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setContent("peer chat");
+
+        MessageResponse response = messageService.send(1L, 901L, req);
+        assertThat(response.getId()).isEqualTo(700L);
+    }
+
+    @Test
+    void send_onMentorshipScopedConversationWithoutMentorshipRow_throwsConflict() {
+        // assertSendable's defence: a MENTORSHIP-kind conversation whose
+        // mentorship reference is null must reject sends.
+        Conversation broken = new Conversation();
+        broken.setId(902L);
+        broken.setKind(ConversationKind.MENTORSHIP);
+        broken.setMentorship(null);
+        when(conversationRepository.findById(902L)).thenReturn(Optional.of(broken));
+        when(participantRepository.existsByConversationIdAndUserId(902L, 1L)).thenReturn(true);
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setContent("orphan conversation");
+
+        assertThatThrownBy(() -> messageService.send(1L, 902L, req))
+                .isInstanceOf(MentorshipRequestException.class);
     }
 
     @Test

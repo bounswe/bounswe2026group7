@@ -1,11 +1,18 @@
 package com.group7.backend.service;
 
-import com.group7.backend.dto.response.AttachmentUploadResponse;
+import com.group7.backend.dto.response.AttachmentSummary;
+import com.group7.backend.entity.Attachment;
+import com.group7.backend.entity.User;
+import com.group7.backend.exception.RateLimitExceededException;
+import com.group7.backend.repository.AttachmentRepository;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -14,26 +21,38 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * Stores chat attachments under a directory served at
- * {@code /api/uploads/attachments/**}. Mirrors {@link FileStorageService}'s
- * validation pattern (magic-byte check, UUID filenames, path-traversal defense)
- * but accepts both image and document MIME types per issue #245.
+ * {@code /api/uploads/attachments/**}. Each successful upload produces both
+ * a row in {@code attachments} and a file on disk; either both land or
+ * neither does (the file is reclaimed by a transaction synchronization if
+ * the row's transaction rolls back).
+ *
+ * <p>Validation pattern mirrors {@link FileStorageService} (magic-byte check,
+ * UUID filenames, path-traversal defence) but accepts both image and
+ * document MIME types per issue #245.
  */
 @Service
 public class AttachmentStorageService {
 
     private static final Logger log = LoggerFactory.getLogger(AttachmentStorageService.class);
 
+    // The DOCX MIME literal is verbose and reused below; lift it to a constant
+    // so the allowlist + extension table + magic-byte switch all reference one
+    // string.
+    private static final String DOCX_MIME =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/jpeg", "image/png", "image/gif", "image/webp",
-            "application/pdf",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "text/plain"
+            "application/pdf", DOCX_MIME, "text/plain"
     );
 
     private static final Map<String, String> CONTENT_TYPE_TO_EXT = Map.of(
@@ -42,7 +61,7 @@ public class AttachmentStorageService {
             "image/gif", ".gif",
             "image/webp", ".webp",
             "application/pdf", ".pdf",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx",
+            DOCX_MIME, ".docx",
             "text/plain", ".txt"
     );
 
@@ -54,14 +73,26 @@ public class AttachmentStorageService {
     private static final byte[] PDF_MAGIC = {0x25, 0x50, 0x44, 0x46};       // "%PDF"
     private static final byte[] DOCX_MAGIC = {0x50, 0x4B, 0x03, 0x04};      // ZIP container
 
+    private final AttachmentRepository attachmentRepository;
+    private final AttachmentUrlBuilder urlBuilder;
+    private final Clock clock;
+
     @Value("${app.upload.attachments-dir:/app/uploads/attachments}")
     private String uploadDir;
 
     @Value("${app.upload.max-file-size:5242880}")
     private long maxFileSize;
 
-    @Value("${app.base-url:http://localhost:8080}")
-    private String baseUrl;
+    @Value("${app.upload.max-per-user-per-hour:30}")
+    private int maxPerUserPerHour;
+
+    public AttachmentStorageService(AttachmentRepository attachmentRepository,
+                                    AttachmentUrlBuilder urlBuilder,
+                                    Clock clock) {
+        this.attachmentRepository = attachmentRepository;
+        this.urlBuilder = urlBuilder;
+        this.clock = clock;
+    }
 
     @PostConstruct
     public void init() {
@@ -75,37 +106,127 @@ public class AttachmentStorageService {
     }
 
     /**
-     * Validates and persists an uploaded attachment, returning a public URL
-     * plus metadata. Throws {@link IllegalArgumentException} on validation
-     * failure (which {@code GlobalExceptionHandler} maps to {@code 400}).
+     * Validates and persists an uploaded attachment, returning the
+     * {@link AttachmentSummary} for the created row. Throws
+     * {@link IllegalArgumentException} on validation failure (mapped to 400)
+     * or {@link RateLimitExceededException} when the per-user hourly quota is
+     * exhausted (mapped to 429).
      */
-    public AttachmentUploadResponse storeAttachment(MultipartFile file) {
+    @Transactional
+    public AttachmentSummary storeAttachment(MultipartFile file, User uploader) {
         validateFile(file);
+        enforcePerUserHourlyQuota(uploader);
 
-        String contentType = file.getContentType();
-        String extension = CONTENT_TYPE_TO_EXT.getOrDefault(contentType, "");
-        String filename = UUID.randomUUID() + extension;
+        UUID id = UUID.randomUUID();
+        String filename = id + extensionFor(file.getContentType());
+        Path target = resolveUploadTarget(filename);
 
-        Path uploadPath = Paths.get(uploadDir).normalize().toAbsolutePath();
-        Path targetPath = uploadPath.resolve(filename).normalize();
-        if (!targetPath.startsWith(uploadPath)) {
-            throw new IllegalArgumentException("Invalid file path");
-        }
+        writeFileWithRollbackCleanup(file, target);
+        Attachment saved = persistRow(id, filename, file, uploader);
 
-        try (InputStream in = file.getInputStream()) {
-            Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            log.info("Stored attachment: {} ({} bytes)", filename, file.getSize());
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to store attachment", e);
-        }
-
-        String url = baseUrl + "/api/uploads/attachments/" + filename;
-        return AttachmentUploadResponse.of(url, filename, contentType, file.getSize());
+        return AttachmentSummary.of(saved, urlBuilder.downloadUrl(saved.getId()));
     }
 
-    Path getUploadPath() {
+    /**
+     * Resolves the configured upload directory. Used by
+     * {@code AttachmentDownloadController} to stream files back to authenticated
+     * participants of the owning conversation.
+     */
+    public Path getUploadPath() {
         return Paths.get(uploadDir);
     }
+
+    // ── storeAttachment helpers ─────────────────────────────────────────────
+
+    /**
+     * Bounds disk-fill DoS until a global rate-limit middleware lands. The
+     * count is over the rolling hour preceding {@code now()}.
+     */
+    private void enforcePerUserHourlyQuota(User uploader) {
+        OffsetDateTime since = OffsetDateTime.now(clock).minus(Duration.ofHours(1));
+        long recent = attachmentRepository.countByUploaderSince(uploader.getId(), since);
+        if (recent >= maxPerUserPerHour) {
+            throw new RateLimitExceededException(
+                    "Upload quota exceeded — you may upload at most "
+                            + maxPerUserPerHour + " files per hour");
+        }
+    }
+
+    private static String extensionFor(String contentType) {
+        return CONTENT_TYPE_TO_EXT.getOrDefault(contentType, "");
+    }
+
+    private Path resolveUploadTarget(String filename) {
+        Path uploadPath = Paths.get(uploadDir).normalize().toAbsolutePath();
+        Path target = uploadPath.resolve(filename).normalize();
+        if (!target.startsWith(uploadPath)) {
+            throw new IllegalArgumentException("Invalid file path");
+        }
+        return target;
+    }
+
+    /**
+     * Writes the multipart body to {@code target}, then registers a
+     * transaction synchronization that deletes the file if the surrounding
+     * transaction does not commit. This pairs the file's lifetime with the
+     * row's lifetime: a rollback after this method returns reclaims both.
+     *
+     * <p>If {@link Files#copy} fails mid-write a partial file may remain on
+     * disk; the orphan scheduler keys off DB rows and would never reach it,
+     * so we attempt an explicit cleanup before re-raising. Failures of that
+     * cleanup are best-effort logged — we do not mask the original copy
+     * exception by throwing from the cleanup path.
+     */
+    private void writeFileWithRollbackCleanup(MultipartFile file, Path target) {
+        try (InputStream in = file.getInputStream()) {
+            Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            try {
+                Files.deleteIfExists(target);
+            } catch (IOException cleanup) {
+                log.warn("Failed to remove partial attachment file after copy failure: {}",
+                        target, cleanup);
+            }
+            throw new RuntimeException("Failed to store attachment", e);
+        }
+        log.info("Stored attachment file: {} ({} bytes)", target.getFileName(), file.getSize());
+        registerRollbackFileCleanup(target);
+    }
+
+    private static void registerRollbackFileCleanup(Path path) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    return;
+                }
+                try {
+                    if (Files.deleteIfExists(path)) {
+                        log.info("Reclaimed orphan attachment file after rollback: {}", path);
+                    }
+                } catch (IOException e) {
+                    log.warn("Failed to reclaim orphan attachment file after rollback: {}", path, e);
+                }
+            }
+        });
+    }
+
+    private Attachment persistRow(UUID id, String filename, MultipartFile file, User uploader) {
+        Attachment attachment = new Attachment();
+        attachment.setId(id);
+        attachment.setFilename(filename);
+        attachment.setContentType(file.getContentType());
+        attachment.setSizeBytes(file.getSize());
+        attachment.setUploader(uploader);
+        Attachment saved = attachmentRepository.save(attachment);
+        log.info("Persisted attachment row: id={}, uploaderId={}", saved.getId(), uploader.getId());
+        return saved;
+    }
+
+    // ── upload validation ───────────────────────────────────────────────────
 
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -142,8 +263,7 @@ public class AttachmentStorageService {
                         && header[8] == 'W' && header[9] == 'E'
                         && header[10] == 'B' && header[11] == 'P';
                 case "application/pdf" -> bytesRead >= PDF_MAGIC.length && startsWith(header, PDF_MAGIC);
-                case "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ->
-                        bytesRead >= DOCX_MAGIC.length && startsWith(header, DOCX_MAGIC);
+                case DOCX_MIME -> bytesRead >= DOCX_MAGIC.length && startsWith(header, DOCX_MAGIC);
                 case "text/plain" -> isProbablyText(header, bytesRead);
                 default -> false;
             };

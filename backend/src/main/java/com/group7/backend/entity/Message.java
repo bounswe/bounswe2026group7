@@ -13,6 +13,11 @@ import java.time.ZoneOffset;
  * edit/delete column today (issue #245 doesn't ask for it). The {@code readAt}
  * column is the only mutable field after persistence; bulk updated by the
  * {@code PATCH /messages/read} endpoint.
+ *
+ * <p>An optional {@link Attachment} reference carries any uploaded file. The
+ * sender of the message must equal the uploader of the attachment — that
+ * gate is enforced in {@code MessageService.send} so the persisted FK is
+ * always provenance-clean.
  */
 @Entity
 @Table(name = "messages")
@@ -36,8 +41,9 @@ public class Message {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
-    @Column(name = "attachment_url", length = 512)
-    private String attachmentUrl;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "attachment_id")
+    private Attachment attachment;
 
     @Column(name = "sent_at", nullable = false, updatable = false)
     private OffsetDateTime sentAt;

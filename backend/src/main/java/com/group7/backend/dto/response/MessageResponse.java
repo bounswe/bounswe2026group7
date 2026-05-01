@@ -1,7 +1,5 @@
 package com.group7.backend.dto.response;
 
-import com.group7.backend.entity.Conversation;
-import com.group7.backend.entity.Message;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -9,6 +7,11 @@ import lombok.Setter;
 
 import java.time.OffsetDateTime;
 
+/**
+ * Wire shape for a persisted chat message. Constructed by
+ * {@code MessageResponseMapper} — this DTO has no awareness of how the
+ * attachment URL is computed, which is why it has no static factory.
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -36,30 +39,12 @@ public class MessageResponse {
     @Schema(description = "Message text")
     private String content;
 
-    @Schema(description = "Attachment URL, if any")
-    private String attachmentUrl;
+    @Schema(description = "Attachment summary; null if the message has no attachment")
+    private AttachmentSummary attachment;
 
     @Schema(description = "When the message was sent (UTC)")
     private OffsetDateTime sentAt;
 
     @Schema(description = "When the recipient first marked the message read; null if unread")
     private OffsetDateTime readAt;
-
-    public static MessageResponse from(Message message) {
-        MessageResponse r = new MessageResponse();
-        r.setId(message.getId());
-        Conversation conversation = message.getConversation();
-        r.setConversationId(conversation.getId());
-        if (conversation.getMentorship() != null) {
-            r.setMentorshipId(conversation.getMentorship().getId());
-        }
-        r.setSenderId(message.getSender().getId());
-        r.setSenderFirstName(message.getSender().getFirstName());
-        r.setSenderLastName(message.getSender().getLastName());
-        r.setContent(message.getContent());
-        r.setAttachmentUrl(message.getAttachmentUrl());
-        r.setSentAt(message.getSentAt());
-        r.setReadAt(message.getReadAt());
-        return r;
-    }
 }

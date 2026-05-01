@@ -12,7 +12,9 @@ import java.time.OffsetDateTime;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
-    @Query("SELECT m FROM Message m JOIN FETCH m.sender "
+    @Query("SELECT m FROM Message m "
+            + "JOIN FETCH m.sender "
+            + "LEFT JOIN FETCH m.attachment "
             + "WHERE m.conversation.id = :conversationId "
             + "ORDER BY m.sentAt DESC, m.id DESC")
     Page<Message> findByConversationIdOrderBySentAtDescIdDesc(
@@ -20,15 +22,17 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             Pageable pageable);
 
     /**
-     * Eager-fetches the message together with its sender, conversation, and (if any)
-     * the conversation's mentorship — so the broadcast listener can build a
-     * {@code MessageResponse} after the original transaction has closed without
-     * relying on Open-Session-in-View.
+     * Eager-fetches the message together with its sender, conversation,
+     * conversation's mentorship (if any), and attachment (if any) — so the
+     * broadcast listener can build a {@code MessageResponse} after the
+     * original transaction has closed without relying on
+     * Open-Session-in-View.
      */
     @Query("SELECT m FROM Message m "
             + "JOIN FETCH m.sender "
             + "JOIN FETCH m.conversation c "
             + "LEFT JOIN FETCH c.mentorship "
+            + "LEFT JOIN FETCH m.attachment "
             + "WHERE m.id = :id")
     java.util.Optional<Message> findByIdForBroadcast(@Param("id") Long id);
 
@@ -44,4 +48,5 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     int markAllAsReadForReader(@Param("conversationId") Long conversationId,
                                @Param("readerId") Long readerId,
                                @Param("readAt") OffsetDateTime readAt);
+
 }

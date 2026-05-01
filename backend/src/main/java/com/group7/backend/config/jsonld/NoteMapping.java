@@ -1,6 +1,7 @@
 package com.group7.backend.config.jsonld;
 
 import com.group7.backend.config.AppProperties;
+import com.group7.backend.dto.response.AttachmentSummary;
 import com.group7.backend.dto.response.MessageResponse;
 import org.springframework.stereotype.Component;
 
@@ -83,11 +84,17 @@ public class NoteMapping implements JsonLdMapping {
         if (message.getSentAt() != null) {
             note.put("published", message.getSentAt().toString());
         }
-        if (message.getAttachmentUrl() != null && !message.getAttachmentUrl().isBlank()) {
-            // AS 2.0 'attachment' carries linked media for the Note.
+        AttachmentSummary attachmentSummary = message.getAttachment();
+        if (attachmentSummary != null && attachmentSummary.getDownloadUrl() != null) {
+            // AS 2.0 'attachment' carries linked media for the Note. The download
+            // URL was rendered by AttachmentStorageService.attachmentDownloadUrl
+            // when the MessageResponse was built — we inherit the canonical form.
             Map<String, Object> attachment = new LinkedHashMap<>();
             attachment.put("@type", "Document");
-            attachment.put("url", message.getAttachmentUrl());
+            attachment.put("url", attachmentSummary.getDownloadUrl());
+            if (attachmentSummary.getContentType() != null) {
+                attachment.put("mediaType", attachmentSummary.getContentType());
+            }
             note.put("attachment", attachment);
         }
         return note;

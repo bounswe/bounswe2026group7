@@ -7,6 +7,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.UUID;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -20,8 +22,9 @@ public class SendMessageRequest {
             requiredMode = Schema.RequiredMode.REQUIRED)
     private String content;
 
-    @Size(max = 512, message = "Attachment URL must not exceed 512 characters")
-    @Schema(description = "Optional attachment URL returned by POST /api/messages/attachments",
-            example = "http://localhost:8080/api/uploads/attachments/abc.pdf")
-    private String attachmentUrl;
+    @Schema(description = "Optional attachment id returned by POST /api/messages/attachments. "
+            + "The backend reconstructs the URL and enforces that the sender must equal the "
+            + "uploader of this attachment.",
+            example = "5b9c1f0a-2c2c-4cf2-8f1d-9d4f1a0e6b5e")
+    private UUID attachmentId;
 }
