@@ -10,20 +10,39 @@ import java.util.Arrays;
 /**
  * Resolves the client IP used as a rate-limit bucket key.
  *
- * <p>When {@code trustForwardedFor} is enabled, takes the leftmost entry of
- * {@code X-Forwarded-For}. Otherwise uses {@link HttpServletRequest#getRemoteAddr()}.
- * IPv6 addresses are normalized to their /64 prefix so an attacker cannot escape
- * the limiter by rotating the low 64 bits.
+ * <p>When {@code trustForwardedFor} is enabled, the resolver reads
+ * {@code X-Forwarded-For} and walks the list from the right, skipping
+ * {@code trustedProxiesCount} entries (each one represents a trusted hop
+ * between the app and the wild internet). The entry that lands at that
+ * position is treated as the client IP. With the default {@code count = 1},
+ * the resolver returns the entry that the single trusted reverse proxy
+ * appended — never the leftmost, which an attacker can populate by setting
+ * {@code X-Forwarded-For} on the request before it ever reaches the proxy.
  *
- * <p>Trusting XFF is unsafe in any deploy where the client can set the header
- * directly (e.g., local dev, or a misconfigured reverse proxy). Default off.
+ * <p>When {@code trustForwardedFor} is disabled (the default), the resolver
+ * uses {@link HttpServletRequest#getRemoteAddr()}.
+ *
+ * <p>IPv6 addresses are normalised to their {@code /64} prefix so an attacker
+ * cannot rotate the low 64 bits to escape rate limiting.
+ *
+ * <p><strong>Deployment requirement:</strong> when XFF trust is on,
+ * {@code trustedProxiesCount} MUST equal the number of proxies that append
+ * to {@code X-Forwarded-For} between the public internet and this app.
+ * Setting it too low lets an attacker spoof the client IP. Setting it too
+ * high — or any path where the chain arrives shorter than expected — makes
+ * the resolver fall back to {@link HttpServletRequest#getRemoteAddr()}: the
+ * IP of whoever actually connected, which is never attacker-spoofable, but
+ * means everyone behind that proxy gets bucketed together. See
+ * {@code PRODUCTION_CHECKLIST.md} for the deployment matrix.
  */
 public class ClientIpResolver {
 
     private final boolean trustForwardedFor;
+    private final int trustedProxiesCount;
 
-    public ClientIpResolver(boolean trustForwardedFor) {
+    public ClientIpResolver(boolean trustForwardedFor, int trustedProxiesCount) {
         this.trustForwardedFor = trustForwardedFor;
+        this.trustedProxiesCount = Math.max(1, trustedProxiesCount);
     }
 
     /**
@@ -32,7 +51,7 @@ public class ClientIpResolver {
      * available, or {@code "raw:<value>"} if parsing fails.
      */
     public String resolve(HttpServletRequest request) {
-        String raw = trustForwardedFor ? leftmostForwardedFor(request) : null;
+        String raw = trustForwardedFor ? trustedClientIpFromXff(request) : null;
         if (raw == null || raw.isBlank()) {
             raw = request.getRemoteAddr();
         }
@@ -53,14 +72,27 @@ public class ClientIpResolver {
         return address.getHostAddress();
     }
 
-    private static String leftmostForwardedFor(HttpServletRequest request) {
+    /**
+     * Walks {@code X-Forwarded-For} from the right, skipping
+     * {@code trustedProxiesCount} entries, and returns the next one. Returns
+     * {@code null} (so {@link #resolve} falls back to {@code remoteAddr})
+     * when the header is missing, blank, or shorter than the configured
+     * trust depth. The short-chain case must NOT yield the leftmost entry
+     * because that entry is attacker-controllable (the attacker sets
+     * {@code X-Forwarded-For} on their original request before any trusted
+     * proxy has a chance to append).
+     */
+    private String trustedClientIpFromXff(HttpServletRequest request) {
         String header = request.getHeader("X-Forwarded-For");
         if (header == null || header.isBlank()) {
             return null;
         }
-        int comma = header.indexOf(',');
-        String first = (comma == -1) ? header : header.substring(0, comma);
-        return first.trim();
+        String[] entries = header.split(",");
+        if (entries.length < trustedProxiesCount) {
+            return null;
+        }
+        int idx = entries.length - trustedProxiesCount;
+        return entries[idx].trim();
     }
 
     private static String ipv6SlashSixtyFour(byte[] fullAddress, String fallback) {

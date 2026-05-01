@@ -27,7 +27,9 @@ public class RateLimitConfiguration {
 
     @Bean
     public ClientIpResolver rateLimitClientIpResolver(RateLimitProperties properties) {
-        return new ClientIpResolver(properties.isTrustForwardedFor());
+        return new ClientIpResolver(
+                properties.isTrustForwardedFor(),
+                properties.getTrustedProxiesCount());
     }
 
     @Bean

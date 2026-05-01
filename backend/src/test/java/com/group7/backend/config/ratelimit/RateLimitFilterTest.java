@@ -250,7 +250,7 @@ class RateLimitFilterTest {
         return new RateLimitFilter(
                 props,
                 cache,
-                new ClientIpResolver(false),
+                new ClientIpResolver(false, 1),
                 OBJECT_MAPPER,
                 clock);
     }

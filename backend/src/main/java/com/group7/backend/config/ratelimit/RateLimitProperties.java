@@ -1,6 +1,7 @@
 package com.group7.backend.config.ratelimit;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -28,11 +29,27 @@ public class RateLimitProperties {
     private boolean enabled = true;
 
     /**
-     * If true, read the leftmost {@code X-Forwarded-For} entry as the client IP.
-     * Only enable when behind a reverse proxy that strips/overwrites client-supplied
-     * XFF — otherwise an attacker can pick their own rate-limit key.
+     * If true, read the client IP from {@code X-Forwarded-For}. Only enable
+     * when behind reverse proxies that strip or append (never blindly forward)
+     * client-supplied XFF — otherwise an attacker can pick their own
+     * rate-limit key. The number of trusted proxy hops is set by
+     * {@link #trustedProxiesCount}.
      */
     private boolean trustForwardedFor = false;
+
+    /**
+     * Number of trusted proxy hops sitting between this app and the wild
+     * internet (e.g. CDN + load balancer = 2). Used together with
+     * {@link #trustForwardedFor} to compute the client IP: the resolver
+     * walks the XFF list from the right, skips this many entries, and treats
+     * the next entry as the client IP. Default 1 covers the common
+     * "single trusted reverse proxy in front of the app" deployment.
+     *
+     * <p>This setting matters only when {@link #trustForwardedFor} is on; it
+     * is ignored otherwise.
+     */
+    @Min(1)
+    private int trustedProxiesCount = 1;
 
     /** Rules keyed by rule name. Each value is validated when bound. */
     @Valid
@@ -52,6 +69,14 @@ public class RateLimitProperties {
 
     public void setTrustForwardedFor(boolean trustForwardedFor) {
         this.trustForwardedFor = trustForwardedFor;
+    }
+
+    public int getTrustedProxiesCount() {
+        return trustedProxiesCount;
+    }
+
+    public void setTrustedProxiesCount(int trustedProxiesCount) {
+        this.trustedProxiesCount = trustedProxiesCount;
     }
 
     public Map<String, RateLimitRule> getRules() {
