@@ -2,6 +2,7 @@ package com.group7.backend.config.ratelimit;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.stats.CacheStats;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.TimeMeter;
 
@@ -33,7 +34,31 @@ public class BucketCache {
         this.buckets = Caffeine.newBuilder()
                 .maximumSize(MAX_BUCKETS)
                 .expireAfterAccess(Duration.ofHours(IDLE_HOURS))
+                // Stats are needed in production to detect IP-rotation DDoS
+                // pressure: a steadily rising eviction count means the LRU
+                // is dropping legitimate users' buckets and effectively
+                // resetting their rate limit. Surfaced via {@link #stats()}.
+                .recordStats()
                 .build();
+    }
+
+    /**
+     * Snapshot of cache hit/miss/eviction counters since process start.
+     * Intended for an Actuator exposure or scheduled log line; safe to call
+     * concurrently with {@link #getOrCreate}.
+     */
+    public CacheStats stats() {
+        return buckets.stats();
+    }
+
+    /**
+     * Approximate count of live buckets. Useful as a saturation gauge —
+     * a value approaching {@value #MAX_BUCKETS} means LRU eviction will
+     * start dropping older buckets on the next miss.
+     */
+    public long size() {
+        buckets.cleanUp();
+        return buckets.estimatedSize();
     }
 
     /**
