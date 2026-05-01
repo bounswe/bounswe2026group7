@@ -1,6 +1,7 @@
 package com.group7.backend.config.ratelimit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.group7.backend.config.AuthenticatedUserId;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.FilterChain;
@@ -28,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -156,9 +158,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private String resolveActorKey(RateLimitRule rule, HttpServletRequest request) {
         if (rule.keyStrategy() == KeyStrategy.USER) {
+            // Read the user id through the named contract on
+            // AuthenticatedUserId so that if JwtAuthenticationFilter ever
+            // changes how the id is attached to the Authentication, this
+            // filter doesn't silently degrade to IP-keyed.
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated() && auth.getCredentials() instanceof Long userId) {
-                return "u" + userId;
+            Optional<Long> userId = AuthenticatedUserId.fromAuthentication(auth);
+            if (userId.isPresent()) {
+                return "u" + userId.get();
             }
             log.warn("USER-keyed rule '{}' had no authenticated principal; falling back to IP",
                     request.getRequestURI());
