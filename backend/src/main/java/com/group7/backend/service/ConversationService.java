@@ -5,6 +5,7 @@ import com.group7.backend.entity.ConversationKind;
 import com.group7.backend.entity.ConversationParticipant;
 import com.group7.backend.entity.ConversationParticipantId;
 import com.group7.backend.entity.Mentorship;
+import com.group7.backend.entity.MentorshipStatus;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
@@ -18,6 +19,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 
 /**
  * Lifecycle service for {@link Conversation}. Single responsibility: decide
@@ -68,7 +71,17 @@ public class ConversationService {
      * conversation row via the partial unique index on
      * {@code conversations.mentorship_id}.
      *
-     * @throws ResourceNotFoundException when the mentorship does not exist
+     * <p>Creation is gated on the mentorship being {@link MentorshipStatus#ACTIVE}.
+     * If the mentorship is not active and no conversation exists yet, this
+     * throws {@link ResourceNotFoundException}: read paths
+     * ({@code GET /messages}, {@code PATCH /read}) must not silently insert
+     * empty conversation rows for rejected/completed mentorships nor leak
+     * participation by returning 200. An already-existing conversation
+     * (created while the mentorship was active) is always returned so history
+     * remains readable after the mentorship reaches a terminal state.
+     *
+     * @throws ResourceNotFoundException when the mentorship does not exist,
+     *         or when no conversation exists yet for a non-active mentorship
      * @throws ProfileNotVisibleException when {@code requesterId} is neither
      *         the mentor nor the mentee of that mentorship
      */
@@ -79,8 +92,14 @@ public class ConversationService {
             throw new ProfileNotVisibleException(
                     "You are not a participant of this mentorship");
         }
-        return conversationRepository.findByMentorshipId(mentorshipId)
-                .orElseGet(() -> createOrRecover(mentorship));
+        Optional<Conversation> existing = conversationRepository.findByMentorshipId(mentorshipId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
+            throw new ResourceNotFoundException("Conversation not found");
+        }
+        return createOrRecover(mentorship);
     }
 
     /**

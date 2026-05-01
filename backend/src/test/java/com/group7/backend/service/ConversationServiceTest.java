@@ -6,6 +6,7 @@ import com.group7.backend.entity.ConversationParticipant;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.Mentorship;
+import com.group7.backend.entity.MentorshipStatus;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.ConversationParticipantRepository;
@@ -66,6 +67,7 @@ class ConversationServiceTest {
         mentorship.setId(100L);
         mentorship.setMentor(mentor);
         mentorship.setMentee(mentee);
+        mentorship.setStatus(MentorshipStatus.ACTIVE);
     }
 
     @Test
@@ -133,6 +135,43 @@ class ConversationServiceTest {
 
         assertThatThrownBy(() -> conversationService.findOrCreateForMentorship(404L, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void findOrCreate_returnsExisting_evenWhenMentorshipNotActive() {
+        // History remains readable after the mentorship reaches a terminal
+        // state — once the conversation row exists, status is irrelevant
+        // for resolving it on subsequent reads.
+        mentorship.setStatus(MentorshipStatus.COMPLETED);
+        Conversation existing = new Conversation();
+        existing.setId(900L);
+        existing.setKind(ConversationKind.MENTORSHIP);
+        existing.setMentorship(mentorship);
+
+        when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
+        when(conversationRepository.findByMentorshipId(100L)).thenReturn(Optional.of(existing));
+
+        Conversation result = conversationService.findOrCreateForMentorship(100L, 1L);
+
+        assertThat(result).isSameAs(existing);
+        verify(conversationRepository, never()).save(any());
+        verify(participantRepository, never()).save(any());
+    }
+
+    @Test
+    void findOrCreate_throwsNotFound_whenMentorshipNotActiveAndNoConversation() {
+        // The read paths (GET /messages, PATCH /read) must not silently insert
+        // empty conversation rows for rejected/completed mentorships nor leak
+        // participation by returning 200.
+        mentorship.setStatus(MentorshipStatus.TERMINATED);
+        when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
+        when(conversationRepository.findByMentorshipId(100L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> conversationService.findOrCreateForMentorship(100L, 1L))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(conversationRepository, never()).save(any());
+        verify(participantRepository, never()).save(any());
     }
 
     @Test
