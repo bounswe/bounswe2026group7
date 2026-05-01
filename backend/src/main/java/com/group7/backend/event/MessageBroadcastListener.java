@@ -33,7 +33,13 @@ public class MessageBroadcastListener {
         this.messagingTemplate = messagingTemplate;
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    // fallbackExecution stays at the default (false): the listener must run
+    // only after a real transaction commits. If MessageService.send is ever
+    // refactored to be invoked outside a transaction, we would rather fail
+    // loudly here than silently broadcast a message that was never persisted
+    // (findByIdForBroadcast would return empty and the recipient would never
+    // see the message over the socket).
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onMessageSent(MessageSentEvent event) {
         // findByIdForBroadcast eager-fetches sender + conversation + mentorship so
         // MessageResponse.from(message) does not depend on Open-Session-in-View
