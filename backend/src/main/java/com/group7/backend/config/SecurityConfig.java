@@ -54,7 +54,10 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/api/uploads/photos/**").permitAll()
-                .requestMatchers("/api/uploads/attachments/**").permitAll()
+                // /api/uploads/attachments/** is intentionally NOT permitAll —
+                // chat attachments are private message content and the
+                // download path lives behind AttachmentDownloadController,
+                // which enforces JWT auth and conversation-participant ACL.
                 // The /ws/chat HTTP handshake is permitted; the
                 // JwtChannelInterceptor authenticates the STOMP CONNECT frame
                 // before any subscription or send is allowed.

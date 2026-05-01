@@ -14,22 +14,15 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${app.upload.dir:/app/uploads/photos}")
     private String uploadDir;
 
-    @Value("${app.upload.attachments-dir:/app/uploads/attachments}")
-    private String attachmentsDir;
-
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         // Serve uploaded photos at /api/uploads/photos/{filename}
-        // Cache for 1 hour (photos rarely change, reduces repeat requests)
+        // Cache for 1 hour (photos rarely change, reduces repeat requests).
+        // Profile photos are intentionally public; chat attachments are not —
+        // they are served through AttachmentDownloadController, which enforces
+        // authentication and conversation-participant ACL.
         registry.addResourceHandler("/api/uploads/photos/**")
                 .addResourceLocations("file:" + uploadDir + "/")
-                .setCacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePublic());
-
-        // Serve chat message attachments at /api/uploads/attachments/{filename}
-        // Same caching policy as photos — attachments are immutable once stored
-        // (UUID-based filenames; no overwrite path).
-        registry.addResourceHandler("/api/uploads/attachments/**")
-                .addResourceLocations("file:" + attachmentsDir + "/")
                 .setCacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePublic());
     }
 }
