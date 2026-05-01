@@ -46,7 +46,7 @@ describe('HomePage Component', () => {
     await renderComponent()
 
     await waitFor(() => {
-      expect(screen.getByText(/active mentees/i)).toBeInTheDocument()
+      expect(screen.getAllByText(/active mentees/i).length).toBeGreaterThan(0)
       expect(screen.getByText(/capacity/i)).toBeInTheDocument()
     })
   })
