@@ -3,13 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import {
   getMatchingMentors,
-  getReceivedMentorshipRequests,
   acceptMentorshipRequest,
   rejectMentorshipRequest,
   getActiveMentorships,
-  getOwnProfile,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
 
 function timeAgo(iso) {
@@ -23,6 +22,17 @@ function timeAgo(iso) {
 export default function HomePage() {
   const navigate = useNavigate()
   const { role } = useAuth()
+  const {
+    pendingRequests,
+    pendingCount,
+    activeMentorships,
+    activeMenteeCount,
+    maxCapacity,
+    availableSlots,
+    mentorLoading,
+    handleMentorRequestRejected,
+    handleMentorRequestAccepted,
+  } = useMentorship()
   const isMentee = role === 'MENTEE'
 
   // ── Mentee state ──────────────────────────────────────────────────────────
@@ -30,14 +40,9 @@ export default function HomePage() {
   const [activeMentorship, setActiveMentorship] = useState(null)
   const [menteeLoading, setMenteeLoading] = useState(true)
 
-  // ── Mentor state ──────────────────────────────────────────────────────────
-  const [receivedRequests, setReceivedRequests] = useState([])
-  const [activeMentorships, setActiveMentorships] = useState([])
-  const [mentorStats, setMentorStats] = useState(null)
   const [acceptingId, setAcceptingId] = useState(null)   // request being accepted
   const [selectedDuration, setSelectedDuration] = useState(3)
   const [actionLoading, setActionLoading] = useState(false)
-  const [mentorLoading, setMentorLoading] = useState(false)
 
   // ── Load mentee data ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -66,27 +71,6 @@ export default function HomePage() {
     loadMenteeData()
   }, [isMentee])
 
-  // ── Load mentor data ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (isMentee) return
-    setMentorLoading(true)
-    Promise.allSettled([
-      getReceivedMentorshipRequests(),
-      getActiveMentorships(),
-      getOwnProfile(),
-    ]).then(([reqs, mentorships, profile]) => {
-      if (reqs.status === 'fulfilled') {
-        setReceivedRequests(reqs.value.content || [])
-      }
-      if (mentorships.status === 'fulfilled') {
-        setActiveMentorships(mentorships.value || [])
-      }
-      if (profile.status === 'fulfilled') {
-        setMentorStats(profile.value)
-      }
-    }).finally(() => setMentorLoading(false))
-  }, [isMentee])
-
   // ── Toast helper ───────────────────────────────────────────────────────────
   const showToast = (message, type = 'success') => {
     const el = document.createElement('div')
@@ -101,7 +85,7 @@ export default function HomePage() {
     setActionLoading(true)
     try {
       await rejectMentorshipRequest(id)
-      setReceivedRequests(prev => prev.filter(r => r.id !== id))
+      handleMentorRequestRejected(id)
       showToast('Request declined.', 'success')
     } catch {
       showToast('Failed to decline request.', 'error')
@@ -115,9 +99,7 @@ export default function HomePage() {
     setActionLoading(true)
     try {
       const newMentorship = await acceptMentorshipRequest(acceptingId, selectedDuration)
-      setReceivedRequests(prev => prev.filter(r => r.id !== acceptingId))
-      setActiveMentorships(prev => [newMentorship, ...prev])
-      setMentorStats(prev => prev ? { ...prev, currentMenteeCount: (prev.currentMenteeCount || 0) + 1 } : prev)
+      handleMentorRequestAccepted(acceptingId, newMentorship)
       setAcceptingId(null)
       setSelectedDuration(3)
       showToast('Request accepted! Mentorship started.', 'success')
@@ -135,14 +117,6 @@ export default function HomePage() {
       setActionLoading(false)
     }
   }
-
-  // ── Derived mentor stats ───────────────────────────────────────────────────
-  const pendingCount = receivedRequests.filter(r => r.status === 'PENDING').length
-  const pendingRequests = receivedRequests.filter(r => r.status === 'PENDING')
-  const activeMenteeCount = mentorStats?.currentMenteeCount ?? '-'
-  const maxCapacity = mentorStats?.maxMenteeCapacity ?? '-'
-  const availableSlots = typeof activeMenteeCount === 'number' && typeof maxCapacity === 'number'
-    ? maxCapacity - activeMenteeCount : '-'
 
   // ──────────────────────────────────────────────────────────────────────────
   return (

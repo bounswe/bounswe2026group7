@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import ExplorePage from '../ExplorePage'
 import * as api from '../../services/api'
 import * as AuthContext from '../../context/AuthContext'
+import { MentorshipProvider } from '../../context/MentorshipContext'
 
 vi.mock('../../services/api')
 vi.mock('../../context/AuthContext')
@@ -29,7 +30,9 @@ describe('ExplorePage Component', () => {
   const renderComponent = () => {
     return render(
       <MemoryRouter>
-        <ExplorePage />
+        <MentorshipProvider>
+          <ExplorePage />
+        </MentorshipProvider>
       </MemoryRouter>
     )
   }
