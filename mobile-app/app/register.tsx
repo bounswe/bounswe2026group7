@@ -99,6 +99,14 @@ export default function RegisterScreen() {
       const successMsg = registerRes.data?.message ||
         "Account created! Please check your email to verify your account, then log in.";
       Alert.alert("Success", successMsg, [
+        {
+          text: "Open Verification",
+          onPress: () =>
+            router.replace({
+              pathname: '/verify-email' as any,
+              params: { email },
+            }),
+        },
         { text: "Go to Login", onPress: () => router.replace('/login') },
       ]);
     } catch (error: any) {
