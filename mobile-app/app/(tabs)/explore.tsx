@@ -10,6 +10,7 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 
 // Yardımcı Fonksiyon: Baş harfleri hesaplar
@@ -52,10 +53,36 @@ export default function ExploreScreen() {
 
 const PAGE_SIZE = 5;
 
+function mapMentor(m: any, isMatch = false): MentorCard {
+  const fullName = m.lastName ? `${m.firstName} ${m.lastName}` : m.firstName;
+  const hasCapacity =
+    m.maxMenteeCapacity == null
+      ? true
+      : (m.currentMenteeCount ?? 0) < m.maxMenteeCapacity;
+  return {
+    id: String(m.id),
+    name: fullName,
+    initials: getInitials(fullName),
+    role: m.field || m.expertise || 'Mentor',
+    avatarBg: isMatch ? '#D8E5F1' : '#D6E8DC',
+    avatarText: isMatch ? '#315A7A' : '#2F563C',
+    available: hasCapacity,
+    tags: m.interests || [],
+    rating: '5.0',
+    reviews: '0',
+    about: m.bio || 'No bio provided.',
+    mentoringGoals: [],
+    preferredMenteeCriteria: [],
+    availability: [],
+  };
+}
+
 function MenteeExploreContent() {
   const [mentors, setMentors] = useState<MentorCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
+  const [isMatchMode, setIsMatchMode] = useState(false);
+  const [matchLoading, setMatchLoading] = useState(false);
   const scrollRef = React.useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -63,41 +90,42 @@ function MenteeExploreContent() {
       try {
         const res = await apiClient.get('/users/mentors');
         const data: any[] = res.data.content ?? res.data;
-
-        const mappedMentors = data.map((m: any) => {
-          const fullName = m.lastName ? `${m.firstName} ${m.lastName}` : m.firstName;
-          const hasCapacity =
-            m.maxMenteeCapacity == null
-              ? true
-              : (m.currentMenteeCount ?? 0) < m.maxMenteeCapacity;
-          return {
-            id: String(m.id),
-            name: fullName,
-            initials: getInitials(fullName),
-            role: m.field || m.expertise || 'Mentor',
-            avatarBg: '#D6E8DC',
-            avatarText: '#2F563C',
-            available: hasCapacity,
-            tags: m.interests || [],
-            rating: '5.0',
-            reviews: '0',
-            about: m.bio || 'No bio provided.',
-            mentoringGoals: [],
-            preferredMenteeCriteria: [],
-            availability: [],
-          };
-        });
-
-        setMentors(mappedMentors);
+        setMentors(data.map((m) => mapMentor(m, false)));
       } catch (error) {
         console.error('Mentorları çekerken hata oluştu:', error);
       } finally {
         setLoading(false);
       }
     };
-
     fetchMentors();
   }, []);
+
+  const toggleMatchMode = async () => {
+    if (isMatchMode) {
+      setIsMatchMode(false);
+      setCurrentPage(0);
+      return;
+    }
+    setMatchLoading(true);
+    try {
+      const res = await apiClient.get('/matching/mentors/all');
+      setMentors((res.data as any[]).map((m) => mapMentor(m, true)));
+      setIsMatchMode(true);
+      setCurrentPage(0);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    } catch (err: any) {
+      if (err?.response?.status === 403) {
+        Alert.alert(
+          'Matching Unavailable',
+          'You already have an active mentor. End your current mentorship first to find new matches.'
+        );
+      } else {
+        console.error('Matching error:', err);
+      }
+    } finally {
+      setMatchLoading(false);
+    }
+  };
 
   const totalPages = Math.ceil(mentors.length / PAGE_SIZE);
   const pagedMentors = mentors.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
@@ -134,6 +162,13 @@ function MenteeExploreContent() {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput placeholder="Search topics or mentors..." placeholderTextColor="rgba(255,255,255,0.45)" style={styles.searchInput} />
         </View>
+        <TouchableOpacity style={[styles.matchButton, isMatchMode && styles.matchButtonActive]} onPress={toggleMatchMode} disabled={matchLoading}>
+          {matchLoading
+            ? <ActivityIndicator size="small" color="#F8F6F2" />
+            : <Text style={[styles.matchButtonText, isMatchMode && styles.matchButtonTextActive]}>
+                {isMatchMode ? '✕  Show All Mentors' : '✦  Find Best Matches'}
+              </Text>}
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -150,10 +185,17 @@ function MenteeExploreContent() {
                   <Text style={styles.cardName}>{mentor.name}</Text>
                   <Text style={styles.cardRole}>{mentor.role}</Text>
                 </View>
-                <View style={[styles.statusBadge, mentor.available ? styles.availableBadge : styles.fullBadge]}>
-                  <Text style={[styles.statusBadgeText, mentor.available ? styles.availableBadgeText : styles.fullBadgeText]}>
-                    {mentor.available ? 'Available' : 'Full'}
-                  </Text>
+                <View style={styles.badgeColumn}>
+                  {isMatchMode && (
+                    <View style={styles.matchBadge}>
+                      <Text style={styles.matchBadgeText}>✦ Match</Text>
+                    </View>
+                  )}
+                  <View style={[styles.statusBadge, mentor.available ? styles.availableBadge : styles.fullBadge]}>
+                    <Text style={[styles.statusBadgeText, mentor.available ? styles.availableBadgeText : styles.fullBadgeText]}>
+                      {mentor.available ? 'Available' : 'Full'}
+                    </Text>
+                  </View>
                 </View>
               </View>
               <View style={styles.tagsRow}>
@@ -895,5 +937,42 @@ const styles = StyleSheet.create({
 
   pageButtonTextActive: {
     color: '#F8F6F2',
+  },
+  matchButton: {
+    height: 50,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  matchButtonActive: {
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    borderColor: 'rgba(255,255,255,0.50)',
+  },
+  matchButtonText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  matchButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  badgeColumn: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  matchBadge: {
+    backgroundColor: '#D8E5F1',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  matchBadgeText: {
+    color: '#315A7A',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
