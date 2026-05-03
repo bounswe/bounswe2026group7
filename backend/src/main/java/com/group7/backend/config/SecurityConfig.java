@@ -1,5 +1,7 @@
 package com.group7.backend.config;
 
+import com.group7.backend.config.ratelimit.RateLimitFilter;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,12 +25,20 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final Optional<RateLimitFilter> rateLimitFilter;
 
     @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:5174}")
     private String[] allowedOrigins;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    /**
+     * {@code rateLimitFilter} is wrapped in {@link Optional} so {@code @WebMvcTest}
+     * controller slices that import {@link SecurityConfig} without the rate-limit
+     * beans still wire a filter chain.
+     */
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                          Optional<RateLimitFilter> rateLimitFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.rateLimitFilter = rateLimitFilter;
     }
 
     @Bean
@@ -57,6 +67,9 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        rateLimitFilter.ifPresent(filter ->
+                http.addFilterAfter(filter, JwtAuthenticationFilter.class));
 
         return http.build();
     }
