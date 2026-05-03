@@ -5,6 +5,7 @@ import {
   getReceivedMentorshipRequests,
   getSentMentorshipRequests,
 } from '../services/api'
+import { getMeetingsAcrossMentorships, getTasksAcrossMentorships } from '../services/mentorshipMocks'
 import { useAuth } from './AuthContext'
 
 const MentorshipContext = createContext(null)
@@ -30,9 +31,10 @@ export function MentorshipProvider({ children }) {
   const [activeMentorships, setActiveMentorships] = useState(emptyMentorState.activeMentorships)
   const [mentorStats, setMentorStats] = useState(emptyMentorState.mentorStats)
   const [mentorLoading, setMentorLoading] = useState(emptyMentorState.mentorLoading)
-
   const [sentRequests, setSentRequests] = useState(emptyMenteeState.sentRequests)
   const [menteeLoading, setMenteeLoading] = useState(emptyMenteeState.menteeLoading)
+  const [tasksCount, setTasksCount] = useState(0)
+  const [sessionsCount, setSessionsCount] = useState(0)
 
   const resetMentorState = useCallback(() => {
     setReceivedRequests(emptyMentorState.receivedRequests)
@@ -122,9 +124,36 @@ export function MentorshipProvider({ children }) {
     ? maxCapacity - activeMenteeCount
     : null
 
+  const sentPendingCount = useMemo(
+    () => sentRequests.filter(r => r.status === 'PENDING').length,
+    [sentRequests]
+  )
+
   const activeMenteeBadgeCount = isMentor
     ? activeMenteeCount
     : (menteeLoading ? null : activeMentorships.filter(m => m.status === 'ACTIVE').length)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!activeMentorships || activeMentorships.length === 0) {
+      setTasksCount(0)
+      setSessionsCount(0)
+      return () => { cancelled = true }
+    }
+    Promise.all([
+      getTasksAcrossMentorships(activeMentorships),
+      getMeetingsAcrossMentorships(activeMentorships),
+    ]).then(([tasks, sessions]) => {
+      if (cancelled) return
+      setTasksCount(tasks.length)
+      setSessionsCount(sessions.length)
+    }).catch(() => {
+      if (cancelled) return
+      setTasksCount(0)
+      setSessionsCount(0)
+    })
+    return () => { cancelled = true }
+  }, [activeMentorships])
 
   const handleMentorRequestRejected = useCallback((requestId) => {
     setReceivedRequests(prev => prev.filter(r => r.id !== requestId))
@@ -147,6 +176,10 @@ export function MentorshipProvider({ children }) {
     mentorStats,
     pendingRequests,
     pendingCount: pendingRequests.length,
+    sentRequests,
+    sentPendingCount,
+    tasksCount,
+    sessionsCount,
     activeMenteeCount,
     maxCapacity,
     availableSlots,

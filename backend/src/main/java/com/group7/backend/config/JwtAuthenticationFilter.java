@@ -72,6 +72,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             role != null && !role.isBlank(),
                             userId != null);
                 } else {
+                    // Project convention: principal = email, credentials = userId (Long),
+                    // authorities = single ROLE_<role>. The userId-in-credentials slot
+                    // is read by controllers and the rate-limit filter via
+                    // {@link AuthenticatedUserId#fromAuthentication(Authentication)} —
+                    // if the layout here ever changes, update that helper too.
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
                                     email,

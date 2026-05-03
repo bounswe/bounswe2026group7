@@ -116,6 +116,7 @@ export default function HomeScreen() {
       pathname: '/connection-profile',
       params: {
         id: String(item.connectedUserId),
+        mentorshipId: String(item.mentorshipId),
         type: item.type,
         name: item.connectedUserFirstName,
         initials,

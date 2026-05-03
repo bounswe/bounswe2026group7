@@ -19,6 +19,7 @@ const NAV_TABS = [
   { label: 'Messages', path: '/messages' },
   { label: 'Tasks', path: '/tasks' },
   { label: 'Schedule', path: '/schedule' },
+  { label: 'Availability', path: '/availability' },
   { label: 'Profile', path: '/profile' },
 ]
 
@@ -38,7 +39,13 @@ export default function MainLayout({ children }) {
 
 
   const { role, logout, firstName, lastName, profilePhoto } = useAuth()
-  const { activeMenteeBadgeCount } = useMentorship()
+  const {
+    pendingCount,
+    activeMenteeCount,
+    tasksCount,
+    sessionsCount,
+    activeMenteeBadgeCount,
+  } = useMentorship()
   const presence = usePresence()
   const currentPath = location.pathname
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -117,13 +124,12 @@ export default function MainLayout({ children }) {
               {/* Stats */}
               <div className="ud-stats">
                 {(role === 'MENTOR' ? [
-                  { num: 2, label: 'Mentees' },
-                  { num: 5, label: 'Sessions' },
-                  { num: 4, label: 'Requests' },
+                  { num: activeMenteeCount, label: 'Mentees' },
+                  { num: sessionsCount, label: 'Sessions' },
+                  { num: pendingCount, label: 'Requests' },
                 ] : [
-                  { num: 5, label: 'Tasks' },
-                  { num: 3, label: 'Sessions' },
-                  { num: 2, label: 'Requests' },
+                  { num: tasksCount, label: 'Tasks' },
+                  { num: sessionsCount, label: 'Sessions' },
                 ]).map((s, i) => (
                   <div key={s.label} className={`ud-stat${i > 0 ? ' ud-stat--sep' : ''}`}>
                     <span className="ud-stat-num">{s.num}</span>

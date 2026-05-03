@@ -61,7 +61,6 @@ export default function HomePage() {
   useEffect(() => {
     if (activeMentorship) setHasActiveMentor(true)
   }, [activeMentorship])
-
   // ── Toast helper ───────────────────────────────────────────────────────────
   const showToast = (message, type = 'success') => {
     const el = document.createElement('div')
@@ -115,12 +114,9 @@ export default function HomePage() {
   const availableSlotsDisplay = typeof activeMenteeCount === 'number' && typeof maxCapacity === 'number'
     ? availableSlots
     : '-'
-
   // ──────────────────────────────────────────────────────────────────────────
-  const sidebarActiveCount = isMentee ? (activeMentorship ? 1 : 0) : activeMenteeCount
-
   return (
-    <MainLayout activeMentorshipCount={sidebarActiveCount}>
+    <MainLayout>
 
       {isMentee ? (
         <>

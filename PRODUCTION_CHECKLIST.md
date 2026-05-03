@@ -65,3 +65,24 @@ Sunucuda aşağıdaki env variable'ları güvenli şekilde set et (`.env` dosyas
 - [ ] Manuel test: register → email gel → verify → login
 - [ ] Expired token testi: token süresini kıs, link'e tıkla, hata mesajı doğru mu?
 - [ ] Rate limit testi: aynı email için 4. resend'de 429 benzeri hata geliyor mu?
+
+---
+
+## 6. Rate Limiter — `X-Forwarded-For` configuration
+
+`app.ratelimit.trust-forwarded-for` ve `app.ratelimit.trusted-proxies-count`
+sadece reverse-proxy arkasında doğru ayarlandığında IP-bazlı rate limit'i
+güvenli tutar. Yanlış ayar saldırganın `X-Forwarded-For` set ederek
+rate-limit anahtarını seçmesine izin verir.
+
+| Topoloji | `trust-forwarded-for` | `trusted-proxies-count` |
+|---|---|---|
+| Lokal dev (proxy yok) | `false` | (önemsiz) |
+| Tek proxy: nginx → app, ALB → app | `true` | `1` |
+| CDN + LB: Cloudflare/CloudFront → ALB → app | `true` | `2` |
+| 3 hop (CDN + WAF + LB) | `true` | `3` |
+
+Doğrulama: yapılandırma sonrası tarayıcıdan dış IP'yi öğren, sunucu
+loglarındaki rate-limit anahtarının (`****<son4>`) bu IP ile uyuştuğunu
+gör. Eğer anahtar her istekte değişiyorsa veya proxy IP'si görünüyorsa
+`trusted-proxies-count` değeri yanlıştır.

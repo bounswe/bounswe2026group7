@@ -3,9 +3,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRole } from '../components/RoleContext';
 import apiClient from '../api/client';
@@ -47,6 +50,7 @@ export default function ConnectionProfileScreen() {
   const params = useLocalSearchParams();
 
   const id = parseString(params.id);
+  const mentorshipId = parseString(params.mentorshipId);
   const type = parseString(params.type);
   const name = parseString(params.name);
   const initials = parseString(params.initials);
@@ -63,6 +67,11 @@ export default function ConnectionProfileScreen() {
   const mentoringGoals = parseJsonList(params.mentoringGoals);
   const preferences = parseJsonList(params.preferences);
 
+  const [sharedGoal, setSharedGoal] = useState(parseString(params.subtitle));
+  const [goalDraft, setGoalDraft] = useState('');
+  const [goalEditing, setGoalEditing] = useState(false);
+  const [goalSaving, setGoalSaving] = useState(false);
+
   useEffect(() => {
     if (!id) return;
     apiClient.get(`/users/${id}`).then((res) => {
@@ -75,6 +84,27 @@ export default function ConnectionProfileScreen() {
       if (d.goals) setGoals([d.goals]);
     }).catch(() => {});
   }, [id]);
+
+  useEffect(() => {
+    if (!mentorshipId) return;
+    apiClient.get(`/mentorships/${mentorshipId}`).then((res) => {
+      if (res.data.sharedGoal) setSharedGoal(res.data.sharedGoal);
+    }).catch(() => {});
+  }, [mentorshipId]);
+
+  const saveSharedGoal = async () => {
+    if (!mentorshipId || !goalDraft.trim()) return;
+    setGoalSaving(true);
+    try {
+      await apiClient.put(`/mentorships/${mentorshipId}/goal`, { sharedGoal: goalDraft.trim() });
+      setSharedGoal(goalDraft.trim());
+      setGoalEditing(false);
+    } catch {
+      Alert.alert('Error', 'Could not save the shared goal. Please try again.');
+    } finally {
+      setGoalSaving(false);
+    }
+  };
 
   const stat1Label = parseString(params.stat1Label);
   const stat1Value = parseString(params.stat1Value);
@@ -223,6 +253,56 @@ export default function ConnectionProfileScreen() {
                     </View>
                   ))}
                 </View>
+              </>
+            )}
+          </View>
+
+          <Text style={styles.sectionTitle}>SHARED GOAL</Text>
+
+          <View style={styles.card}>
+            {goalEditing ? (
+              <>
+                <TextInput
+                  style={styles.goalInput}
+                  value={goalDraft}
+                  onChangeText={setGoalDraft}
+                  placeholder="Describe your shared mentorship goal..."
+                  placeholderTextColor="#B0A89E"
+                  multiline
+                  maxLength={500}
+                  autoFocus
+                />
+                <Text style={styles.goalCharCount}>{goalDraft.length}/500</Text>
+                <View style={styles.goalButtonRow}>
+                  <TouchableOpacity
+                    style={styles.goalCancelButton}
+                    onPress={() => setGoalEditing(false)}
+                    disabled={goalSaving}
+                  >
+                    <Text style={styles.goalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.goalSaveButton, (!goalDraft.trim() || goalSaving) && { opacity: 0.5 }]}
+                    onPress={saveSharedGoal}
+                    disabled={!goalDraft.trim() || goalSaving}
+                  >
+                    {goalSaving
+                      ? <ActivityIndicator size="small" color="#F8F6F2" />
+                      : <Text style={styles.goalSaveText}>Save Goal</Text>}
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardText}>
+                  {sharedGoal || 'No shared goal set yet. Tap Edit to define one together.'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.goalEditButton}
+                  onPress={() => { setGoalDraft(sharedGoal); setGoalEditing(true); }}
+                >
+                  <Text style={styles.goalEditText}>Edit Goal</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -691,5 +771,64 @@ const styles = StyleSheet.create({
   actionButtonHalf: {
     flex: 1,
     marginBottom: 0,
+  },
+  goalInput: {
+    backgroundColor: '#FCFBF8',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#C8D9CA',
+    padding: 14,
+    fontSize: 15,
+    color: '#23372B',
+    minHeight: 90,
+    textAlignVertical: 'top',
+    marginBottom: 6,
+  },
+  goalCharCount: {
+    color: '#B0A89E',
+    fontSize: 12,
+    textAlign: 'right',
+    marginBottom: 14,
+  },
+  goalButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  goalCancelButton: {
+    flex: 1,
+    backgroundColor: '#EDE8E1',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  goalCancelText: {
+    color: '#6B6158',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  goalSaveButton: {
+    flex: 2,
+    backgroundColor: '#4B7B57',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  goalSaveText: {
+    color: '#F8F6F2',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  goalEditButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EEF3EE',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 6,
+  },
+  goalEditText: {
+    color: '#2F563C',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
