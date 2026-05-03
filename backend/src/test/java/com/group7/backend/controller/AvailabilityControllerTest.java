@@ -10,6 +10,7 @@ import com.group7.backend.exception.OverlappingSlotException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.service.AvailabilityService;
 import com.group7.backend.service.JwtService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -73,6 +74,7 @@ class AvailabilityControllerTest {
     // ── GET /{mentorId} ─────────────────────────────────────────────────────
 
     @Test
+    @DisplayName("Any authenticated user — including unrelated mentees — can read any mentor's availability (issue #274)")
     void getSlotsReturns200ForMentee() throws Exception {
         mockMenteeJwt("mentee-token", 1L);
         when(availabilityService.getSlots(2L)).thenReturn(List.of(sampleSlot()));
@@ -91,6 +93,29 @@ class AvailabilityControllerTest {
         mockMvc.perform(get("/api/availability/2")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("A mentor can read another mentor's availability (issue #274 — open policy)")
+    void getSlotsReturns200ForUnrelatedMentor() throws Exception {
+        mockMentorJwt("other-mentor-token", 3L);
+        when(availabilityService.getSlots(2L)).thenReturn(List.of(sampleSlot()));
+
+        mockMvc.perform(get("/api/availability/2")
+                        .header("Authorization", "Bearer other-mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].dayOfWeek").value("MONDAY"));
+    }
+
+    @Test
+    @DisplayName("Unauthenticated requests are rejected (issue #274 — denied case)")
+    void getSlotsRejectsUnauthenticatedRequests() throws Exception {
+        // Spring Security's default entry point returns 403 (not 401) when no
+        // authentication is present and no custom AuthenticationEntryPoint is
+        // configured. The assertion locks in "rejected without a Bearer token",
+        // which is the policy contract; the exact code is a Spring detail.
+        mockMvc.perform(get("/api/availability/2"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
