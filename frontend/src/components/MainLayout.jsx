@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Avatar from './Avatar'
 import NotificationBell from './NotificationBell'
+import { useMentorship } from '../context/MentorshipContext'
 import usePresence from '../hooks/usePresence'
 import {
   Home, Compass, MessageCircle, CheckSquare, CalendarDays,
@@ -31,12 +32,13 @@ const SIDEBAR_LINKS = [
   { label: 'Profile', path: '/profile', icon: User },
 ]
 
-export default function MainLayout({ children, activeMentorshipCount = null }) {
+export default function MainLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
 
 
   const { role, logout, firstName, lastName, profilePhoto } = useAuth()
+  const { activeMenteeBadgeCount } = useMentorship()
   const presence = usePresence()
   const currentPath = location.pathname
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -167,9 +169,9 @@ export default function MainLayout({ children, activeMentorshipCount = null }) {
             <Avatar src={profilePhoto} initials={initials} size="md" status={presence} className="sidebar-avatar" />
             <div className="sidebar-name">{displayName}</div>
             <div className="sidebar-role">{roleLabel}</div>
-            {activeMentorshipCount != null && (
+            {role && (
               <div className="sidebar-badge">
-                {role === 'MENTOR' ? 'Active Mentees' : 'Active Mentorship'}: {activeMentorshipCount}
+                {role === 'MENTOR' ? 'Active Mentees' : 'Active Mentorship'}: {activeMenteeBadgeCount ?? '...'}
               </div>
             )}
           </div>

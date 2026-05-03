@@ -3,13 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import {
   getMatchingMentors,
-  getReceivedMentorshipRequests,
   acceptMentorshipRequest,
   rejectMentorshipRequest,
-  getActiveMentorships,
-  getOwnProfile,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
 
 function timeAgo(iso) {
@@ -23,69 +21,46 @@ function timeAgo(iso) {
 export default function HomePage() {
   const navigate = useNavigate()
   const { role } = useAuth()
+  const {
+    pendingRequests,
+    pendingCount,
+    activeMentorships,
+    activeMenteeCount,
+    maxCapacity,
+    availableSlots,
+    mentorLoading,
+    menteeLoading,
+    handleMentorRequestRejected,
+    handleMentorRequestAccepted,
+  } = useMentorship()
   const isMentee = role === 'MENTEE'
 
   // ── Mentee state ──────────────────────────────────────────────────────────
   const [hasActiveMentor, setHasActiveMentor] = useState(false)
-  const [activeMentorship, setActiveMentorship] = useState(null)
-  const [menteeLoading, setMenteeLoading] = useState(true)
 
-  // ── Mentor state ──────────────────────────────────────────────────────────
-  const [receivedRequests, setReceivedRequests] = useState([])
-  const [activeMentorships, setActiveMentorships] = useState([])
-  const [mentorStats, setMentorStats] = useState(null)
   const [acceptingId, setAcceptingId] = useState(null)   // request being accepted
   const [selectedDuration, setSelectedDuration] = useState(3)
   const [actionLoading, setActionLoading] = useState(false)
-  const [mentorLoading, setMentorLoading] = useState(false)
 
   // ── Load mentee data ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!isMentee) return
     async function loadMenteeData() {
-      setMenteeLoading(true)
       try {
-        const [mentorshipsData, matchData] = await Promise.allSettled([
-          getActiveMentorships(),
-          getMatchingMentors(),
-        ])
-        if (mentorshipsData.status === 'fulfilled') {
-          const active = (mentorshipsData.value || []).find(m => m.status === 'ACTIVE')
-          if (active) { setActiveMentorship(active); setHasActiveMentor(true) }
-        }
-        if (matchData.status === 'rejected') {
-          const msg = matchData.reason?.message || ''
-          if (msg.includes('403')) setHasActiveMentor(true)
-        }
-      } catch {
-        // silently ignore
-      } finally {
-        setMenteeLoading(false)
+        await getMatchingMentors()
+      } catch (err) {
+        const msg = err?.message || ''
+        if (msg.includes('403')) setHasActiveMentor(true)
       }
     }
     loadMenteeData()
   }, [isMentee])
 
-  // ── Load mentor data ───────────────────────────────────────────────────────
+  const activeMentorship = activeMentorships.find(m => m.status === 'ACTIVE') || null
+
   useEffect(() => {
-    if (isMentee) return
-    setMentorLoading(true)
-    Promise.allSettled([
-      getReceivedMentorshipRequests(),
-      getActiveMentorships(),
-      getOwnProfile(),
-    ]).then(([reqs, mentorships, profile]) => {
-      if (reqs.status === 'fulfilled') {
-        setReceivedRequests(reqs.value.content || [])
-      }
-      if (mentorships.status === 'fulfilled') {
-        setActiveMentorships(mentorships.value || [])
-      }
-      if (profile.status === 'fulfilled') {
-        setMentorStats(profile.value)
-      }
-    }).finally(() => setMentorLoading(false))
-  }, [isMentee])
+    if (activeMentorship) setHasActiveMentor(true)
+  }, [activeMentorship])
 
   // ── Toast helper ───────────────────────────────────────────────────────────
   const showToast = (message, type = 'success') => {
@@ -101,7 +76,7 @@ export default function HomePage() {
     setActionLoading(true)
     try {
       await rejectMentorshipRequest(id)
-      setReceivedRequests(prev => prev.filter(r => r.id !== id))
+      handleMentorRequestRejected(id)
       showToast('Request declined.', 'success')
     } catch {
       showToast('Failed to decline request.', 'error')
@@ -115,9 +90,7 @@ export default function HomePage() {
     setActionLoading(true)
     try {
       const newMentorship = await acceptMentorshipRequest(acceptingId, selectedDuration)
-      setReceivedRequests(prev => prev.filter(r => r.id !== acceptingId))
-      setActiveMentorships(prev => [newMentorship, ...prev])
-      setMentorStats(prev => prev ? { ...prev, currentMenteeCount: (prev.currentMenteeCount || 0) + 1 } : prev)
+      handleMentorRequestAccepted(acceptingId, newMentorship)
       setAcceptingId(null)
       setSelectedDuration(3)
       showToast('Request accepted! Mentorship started.', 'success')
@@ -137,12 +110,11 @@ export default function HomePage() {
   }
 
   // ── Derived mentor stats ───────────────────────────────────────────────────
-  const pendingCount = receivedRequests.filter(r => r.status === 'PENDING').length
-  const pendingRequests = receivedRequests.filter(r => r.status === 'PENDING')
-  const activeMenteeCount = mentorStats?.currentMenteeCount ?? '-'
-  const maxCapacity = mentorStats?.maxMenteeCapacity ?? '-'
-  const availableSlots = typeof activeMenteeCount === 'number' && typeof maxCapacity === 'number'
-    ? maxCapacity - activeMenteeCount : '-'
+  const activeMenteeDisplay = activeMenteeCount ?? '-'
+  const maxCapacityDisplay = maxCapacity ?? '-'
+  const availableSlotsDisplay = typeof activeMenteeCount === 'number' && typeof maxCapacity === 'number'
+    ? availableSlots
+    : '-'
 
   // ──────────────────────────────────────────────────────────────────────────
   const sidebarActiveCount = isMentee ? (activeMentorship ? 1 : 0) : activeMenteeCount
@@ -258,9 +230,9 @@ export default function HomePage() {
           {/* Stats row */}
           <div className="mentor-stats-row">
             {[
-              { num: activeMenteeCount, label: 'Active Mentees' },
-              { num: maxCapacity, label: 'Capacity' },
-              { num: availableSlots, label: 'Available Slots' },
+              { num: activeMenteeDisplay, label: 'Active Mentees' },
+              { num: maxCapacityDisplay, label: 'Capacity' },
+              { num: availableSlotsDisplay, label: 'Available Slots' },
               { num: pendingCount, label: 'Pending Requests' },
             ].map(s => (
               <div className="mentor-stat-card" key={s.label}>

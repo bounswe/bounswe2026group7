@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import ExplorePage from '../ExplorePage'
 import * as api from '../../services/api'
 import * as AuthContext from '../../context/AuthContext'
+import { MentorshipProvider } from '../../context/MentorshipContext'
 
 vi.mock('../../services/api')
 vi.mock('../../context/AuthContext')
@@ -22,6 +23,8 @@ describe('ExplorePage Component', () => {
     api.getMatchingMentors.mockResolvedValue([])
     api.getMatchingMentees.mockResolvedValue([])
     api.getActiveMentorships.mockResolvedValue([])
+    api.getReceivedMentorshipRequests.mockResolvedValue({ content: [] })
+    api.getOwnProfile.mockResolvedValue({ currentMenteeCount: 0, maxMenteeCapacity: 0 })
     api.getNotifications.mockResolvedValue([])
     AuthContext.useAuth.mockReturnValue({ role: 'MENTEE' })
   })
@@ -29,7 +32,9 @@ describe('ExplorePage Component', () => {
   const renderComponent = () => {
     return render(
       <MemoryRouter>
-        <ExplorePage />
+        <MentorshipProvider>
+          <ExplorePage />
+        </MentorshipProvider>
       </MemoryRouter>
     )
   }

@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import HomePage from '../HomePage'
 import * as api from '../../services/api'
 import * as AuthContext from '../../context/AuthContext'
+import { MentorshipProvider } from '../../context/MentorshipContext'
 
 vi.mock('../../services/api')
 vi.mock('../../context/AuthContext')
@@ -16,6 +17,7 @@ describe('HomePage Component', () => {
     api.getActiveMentorships.mockResolvedValue([])
     api.getMatchingMentors.mockResolvedValue([])
     api.getReceivedMentorshipRequests.mockResolvedValue({ content: [] })
+    api.getSentMentorshipRequests.mockResolvedValue({ content: [] })
     api.getOwnProfile.mockResolvedValue({ currentMenteeCount: 2, maxMenteeCapacity: 5 })
     AuthContext.useAuth.mockReturnValue({ role: 'MENTEE', firstName: 'Test', lastName: 'User' })
   })
@@ -25,7 +27,9 @@ describe('HomePage Component', () => {
     await act(async () => {
       result = render(
         <MemoryRouter>
-          <HomePage />
+          <MentorshipProvider>
+            <HomePage />
+          </MentorshipProvider>
         </MemoryRouter>
       )
     })
