@@ -21,6 +21,19 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Authorization model for this controller (decided per issue #274):
+ * <ul>
+ *   <li>{@code GET /{mentorId}} — open to any authenticated user. Mentor weekly
+ *       availability is part of the discoverable mentor profile; mentees need it
+ *       before deciding whether to send a mentorship request. Global
+ *       {@code .anyRequest().authenticated()} in {@code SecurityConfig} is the
+ *       only gate. Deliberate, not an oversight.</li>
+ *   <li>{@code PUT}, {@code POST}, {@code DELETE} — restricted to {@code MENTOR}
+ *       role via {@code @PreAuthorize}; the affected mentor id is read from the
+ *       authenticated principal, so a mentor can only mutate their own slots.</li>
+ * </ul>
+ */
 @RestController
 @RequestMapping("/api/availability")
 @Tag(name = "Availability", description = "Mentor weekly availability management")
@@ -32,10 +45,15 @@ public class AvailabilityController {
         this.availabilityService = availabilityService;
     }
 
+    /**
+     * Returns the mentor's weekly availability. Visible to any authenticated
+     * user — see class-level javadoc and issue #274 for the policy decision.
+     */
     @GetMapping("/{mentorId}")
     @Operation(
             summary = "Get mentor availability",
-            description = "Returns all availability slots for the specified mentor, sorted by day and time."
+            description = "Returns all availability slots for the specified mentor, sorted by day and time. "
+                    + "Visible to any authenticated user — mentor availability is part of the discoverable profile."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Availability slots",
