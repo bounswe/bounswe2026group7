@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -31,14 +32,17 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -238,6 +242,54 @@ class MentorPairMessagingIntegrationTest {
     }
 
     @Test
+    void mentorPair_attachment_isUploadableBySenderAndDownloadableByPeer() throws Exception {
+        // Mentor A uploads a PDF, then sends it as an attachment on the
+        // mentor-pair endpoint. The attachment ACL is conversation-graph
+        // based, so B (the other participant) can download it without any
+        // pair-specific code paths in the attachment subsystem.
+        Mentors m = registerTwoMentors("pair_attach_a@test.com", "pair_attach_b@test.com");
+
+        byte[] pdf = pdfBody("peer-shared");
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "peer.pdf", "application/pdf", pdf);
+        MvcResult upload = mockMvc.perform(multipart("/api/messages/attachments")
+                        .file(file)
+                        .header("Authorization", "Bearer " + m.tokenA))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String attachmentId = objectMapper.readTree(upload.getResponse().getContentAsString())
+                .get("id").asText();
+        String downloadUrl = objectMapper.readTree(upload.getResponse().getContentAsString())
+                .get("downloadUrl").asText();
+
+        SendMessageRequest body = new SendMessageRequest();
+        body.setContent("here is the doc");
+        body.setAttachmentId(UUID.fromString(attachmentId));
+        mockMvc.perform(post("/api/conversations/mentor-pair/" + m.idB + "/messages")
+                        .header("Authorization", "Bearer " + m.tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.attachment.id").value(attachmentId))
+                .andExpect(jsonPath("$.attachment.downloadUrl").value(downloadUrl));
+
+        // Mentor B (peer participant) can download.
+        String downloadPath = downloadUrl.substring(downloadUrl.indexOf("/api/"));
+        mockMvc.perform(get(downloadPath)
+                        .header("Authorization", "Bearer " + m.tokenB))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"));
+
+        // Mentee (no participation in this conversation) cannot download.
+        // Existing ACL returns 404 (not 403) to avoid leaking the attachment's
+        // existence to non-participants.
+        String menteeToken = registerAndLogin("pair_attach_mentee@test.com", false);
+        mockMvc.perform(get(downloadPath)
+                        .header("Authorization", "Bearer " + menteeToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void mentorPair_doesNotCollideWithExistingMentorshipConversation() throws Exception {
         // The unique index on (pair_a_id, pair_b_id, kind) includes `kind` so
         // a future scenario where two users share both a mentorship and a
@@ -305,6 +357,15 @@ class MentorPairMessagingIntegrationTest {
                 .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString())
                 .get("sessionToken").asText();
+    }
+
+    private static byte[] pdfBody(String trailing) {
+        byte[] header = new byte[]{0x25, 0x50, 0x44, 0x46}; // %PDF
+        byte[] tail = trailing.getBytes();
+        byte[] result = new byte[header.length + tail.length];
+        System.arraycopy(header, 0, result, 0, header.length);
+        System.arraycopy(tail, 0, result, header.length, tail.length);
+        return result;
     }
 
     private Notification waitForNotification(Long recipientId, NotificationType type) {
