@@ -2,15 +2,12 @@ package com.group7.backend.service;
 
 import com.group7.backend.entity.Conversation;
 import com.group7.backend.entity.ConversationKind;
-import com.group7.backend.entity.ConversationParticipant;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.Mentorship;
 import com.group7.backend.entity.MentorshipStatus;
-import com.group7.backend.entity.User;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
-import com.group7.backend.repository.ConversationParticipantRepository;
 import com.group7.backend.repository.ConversationRepository;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.UserRepository;
@@ -19,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
@@ -27,6 +23,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -36,10 +34,9 @@ import static org.mockito.Mockito.when;
 class ConversationServiceTest {
 
     @Mock private ConversationRepository conversationRepository;
-    @Mock private ConversationParticipantRepository participantRepository;
     @Mock private MentorshipRepository mentorshipRepository;
     @Mock private UserRepository userRepository;
-    @Mock private ApplicationContext applicationContext;
+    @Mock private ConversationCreator conversationCreator;
 
     private ConversationService conversationService;
 
@@ -51,15 +48,7 @@ class ConversationServiceTest {
     @BeforeEach
     void setUp() {
         conversationService = new ConversationService(
-                conversationRepository, participantRepository, mentorshipRepository,
-                userRepository, applicationContext);
-        // Self-injection: in unit tests we route the bean lookup back to the
-        // service under test so the inner createForMentorshipInNewTx /
-        // createForMentorPairInNewTx calls execute the real method (no Spring
-        // proxy in pure JUnit).
-        org.mockito.Mockito.lenient()
-                .when(applicationContext.getBean(ConversationService.class))
-                .thenReturn(conversationService);
+                conversationRepository, mentorshipRepository, userRepository, conversationCreator);
 
         mentor = new Mentor();
         mentor.setId(1L);
@@ -80,6 +69,8 @@ class ConversationServiceTest {
         mentorPeer.setFirstName("Iris");
     }
 
+    // ── findOrCreateForMentorship (issue #245) ──────────────────────────────
+
     @Test
     void findOrCreate_returnsExistingConversation_whenAlreadyPresent() {
         Conversation existing = new Conversation();
@@ -93,26 +84,24 @@ class ConversationServiceTest {
         Conversation result = conversationService.findOrCreateForMentorship(100L, 1L);
 
         assertThat(result).isSameAs(existing);
-        verify(conversationRepository, never()).save(any());
-        verify(participantRepository, never()).save(any());
+        verify(conversationCreator, never()).createForMentorshipInNewTx(any());
     }
 
     @Test
-    void findOrCreate_createsConversationAndTwoParticipants_whenMissing() {
+    void findOrCreate_delegatesToCreator_whenMissing() {
+        Conversation created = new Conversation();
+        created.setId(900L);
+        created.setKind(ConversationKind.MENTORSHIP);
+        created.setMentorship(mentorship);
+
         when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
         when(conversationRepository.findByMentorshipId(100L)).thenReturn(Optional.empty());
-        when(conversationRepository.save(any(Conversation.class))).thenAnswer(inv -> {
-            Conversation c = inv.getArgument(0);
-            c.setId(900L);
-            return c;
-        });
+        when(conversationCreator.createForMentorshipInNewTx(mentorship)).thenReturn(created);
 
         Conversation result = conversationService.findOrCreateForMentorship(100L, 1L);
 
-        assertThat(result.getId()).isEqualTo(900L);
-        assertThat(result.getKind()).isEqualTo(ConversationKind.MENTORSHIP);
-        assertThat(result.getMentorship()).isSameAs(mentorship);
-        verify(participantRepository, times(2)).save(any(ConversationParticipant.class));
+        assertThat(result).isSameAs(created);
+        verify(conversationCreator, times(1)).createForMentorshipInNewTx(mentorship);
     }
 
     @Test
@@ -122,7 +111,6 @@ class ConversationServiceTest {
         when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
         when(conversationRepository.findByMentorshipId(100L)).thenReturn(Optional.of(existing));
 
-        // Mentee (id=2) is also a participant — should be authorized.
         Conversation result = conversationService.findOrCreateForMentorship(100L, 2L);
 
         assertThat(result).isSameAs(existing);
@@ -136,7 +124,7 @@ class ConversationServiceTest {
                 .isInstanceOf(ProfileNotVisibleException.class);
 
         verify(conversationRepository, never()).findByMentorshipId(any());
-        verify(conversationRepository, never()).save(any());
+        verify(conversationCreator, never()).createForMentorshipInNewTx(any());
     }
 
     @Test
@@ -149,9 +137,6 @@ class ConversationServiceTest {
 
     @Test
     void findOrCreate_returnsExisting_evenWhenMentorshipNotActive() {
-        // History remains readable after the mentorship reaches a terminal
-        // state — once the conversation row exists, status is irrelevant
-        // for resolving it on subsequent reads.
         mentorship.setStatus(MentorshipStatus.COMPLETED);
         Conversation existing = new Conversation();
         existing.setId(900L);
@@ -164,15 +149,11 @@ class ConversationServiceTest {
         Conversation result = conversationService.findOrCreateForMentorship(100L, 1L);
 
         assertThat(result).isSameAs(existing);
-        verify(conversationRepository, never()).save(any());
-        verify(participantRepository, never()).save(any());
+        verify(conversationCreator, never()).createForMentorshipInNewTx(any());
     }
 
     @Test
     void findOrCreate_throwsNotFound_whenMentorshipNotActiveAndNoConversation() {
-        // The read paths (GET /messages, PATCH /read) must not silently insert
-        // empty conversation rows for rejected/completed mentorships nor leak
-        // participation by returning 200.
         mentorship.setStatus(MentorshipStatus.TERMINATED);
         when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
         when(conversationRepository.findByMentorshipId(100L)).thenReturn(Optional.empty());
@@ -180,8 +161,7 @@ class ConversationServiceTest {
         assertThatThrownBy(() -> conversationService.findOrCreateForMentorship(100L, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);
 
-        verify(conversationRepository, never()).save(any());
-        verify(participantRepository, never()).save(any());
+        verify(conversationCreator, never()).createForMentorshipInNewTx(any());
     }
 
     @Test
@@ -193,11 +173,9 @@ class ConversationServiceTest {
 
         when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
         when(conversationRepository.findByMentorshipId(100L))
-                // First call: no row yet → triggers create
-                // Second call (after DataIntegrityViolation): the winner is visible
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(winnerSnapshot));
-        when(conversationRepository.save(any(Conversation.class)))
+        when(conversationCreator.createForMentorshipInNewTx(mentorship))
                 .thenThrow(new DataIntegrityViolationException("uq_conversations_mentorship"));
 
         Conversation result = conversationService.findOrCreateForMentorship(100L, 1L);
@@ -208,26 +186,25 @@ class ConversationServiceTest {
     // ── findOrCreateForMentorPair (issue #284) ──────────────────────────────
 
     @Test
-    void mentorPair_createsConversation_withCanonicalOrderAndTwoParticipants() {
+    void mentorPair_delegatesToCreator_withCanonicalOrder() {
+        Conversation created = new Conversation();
+        created.setId(901L);
+        created.setKind(ConversationKind.MENTOR_PAIR);
+        created.setPairAId(1L);
+        created.setPairBId(3L);
+
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(userRepository.findById(3L)).thenReturn(Optional.of(mentorPeer));
         when(conversationRepository.findByPairAIdAndPairBIdAndKind(
-                1L, 3L, ConversationKind.MENTOR_PAIR))
-                .thenReturn(Optional.empty());
-        when(conversationRepository.save(any(Conversation.class))).thenAnswer(inv -> {
-            Conversation c = inv.getArgument(0);
-            c.setId(901L);
-            return c;
-        });
+                1L, 3L, ConversationKind.MENTOR_PAIR)).thenReturn(Optional.empty());
+        when(conversationCreator.createForMentorPairInNewTx(
+                eq(mentor), eq(mentorPeer), eq(1L), eq(3L))).thenReturn(created);
 
         Conversation result = conversationService.findOrCreateForMentorPair(1L, 3L);
 
-        assertThat(result.getId()).isEqualTo(901L);
-        assertThat(result.getKind()).isEqualTo(ConversationKind.MENTOR_PAIR);
-        assertThat(result.getPairAId()).isEqualTo(1L);
-        assertThat(result.getPairBId()).isEqualTo(3L);
-        assertThat(result.getMentorship()).isNull();
-        verify(participantRepository, times(2)).save(any(ConversationParticipant.class));
+        assertThat(result).isSameAs(created);
+        verify(conversationCreator, times(1)).createForMentorPairInNewTx(
+                mentor, mentorPeer, 1L, 3L);
     }
 
     @Test
@@ -241,34 +218,39 @@ class ConversationServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(userRepository.findById(3L)).thenReturn(Optional.of(mentorPeer));
         when(conversationRepository.findByPairAIdAndPairBIdAndKind(
-                1L, 3L, ConversationKind.MENTOR_PAIR))
-                .thenReturn(Optional.of(existing));
+                1L, 3L, ConversationKind.MENTOR_PAIR)).thenReturn(Optional.of(existing));
 
         Conversation result = conversationService.findOrCreateForMentorPair(1L, 3L);
 
         assertThat(result).isSameAs(existing);
-        verify(conversationRepository, never()).save(any());
-        verify(participantRepository, never()).save(any());
+        verify(conversationCreator, never()).createForMentorPairInNewTx(any(), any(), anyLong(), anyLong());
     }
 
     @Test
-    void mentorPair_resolvesToSameConversation_regardlessOfArgumentOrder() {
-        // Calling (3, 1) must produce the same canonical key (1, 3) as (1, 3).
-        Conversation existing = new Conversation();
-        existing.setId(901L);
-        existing.setKind(ConversationKind.MENTOR_PAIR);
-        existing.setPairAId(1L);
-        existing.setPairBId(3L);
+    void mentorPair_canonicalisesArgumentOrder_onCreatePath() {
+        // Calling (3, 1) — reverse of canonical — must still send (1, 3) to
+        // the creator. This is the test that the previous version of this
+        // suite missed (it only verified the read-side canonicalisation).
+        Conversation created = new Conversation();
+        created.setId(901L);
+        created.setKind(ConversationKind.MENTOR_PAIR);
+        created.setPairAId(1L);
+        created.setPairBId(3L);
 
         when(userRepository.findById(3L)).thenReturn(Optional.of(mentorPeer));
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(conversationRepository.findByPairAIdAndPairBIdAndKind(
-                1L, 3L, ConversationKind.MENTOR_PAIR))
-                .thenReturn(Optional.of(existing));
+                1L, 3L, ConversationKind.MENTOR_PAIR)).thenReturn(Optional.empty());
+        when(conversationCreator.createForMentorPairInNewTx(
+                any(), any(), eq(1L), eq(3L))).thenReturn(created);
 
         Conversation result = conversationService.findOrCreateForMentorPair(3L, 1L);
 
-        assertThat(result).isSameAs(existing);
+        assertThat(result).isSameAs(created);
+        // Whichever User went where in the create call doesn't matter — only
+        // the canonical (lower, higher) pair identifiers do.
+        verify(conversationCreator, times(1)).createForMentorPairInNewTx(
+                any(), any(), eq(1L), eq(3L));
     }
 
     @Test
@@ -299,8 +281,6 @@ class ConversationServiceTest {
 
     @Test
     void mentorPair_throws400_whenRequesterIsNotAMentor() {
-        // Defense-in-depth: controller @PreAuthorize blocks mentees, but the
-        // service rejects a mentee caller too if invoked from non-controller code.
         when(userRepository.findById(2L)).thenReturn(Optional.of(mentee));
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
 
@@ -321,7 +301,6 @@ class ConversationServiceTest {
 
     @Test
     void mentorPair_throws400_whenOtherIsAnAdmin() {
-        // Admin extends User but is not a Mentor — instanceof check rejects.
         com.group7.backend.entity.Admin admin = new com.group7.backend.entity.Admin();
         admin.setId(99L);
 
@@ -345,11 +324,10 @@ class ConversationServiceTest {
         when(userRepository.findById(3L)).thenReturn(Optional.of(mentorPeer));
         when(conversationRepository.findByPairAIdAndPairBIdAndKind(
                 1L, 3L, ConversationKind.MENTOR_PAIR))
-                // First call: no row yet → triggers create
-                // Second call (after DataIntegrityViolation): the winner is visible
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(winnerSnapshot));
-        when(conversationRepository.save(any(Conversation.class)))
+        when(conversationCreator.createForMentorPairInNewTx(
+                any(), any(), eq(1L), eq(3L)))
                 .thenThrow(new DataIntegrityViolationException("uq_conversations_pair_kind"));
 
         Conversation result = conversationService.findOrCreateForMentorPair(1L, 3L);
@@ -359,17 +337,12 @@ class ConversationServiceTest {
 
     @Test
     void mentorPair_recoveryWithoutRow_throwsIllegalState() {
-        // Inner tx throws but the recovery re-find sees nothing — this should
-        // never happen in production (the unique index guarantees the winning
-        // row is committed by the time the loser re-reads). Surface as a
-        // 500-class IllegalStateException with diagnostic context so the
-        // operator knows transaction isolation is misconfigured.
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
         when(userRepository.findById(3L)).thenReturn(Optional.of(mentorPeer));
         when(conversationRepository.findByPairAIdAndPairBIdAndKind(
-                1L, 3L, ConversationKind.MENTOR_PAIR))
-                .thenReturn(Optional.empty());
-        when(conversationRepository.save(any(Conversation.class)))
+                1L, 3L, ConversationKind.MENTOR_PAIR)).thenReturn(Optional.empty());
+        when(conversationCreator.createForMentorPairInNewTx(
+                any(), any(), eq(1L), eq(3L)))
                 .thenThrow(new DataIntegrityViolationException("uq_conversations_pair_kind"));
 
         assertThatThrownBy(() -> conversationService.findOrCreateForMentorPair(1L, 3L))

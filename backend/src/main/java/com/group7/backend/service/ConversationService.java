@@ -2,25 +2,20 @@ package com.group7.backend.service;
 
 import com.group7.backend.entity.Conversation;
 import com.group7.backend.entity.ConversationKind;
-import com.group7.backend.entity.ConversationParticipant;
-import com.group7.backend.entity.ConversationParticipantId;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.Mentorship;
 import com.group7.backend.entity.MentorshipStatus;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
-import com.group7.backend.repository.ConversationParticipantRepository;
 import com.group7.backend.repository.ConversationRepository;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -37,21 +32,16 @@ import java.util.Optional;
  * to existing branches.
  *
  * <h2>Race-safe creation</h2>
- * The find-or-create flow uses the canonical Spring pattern: the outer method
- * is <strong>non-transactional</strong>, so the read and the recovery path see
- * separate, fully-committed states. The actual create runs in
- * {@link Propagation#REQUIRES_NEW} — when a partial unique index catches a
+ * The find-or-create flow uses the canonical Spring pattern: this service
+ * stays <strong>non-transactional</strong>, so the read and the recovery path
+ * see separate, fully-committed states. The actual creation is delegated to
+ * {@link ConversationCreator}, whose methods run with
+ * {@link Propagation#REQUIRES_NEW}. When a partial unique index catches a
  * concurrent insert and Hibernate raises {@link DataIntegrityViolationException},
- * only the inner transaction rolls back; the outer method then re-reads and
- * returns the winner. Wrapping everything in a single {@code @Transactional}
- * would mark that outer transaction rollback-only and produce
- * {@code UnexpectedRollbackException} at commit.
- *
- * <h2>Self-invocation</h2>
- * The inner {@code REQUIRES_NEW} method is invoked through the bean factory
- * ({@code applicationContext.getBean(ConversationService.class)}) so the
- * Spring AOP advice fires. A direct {@code this.method(...)} call would
- * bypass the proxy and silently downgrade to the outer transaction.
+ * only the inner transaction rolls back; this service then re-reads and
+ * returns the winner. Wrapping these methods in a single {@code @Transactional}
+ * would mark the outer transaction rollback-only and produce
+ * {@code UnexpectedRollbackException} at commit instead of a clean re-find.
  */
 @Service
 public class ConversationService {
@@ -59,21 +49,18 @@ public class ConversationService {
     private static final Logger log = LoggerFactory.getLogger(ConversationService.class);
 
     private final ConversationRepository conversationRepository;
-    private final ConversationParticipantRepository participantRepository;
     private final MentorshipRepository mentorshipRepository;
     private final UserRepository userRepository;
-    private final ApplicationContext applicationContext;
+    private final ConversationCreator conversationCreator;
 
     public ConversationService(ConversationRepository conversationRepository,
-                               ConversationParticipantRepository participantRepository,
                                MentorshipRepository mentorshipRepository,
                                UserRepository userRepository,
-                               ApplicationContext applicationContext) {
+                               ConversationCreator conversationCreator) {
         this.conversationRepository = conversationRepository;
-        this.participantRepository = participantRepository;
         this.mentorshipRepository = mentorshipRepository;
         this.userRepository = userRepository;
-        this.applicationContext = applicationContext;
+        this.conversationCreator = conversationCreator;
     }
 
     // ── Mentorship-scoped conversations (issue #245) ────────────────────────
@@ -112,40 +99,21 @@ public class ConversationService {
         if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
             throw new ResourceNotFoundException("Conversation not found");
         }
-        return createOrRecoverForMentorship(mentorship);
-    }
-
-    private Conversation createOrRecoverForMentorship(Mentorship mentorship) {
-        ConversationService self = applicationContext.getBean(ConversationService.class);
         try {
-            return self.createForMentorshipInNewTx(mentorship);
+            return conversationCreator.createForMentorshipInNewTx(mentorship);
         } catch (DataIntegrityViolationException e) {
             log.warn("Concurrent conversation creation for mentorshipId={}; resolving via re-find",
-                    mentorship.getId());
-            return conversationRepository.findByMentorshipId(mentorship.getId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Conversation creation race resolved with no row visible — "
-                                    + "transaction isolation issue?", e));
+                    mentorshipId);
+            return conversationRepository.findByMentorshipId(mentorshipId)
+                    .orElseThrow(() -> {
+                        log.error("Mentorship conversation race resolved with no row visible "
+                                + "(mentorshipId={}); transaction isolation misconfigured?",
+                                mentorshipId, e);
+                        return new IllegalStateException(
+                                "Conversation creation race resolved with no row visible — "
+                                        + "transaction isolation issue?", e);
+                    });
         }
-    }
-
-    /**
-     * Atomic create: conversation row + two participant rows in one transaction.
-     * Public so the bean proxy intercepts the call when invoked via
-     * {@link #createOrRecoverForMentorship(Mentorship)}; not part of the
-     * service's external contract.
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Conversation createForMentorshipInNewTx(Mentorship mentorship) {
-        Conversation conversation = new Conversation();
-        conversation.setKind(ConversationKind.MENTORSHIP);
-        conversation.setMentorship(mentorship);
-        Conversation saved = conversationRepository.save(conversation);
-        participantRepository.save(participant(saved, mentorship.getMentor()));
-        participantRepository.save(participant(saved, mentorship.getMentee()));
-        log.info("Conversation created: id={}, kind=MENTORSHIP, mentorshipId={}",
-                saved.getId(), mentorship.getId());
-        return saved;
     }
 
     // ── Mentor-pair conversations (issue #284) ─────────────────────────────
@@ -196,56 +164,25 @@ public class ConversationService {
         if (existing.isPresent()) {
             return existing.get();
         }
-        return createOrRecoverPair(requester, other, lower, higher);
-    }
-
-    private Conversation createOrRecoverPair(User requester, User other,
-                                             long lower, long higher) {
-        ConversationService self = applicationContext.getBean(ConversationService.class);
         try {
-            return self.createForMentorPairInNewTx(requester, other, lower, higher);
+            return conversationCreator.createForMentorPairInNewTx(requester, other, lower, higher);
         } catch (DataIntegrityViolationException e) {
             log.warn("Concurrent mentor-pair creation for ({}, {}); resolving via re-find",
                     lower, higher);
             return conversationRepository
                     .findByPairAIdAndPairBIdAndKind(lower, higher, ConversationKind.MENTOR_PAIR)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Mentor-pair creation race resolved with no row visible — "
-                                    + "transaction isolation issue?", e));
+                    .orElseThrow(() -> {
+                        log.error("Mentor-pair conversation race resolved with no row visible "
+                                + "(pair=({}, {})); transaction isolation misconfigured?",
+                                lower, higher, e);
+                        return new IllegalStateException(
+                                "Mentor-pair creation race resolved with no row visible — "
+                                        + "transaction isolation issue?", e);
+                    });
         }
     }
 
-    /**
-     * Atomic create for a {@link ConversationKind#MENTOR_PAIR} conversation:
-     * one conversation row plus two participant rows. Public so the
-     * {@code @Lazy self} proxy intercepts the call from
-     * {@link #createOrRecoverPair(User, User, long, long)}; not part of the
-     * service's external contract.
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Conversation createForMentorPairInNewTx(User requester, User other,
-                                                   long lower, long higher) {
-        Conversation conversation = new Conversation();
-        conversation.setKind(ConversationKind.MENTOR_PAIR);
-        conversation.setPairAId(lower);
-        conversation.setPairBId(higher);
-        Conversation saved = conversationRepository.save(conversation);
-        participantRepository.save(participant(saved, requester));
-        participantRepository.save(participant(saved, other));
-        log.info("Conversation created: id={}, kind=MENTOR_PAIR, pair=({}, {})",
-                saved.getId(), lower, higher);
-        return saved;
-    }
-
     // ── Internals ───────────────────────────────────────────────────────────
-
-    private static ConversationParticipant participant(Conversation conversation, User user) {
-        ConversationParticipant cp = new ConversationParticipant();
-        cp.setConversation(conversation);
-        cp.setUser(user);
-        cp.setId(new ConversationParticipantId(conversation.getId(), user.getId()));
-        return cp;
-    }
 
     private static boolean isParticipant(Mentorship mentorship, Long userId) {
         return mentorship.getMentor().getId().equals(userId)
