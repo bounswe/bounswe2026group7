@@ -37,6 +37,7 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import java.lang.reflect.Type;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 
@@ -162,10 +163,17 @@ class MessagingWebSocketIntegrationTest {
         String outsiderToken = registerAndLogin("ws_outsider@test.com", true);
 
         // CONNECT succeeds (the outsider has a valid JWT) but the SUBSCRIBE
-        // frame is rejected by the interceptor; the server then closes the
-        // session. From the client's perspective the subscription handler is
-        // simply never invoked, even after a real broadcast happens.
-        StompSession session = connect(outsiderToken);
+        // frame is rejected by the interceptor; the server sends a STOMP
+        // ERROR frame (surfaced via handleException) and/or closes the
+        // transport (surfaced via handleTransportError). Either signal is a
+        // server-side rejection; the test asserts that at least one fires
+        // and that no broadcast frame is ever delivered to the outsider.
+        RecordingSessionHandler handler = new RecordingSessionHandler();
+        StompHeaders stompHeaders = new StompHeaders();
+        stompHeaders.add("Authorization", "Bearer " + outsiderToken);
+        StompSession session = stompClient
+                .connectAsync(wsUrl(), new WebSocketHttpHeaders(), stompHeaders, handler)
+                .get(5, TimeUnit.SECONDS);
 
         LinkedBlockingDeque<MessageResponse> received = new LinkedBlockingDeque<>();
         try {
@@ -178,11 +186,14 @@ class MessagingWebSocketIntegrationTest {
                 }
             });
         } catch (Exception ignored) {
-            // Some Spring versions surface the rejection as an exception here;
-            // others close the session asynchronously. Either way, no frame
-            // should be delivered.
+            // Some Spring versions surface the rejection synchronously here;
+            // either way handleException / handleTransportError will fire.
         }
-        Thread.sleep(500);
+
+        // Server-side rejection MUST surface within a bounded window.
+        assertThat(handler.rejection.await(2, TimeUnit.SECONDS))
+                .as("server should send STOMP ERROR or close the session for non-participant SUBSCRIBE")
+                .isTrue();
 
         // Have the mentor send a real message via REST and confirm the outsider
         // never receives it.
@@ -301,6 +312,29 @@ class MessagingWebSocketIntegrationTest {
                                     StompHeaders headers, byte[] payload, Throwable exception) {
             // Allow the test to observe failures via session state instead of
             // letting them spam stderr.
+        }
+    }
+
+    /**
+     * Session handler that opens a {@link CountDownLatch} the moment the
+     * server signals a rejection — either via a STOMP ERROR frame
+     * ({@code handleException}) or by closing the underlying transport
+     * ({@code handleTransportError}). The test for non-participant SUBSCRIBE
+     * awaits this latch to assert the rejection actually arrived rather than
+     * inferring it from the absence of a broadcast.
+     */
+    private static class RecordingSessionHandler extends StompSessionHandlerAdapter {
+        final CountDownLatch rejection = new CountDownLatch(1);
+
+        @Override
+        public void handleException(StompSession session, StompCommand command,
+                                    StompHeaders headers, byte[] payload, Throwable exception) {
+            rejection.countDown();
+        }
+
+        @Override
+        public void handleTransportError(StompSession session, Throwable exception) {
+            rejection.countDown();
         }
     }
 }
