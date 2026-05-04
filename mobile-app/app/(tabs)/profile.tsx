@@ -172,6 +172,53 @@ async function uploadProfilePhoto(uri: string) {
   return response.data?.profilePhoto || uri;
 }
 
+async function deleteProfilePhoto() {
+  await apiClient.delete('/users/me/photo');
+}
+
+function openAvatarActions(
+  role: AppRole,
+  userId: string,
+  profilePhoto: string | null,
+  setProfilePhoto: (v: string | null) => void,
+) {
+  const options: { text: string; onPress: () => void; style?: 'destructive' | 'cancel' | 'default' }[] = [
+    {
+      text: 'Change Photo',
+      onPress: async () => {
+        const uri = await pickAvatar();
+        if (!uri) return;
+        try {
+          const saved = await uploadProfilePhoto(uri);
+          await cacheAvatar(role, userId, saved);
+          setProfilePhoto(saved);
+        } catch {
+          await cacheAvatar(role, userId, uri);
+          setProfilePhoto(uri);
+          Alert.alert('Warning', 'Photo updated locally but could not be uploaded.');
+        }
+      },
+    },
+  ];
+  if (profilePhoto) {
+    options.push({
+      text: 'Remove Photo',
+      style: 'destructive',
+      onPress: async () => {
+        try {
+          await deleteProfilePhoto();
+          await SecureStore.deleteItemAsync(getAvatarStorageKey(role, userId));
+          setProfilePhoto(null);
+        } catch {
+          Alert.alert('Error', 'Could not remove the photo. Please try again.');
+        }
+      },
+    });
+  }
+  options.push({ text: 'Cancel', style: 'cancel', onPress: () => {} });
+  Alert.alert('Profile Photo', 'Choose an action', options);
+}
+
 // --- MENTEE PROFILI ---
 function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   const [fullName, setFullName] = useState('');
@@ -273,17 +320,7 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             onPress={async () => {
               const userId = await SecureStore.getItemAsync('userId');
               if (!userId) return;
-              const uri = await pickAvatar();
-              if (!uri) return;
-              try {
-                const savedPhoto = await uploadProfilePhoto(uri);
-                await cacheAvatar('mentee', userId, savedPhoto);
-                setProfilePhoto(savedPhoto);
-              } catch {
-                await cacheAvatar('mentee', userId, uri);
-                setProfilePhoto(uri);
-                Alert.alert('Warning', 'Photo was updated locally but could not be uploaded to the server.');
-              }
+              openAvatarActions('mentee', userId, profilePhoto, setProfilePhoto);
             }}
           >
             {profilePhoto ? (
@@ -315,6 +352,13 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             >
               <Text style={styles.quickActionIcon}>🔍</Text>
               <Text style={styles.quickActionText}>Find Mentor</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/availability-scheduling')}
+            >
+              <Text style={styles.quickActionIcon}>📅</Text>
+              <Text style={styles.quickActionText}>Availability</Text>
             </TouchableOpacity>
           </View>
 
@@ -499,17 +543,7 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             onPress={async () => {
               const userId = await SecureStore.getItemAsync('userId');
               if (!userId) return;
-              const uri = await pickAvatar();
-              if (!uri) return;
-              try {
-                const savedPhoto = await uploadProfilePhoto(uri);
-                await cacheAvatar('mentor', userId, savedPhoto);
-                setProfilePhoto(savedPhoto);
-              } catch {
-                await cacheAvatar('mentor', userId, uri);
-                setProfilePhoto(uri);
-                Alert.alert('Warning', 'Photo was updated locally but could not be uploaded to the server.');
-              }
+              openAvatarActions('mentor', userId, profilePhoto, setProfilePhoto);
             }}
           >
             {profilePhoto ? (

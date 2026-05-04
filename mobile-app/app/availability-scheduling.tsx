@@ -13,28 +13,19 @@ import * as SecureStore from 'expo-secure-store';
 import apiClient from '../api/client';
 import { useRole } from '../components/RoleContext';
 
+type TimeSlot = { start: string; end: string };
+
 type DayItem = {
   key: string;
   short: string;
   active: boolean;
-  start?: string;
-  end?: string;
+  slots: TimeSlot[];
 };
 
 const TIME_OPTIONS = [
-  '08:00',
-  '09:00',
-  '10:00',
-  '11:00',
-  '12:00',
-  '13:00',
-  '14:00',
-  '15:00',
-  '16:00',
-  '17:00',
-  '18:00',
-  '19:00',
-  '20:00',
+  '08:00', '09:00', '10:00', '11:00', '12:00',
+  '13:00', '14:00', '15:00', '16:00', '17:00',
+  '18:00', '19:00', '20:00',
 ];
 
 const DAY_KEY_TO_API: Record<string, string> = {
@@ -47,16 +38,17 @@ const DAY_KEY_TO_API: Record<string, string> = {
   sun: 'SUNDAY',
 };
 
-
 const DEFAULT_DAYS: DayItem[] = [
-  { key: 'mon', short: 'Mon', active: false },
-  { key: 'tue', short: 'Tue', active: false },
-  { key: 'wed', short: 'Wed', active: false },
-  { key: 'thu', short: 'Thu', active: false },
-  { key: 'fri', short: 'Fri', active: false },
-  { key: 'sat', short: 'Sat', active: false },
-  { key: 'sun', short: 'Sun', active: false },
+  { key: 'mon', short: 'Mon', active: false, slots: [] },
+  { key: 'tue', short: 'Tue', active: false, slots: [] },
+  { key: 'wed', short: 'Wed', active: false, slots: [] },
+  { key: 'thu', short: 'Thu', active: false, slots: [] },
+  { key: 'fri', short: 'Fri', active: false, slots: [] },
+  { key: 'sat', short: 'Sat', active: false, slots: [] },
+  { key: 'sun', short: 'Sun', active: false, slots: [] },
 ];
+
+const DEFAULT_SLOT: TimeSlot = { start: '09:00', end: '18:00' };
 
 export default function AvailabilitySchedulingScreen() {
   const { role } = useRole();
@@ -69,34 +61,36 @@ export default function AvailabilitySchedulingScreen() {
 
   useEffect(() => {
     const loadAvailability = async () => {
-      if (!isMentor) {
-        setLoading(false);
-        return;
-      }
-
       try {
-        const userId = await SecureStore.getItemAsync('userId');
-        if (!userId) {
-          setBannerTone('error');
-          setBannerMessage('Could not identify your account. Please sign in again.');
-          return;
+        let apiSlots: any[];
+        if (isMentor) {
+          const userId = await SecureStore.getItemAsync('userId');
+          if (!userId) {
+            setBannerTone('error');
+            setBannerMessage('Could not identify your account. Please sign in again.');
+            setLoading(false);
+            return;
+          }
+          const res = await apiClient.get(`/availability/${userId}`);
+          apiSlots = res.data;
+        } else {
+          const res = await apiClient.get('/mentee-availability');
+          apiSlots = res.data;
         }
-        const res = await apiClient.get(`/availability/${userId}`);
-        const slots: any[] = res.data;
 
         setDays((prev) =>
           prev.map((day) => {
             const apiDay = DAY_KEY_TO_API[day.key];
-            const slot = slots.find((s) => s.dayOfWeek === apiDay);
-            if (slot) {
-              return {
-                ...day,
-                active: true,
-                start: slot.startTime.substring(0, 5),
-                end: slot.endTime.substring(0, 5),
-              };
+            const daySlots = apiSlots
+              .filter((s) => s.dayOfWeek === apiDay)
+              .map((s) => ({
+                start: s.startTime.substring(0, 5),
+                end: s.endTime.substring(0, 5),
+              }));
+            if (daySlots.length > 0) {
+              return { ...day, active: true, slots: daySlots };
             }
-            return { ...day, active: false, start: undefined, end: undefined };
+            return { ...day, active: false, slots: [] };
           })
         );
       } catch (err) {
@@ -116,85 +110,96 @@ export default function AvailabilitySchedulingScreen() {
     setDays((prev) =>
       prev.map((day) =>
         day.key === key
-          ? {
-              ...day,
-              active: !day.active,
-              start: !day.active ? '09:00' : undefined,
-              end: !day.active ? '18:00' : undefined,
-            }
+          ? { ...day, active: !day.active, slots: !day.active ? [{ ...DEFAULT_SLOT }] : [] }
           : day
       )
     );
   };
 
-  const getNextTime = (current: string | undefined, type: 'start' | 'end') => {
-    const fallback = type === 'start' ? '09:00' : '18:00';
-    const value = current ?? fallback;
-    const currentIndex = TIME_OPTIONS.indexOf(value);
-    const nextIndex =
-      currentIndex === -1 ? 0 : (currentIndex + 1) % TIME_OPTIONS.length;
-    return TIME_OPTIONS[nextIndex];
+  const addSlot = (key: string) => {
+    setBannerMessage(null);
+    setBannerTone(null);
+    setDays((prev) =>
+      prev.map((day) =>
+        day.key === key && day.active
+          ? { ...day, slots: [...day.slots, { ...DEFAULT_SLOT }] }
+          : day
+      )
+    );
   };
 
-  const updateTime = (key: string, type: 'start' | 'end') => {
+  const removeSlot = (key: string, index: number) => {
+    setBannerMessage(null);
+    setBannerTone(null);
+    setDays((prev) =>
+      prev.map((day) => {
+        if (day.key !== key) return day;
+        const newSlots = day.slots.filter((_, i) => i !== index);
+        if (newSlots.length === 0) {
+          return { ...day, active: false, slots: [] };
+        }
+        return { ...day, slots: newSlots };
+      })
+    );
+  };
+
+  const cycleTime = (current: string, type: 'start' | 'end') => {
+    const fallback = type === 'start' ? '09:00' : '18:00';
+    const value = current || fallback;
+    const idx = TIME_OPTIONS.indexOf(value);
+    return TIME_OPTIONS[idx === -1 ? 0 : (idx + 1) % TIME_OPTIONS.length];
+  };
+
+  const updateSlotTime = (key: string, index: number, type: 'start' | 'end') => {
     setBannerMessage(null);
     setBannerTone(null);
     setDays((prev) =>
       prev.map((day) => {
         if (day.key !== key || !day.active) return day;
-
-        const nextValue = getNextTime(
-          type === 'start' ? day.start : day.end,
-          type
-        );
-
-        if (type === 'start') {
-          return { ...day, start: nextValue };
-        }
-
-        return { ...day, end: nextValue };
+        const newSlots = day.slots.map((slot, i) => {
+          if (i !== index) return slot;
+          return { ...slot, [type]: cycleTime(slot[type], type) };
+        });
+        return { ...day, slots: newSlots };
       })
     );
   };
 
   const handleUpdateAvailability = async () => {
-    if (!isMentor) {
-      Alert.alert('Mentor only', 'This screen is only available for mentor accounts.');
-      return;
-    }
-
-    const activeDays = days.filter((day) => day.active && day.start && day.end);
+    const activeDays = days.filter((d) => d.active && d.slots.length > 0);
     if (activeDays.length === 0) {
       Alert.alert('No Availability Selected', 'Please enable at least one time slot before saving.');
       return;
     }
 
-    const invalidDay = days.find((day) => {
-      if (!day.active || !day.start || !day.end) return false;
-      const startIndex = TIME_OPTIONS.indexOf(day.start);
-      const endIndex = TIME_OPTIONS.indexOf(day.end);
-      return startIndex >= endIndex;
-    });
-
-    if (invalidDay) {
-      Alert.alert('Invalid Time Slot', `For ${invalidDay.short}, the end time must be after the start time.`);
-      return;
+    for (const day of activeDays) {
+      for (const slot of day.slots) {
+        const si = TIME_OPTIONS.indexOf(slot.start);
+        const ei = TIME_OPTIONS.indexOf(slot.end);
+        if (si >= ei) {
+          Alert.alert('Invalid Time Slot', `For ${day.short}, the end time must be after the start time.`);
+          return;
+        }
+      }
     }
 
-    const slots = days
-      .filter((day) => day.active && day.start && day.end)
-      .map((day) => ({
-        dayOfWeek: DAY_KEY_TO_API[day.key],
-        startTime: day.start,
-        endTime: day.end,
-        recurring: true,
-      }));
+    const slots = days.flatMap((day) =>
+      day.active
+        ? day.slots.map((slot) => ({
+            dayOfWeek: DAY_KEY_TO_API[day.key],
+            startTime: slot.start,
+            endTime: slot.end,
+            recurring: true,
+          }))
+        : []
+    );
 
     setSaving(true);
     setBannerMessage(null);
     setBannerTone(null);
     try {
-      await apiClient.put('/availability', { slots });
+      const endpoint = isMentor ? '/availability' : '/mentee-availability';
+      await apiClient.put(endpoint, { slots });
       setBannerTone('success');
       setBannerMessage('Availability successfully updated and reflected on your profile.');
     } catch (error: any) {
@@ -207,6 +212,8 @@ export default function AvailabilitySchedulingScreen() {
     }
   };
 
+  const totalSlots = days.reduce((sum, d) => sum + (d.active ? d.slots.length : 0), 0);
+
   return (
     <View style={styles.container}>
       <View style={styles.fixedHeader}>
@@ -218,10 +225,7 @@ export default function AvailabilitySchedulingScreen() {
         </View>
 
         <View style={styles.headerTopRow}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
 
@@ -245,119 +249,97 @@ export default function AvailabilitySchedulingScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {!isMentor ? (
-          <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>Mentor Availability</Text>
-            <Text style={styles.infoText}>
-              This editing screen is available only for mentor accounts. Mentees manage their own schedule in a separate flow.
-            </Text>
-          </View>
-        ) : loading ? (
+        {loading ? (
           <ActivityIndicator size="large" color="#456B50" style={styles.loader} />
         ) : (
           <>
             {bannerMessage ? (
-              <View
-                style={[
-                  styles.banner,
-                  bannerTone === 'success' ? styles.bannerSuccess : styles.bannerError,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.bannerText,
-                    bannerTone === 'success' ? styles.bannerTextSuccess : styles.bannerTextError,
-                  ]}
-                >
+              <View style={[styles.banner, bannerTone === 'success' ? styles.bannerSuccess : styles.bannerError]}>
+                <Text style={[styles.bannerText, bannerTone === 'success' ? styles.bannerTextSuccess : styles.bannerTextError]}>
                   {bannerMessage}
                 </Text>
               </View>
             ) : null}
 
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>ACTIVE DAYS</Text>
-              <Text style={styles.summaryValue}>{days.filter((day) => day.active).length}/7</Text>
+              <Text style={styles.summaryLabel}>ACTIVE SLOTS</Text>
+              <Text style={styles.summaryValue}>{totalSlots}</Text>
               <Text style={styles.summaryHint}>
-                Tap a day to enable it, then tap each time chip to set the start and end hour.
+                Tap a day to enable it. Use + to add multiple slots per day, and tap times to cycle through hours.
               </Text>
             </View>
 
-        <Text style={styles.sectionTitle}>WEEKLY SCHEDULE</Text>
+            <Text style={styles.sectionTitle}>WEEKLY SCHEDULE</Text>
 
             <View style={styles.scheduleCard}>
-              {days.map((day, index) => (
+              {days.map((day, dayIndex) => (
                 <View key={day.key}>
-                  <View style={styles.dayRow}>
-                    <TouchableOpacity
-                      activeOpacity={0.82}
-                      onPress={() => toggleDay(day.key)}
-                      style={[
-                        styles.dayCircle,
-                        day.active ? styles.dayCircleActive : styles.dayCircleInactive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.dayCircleText,
-                          day.active
-                            ? styles.dayCircleTextActive
-                            : styles.dayCircleTextInactive,
-                        ]}
+                  <View style={styles.dayBlock}>
+                    <View style={styles.dayHeaderRow}>
+                      <TouchableOpacity
+                        activeOpacity={0.82}
+                        onPress={() => toggleDay(day.key)}
+                        style={[styles.dayCircle, day.active ? styles.dayCircleActive : styles.dayCircleInactive]}
                       >
-                        {day.short}
-                      </Text>
-                    </TouchableOpacity>
+                        <Text style={[styles.dayCircleText, day.active ? styles.dayCircleTextActive : styles.dayCircleTextInactive]}>
+                          {day.short}
+                        </Text>
+                      </TouchableOpacity>
 
-                    <View style={styles.timeArea}>
-                      {day.active ? (
-                        <View style={styles.timeRow}>
-                          <TouchableOpacity
-                            style={styles.timeBadge}
-                            onPress={() => updateTime(day.key, 'start')}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.timeBadgeText}>{day.start}</Text>
+                      <View style={styles.dayHeaderMiddle}>
+                        {!day.active && (
+                          <Text style={styles.notAvailableText}>Not available</Text>
+                        )}
+                        {day.active && (
+                          <TouchableOpacity style={styles.addSlotButton} onPress={() => addSlot(day.key)}>
+                            <Text style={styles.addSlotText}>+ Add slot</Text>
                           </TouchableOpacity>
+                        )}
+                      </View>
 
-                          <Text style={styles.hyphen}>-</Text>
-
-                          <TouchableOpacity
-                            style={styles.timeBadge}
-                            onPress={() => updateTime(day.key, 'end')}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.timeBadgeText}>{day.end}</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <Text style={styles.notAvailableText}>Not available</Text>
-                      )}
+                      <TouchableOpacity
+                        style={[styles.toggleTrack, day.active ? styles.toggleTrackActive : styles.toggleTrackInactive]}
+                        onPress={() => toggleDay(day.key)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={[styles.toggleThumb, day.active ? styles.toggleThumbRight : styles.toggleThumbLeft]} />
+                      </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity
-                      style={[
-                        styles.toggleTrack,
-                        day.active ? styles.toggleTrackActive : styles.toggleTrackInactive,
-                      ]}
-                      onPress={() => toggleDay(day.key)}
-                      activeOpacity={0.8}
-                    >
-                      <View
-                        style={[
-                          styles.toggleThumb,
-                          day.active ? styles.toggleThumbRight : styles.toggleThumbLeft,
-                        ]}
-                      />
-                    </TouchableOpacity>
+                    {day.active && day.slots.map((slot, slotIndex) => (
+                      <View key={slotIndex} style={styles.slotRow}>
+                        <TouchableOpacity
+                          style={styles.timeBadge}
+                          onPress={() => updateSlotTime(day.key, slotIndex, 'start')}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.timeBadgeText}>{slot.start}</Text>
+                        </TouchableOpacity>
+
+                        <Text style={styles.hyphen}>–</Text>
+
+                        <TouchableOpacity
+                          style={styles.timeBadge}
+                          onPress={() => updateSlotTime(day.key, slotIndex, 'end')}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.timeBadgeText}>{slot.end}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.removeSlotButton} onPress={() => removeSlot(day.key, slotIndex)}>
+                          <Text style={styles.removeSlotText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
                   </View>
 
-                  {index !== days.length - 1 && <View style={styles.rowDivider} />}
+                  {dayIndex !== days.length - 1 && <View style={styles.rowDivider} />}
                 </View>
               ))}
             </View>
 
             <Text style={styles.helperText}>
-              Removing a day clears that slot. The backend will reject overlapping or reversed time ranges automatically.
+              Removing all slots for a day disables it. The backend rejects overlapping or reversed time ranges.
             </Text>
 
             <TouchableOpacity
@@ -377,10 +359,7 @@ export default function AvailabilitySchedulingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ECE8E1',
-  },
+  container: { flex: 1, backgroundColor: '#ECE8E1' },
   fixedHeader: {
     backgroundColor: '#456B50',
     paddingTop: 54,
@@ -397,21 +376,9 @@ const styles = StyleSheet.create({
     top: -30,
     left: -40,
   },
-  statusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  statusIcons: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-  },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  statusIcons: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   headerTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -427,120 +394,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 16,
   },
-  backButtonText: {
-    color: '#F7F4EE',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  headerMainRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    marginTop: 6,
-  },
-  title: {
-    color: '#F7F4EE',
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: '700',
-  },
-  titleItalic: {
-    fontStyle: 'italic',
-    fontWeight: '700',
-  },
-  saveText: {
-    color: '#BFE2C8',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  scrollArea: {
-    flex: 1,
-    backgroundColor: '#ECE8E1',
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 36,
-  },
-  loader: {
-    marginTop: 50,
-  },
-  banner: {
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 16,
-  },
-  bannerSuccess: {
-    backgroundColor: '#E6F2E8',
-    borderWidth: 1,
-    borderColor: '#BFD9C4',
-  },
-  bannerError: {
-    backgroundColor: '#F6E6E2',
-    borderWidth: 1,
-    borderColor: '#E7C3BA',
-  },
-  bannerText: {
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  bannerTextSuccess: {
-    color: '#2F563C',
-  },
-  bannerTextError: {
-    color: '#8C3E35',
-  },
-  summaryCard: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 26,
-    padding: 20,
-    marginBottom: 18,
-  },
-  summaryLabel: {
-    color: '#8B8176',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginBottom: 6,
-  },
-  summaryValue: {
-    color: '#23372B',
-    fontSize: 28,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  summaryHint: {
-    color: '#7C7267',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  infoCard: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 26,
-    padding: 22,
-  },
-  infoTitle: {
-    color: '#23372B',
-    fontSize: 24,
-    fontWeight: '800',
-    marginBottom: 10,
-  },
-  infoText: {
-    color: '#7C7267',
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
-  },
-  sectionTitle: {
-    color: '#8B8176',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginBottom: 16,
-  },
+  backButtonText: { color: '#F7F4EE', fontSize: 14, fontWeight: '700' },
+  headerMainRow: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-end', marginTop: 6 },
+  title: { color: '#F7F4EE', fontSize: 34, lineHeight: 38, fontWeight: '700' },
+  titleItalic: { fontStyle: 'italic', fontWeight: '700' },
+  saveText: { color: '#BFE2C8', fontSize: 16, fontWeight: '700' },
+  scrollArea: { flex: 1, backgroundColor: '#ECE8E1' },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 36 },
+  loader: { marginTop: 50 },
+  banner: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 16 },
+  bannerSuccess: { backgroundColor: '#E6F2E8', borderWidth: 1, borderColor: '#BFD9C4' },
+  bannerError: { backgroundColor: '#F6E6E2', borderWidth: 1, borderColor: '#E7C3BA' },
+  bannerText: { fontSize: 14, fontWeight: '600', lineHeight: 20 },
+  bannerTextSuccess: { color: '#2F563C' },
+  bannerTextError: { color: '#8C3E35' },
+  summaryCard: { backgroundColor: '#F8F6F2', borderRadius: 26, padding: 20, marginBottom: 18 },
+  summaryLabel: { color: '#8B8176', fontSize: 12, fontWeight: '700', letterSpacing: 1.5, marginBottom: 6 },
+  summaryValue: { color: '#23372B', fontSize: 28, fontWeight: '800', marginBottom: 8 },
+  summaryHint: { color: '#7C7267', fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  sectionTitle: { color: '#8B8176', fontSize: 13, fontWeight: '700', letterSpacing: 2, marginBottom: 16 },
   scheduleCard: {
     backgroundColor: '#F8F6F2',
     borderRadius: 26,
@@ -548,69 +420,36 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginBottom: 12,
   },
-  dayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 72,
-  },
+  dayBlock: { paddingVertical: 4 },
+  dayHeaderRow: { flexDirection: 'row', alignItems: 'center', minHeight: 64 },
   dayCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     flexShrink: 0,
   },
-  dayCircleActive: {
-    backgroundColor: '#3F7653',
-  },
-  dayCircleInactive: {
-    backgroundColor: '#E8E2D9',
-  },
-  dayCircleText: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  dayCircleTextActive: {
-    color: '#F7F4EE',
-  },
-  dayCircleTextInactive: {
-    color: '#B5ADA3',
-  },
-  timeArea: {
+  dayCircleActive: { backgroundColor: '#3F7653' },
+  dayCircleInactive: { backgroundColor: '#E8E2D9' },
+  dayCircleText: { fontSize: 14, fontWeight: '700' },
+  dayCircleTextActive: { color: '#F7F4EE' },
+  dayCircleTextInactive: { color: '#B5ADA3' },
+  dayHeaderMiddle: {
     flex: 1,
-    marginRight: 8,
-  },
-  timeRow: {
-    flexDirection: 'row',
+    alignSelf: 'stretch',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
   },
-  timeBadge: {
+  notAvailableText: { color: '#B5ADA3', fontSize: 14, fontWeight: '500', flex: 1 },
+  addSlotButton: {
     backgroundColor: '#D6E8DC',
     borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    minWidth: 74,
-    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  timeBadgeText: {
-    color: '#2F563C',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  hyphen: {
-    color: '#B5ADA3',
-    fontSize: 22,
-    marginHorizontal: 8,
-    fontWeight: '400',
-  },
-  notAvailableText: {
-    color: '#B5ADA3',
-    fontSize: 14,
-    fontWeight: '500',
-  },
+  addSlotText: { color: '#2F563C', fontSize: 13, fontWeight: '700' },
   toggleTrack: {
     width: 46,
     height: 28,
@@ -618,14 +457,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 3,
     flexShrink: 0,
-    marginLeft: 0,
   },
-  toggleTrackActive: {
-    backgroundColor: '#3F7653',
-  },
-  toggleTrackInactive: {
-    backgroundColor: '#DDDBD7',
-  },
+  toggleTrackActive: { backgroundColor: '#3F7653' },
+  toggleTrackInactive: { backgroundColor: '#DDDBD7' },
   toggleThumb: {
     width: 22,
     height: 22,
@@ -639,33 +473,37 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
-  toggleThumbLeft: {
-    left: 3,
+  toggleThumbLeft: { left: 3 },
+  toggleThumbRight: { right: 3 },
+  slotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginLeft: 66,
+    gap: 8,
   },
-  toggleThumbRight: {
-    right: 3,
-  },
-  rowDivider: {
-    height: 1,
-    backgroundColor: '#E5DED4',
-    marginVertical: 10,
-  },
-  helperText: {
-    color: '#9A8F82',
-    fontSize: 13,
-    marginBottom: 22,
-    marginLeft: 4,
-    lineHeight: 18,
-  },
-  updateButton: {
-    backgroundColor: '#467853',
-    borderRadius: 24,
-    paddingVertical: 22,
+  timeBadge: {
+    backgroundColor: '#D6E8DC',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    minWidth: 68,
     alignItems: 'center',
   },
-  updateButtonText: {
-    color: '#F8F6F2',
-    fontSize: 17,
-    fontWeight: '700',
+  timeBadgeText: { color: '#2F563C', fontSize: 14, fontWeight: '700' },
+  hyphen: { color: '#B5ADA3', fontSize: 20, fontWeight: '400' },
+  removeSlotButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F0E8E4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
   },
+  removeSlotText: { color: '#A0544A', fontSize: 12, fontWeight: '700' },
+  rowDivider: { height: 1, backgroundColor: '#E5DED4', marginVertical: 8 },
+  helperText: { color: '#9A8F82', fontSize: 13, marginBottom: 22, marginLeft: 4, lineHeight: 18 },
+  updateButton: { backgroundColor: '#467853', borderRadius: 24, paddingVertical: 22, alignItems: 'center' },
+  updateButtonText: { color: '#F8F6F2', fontSize: 17, fontWeight: '700' },
 });

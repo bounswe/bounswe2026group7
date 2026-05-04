@@ -22,6 +22,22 @@ type MeetingItem = {
   status: 'confirmed' | 'pending';
 };
 
+type AvailabilitySlot = {
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+};
+
+const DAY_LIST = [
+  { api: 'MONDAY',    short: 'Mon' },
+  { api: 'TUESDAY',   short: 'Tue' },
+  { api: 'WEDNESDAY', short: 'Wed' },
+  { api: 'THURSDAY',  short: 'Thu' },
+  { api: 'FRIDAY',    short: 'Fri' },
+  { api: 'SATURDAY',  short: 'Sat' },
+  { api: 'SUNDAY',    short: 'Sun' },
+];
+
 function parseString(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value ?? '';
 }
@@ -67,6 +83,9 @@ export default function ConnectionProfileScreen() {
   const mentoringGoals = parseJsonList(params.mentoringGoals);
   const preferences = parseJsonList(params.preferences);
 
+  const [mentorSlots, setMentorSlots] = useState<AvailabilitySlot[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+
   const [sharedGoal, setSharedGoal] = useState(parseString(params.subtitle));
   const [goalDraft, setGoalDraft] = useState('');
   const [goalEditing, setGoalEditing] = useState(false);
@@ -91,6 +110,15 @@ export default function ConnectionProfileScreen() {
       if (res.data.sharedGoal) setSharedGoal(res.data.sharedGoal);
     }).catch(() => {});
   }, [mentorshipId]);
+
+  useEffect(() => {
+    if (!isViewingMentor || !id) return;
+    setAvailabilityLoading(true);
+    apiClient.get(`/availability/${id}`)
+      .then((res) => setMentorSlots(res.data ?? []))
+      .catch(() => {})
+      .finally(() => setAvailabilityLoading(false));
+  }, [isViewingMentor, id]);
 
   const saveSharedGoal = async () => {
     if (!mentorshipId || !goalDraft.trim()) return;
@@ -307,84 +335,56 @@ export default function ConnectionProfileScreen() {
             )}
           </View>
 
-          <Text style={styles.sectionTitle}>SHARED CALENDAR</Text>
+          {isViewingMentor && (
+            <>
+              <Text style={styles.sectionTitle}>MENTOR AVAILABILITY</Text>
 
-          <View style={styles.card}>
-            <View style={styles.calendarHeader}>
-              <Text style={styles.calendarMonth}>April 2026</Text>
-              <TouchableOpacity>
-                <Text style={styles.calendarLink}>View Full</Text>
-              </TouchableOpacity>
-            </View>
+              <View style={styles.card}>
+                {availabilityLoading ? (
+                  <ActivityIndicator size="small" color="#456B50" />
+                ) : (
+                  <>
+                    <View style={styles.daysGrid}>
+                      {DAY_LIST.map(({ api, short }) => {
+                        const available = mentorSlots.some((s) => s.dayOfWeek === api);
+                        return (
+                          <View key={api} style={[styles.dayCell, available && styles.dayCellActive]}>
+                            <Text style={[styles.dayCellText, available && styles.dayCellTextActive]}>
+                              {short}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
 
-            <View style={styles.weekRow}>
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                <Text key={day} style={styles.weekDay}>
-                  {day}
-                </Text>
-              ))}
-            </View>
-
-            <View style={styles.daysGrid}>
-              {['7', '8', '9', '10', '11', '12', '13'].map((day, index) => {
-                const highlighted = index === 1 || index === 4;
-                return (
-                  <View
-                    key={day}
-                    style={[
-                      styles.dayCell,
-                      highlighted && styles.dayCellActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.dayCellText,
-                        highlighted && styles.dayCellTextActive,
-                      ]}
-                    >
-                      {day}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            <Text style={styles.cardLabel}>Upcoming Shared Meetings</Text>
-
-            {meetings.map((meeting) => (
-              <View key={meeting.id} style={styles.meetingRow}>
-                <View style={styles.meetingTimeBox}>
-                  <Text style={styles.meetingDay}>{meeting.day}</Text>
-                  <Text style={styles.meetingTime}>{meeting.time}</Text>
-                </View>
-
-                <View style={styles.meetingInfo}>
-                  <Text style={styles.meetingTitle}>{meeting.title}</Text>
-                  <Text style={styles.meetingDate}>{meeting.date}</Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.meetingBadge,
-                    meeting.status === 'confirmed'
-                      ? styles.meetingBadgeConfirmed
-                      : styles.meetingBadgePending,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.meetingBadgeText,
-                      meeting.status === 'confirmed'
-                        ? styles.meetingBadgeTextConfirmed
-                        : styles.meetingBadgeTextPending,
-                    ]}
-                  >
-                    {meeting.status === 'confirmed' ? 'Confirmed' : 'Pending'}
-                  </Text>
-                </View>
+                    {mentorSlots.length === 0 ? (
+                      <Text style={styles.cardText}>No availability set by mentor yet.</Text>
+                    ) : (
+                      DAY_LIST
+                        .filter(({ api }) => mentorSlots.some((s) => s.dayOfWeek === api))
+                        .map(({ api, short }) => {
+                          const slots = mentorSlots.filter((s) => s.dayOfWeek === api);
+                          return (
+                            <View key={api} style={styles.availabilityRow}>
+                              <Text style={styles.availabilityDay}>{short}</Text>
+                              <View style={styles.availabilitySlots}>
+                                {slots.map((s, i) => (
+                                  <View key={i} style={styles.availabilityBadge}>
+                                    <Text style={styles.availabilityBadgeText}>
+                                      {s.startTime.substring(0, 5)} – {s.endTime.substring(0, 5)}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            </View>
+                          );
+                        })
+                    )}
+                  </>
+                )}
               </View>
-            ))}
-          </View>
+            </>
+          )}
 
           <Text style={styles.sectionTitle}>ACTIONS</Text>
 
@@ -608,32 +608,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  calendarHeader: {
+  availabilityRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 10,
+    gap: 10,
   },
-  calendarMonth: {
-    color: '#23372B',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  calendarLink: {
-    color: '#4B7B57',
+  availabilityDay: {
+    width: 36,
+    color: '#2F563C',
     fontSize: 13,
     fontWeight: '700',
   },
-  weekRow: {
+  availabilitySlots: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  weekDay: {
-    width: '13%',
-    textAlign: 'center',
-    color: '#9A8F82',
-    fontSize: 11,
+  availabilityBadge: {
+    backgroundColor: '#D7E8DA',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  availabilityBadgeText: {
+    color: '#2F563C',
+    fontSize: 13,
     fontWeight: '600',
   },
   daysGrid: {

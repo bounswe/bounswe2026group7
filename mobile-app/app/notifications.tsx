@@ -41,10 +41,14 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = useCallback(async (markAllAfter = false) => {
     try {
       const res = await apiClient.get('/notifications');
       setNotifications(res.data);
+      if (markAllAfter && res.data.some((n: Notification) => !n.isRead)) {
+        await apiClient.patch('/notifications/read-all');
+        setNotifications(res.data.map((n: Notification) => ({ ...n, isRead: true })));
+      }
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     } finally {
@@ -54,21 +58,8 @@ export default function NotificationsScreen() {
   }, []);
 
   useEffect(() => {
-    fetchNotifications();
+    fetchNotifications(true);
   }, [fetchNotifications]);
-
-  useEffect(() => {
-    const clearUnreadOnOpen = async () => {
-      try {
-        await apiClient.patch('/notifications/read-all');
-        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      } catch (err) {
-        console.error('Failed to clear unread notifications on open:', err);
-      }
-    };
-
-    clearUnreadOnOpen();
-  }, []);
 
   const markAsRead = async (id: number) => {
     try {
@@ -87,6 +78,25 @@ export default function NotificationsScreen() {
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
     } catch (err) {
       console.error('Failed to mark all as read:', err);
+    }
+  };
+
+  const handleNotificationPress = async (n: Notification) => {
+    if (!n.isRead) await markAsRead(n.id);
+    switch (n.type) {
+      case 'REQUEST_ACCEPTED':
+      case 'MEETING_REMINDER':
+        router.push('/(tabs)/' as any);
+        break;
+      case 'REQUEST_REJECTED':
+        router.push('/(tabs)/profile' as any);
+        break;
+      case 'MATCH_FOUND':
+        router.push('/(tabs)/explore' as any);
+        break;
+      case 'NEW_MESSAGE':
+        router.push('/(tabs)/messages' as any);
+        break;
     }
   };
 
@@ -141,7 +151,7 @@ export default function NotificationsScreen() {
               <TouchableOpacity
                 key={n.id}
                 style={[styles.card, !n.isRead && styles.cardUnread]}
-                onPress={() => !n.isRead && markAsRead(n.id)}
+                onPress={() => handleNotificationPress(n)}
                 activeOpacity={0.85}
               >
                 <View style={styles.cardLeft}>
