@@ -1,5 +1,6 @@
 package com.group7.backend.controller;
 
+import com.group7.backend.controller.support.PageableSupport;
 import com.group7.backend.dto.response.MenteeCandidateResponse;
 import com.group7.backend.dto.response.MentorMatchResponse;
 import com.group7.backend.service.MatchingService;
@@ -10,7 +11,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -52,7 +52,7 @@ public class MatchingController {
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Long menteeId = (Long) authentication.getCredentials();
-        Pageable pageable = clampPageable(page, size);
+        Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(matchingService.getTopMentors(menteeId, keyword, pageable));
     }
 
@@ -92,12 +92,7 @@ public class MatchingController {
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Long mentorId = (Long) authentication.getCredentials();
-        Pageable pageable = clampPageable(page, size);
+        Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(matchingService.getCandidateMentees(mentorId, keyword, pageable));
-    }
-
-    private Pageable clampPageable(int page, int size) {
-        int clampedSize = Math.min(Math.max(size, 1), 100);
-        return PageRequest.of(Math.max(page, 0), clampedSize);
     }
 }
