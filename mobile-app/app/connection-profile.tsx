@@ -111,15 +111,6 @@ export default function ConnectionProfileScreen() {
     }).catch(() => {});
   }, [mentorshipId]);
 
-  useEffect(() => {
-    if (!isViewingMentor || !id) return;
-    setAvailabilityLoading(true);
-    apiClient.get(`/availability/${id}`)
-      .then((res) => setMentorSlots(res.data ?? []))
-      .catch(() => {})
-      .finally(() => setAvailabilityLoading(false));
-  }, [isViewingMentor, id]);
-
   const saveSharedGoal = async () => {
     if (!mentorshipId || !goalDraft.trim()) return;
     setGoalSaving(true);
@@ -142,6 +133,15 @@ export default function ConnectionProfileScreen() {
   const stat3Value = parseString(params.stat3Value);
 
   const isViewingMentor = type === 'mentor';
+
+  useEffect(() => {
+    if (!isViewingMentor || !id) return;
+    setAvailabilityLoading(true);
+    apiClient.get(`/availability/${id}`)
+      .then((res) => setMentorSlots(res.data ?? []))
+      .catch(() => {})
+      .finally(() => setAvailabilityLoading(false));
+  }, [isViewingMentor, id]);
 
   const openRequest = (mode: 'meeting' | 'change' | 'end') => {
     router.push({
