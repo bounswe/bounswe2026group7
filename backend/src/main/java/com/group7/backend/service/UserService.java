@@ -9,6 +9,7 @@ import com.group7.backend.dto.response.ProfileResponse;
 import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
+import com.group7.backend.entity.TaggedTermLists;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
@@ -220,23 +221,34 @@ public class UserService {
         if (request.getField() != null) {
             mentor.setField(request.getField());
         }
+        if (request.getFieldUri() != null) {
+            mentor.setFieldUri(request.getFieldUri());
+        }
         if (request.getExpertise() != null) {
             mentor.setExpertise(request.getExpertise());
+        }
+        if (request.getExpertiseUri() != null) {
+            mentor.setExpertiseUri(request.getExpertiseUri());
         }
         if (request.getAffiliation() != null) {
             mentor.setAffiliation(request.getAffiliation());
         }
         if (request.getInterests() != null) {
-            mentor.setInterests(request.getInterests());
+            mentor.setInterestEntries(TaggedTermLists.combine(request.getInterests(), request.getInterestUris()));
         }
         if (request.getMaxMenteeCapacity() != null) {
             mentor.setMaxMenteeCapacity(request.getMaxMenteeCapacity());
         }
         if (request.getPreferredMenteeSkills() != null) {
-            mentor.setPreferredMenteeSkills(request.getPreferredMenteeSkills());
+            mentor.setPreferredMenteeSkillEntries(TaggedTermLists.combine(
+                    request.getPreferredMenteeSkills(),
+                    request.getPreferredMenteeSkillUris()));
         }
         if (request.getPreferredMenteeMajor() != null) {
             mentor.setPreferredMenteeMajor(request.getPreferredMenteeMajor());
+        }
+        if (request.getPreferredMenteeMajorUri() != null) {
+            mentor.setPreferredMenteeMajorUri(request.getPreferredMenteeMajorUri());
         }
         if (request.getMentoringGoals() != null) {
             mentor.setMentoringGoals(request.getMentoringGoals());
@@ -256,14 +268,21 @@ public class UserService {
         if (request.getMajor() != null) {
             mentee.setMajor(request.getMajor());
         }
+        if (request.getMajorUri() != null) {
+            mentee.setMajorUri(request.getMajorUri());
+        }
         if (request.getInterests() != null) {
-            mentee.setInterests(request.getInterests());
+            mentee.setInterestEntries(TaggedTermLists.combine(request.getInterests(), request.getInterestUris()));
         }
         if (request.getCareerInterest() != null) {
             mentee.setCareerInterest(request.getCareerInterest());
         }
+        if (request.getCareerInterestUri() != null) {
+            mentee.setCareerInterestUri(request.getCareerInterestUri());
+        }
         if (request.getSkills() != null) {
-            mentee.setSkills(request.getSkills());
+            mentee.setSkillEntries(TaggedTermLists.combine(
+                    request.getSkills(), request.getSkillUris()));
         }
         if (request.getMeetingFreqPref() != null) {
             mentee.setMeetingFreqPref(request.getMeetingFreqPref());
@@ -272,4 +291,5 @@ public class UserService {
             mentee.setBackgroundInfo(request.getBackgroundInfo());
         }
     }
+
 }
