@@ -148,6 +148,23 @@ public class ConversationService {
             throw new IllegalArgumentException(
                     "Cannot start a conversation with yourself");
         }
+
+        // Resolve the canonical key first so we can short-circuit on the
+        // common idempotent path (existing conversation) without paying for
+        // two userRepository lookups. Loading the User entities is only
+        // needed when we actually have to insert participant rows.
+        long lower = Math.min(requesterId, otherMentorId);
+        long higher = Math.max(requesterId, otherMentorId);
+        Optional<Conversation> existing = conversationRepository
+                .findByPairAIdAndPairBIdAndKind(lower, higher, ConversationKind.MENTOR_PAIR);
+        if (existing.isPresent()) {
+            // History survives role changes intentionally: even if a former
+            // mentor was demoted, their existing peer conversations remain
+            // readable. The role check below only gates new-conversation
+            // creation.
+            return existing.get();
+        }
+
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         User other = userRepository.findById(otherMentorId)
@@ -157,13 +174,6 @@ public class ConversationService {
                     "Both participants must be mentors");
         }
 
-        long lower = Math.min(requesterId, otherMentorId);
-        long higher = Math.max(requesterId, otherMentorId);
-        Optional<Conversation> existing = conversationRepository
-                .findByPairAIdAndPairBIdAndKind(lower, higher, ConversationKind.MENTOR_PAIR);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
         try {
             return conversationCreator.createForMentorPairInNewTx(requester, other, lower, higher);
         } catch (DataIntegrityViolationException e) {

@@ -209,20 +209,22 @@ class ConversationServiceTest {
 
     @Test
     void mentorPair_returnsExistingConversation_whenAlreadyPresent() {
+        // Idempotent path: the conversation lookup short-circuits before any
+        // userRepository call. The role check is intentionally NOT re-run on
+        // existing conversations so peer history survives role changes.
         Conversation existing = new Conversation();
         existing.setId(901L);
         existing.setKind(ConversationKind.MENTOR_PAIR);
         existing.setPairAId(1L);
         existing.setPairBId(3L);
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(userRepository.findById(3L)).thenReturn(Optional.of(mentorPeer));
         when(conversationRepository.findByPairAIdAndPairBIdAndKind(
                 1L, 3L, ConversationKind.MENTOR_PAIR)).thenReturn(Optional.of(existing));
 
         Conversation result = conversationService.findOrCreateForMentorPair(1L, 3L);
 
         assertThat(result).isSameAs(existing);
+        verify(userRepository, never()).findById(any());
         verify(conversationCreator, never()).createForMentorPairInNewTx(any(), any(), anyLong(), anyLong());
     }
 
