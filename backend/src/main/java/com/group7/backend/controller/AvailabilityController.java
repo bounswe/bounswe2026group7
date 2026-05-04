@@ -7,6 +7,7 @@ import com.group7.backend.dto.response.AvailabilityOverrideResponse;
 import com.group7.backend.dto.response.AvailabilitySlotResponse;
 import com.group7.backend.service.AvailabilityOverrideService;
 import com.group7.backend.service.AvailabilityService;
+import com.group7.backend.service.CalendarExportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -19,7 +20,9 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -47,11 +50,14 @@ public class AvailabilityController {
 
     private final AvailabilityService availabilityService;
     private final AvailabilityOverrideService overrideService;
+    private final CalendarExportService calendarExportService;
 
     public AvailabilityController(AvailabilityService availabilityService,
-                                  AvailabilityOverrideService overrideService) {
+                                  AvailabilityOverrideService overrideService,
+                                  CalendarExportService calendarExportService) {
         this.availabilityService = availabilityService;
         this.overrideService = overrideService;
+        this.calendarExportService = calendarExportService;
     }
 
     /**
@@ -201,6 +207,39 @@ public class AvailabilityController {
         Long mentorId = (Long) authentication.getCredentials();
         overrideService.remove(mentorId, overrideId);
         return ResponseEntity.noContent().build();
+    }
+
+    // ── iCalendar export (issue #250) ────────────────────────────────────────
+
+    @GetMapping(value = "/{mentorId}/ical", produces = "text/calendar;charset=UTF-8")
+    @Operation(
+            summary = "Export mentor availability as iCalendar",
+            description = "Returns the mentor's recurring weekly schedule and one-off "
+                    + "AVAILABLE/UNAVAILABLE overrides as an RFC 5545 (.ics) file. "
+                    + "Anonymous endpoint — calendar applications (Google, Apple, "
+                    + "Outlook) cannot send Authorization headers on subscription URLs, "
+                    + "so this is published openly. The data exposed (mentor name + "
+                    + "availability) is already visible to any authenticated user via "
+                    + "GET /{mentorId}; making the .ics path anonymous is a transport "
+                    + "concession, not a sensitivity change. Drive-by enumeration is "
+                    + "rate-limited by IP via the {@code availability-ical} bucket."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "iCalendar file",
+                    content = @Content(mediaType = "text/calendar")),
+            @ApiResponse(responseCode = "404", description = "Mentor not found",
+                    content = @Content),
+            @ApiResponse(responseCode = "429", description = "Rate limit exceeded",
+                    content = @Content)
+    })
+    public ResponseEntity<byte[]> exportIcal(
+            @Parameter(description = "Mentor ID") @PathVariable Long mentorId) {
+        byte[] body = calendarExportService.exportMentorAvailability(mentorId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/calendar;charset=UTF-8"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"mentor_" + mentorId + "_availability.ics\"")
+                .body(body);
     }
 
     /**

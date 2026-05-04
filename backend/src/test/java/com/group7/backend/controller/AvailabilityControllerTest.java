@@ -14,6 +14,7 @@ import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.service.AvailabilityOverrideService;
 import com.group7.backend.service.AvailabilityService;
+import com.group7.backend.service.CalendarExportService;
 import com.group7.backend.service.JwtService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -55,6 +56,9 @@ class AvailabilityControllerTest {
 
     @MockitoBean
     private AvailabilityOverrideService overrideService;
+
+    @MockitoBean
+    private CalendarExportService calendarExportService;
 
     @MockitoBean
     private JwtService jwtService;
@@ -404,5 +408,31 @@ class AvailabilityControllerTest {
         mockMvc.perform(delete("/api/availability/overrides/7")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isForbidden());
+    }
+
+    // ── /ical endpoint (issue #250) ─────────────────────────────────────────
+
+    @Test
+    @DisplayName("GET /ical is anonymous — calendar apps cannot send Authorization headers on subscription URLs")
+    void exportIcalReturns200ForAnonymousCaller() throws Exception {
+        byte[] ics = ("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n"
+                + "END:VCALENDAR\r\n").getBytes();
+        when(calendarExportService.exportMentorAvailability(2L)).thenReturn(ics);
+
+        mockMvc.perform(get("/api/availability/2/ical"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "text/calendar;charset=UTF-8"))
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"mentor_2_availability.ics\""))
+                .andExpect(content().bytes(ics));
+    }
+
+    @Test
+    void exportIcalReturns404WhenMentorMissing() throws Exception {
+        when(calendarExportService.exportMentorAvailability(99L))
+                .thenThrow(new ResourceNotFoundException("Mentor not found"));
+
+        mockMvc.perform(get("/api/availability/99/ical"))
+                .andExpect(status().isNotFound());
     }
 }
