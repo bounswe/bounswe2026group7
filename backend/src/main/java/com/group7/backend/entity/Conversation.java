@@ -38,6 +38,22 @@ public class Conversation {
     @JoinColumn(name = "mentorship_id")
     private Mentorship mentorship;
 
+    /**
+     * Lower of the two user ids when {@link #kind} is
+     * {@link ConversationKind#MENTOR_PAIR}; null otherwise. The DB constraint
+     * {@code conversations_pair_ordering} enforces {@code pair_a_id < pair_b_id}
+     * when populated, so this column always carries the numerically-smaller id.
+     */
+    @Column(name = "pair_a_id")
+    private Long pairAId;
+
+    /**
+     * Higher of the two user ids when {@link #kind} is
+     * {@link ConversationKind#MENTOR_PAIR}; null otherwise.
+     */
+    @Column(name = "pair_b_id")
+    private Long pairBId;
+
     @OneToMany(mappedBy = "conversation", fetch = FetchType.LAZY,
             cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<ConversationParticipant> participants = new LinkedHashSet<>();
