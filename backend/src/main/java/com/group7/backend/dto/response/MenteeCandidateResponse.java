@@ -26,14 +26,26 @@ public class MenteeCandidateResponse {
     @Schema(description = "Major / field of study", example = "Computer Science")
     private String major;
 
+    @Schema(description = "Optional ISCED-F URI for the major")
+    private String majorUri;
+
     @Schema(description = "List of interests", example = "[\"AI\", \"Databases\"]")
     private List<String> interests;
+
+    @Schema(description = "Canonical URIs parallel to `interests`. Entries may be ESCO, Wikidata, or null.")
+    private List<String> interestUris;
 
     @Schema(description = "Career interest", example = "Backend Engineering")
     private String careerInterest;
 
+    @Schema(description = "Optional ESCO skill URI for the career interest")
+    private String careerInterestUri;
+
     @Schema(description = "List of skills", example = "[\"Java\", \"Python\"]")
     private List<String> skills;
+
+    @Schema(description = "ESCO skill URIs parallel to `skills`.")
+    private List<String> skillUris;
 
     @Schema(description = "Background information", example = "3rd year CS student at Bogazici")
     private String backgroundInfo;
@@ -47,9 +59,13 @@ public class MenteeCandidateResponse {
         r.setFirstName(mentee.getFirstName());
         r.setGoals(mentee.getGoals());
         r.setMajor(mentee.getMajor());
+        r.setMajorUri(mentee.getMajorUri());
         r.setInterests(mentee.getInterests());
+        r.setInterestUris(mentee.getInterestUris());
         r.setCareerInterest(mentee.getCareerInterest());
+        r.setCareerInterestUri(mentee.getCareerInterestUri());
         r.setSkills(mentee.getSkills());
+        r.setSkillUris(mentee.getSkillUris());
         r.setBackgroundInfo(mentee.getBackgroundInfo());
         r.setMeetingFreqPref(mentee.getMeetingFreqPref());
         return r;

@@ -102,6 +102,16 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
     }
 
+    @ExceptionHandler(TaxonomyUpstreamException.class)
+    public ResponseEntity<Map<String, String>> handleTaxonomyUpstream(TaxonomyUpstreamException ex,
+                                                                      HttpServletRequest request) {
+        log.warn("Taxonomy upstream failure: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.SERVICE_UNAVAILABLE,
+                "Service Unavailable",
+                "Taxonomy provider is unreachable. Please try again.");
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
