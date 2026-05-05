@@ -3,6 +3,7 @@ package com.group7.backend.service;
 import com.group7.backend.dto.request.EditProfileRequest;
 import com.group7.backend.dto.request.MenteeProfileRequest;
 import com.group7.backend.dto.request.MentorProfileRequest;
+import com.group7.backend.dto.request.SearchRole;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
@@ -13,13 +14,16 @@ import com.group7.backend.entity.TaggedTermLists;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
+import com.group7.backend.repository.AvailabilitySlotRepository;
 import com.group7.backend.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,13 +36,20 @@ public class UserService {
     private final UserRepository userRepository;
     private final MentorRepository mentorRepository;
     private final MenteeRepository menteeRepository;
+    private final AvailabilitySlotRepository availabilitySlotRepository;
+    private final MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
     private final FileStorageService fileStorageService;
 
     public UserService(UserRepository userRepository, MentorRepository mentorRepository,
-                       MenteeRepository menteeRepository, FileStorageService fileStorageService) {
+                       MenteeRepository menteeRepository,
+                       AvailabilitySlotRepository availabilitySlotRepository,
+                       MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository,
+                       FileStorageService fileStorageService) {
         this.userRepository = userRepository;
         this.mentorRepository = mentorRepository;
         this.menteeRepository = menteeRepository;
+        this.availabilitySlotRepository = availabilitySlotRepository;
+        this.menteeAvailabilitySlotRepository = menteeAvailabilitySlotRepository;
         this.fileStorageService = fileStorageService;
     }
 
@@ -57,6 +68,86 @@ public class UserService {
 
         return userRepository.findAllNonAdmins(pageable)
                 .map(this::mapToResponse);
+    }
+
+    /**
+     * General-purpose user search with composable filters (#262). Distinct
+     * from the matching path: this surface is exploratory ("find me people
+     * with X"), not score-driven. Filtering happens at the SQL layer via
+     * {@code MentorRepository.searchByFilters} / {@code MenteeRepository.searchByFilters}.
+     *
+     * <h3>Role gate</h3>
+     * <ul>
+     *   <li>Admin → may search any {@link SearchRole}, but
+     *       {@code hasAvailability=true} is rejected (admins have no slots).</li>
+     *   <li>Mentee → may search {@code MENTOR} only; same-role search yields 403.
+     *       {@code hasAvailability=true} requires the mentee to have at least
+     *       one availability slot, else 400.</li>
+     *   <li>Mentor → mirror of mentee (may search {@code MENTEE} only;
+     *       slot-presence requirement applies).</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public Page<ProfileResponse> searchUsers(SearchRole role,
+                                             String keyword,
+                                             List<String> interests,
+                                             List<String> skills,
+                                             String major,
+                                             boolean hasAvailability,
+                                             Long requesterId,
+                                             Pageable pageable) {
+        Objects.requireNonNull(role, "role");
+        User requester = userRepository.findById(requesterId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + requesterId));
+
+        // Role gate: same-role search and admin-with-hasAvailability are
+        // rejected upfront before the repo query.
+        if (requester instanceof Admin) {
+            if (hasAvailability) {
+                throw new IllegalArgumentException(
+                        "hasAvailability filter is not applicable for admin searches");
+            }
+        } else if (requester instanceof Mentee && role == SearchRole.MENTEE) {
+            throw new ProfileNotVisibleException("Mentees cannot search for other mentees");
+        } else if (requester instanceof Mentor && role == SearchRole.MENTOR) {
+            throw new ProfileNotVisibleException("Mentors cannot search for other mentors");
+        }
+
+        // Slot-presence guard: hasAvailability=true requires the requester
+        // to have at least one slot of their own to compare against. Without
+        // this, the SQL filter silently returns empty, which surprises users.
+        // existsBy* emits SELECT 1 ... LIMIT 1, no entity hydration.
+        if (hasAvailability && requester instanceof Mentee
+                && !menteeAvailabilitySlotRepository.existsByMenteeId(requesterId)) {
+            throw new IllegalArgumentException(
+                    "Set your availability before filtering by overlap");
+        }
+        if (hasAvailability && requester instanceof Mentor
+                && !availabilitySlotRepository.existsByMentorId(requesterId)) {
+            throw new IllegalArgumentException(
+                    "Set your availability before filtering by overlap");
+        }
+
+        String normKeyword = SearchNormaliser.keyword(keyword);
+        List<String> normInterests = SearchNormaliser.list(interests);
+        List<String> normSkills = SearchNormaliser.list(skills);
+        String normMajor = SearchNormaliser.scalar(major);
+
+        if (role == SearchRole.MENTOR) {
+            Long requesterMenteeId = (hasAvailability && requester instanceof Mentee)
+                    ? requesterId : null;
+            return mentorRepository.searchByFilters(
+                    normKeyword, normInterests, normSkills, normMajor,
+                    /*requireCapacity*/ false, requesterMenteeId, pageable)
+                    .map(m -> (ProfileResponse) MentorResponse.from(m));
+        } else {
+            Long requesterMentorId = (hasAvailability && requester instanceof Mentor)
+                    ? requesterId : null;
+            return menteeRepository.searchByFilters(
+                    normKeyword, normInterests, normSkills, normMajor,
+                    /*requireUnattached*/ false, requesterMentorId, pageable)
+                    .map(m -> (ProfileResponse) MenteeResponse.from(m));
+        }
     }
 
     @Transactional(readOnly = true)
