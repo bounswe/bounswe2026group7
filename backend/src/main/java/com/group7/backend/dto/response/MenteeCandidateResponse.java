@@ -12,7 +12,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @Schema(description = "Privacy-safe mentee candidate visible to mentors during matching")
-public class MenteeCandidateResponse {
+public class MenteeCandidateResponse implements MatchSummary {
 
     @Schema(description = "Mentee user ID", example = "7")
     private Long id;

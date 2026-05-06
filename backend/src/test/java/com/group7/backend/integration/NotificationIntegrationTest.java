@@ -177,7 +177,13 @@ class NotificationIntegrationTest {
     }
 
     @Test
-    void matchingEndpointCreatesMatchFoundNotification() throws Exception {
+    void matchingEndpointDoesNotCreateMatchFoundNotification_post273() throws Exception {
+        // Regression for #273. Before the fix, hitting the matching endpoint
+        // fired a publishMatchFound on every page-0 browse — wasting queries
+        // and conflating browsing with notification opt-in. The notification
+        // path is now driven by MatchNotificationScheduler, so a read-only
+        // browse must NEVER persist a Notification row. The scheduler's
+        // own behaviour is covered by MatchNotificationIntegrationTest.
         registerAndLogin("notif_mentor2@test.com", true);
         Mentor mentor = mentorRepository.findAll().stream()
                 .filter(m -> m.getEmail().equals("notif_mentor2@test.com"))
@@ -202,8 +208,22 @@ class NotificationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].firstName").value("Ayse"));
 
-        Notification created = waitForNotification(mentee.getId(), NotificationType.MATCH_FOUND);
-        assertThat(created).isNotNull();
+        // Wait briefly then assert absence — pollDelay covers the case of a
+        // late-firing @Async listener catching up after our initial check.
+        // Awaitility.untilAsserted re-runs until the assertion passes; for an
+        // "expect zero" we set an upper bound and require the absence to hold
+        // across the polling window. Robust against slow CI compared to a
+        // fixed Thread.sleep.
+        org.awaitility.Awaitility.await()
+                .pollDelay(java.time.Duration.ofMillis(500))
+                .atMost(java.time.Duration.ofSeconds(2))
+                .untilAsserted(() -> {
+                    long matchFoundCount = notificationRepository.findAll().stream()
+                            .filter(n -> n.getRecipient().getId().equals(mentee.getId()))
+                            .filter(n -> n.getType() == NotificationType.MATCH_FOUND)
+                            .count();
+                    assertThat(matchFoundCount).isZero();
+                });
     }
 
         @Test

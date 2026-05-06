@@ -13,6 +13,7 @@ import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.service.ranking.MentorRanker;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -29,6 +30,13 @@ import java.util.stream.Collectors;
  * Mentor/mentee matching service. The data-loading layer is fully SQL-side
  * (#262); this service orchestrates the search → batch-slot-fetch → score →
  * paginate pipeline.
+ *
+ * <p>Read-only after #273. The match-found notification was previously
+ * fired from this service on every page-0 browse; that side effect moved to
+ * {@code MatchNotificationProcessor}, which is invoked daily by
+ * {@code MatchNotificationScheduler} only when the user's top match has
+ * actually changed since the last notification. Pagination, page refreshes,
+ * and deep-links no longer publish anything.
  *
  * <h2>Query budget</h2>
  * Four JPQL/HQL queries per matching call regardless of result size:
@@ -61,53 +69,42 @@ import java.util.stream.Collectors;
 public class MatchingService {
 
     /**
-     * Fixed-size oversample window for in-memory scoring + ranking. Pages
-     * beyond this window return empty content; the frontend should treat
-     * that as "end of results".
+     * Default oversample window if {@code app.matching.ranking-window} is
+     * absent. Pages beyond the window return empty content; the frontend
+     * should treat that as "end of results".
      */
-    private static final int RANKING_WINDOW = 200;
+    private static final int DEFAULT_RANKING_WINDOW = 200;
 
     private final MenteeRepository menteeRepository;
     private final MentorRepository mentorRepository;
     private final AvailabilitySlotRepository availabilitySlotRepository;
     private final MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
     private final MentorRanker mentorRanker;
-    private final NotificationEventPublisher notificationEventPublisher;
+    private final int rankingWindow;
 
     public MatchingService(MenteeRepository menteeRepository,
                            MentorRepository mentorRepository,
                            AvailabilitySlotRepository availabilitySlotRepository,
                            MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository,
                            MentorRanker mentorRanker,
-                           NotificationEventPublisher notificationEventPublisher) {
+                           @Value("${app.matching.ranking-window:" + DEFAULT_RANKING_WINDOW + "}")
+                           int rankingWindow) {
         this.menteeRepository = menteeRepository;
         this.mentorRepository = mentorRepository;
         this.availabilitySlotRepository = availabilitySlotRepository;
         this.menteeAvailabilitySlotRepository = menteeAvailabilitySlotRepository;
         this.mentorRanker = mentorRanker;
-        this.notificationEventPublisher = notificationEventPublisher;
+        this.rankingWindow = rankingWindow;
     }
 
     @Transactional(readOnly = true)
     public Page<MentorMatchResponse> getTopMentors(Long menteeId, String keyword, Pageable pageable) {
-        List<MentorMatchResponse> ranked = rankAvailableMentors(menteeId, keyword);
-        // Match-found notification only on page 0 — pre-refactor it fired on the
-        // globally-top mentor, so the post-refactor equivalent is the top of
-        // the first page. Subsequent pages don't surface "found you a match!"
-        // because the user is already past the headline result.
-        if (pageable.getPageNumber() == 0 && !ranked.isEmpty()) {
-            notificationEventPublisher.publishMatchFound(menteeId, ranked.get(0).getFirstName());
-        }
-        return slicePage(ranked, pageable);
+        return slicePage(rankMentorsForId(menteeId, keyword), pageable);
     }
 
     @Transactional(readOnly = true)
     public List<MentorMatchResponse> getTopMentorsList(Long menteeId, String keyword) {
-        List<MentorMatchResponse> ranked = rankAvailableMentors(menteeId, keyword);
-        if (!ranked.isEmpty()) {
-            notificationEventPublisher.publishMatchFound(menteeId, ranked.get(0).getFirstName());
-        }
-        return ranked;
+        return rankMentorsForId(menteeId, keyword);
     }
 
     @Transactional(readOnly = true)
@@ -117,49 +114,61 @@ public class MatchingService {
         if (mentor.getCurrentMenteeCount() >= mentor.getMaxMenteeCapacity()) {
             throw new MatchingNotAllowedException("You have reached your maximum mentee capacity");
         }
-
-        // Mentee-side has no scoring algorithm today (filter-only). The
-        // existing notification semantics fire when the candidate set is
-        // non-empty, gated to page 0 to match the mentor path.
-        // requesterMentorId is null on the matching path: slot overlap is part
-        // of the SCORING in the mentor-side path (the ranker's availability
-        // score), but the mentee-side path here doesn't score, and the
-        // pre-refactor behaviour did not slot-filter candidate mentees. Passing
-        // mentorId here would silently exclude every mentee whenever the mentor
-        // has zero availability slots set.
-        Pageable fetchPage = PageRequest.of(0, RANKING_WINDOW);
-        List<Mentee> raw = menteeRepository.findRankingCandidates(
-                SearchNormaliser.keyword(keyword), null, null, null,
-                /*requireUnattached*/ true,
-                /*requesterMentorId*/ null,
-                fetchPage);
-
-        // In-memory post-filter: mentees must match at least one of the mentor's
-        // preferences (interest overlap, skill, preferred major, or field). This
-        // OR-of-categories semantic doesn't compose well with the AND-across-
-        // filters JPQL `searchByFilters` shape, and pushing it to SQL would mean
-        // splitting the repo method or introducing a 5th boolean param. The
-        // post-filter runs on at most {@code RANKING_WINDOW} rows already in
-        // memory, so the cost is negligible and the SQL stays clean.
-        List<MenteeCandidateResponse> candidates = raw.stream()
-                .filter(me -> matchesMentorPreferences(mentor, me))
-                .map(MenteeCandidateResponse::from)
-                .toList();
-
-        if (pageable.getPageNumber() == 0 && !candidates.isEmpty()) {
-            notificationEventPublisher.publishMatchFound(mentorId, candidates.get(0).getFirstName());
-        }
-        return slicePage(candidates, pageable);
+        return slicePage(findCandidateMenteesFor(mentor, keyword), pageable);
     }
 
-    private List<MentorMatchResponse> rankAvailableMentors(Long menteeId, String keyword) {
+    /**
+     * ID-based wrapper: loads the mentee, verifies eligibility, then delegates
+     * to {@link #rankMentorsFor(Mentee, String)}. Used by the public matching
+     * methods. Throws {@link MatchingNotAllowedException} when the mentee
+     * already has an active mentor (a business condition mapped to HTTP 403
+     * by the global handler) and {@link ResourceNotFoundException} (HTTP 404)
+     * when the mentee row is missing.
+     *
+     * <p>Naming parallels the pure variant {@link #rankMentorsFor(Mentee, String)}
+     * — same root verb, the {@code ForId} suffix signals "give me a Long, I'll
+     * handle the load + check."
+     *
+     * <p>No {@code @Transactional} annotation on purpose: Spring AOP's default
+     * proxies do not apply transaction advice to package-private methods, and
+     * the public callers ({@code getTopMentors}, {@code getTopMentorsList})
+     * already declare {@code readOnly = true} which propagates here. A future
+     * caller that needs a different transaction shape should declare it on
+     * their own public entry point and pass through.
+     */
+    List<MentorMatchResponse> rankMentorsForId(Long menteeId, String keyword) {
         Mentee mentee = menteeRepository.findById(menteeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Mentee not found"));
         if (mentee.getActiveMentorId() != null) {
             throw new MatchingNotAllowedException("You already have an active mentor");
         }
+        return rankMentorsFor(mentee, keyword);
+    }
 
-        Pageable fetchPage = PageRequest.of(0, RANKING_WINDOW);
+    /**
+     * Pure ranking core for an already-loaded eligible mentee. Skips the
+     * {@code findById} + active-mentor check, so callers who have a Mentee
+     * in hand (e.g., {@code MatchNotificationProcessor.processMentee}) avoid
+     * a redundant DB round-trip.
+     *
+     * <p><b>Precondition:</b> the mentee must be non-null and have no active
+     * mentor. Violations throw {@link IllegalStateException} (programmer
+     * error, not a business condition — not mapped to HTTP).
+     *
+     * <p>No {@code @Transactional}: package-private method advice is ignored
+     * by Spring's proxy. Runs inside the caller's transaction.
+     */
+    List<MentorMatchResponse> rankMentorsFor(Mentee mentee, String keyword) {
+        if (mentee == null) {
+            throw new IllegalStateException("rankMentorsFor: mentee must not be null");
+        }
+        if (mentee.getActiveMentorId() != null) {
+            throw new IllegalStateException(
+                    "rankMentorsFor: mentee " + mentee.getId()
+                            + " has an active mentor; caller must check eligibility first");
+        }
+
+        Pageable fetchPage = PageRequest.of(0, rankingWindow);
         List<Mentor> raw = mentorRepository.findRankingCandidates(
                 SearchNormaliser.keyword(keyword), null, null, null,
                 /*requireCapacity*/ true,
@@ -175,7 +184,7 @@ public class MatchingService {
                 .findByMentorIdIn(mentorIds).stream()
                 .collect(Collectors.groupingBy(s -> s.getMentor().getId()));
         List<MenteeAvailabilitySlot> menteeSlots =
-                menteeAvailabilitySlotRepository.findByMenteeId(menteeId);
+                menteeAvailabilitySlotRepository.findByMenteeId(mentee.getId());
 
         return raw.stream()
                 .map(m -> MentorMatchResponse.from(m, mentorRanker.score(
@@ -183,6 +192,48 @@ public class MatchingService {
                         slotsByMentor.getOrDefault(m.getId(), List.of()),
                         menteeSlots)))
                 .sorted(Comparator.comparingInt(MentorMatchResponse::getMatchScore).reversed())
+                .toList();
+    }
+
+    /**
+     * Pure candidate-mentee filter for an already-loaded eligible mentor.
+     * Skips the {@code findById} + capacity check; caller must verify.
+     *
+     * <p><b>Precondition:</b> the mentor must be non-null and have spare
+     * capacity. Violations throw {@link IllegalStateException}.
+     */
+    List<MenteeCandidateResponse> findCandidateMenteesFor(Mentor mentor, String keyword) {
+        if (mentor == null) {
+            throw new IllegalStateException("findCandidateMenteesFor: mentor must not be null");
+        }
+        if (mentor.getCurrentMenteeCount() >= mentor.getMaxMenteeCapacity()) {
+            throw new IllegalStateException(
+                    "findCandidateMenteesFor: mentor " + mentor.getId()
+                            + " is at full capacity; caller must check eligibility first");
+        }
+
+        // requesterMentorId is null on the matching path: slot overlap is part
+        // of the SCORING in the mentor-side path (the ranker's availability
+        // score), but the mentee-side path here doesn't score. Passing
+        // mentor.id would silently exclude every mentee whenever the mentor
+        // has zero availability slots set — not the intended behaviour.
+        Pageable fetchPage = PageRequest.of(0, rankingWindow);
+        List<Mentee> raw = menteeRepository.findRankingCandidates(
+                SearchNormaliser.keyword(keyword), null, null, null,
+                /*requireUnattached*/ true,
+                /*requesterMentorId*/ null,
+                fetchPage);
+
+        // In-memory post-filter: mentees must match at least one of the mentor's
+        // preferences (interest overlap, skill, preferred major, or field). This
+        // OR-of-categories semantic doesn't compose well with the AND-across-
+        // filters JPQL `searchByFilters` shape, and pushing it to SQL would mean
+        // splitting the repo method or introducing a 5th boolean param. The
+        // post-filter runs on at most {@code RANKING_WINDOW} rows already in
+        // memory, so the cost is negligible and the SQL stays clean.
+        return raw.stream()
+                .filter(me -> matchesMentorPreferences(mentor, me))
+                .map(MenteeCandidateResponse::from)
                 .toList();
     }
 
@@ -197,7 +248,7 @@ public class MatchingService {
         // cast directly to int and produces a negative `start`, which would
         // throw IndexOutOfBoundsException from List.subList. Comparing in
         // long-space and short-circuiting on out-of-range offsets makes the
-        // narrowing cast safe (offset < ranked.size() ≤ RANKING_WINDOW).
+        // narrowing cast safe (offset < ranked.size() ≤ rankingWindow).
         long offset = pageable.getOffset();
         if (offset >= ranked.size()) {
             return new PageImpl<>(List.of(), pageable, ranked.size());

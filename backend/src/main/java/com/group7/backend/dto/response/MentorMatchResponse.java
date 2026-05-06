@@ -12,7 +12,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @Schema(description = "Privacy-safe mentor match result with compatibility score")
-public class MentorMatchResponse {
+public class MentorMatchResponse implements MatchSummary {
 
     @Schema(description = "Mentor user ID", example = "42")
     private Long id;
