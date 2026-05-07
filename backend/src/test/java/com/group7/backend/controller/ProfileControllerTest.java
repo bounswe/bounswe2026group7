@@ -8,6 +8,7 @@ import com.group7.backend.dto.request.MentorProfileRequest;
 import com.group7.backend.dto.request.MenteeProfileRequest;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
+import com.group7.backend.dto.response.UserProfileResponse;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.service.JwtService;
@@ -56,6 +57,23 @@ class ProfileControllerTest {
         when(jwtService.extractEmail(TEST_TOKEN)).thenReturn("user@example.com");
         when(jwtService.extractUserId(TEST_TOKEN)).thenReturn(userId);
         when(jwtService.extractRole(TEST_TOKEN)).thenReturn(role);
+    }
+
+    /**
+     * Wrapper helpers for the new UserProfileResponse return type (#343).
+     * The endpoints under test now return UserProfileResponse, which uses
+     * {@code @JsonUnwrapped} to keep the wire shape flat — top-level
+     * mentor/mentee fields stay where they were, with follower/following
+     * counts appended. The body assertions in these tests target the
+     * top-level fields, so they keep passing without needing to change
+     * the assertion JSON paths.
+     */
+    private UserProfileResponse wrapMentor() {
+        return new UserProfileResponse(buildMentorResponse(), 0L, 0L);
+    }
+
+    private UserProfileResponse wrapMentee() {
+        return new UserProfileResponse(buildMenteeResponse(), 0L, 0L);
     }
 
     private MentorResponse buildMentorResponse() {
@@ -109,7 +127,7 @@ class ProfileControllerTest {
     @Test
     void getOwnProfile_mentor_returns200WithAllFields() throws Exception {
         mockValidToken(1L, "MENTOR");
-        when(userService.getOwnProfile(1L)).thenReturn(buildMentorResponse());
+        when(userService.getOwnUserProfile(1L)).thenReturn(wrapMentor());
 
         mockMvc.perform(get("/api/users/me")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
@@ -139,7 +157,7 @@ class ProfileControllerTest {
     @Test
     void getOwnProfile_mentor_doesNotExposePasswordHash() throws Exception {
         mockValidToken(1L, "MENTOR");
-        when(userService.getOwnProfile(1L)).thenReturn(buildMentorResponse());
+        when(userService.getOwnUserProfile(1L)).thenReturn(wrapMentor());
 
         mockMvc.perform(get("/api/users/me")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
@@ -152,7 +170,7 @@ class ProfileControllerTest {
     @Test
     void getOwnProfile_mentee_returns200WithAllFields() throws Exception {
         mockValidToken(2L, "MENTEE");
-        when(userService.getOwnProfile(2L)).thenReturn(buildMenteeResponse());
+        when(userService.getOwnUserProfile(2L)).thenReturn(wrapMentee());
 
         mockMvc.perform(get("/api/users/me")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
@@ -179,7 +197,7 @@ class ProfileControllerTest {
     @Test
     void getOwnProfile_mentee_doesNotExposeMentorFields() throws Exception {
         mockValidToken(2L, "MENTEE");
-        when(userService.getOwnProfile(2L)).thenReturn(buildMenteeResponse());
+        when(userService.getOwnUserProfile(2L)).thenReturn(wrapMentee());
 
         mockMvc.perform(get("/api/users/me")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
@@ -211,7 +229,7 @@ class ProfileControllerTest {
     @Test
     void getProfileById_existingUser_returns200() throws Exception {
         mockValidToken(1L, "MENTOR");
-        when(userService.getProfileById(2L, 1L)).thenReturn(buildMenteeResponse());
+        when(userService.getUserProfile(2L, 1L)).thenReturn(wrapMentee());
 
         mockMvc.perform(get("/api/users/2")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
@@ -224,7 +242,7 @@ class ProfileControllerTest {
     @Test
     void getProfileById_notFound_returns404() throws Exception {
         mockValidToken(1L, "MENTOR");
-        when(userService.getProfileById(999L, 1L))
+        when(userService.getUserProfile(999L, 1L))
                 .thenThrow(new ResourceNotFoundException("User not found with id: 999"));
 
         mockMvc.perform(get("/api/users/999")
@@ -243,7 +261,7 @@ class ProfileControllerTest {
     @Test
     void getProfileById_mentorProfile_returnsAllMentorFields() throws Exception {
         mockValidToken(2L, "MENTEE");
-        when(userService.getProfileById(1L, 2L)).thenReturn(buildMentorResponse());
+        when(userService.getUserProfile(1L, 2L)).thenReturn(wrapMentor());
 
         mockMvc.perform(get("/api/users/1")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
@@ -257,7 +275,7 @@ class ProfileControllerTest {
     @Test
     void getProfileById_doesNotExposePasswordHash() throws Exception {
         mockValidToken(1L, "MENTOR");
-        when(userService.getProfileById(2L, 1L)).thenReturn(buildMenteeResponse());
+        when(userService.getUserProfile(2L, 1L)).thenReturn(wrapMentee());
 
         mockMvc.perform(get("/api/users/2")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
@@ -268,7 +286,7 @@ class ProfileControllerTest {
     @Test
     void getProfileById_menteeViewsMentee_returns403() throws Exception {
         mockValidToken(2L, "MENTEE");
-        when(userService.getProfileById(3L, 2L))
+        when(userService.getUserProfile(3L, 2L))
                 .thenThrow(new ProfileNotVisibleException("Mentees cannot view other mentee profiles"));
 
         mockMvc.perform(get("/api/users/3")

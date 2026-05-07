@@ -7,6 +7,7 @@ import com.group7.backend.dto.request.SearchRole;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
+import com.group7.backend.dto.response.UserProfileResponse;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -50,9 +51,9 @@ public class UserController {
             @ApiResponse(responseCode = "401", description = "Not authenticated", content = @Content),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
-    public ResponseEntity<ProfileResponse> getOwnProfile(Authentication authentication) {
+    public ResponseEntity<UserProfileResponse> getOwnProfile(Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
-        return ResponseEntity.ok(userService.getOwnProfile(userId));
+        return ResponseEntity.ok(userService.getOwnUserProfile(userId));
     }
 
     // ── Update profile (role-specific endpoints) ────────────
@@ -153,11 +154,11 @@ public class UserController {
             @ApiResponse(responseCode = "403", description = "Profile not visible", content = @Content),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
-    public ResponseEntity<ProfileResponse> getUserById(
+    public ResponseEntity<UserProfileResponse> getUserById(
             @Parameter(description = "User ID") @PathVariable Long id,
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
-        return ResponseEntity.ok(userService.getProfileById(id, requesterId));
+        return ResponseEntity.ok(userService.getUserProfile(id, requesterId));
     }
 
     @GetMapping("/mentors")
