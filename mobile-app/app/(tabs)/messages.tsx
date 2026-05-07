@@ -176,12 +176,13 @@ export default function MessagesScreen() {
   const isMentor = role === 'mentor';
   const params = useLocalSearchParams();
 
-  const [search, setSearch] = useState('');
+const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
   const [activeListTab, setActiveListTab] = useState<ConversationListTab>('mentorships');
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [mentorshipConversations, setMentorshipConversations] = useState<ConversationItem[]>([]);
   const [peerMentorConversations, setPeerMentorConversations] = useState<ConversationItem[]>([]);
+  const [mentorDirectoryOptions, setMentorDirectoryOptions] = useState<ConversationItem[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -248,7 +249,32 @@ export default function MessagesScreen() {
         setMentorshipConversations(mentorshipThreads);
 
         if (isMentor && parsedUserId != null) {
-          const mentorsRes = await apiClient.get('/users/mentors/all');
+          const [peerInboxRes, mentorsRes] = await Promise.all([
+            apiClient.get('/conversations/mentor-pair?page=0&size=100'),
+            apiClient.get('/users/mentors/all'),
+          ]);
+
+          const peerInboxItems = peerInboxRes.data?.content ?? [];
+          const peerInbox = peerInboxItems.map((conversation: any, index: number) => {
+            const colors = avatarPalette(index + mentorshipThreads.length);
+            return {
+              id: `mentor-pair-${conversation.peerId}`,
+              threadKind: 'mentorPair',
+              counterpartId: Number(conversation.peerId),
+              counterpartName: conversation.peerFirstName || 'Unknown Mentor',
+              subtitle: 'Peer Mentor',
+              preview: conversation.lastMessageContent || 'No messages yet',
+              time: formatRelativeTime(conversation.lastMessageSentAt),
+              unread: Number(conversation.unreadCount ?? 0),
+              online: false,
+              initials: getInitials(conversation.peerFirstName || 'Unknown Mentor'),
+              avatarBg: colors.bg,
+              avatarText: colors.text,
+              type: 'mentor',
+            } satisfies ConversationItem;
+          });
+          setPeerMentorConversations(peerInbox);
+
           const allMentors = mentorsRes.data ?? [];
           const peerMentors = allMentors
             .filter((mentor: any) => Number(mentor.id) !== parsedUserId)
@@ -256,7 +282,7 @@ export default function MessagesScreen() {
               const fullName = mentor.lastName
                 ? `${mentor.firstName} ${mentor.lastName}`
                 : mentor.firstName || 'Unknown Mentor';
-              const colors = avatarPalette(index + mentorshipThreads.length);
+              const colors = avatarPalette(index + mentorshipThreads.length + peerInbox.length);
 
               return {
                 id: `mentor-pair-${mentor.id}`,
@@ -274,10 +300,10 @@ export default function MessagesScreen() {
                 type: 'mentor',
               } satisfies ConversationItem;
             });
-
-          setPeerMentorConversations(peerMentors);
+          setMentorDirectoryOptions(peerMentors);
         } else {
           setPeerMentorConversations([]);
+          setMentorDirectoryOptions([]);
         }
       } catch (error) {
         console.error('Failed to load conversations:', error);
@@ -341,6 +367,29 @@ export default function MessagesScreen() {
       ? mentorshipConversations
       : peerMentorConversations;
   }, [activeListTab, isMentor, mentorshipConversations, peerMentorConversations]);
+
+  const filteredMentorDirectoryOptions = useMemo(() => {
+    if (!isMentor || activeListTab !== 'mentorPeers') {
+      return [];
+    }
+
+    const existingPeerIds = new Set(peerMentorConversations.map((item) => item.counterpartId));
+    const availableMentors = mentorDirectoryOptions.filter(
+      (item) => !existingPeerIds.has(item.counterpartId)
+    );
+
+    const q = search.trim().toLowerCase();
+    if (!q) {
+      return availableMentors;
+    }
+
+    return availableMentors.filter(
+      (item) =>
+        item.counterpartName.toLowerCase().includes(q) ||
+        item.subtitle?.toLowerCase().includes(q) ||
+        item.preview.toLowerCase().includes(q)
+    );
+  }, [activeListTab, isMentor, mentorDirectoryOptions, peerMentorConversations, search]);
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -774,7 +823,7 @@ export default function MessagesScreen() {
                   <Text style={styles.emptyConversationTitle}>No conversations found</Text>
                   <Text style={styles.emptyConversationText}>
                     {isMentor && activeListTab === 'mentorPeers'
-                      ? 'No mentor peers matched your search. Open a mentor profile and start a peer conversation from here.'
+                      ? 'No existing mentor-to-mentor conversations matched your search.'
                       : 'Once you have an active mentorship, your chat threads will appear here.'}
                   </Text>
                 </View>
@@ -789,6 +838,30 @@ export default function MessagesScreen() {
               )}
             </View>
           </View>
+
+          {isMentor && activeListTab === 'mentorPeers' ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Start New Conversation</Text>
+              <View style={styles.cardList}>
+                {filteredMentorDirectoryOptions.length === 0 ? (
+                  <View style={styles.emptyConversationBlock}>
+                    <Text style={styles.emptyConversationTitle}>No mentors available</Text>
+                    <Text style={styles.emptyConversationText}>
+                      Every visible mentor is already in your mentor-pair inbox, or none matched your search.
+                    </Text>
+                  </View>
+                ) : (
+                  filteredMentorDirectoryOptions.map((conversation) => (
+                    <ConversationRow
+                      key={`directory-${conversation.counterpartId}`}
+                      item={conversation}
+                      onPress={() => setSelectedConversation(conversation)}
+                    />
+                  ))
+                )}
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.tipCard}>
             <Text style={styles.tipLabel}>
