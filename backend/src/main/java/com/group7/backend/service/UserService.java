@@ -7,6 +7,7 @@ import com.group7.backend.dto.request.SearchRole;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
+import com.group7.backend.dto.response.UserProfileResponse;
 import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
@@ -14,6 +15,7 @@ import com.group7.backend.entity.TaggedTermLists;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.FollowRepository;
 import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
@@ -38,18 +40,21 @@ public class UserService {
     private final MenteeRepository menteeRepository;
     private final AvailabilitySlotRepository availabilitySlotRepository;
     private final MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
+    private final FollowRepository followRepository;
     private final FileStorageService fileStorageService;
 
     public UserService(UserRepository userRepository, MentorRepository mentorRepository,
                        MenteeRepository menteeRepository,
                        AvailabilitySlotRepository availabilitySlotRepository,
                        MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository,
+                       FollowRepository followRepository,
                        FileStorageService fileStorageService) {
         this.userRepository = userRepository;
         this.mentorRepository = mentorRepository;
         this.menteeRepository = menteeRepository;
         this.availabilitySlotRepository = availabilitySlotRepository;
         this.menteeAvailabilitySlotRepository = menteeAvailabilitySlotRepository;
+        this.followRepository = followRepository;
         this.fileStorageService = fileStorageService;
     }
 
@@ -194,6 +199,38 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
         return mapToResponse(user);
+    }
+
+    /**
+     * Own-profile variant that wraps {@link #getOwnProfile(Long)} with the
+     * follower / following counts introduced by #343. Used by
+     * {@code GET /api/users/me}. Carries no privacy gate (you are always
+     * allowed to view your own profile, including admins viewing
+     * {@code /me}).
+     */
+    @Transactional(readOnly = true)
+    public UserProfileResponse getOwnUserProfile(Long userId) {
+        ProfileResponse profile = getOwnProfile(userId);
+        return wrapWithCounts(profile, userId);
+    }
+
+    /**
+     * Privacy-checked variant that wraps {@link #getProfileById(Long, Long)}
+     * with the follower / following counts. Used by
+     * {@code GET /api/users/{id:\\d+}}. Inherits the same privacy gates as
+     * the underlying call: 403 for mentee→mentee and for any access to an
+     * admin's profile, 404 when either id doesn't resolve.
+     */
+    @Transactional(readOnly = true)
+    public UserProfileResponse getUserProfile(Long targetId, Long requesterId) {
+        ProfileResponse profile = getProfileById(targetId, requesterId);
+        return wrapWithCounts(profile, targetId);
+    }
+
+    private UserProfileResponse wrapWithCounts(ProfileResponse profile, Long userId) {
+        long followers = followRepository.countByIdFolloweeId(userId);
+        long following = followRepository.countByIdFollowerId(userId);
+        return new UserProfileResponse(profile, followers, following);
     }
 
     @Transactional(readOnly = true)

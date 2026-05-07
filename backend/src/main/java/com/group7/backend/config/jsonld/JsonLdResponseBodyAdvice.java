@@ -71,10 +71,22 @@ public class JsonLdResponseBodyAdvice implements ResponseBodyAdvice<Object> {
             return transformCollection(collection, response);
         }
 
-        return findMappingFor(body.getClass())
-                .<Object>map(m -> m.apply(body))
+        // UserProfileResponse (#343) wraps the existing sealed ProfileResponse
+        // with follower / following counts. The JSON-LD mapping registry is
+        // keyed off the inner profile's class (PersonMapping handles
+        // MentorResponse / MenteeResponse). Unwrap before lookup so the
+        // existing schema.org Person shape is preserved; the follower /
+        // following counts are not part of schema.org Person and are
+        // intentionally dropped from the JSON-LD response.
+        Object effectiveBody = (body instanceof com.group7.backend.dto.response.UserProfileResponse wrapper
+                && wrapper.getProfile() != null)
+                ? wrapper.getProfile()
+                : body;
+
+        return findMappingFor(effectiveBody.getClass())
+                .<Object>map(m -> m.apply(effectiveBody))
                 .orElseGet(() -> downgrade(body, response,
-                        "no JSON-LD mapping for " + body.getClass().getSimpleName()));
+                        "no JSON-LD mapping for " + effectiveBody.getClass().getSimpleName()));
     }
 
     private Optional<JsonLdMapping> findMappingFor(Class<?> bodyType) {

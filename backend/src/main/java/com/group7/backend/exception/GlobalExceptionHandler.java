@@ -81,6 +81,14 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
     }
 
+    @ExceptionHandler(SelfFollowException.class)
+    public ResponseEntity<Map<String, String>> handleSelfFollow(SelfFollowException ex,
+                                                                HttpServletRequest request) {
+        log.warn("Self-follow rejected: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<Map<String, String>> handleRateLimit(RateLimitExceededException ex,
                                                                HttpServletRequest request) {
