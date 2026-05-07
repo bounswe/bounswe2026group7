@@ -123,6 +123,12 @@ export function MentorshipProvider({ children }) {
     () => sentRequests.filter(r => r.status === 'PENDING').length,
     [sentRequests]
   )
+  // Role-agnostic active-mentorship count for surfaces shared between mentor and mentee
+  // (sidebar badge, navbar dropdown). Mentors see how many mentees they have; mentees
+  // see whether they currently have an active mentor (max 1 per requirement 1.1.1.1.9).
+  const activeMentorshipCount = isMentor
+    ? (typeof activeMenteeCount === 'number' ? activeMenteeCount : (activeMentorships?.length ?? 0))
+    : (activeMentorships?.length ?? 0)
 
   useEffect(() => {
     let cancelled = false
@@ -172,6 +178,7 @@ export function MentorshipProvider({ children }) {
     tasksCount,
     sessionsCount,
     activeMenteeCount,
+    activeMentorshipCount,
     maxCapacity,
     availableSlots,
     loadMentorData,
