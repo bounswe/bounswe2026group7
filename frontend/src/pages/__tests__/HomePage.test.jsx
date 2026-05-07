@@ -18,6 +18,7 @@ describe('HomePage Component', () => {
     api.getMatchingMentors.mockResolvedValue([])
     api.getReceivedMentorshipRequests.mockResolvedValue({ content: [] })
     api.getOwnProfile.mockResolvedValue({ currentMenteeCount: 2, maxMenteeCapacity: 5 })
+    api.getUserById.mockResolvedValue({ profilePhoto: null })
     AuthContext.useAuth.mockReturnValue({ role: 'MENTEE', firstName: 'Test', lastName: 'User' })
   })
 
