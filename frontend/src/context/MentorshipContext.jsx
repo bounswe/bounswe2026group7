@@ -152,6 +152,13 @@ export function MentorshipProvider({ children }) {
     return () => { cancelled = true }
   }, [activeMentorships])
 
+  // Role-agnostic refresh helper for surfaces that mutate mentorship state outside
+  // the canonical accept/reject path (e.g. ending a mentorship). Picks the correct loader.
+  const refresh = useCallback(() => {
+    if (isMentor) loadMentorData()
+    else if (isMentee) loadMenteeData()
+  }, [isMentor, isMentee, loadMentorData, loadMenteeData])
+
   const handleMentorRequestRejected = useCallback((requestId) => {
     setReceivedRequests(prev => prev.filter(r => r.id !== requestId))
     // Re-fetch from backend so sidebar/navbar/dashboard counts converge to the source of truth
@@ -187,6 +194,7 @@ export function MentorshipProvider({ children }) {
     availableSlots,
     loadMentorData,
     loadMenteeData,
+    refresh,
     handleMentorRequestRejected,
     handleMentorRequestAccepted,
     isMentor,
