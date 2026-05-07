@@ -123,6 +123,12 @@ export function MentorshipProvider({ children }) {
     () => sentRequests.filter(r => r.status === 'PENDING').length,
     [sentRequests]
   )
+  // Role-agnostic active-mentorship count for surfaces shared between mentor and mentee
+  // (sidebar badge, navbar dropdown). Mentors see how many mentees they have; mentees
+  // see whether they currently have an active mentor (max 1 per requirement 1.1.1.1.9).
+  const activeMentorshipCount = isMentor
+    ? (typeof activeMenteeCount === 'number' ? activeMenteeCount : (activeMentorships?.length ?? 0))
+    : (activeMentorships?.length ?? 0)
 
   useEffect(() => {
     let cancelled = false
@@ -148,7 +154,9 @@ export function MentorshipProvider({ children }) {
 
   const handleMentorRequestRejected = useCallback((requestId) => {
     setReceivedRequests(prev => prev.filter(r => r.id !== requestId))
-  }, [])
+    // Re-fetch from backend so sidebar/navbar/dashboard counts converge to the source of truth
+    loadMentorData()
+  }, [loadMentorData])
 
   const handleMentorRequestAccepted = useCallback((requestId, newMentorship) => {
     setReceivedRequests(prev => prev.filter(r => r.id !== requestId))
@@ -157,7 +165,9 @@ export function MentorshipProvider({ children }) {
       ? { ...prev, currentMenteeCount: (prev.currentMenteeCount || 0) + 1 }
       : prev
     )
-  }, [])
+    // Re-fetch from backend so all count surfaces reconcile (mentorStats, requests, mentorships)
+    loadMentorData()
+  }, [loadMentorData])
 
   const value = {
     mentorLoading,
@@ -172,6 +182,7 @@ export function MentorshipProvider({ children }) {
     tasksCount,
     sessionsCount,
     activeMenteeCount,
+    activeMentorshipCount,
     maxCapacity,
     availableSlots,
     loadMentorData,

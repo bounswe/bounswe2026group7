@@ -39,7 +39,7 @@ export default function MainLayout({ children }) {
 
 
   const { role, logout, firstName, lastName, profilePhoto } = useAuth()
-  const { pendingCount, activeMenteeCount, tasksCount, sessionsCount } = useMentorship()
+  const { pendingCount, activeMenteeCount, activeMentorshipCount, tasksCount, sessionsCount } = useMentorship()
   const presence = usePresence()
   const currentPath = location.pathname
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -169,7 +169,7 @@ export default function MainLayout({ children }) {
             <Avatar src={profilePhoto} initials={initials} size="md" status={presence} className="sidebar-avatar" />
             <div className="sidebar-name">{displayName}</div>
             <div className="sidebar-role">{roleLabel}</div>
-            <div className="sidebar-badge">Active Mentorship: 1</div>
+            <div className="sidebar-badge">Active Mentorship: {activeMentorshipCount}</div>
           </div>
           <nav className="sidebar-nav">
             {SIDEBAR_LINKS.map(link => {
