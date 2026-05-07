@@ -251,3 +251,39 @@ export async function updateSharedGoal(id, sharedGoal) {
   })
   return handleResponse(res)
 }
+
+export async function getMentorAvailability(mentorId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/availability/${mentorId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function saveMentorAvailability(data) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/availability`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  })
+  return handleResponse(res)
+}
+
+export async function getMenteeAvailability() {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentee-availability`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function saveMenteeAvailability(data) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentee-availability`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  })
+  return handleResponse(res)
+}
