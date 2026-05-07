@@ -6,15 +6,15 @@ import com.group7.backend.entity.AvailabilitySlot;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.MenteeAvailabilitySlot;
 import com.group7.backend.entity.Mentor;
-import com.group7.backend.repository.AvailabilitySlotRepository;
 import com.group7.backend.exception.ResourceNotFoundException;
-import com.group7.backend.repository.MenteeRepository;
+import com.group7.backend.repository.AvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
+import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
+import com.group7.backend.service.ranking.RuleBasedMentorRanker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -28,30 +28,42 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * Service-level orchestration tests for {@link MatchingService}. The legacy
+ * scoring algorithm assertions moved into
+ * {@code RuleBasedMentorRankerTest} after the ranker extraction (#262); the
+ * service uses a real {@link RuleBasedMentorRanker} instance here so the
+ * orchestration assertions still observe end-to-end scoring outputs without
+ * needing to mock the ranker.
+ *
+ * <p>Repository mocks reflect the post-#262 shape: the matching path uses
+ * {@code findRankingCandidates} (List, no count) on both
+ * {@code MentorRepository} and {@code MenteeRepository}, plus
+ * {@code findByMentorIdIn} for the batch availability fetch. The
+ * {@code searchByFilters} (Page) variants are exercised through
+ * {@code UserSearchControllerTest} / {@code UserSearchIntegrationTest}.
+ */
 @ExtendWith(MockitoExtension.class)
 class MatchingServiceTest {
 
-    @Mock
-    private MenteeRepository menteeRepository;
+    @Mock private MenteeRepository menteeRepository;
+    @Mock private MentorRepository mentorRepository;
+    @Mock private AvailabilitySlotRepository availabilitySlotRepository;
+    @Mock private MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
+    @Mock private NotificationEventPublisher notificationEventPublisher;
 
-    @Mock
-    private MentorRepository mentorRepository;
-
-    @Mock
-    private AvailabilitySlotRepository availabilitySlotRepository;
-
-    @Mock
-    private MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
-
-    @Mock
-    private NotificationEventPublisher notificationEventPublisher;
-
-    @InjectMocks
     private MatchingService matchingService;
 
     private Mentee mentee;
@@ -60,8 +72,17 @@ class MatchingServiceTest {
 
     @BeforeEach
     void setUp() {
+        matchingService = new MatchingService(
+                menteeRepository, mentorRepository,
+                availabilitySlotRepository, menteeAvailabilitySlotRepository,
+                new RuleBasedMentorRanker(),  // real ranker — pure function over already-loaded entities
+                notificationEventPublisher);
+
         pageable = PageRequest.of(0, 20);
+
         mentee = new Mentee();
+        mentee.setId(1L);
+        mentee.setFirstName("Eli");
         mentee.setMajor("Computer Science");
         mentee.setGoals("career machine learning");
         mentee.setCareerInterest("backend engineering");
@@ -69,6 +90,8 @@ class MatchingServiceTest {
         mentee.setSkills(List.of("Java", "Python"));
 
         mentor = new Mentor();
+        mentor.setId(2L);
+        mentor.setFirstName("Mira");
         mentor.setMaxMenteeCapacity(3);
         mentor.setCurrentMenteeCount(1);
         mentor.setField("Computer Science");
@@ -78,125 +101,16 @@ class MatchingServiceTest {
         mentor.setInterests(List.of("AI", "Systems"));
         mentor.setMentoringGoals("Help with career and machine learning projects");
 
-        lenient().when(availabilitySlotRepository.findByMentorId(anyLong())).thenReturn(List.of());
-        lenient().when(menteeAvailabilitySlotRepository.findByMenteeId(anyLong())).thenReturn(List.of());
+        // Default: no availability data on either side — score reflects
+        // profile-only contributions, mirroring the pre-refactor lenient
+        // mocks. Tests that exercise availability override these.
+        lenient().when(availabilitySlotRepository.findByMentorIdIn(anyCollection()))
+                .thenReturn(List.of());
+        lenient().when(menteeAvailabilitySlotRepository.findByMenteeId(anyLong()))
+                .thenReturn(List.of());
     }
 
-    private AvailabilitySlot mentorSlot(DayOfWeek dayOfWeek, String start, String end) {
-        AvailabilitySlot slot = new AvailabilitySlot();
-        slot.setDayOfWeek(dayOfWeek);
-        slot.setStartTime(LocalTime.parse(start));
-        slot.setEndTime(LocalTime.parse(end));
-        slot.setRecurring(true);
-        return slot;
-    }
-
-    private MenteeAvailabilitySlot menteeSlot(DayOfWeek dayOfWeek, String start, String end) {
-        MenteeAvailabilitySlot slot = new MenteeAvailabilitySlot();
-        slot.setDayOfWeek(dayOfWeek);
-        slot.setStartTime(LocalTime.parse(start));
-        slot.setEndTime(LocalTime.parse(end));
-        slot.setRecurring(true);
-        return slot;
-    }
-
-    // ── Score calculation ────────────────────────────────────────────────────
-
-    @Test
-    void scoreOverlappingInterests() {
-        // Mentee has AI and Databases; mentor has AI and Systems → 1 overlap = +3
-        int score = matchingService.calculateScore(mentor, mentee);
-        assertThat(score).isGreaterThanOrEqualTo(3);
-    }
-
-    @Test
-    void scoreSkillMatch() {
-        // Java is in preferredMenteeSkills → +3
-        Mentor m = new Mentor();
-        m.setMaxMenteeCapacity(3);
-        m.setCurrentMenteeCount(0);
-        m.setPreferredMenteeSkills(List.of("Java"));
-
-        Mentee me = new Mentee();
-        me.setSkills(List.of("Java"));
-
-        int score = matchingService.calculateScore(m, me);
-        assertThat(score).isEqualTo(3);
-    }
-
-    @Test
-    void scoreMajorMatchesPreferredMenteeMajor() {
-        // Computer Science == Computer Science → +5
-        Mentor m = new Mentor();
-        m.setMaxMenteeCapacity(3);
-        m.setCurrentMenteeCount(0);
-        m.setPreferredMenteeMajor("Computer Science");
-
-        Mentee me = new Mentee();
-        me.setMajor("Computer Science");
-
-        int score = matchingService.calculateScore(m, me);
-        assertThat(score).isEqualTo(5);
-    }
-
-    @Test
-    void scoreMajorMatchesField() {
-        // Mentee major == mentor field → +3
-        Mentor m = new Mentor();
-        m.setMaxMenteeCapacity(3);
-        m.setCurrentMenteeCount(0);
-        m.setField("Computer Science");
-
-        Mentee me = new Mentee();
-        me.setMajor("Computer Science");
-
-        int score = matchingService.calculateScore(m, me);
-        assertThat(score).isEqualTo(3);
-    }
-
-    @Test
-    void scoreGoalsKeywordOverlap() {
-        // "machine" and "learning" are in mentor mentoringGoals → +2 each
-        Mentor m = new Mentor();
-        m.setMaxMenteeCapacity(3);
-        m.setCurrentMenteeCount(0);
-        m.setMentoringGoals("machine learning and career guidance");
-
-        Mentee me = new Mentee();
-        me.setGoals("machine learning");
-
-        int score = matchingService.calculateScore(m, me);
-        assertThat(score).isEqualTo(4); // "machine" +2, "learning" +2
-    }
-
-    @Test
-    void scoreNullFieldsDoNotCrash() {
-        Mentor m = new Mentor();
-        m.setMaxMenteeCapacity(3);
-        m.setCurrentMenteeCount(0);
-        // all fields null
-
-        Mentee me = new Mentee();
-        // all fields null
-
-        int score = matchingService.calculateScore(m, me);
-        assertThat(score).isEqualTo(0);
-    }
-
-    // ── Capacity filter ──────────────────────────────────────────────────────
-
-    @Test
-    void fullCapacityMentorExcluded() {
-        mentor.setCurrentMenteeCount(3); // full
-        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
-
-        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, pageable);
-
-        assertThat(result.getContent()).isEmpty();
-    }
-
-    // ── Active mentor check ──────────────────────────────────────────────────
+    // ── Active mentor / mentee not found ──────────────────────────────────
 
     @Test
     void activeMentorBlocksRequest() {
@@ -208,8 +122,6 @@ class MatchingServiceTest {
                 .hasMessageContaining("active mentor");
     }
 
-    // ── Mentee not found ─────────────────────────────────────────────────────
-
     @Test
     void menteeNotFoundThrows() {
         when(menteeRepository.findById(99L)).thenReturn(Optional.empty());
@@ -218,22 +130,35 @@ class MatchingServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // ── Top 5 limit ──────────────────────────────────────────────────────────
+    // ── Capacity filter (now SQL-side) ────────────────────────────────────
+
+    @Test
+    void searchByFilters_invokedWithRequireCapacityTrue() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
+
+        matchingService.getTopMentors(1L, null, pageable);
+
+        // Verify the SQL filter pushes capacity, not in-memory.
+        verify(mentorRepository).findRankingCandidates(
+                any(), any(), any(), any(), eq(true), any(), any(Pageable.class));
+    }
+
+    // ── Pagination ────────────────────────────────────────────────────────
 
     @Test
     void paginationReturnsRequestedPageSize() {
         List<Mentor> sixMentors = java.util.stream.IntStream.range(0, 6).mapToObj(i -> {
             Mentor m = new Mentor();
+            m.setId((long) (10 + i));
             m.setMaxMenteeCapacity(3);
             m.setCurrentMenteeCount(0);
             return m;
         }).toList();
-
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAll()).thenReturn(sixMentors);
+        stubMentorSearch(sixMentors);
 
-        Pageable smallPage = PageRequest.of(0, 3);
-        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, smallPage);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, PageRequest.of(0, 3));
 
         assertThat(result.getContent()).hasSize(3);
         assertThat(result.getTotalElements()).isEqualTo(6);
@@ -244,16 +169,15 @@ class MatchingServiceTest {
     void paginationReturnsSecondPage() {
         List<Mentor> sixMentors = java.util.stream.IntStream.range(0, 6).mapToObj(i -> {
             Mentor m = new Mentor();
+            m.setId((long) (10 + i));
             m.setMaxMenteeCapacity(3);
             m.setCurrentMenteeCount(0);
             return m;
         }).toList();
-
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAll()).thenReturn(sixMentors);
+        stubMentorSearch(sixMentors);
 
-        Pageable secondPage = PageRequest.of(1, 4);
-        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, secondPage);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, PageRequest.of(1, 4));
 
         assertThat(result.getContent()).hasSize(2);
         assertThat(result.getTotalElements()).isEqualTo(6);
@@ -263,49 +187,93 @@ class MatchingServiceTest {
     @Test
     void paginationBeyondTotalReturnsEmptyPage() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
+        stubMentorSearch(List.of(mentor));
 
-        Pageable farPage = PageRequest.of(10, 20);
-        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, farPage);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, PageRequest.of(10, 20));
 
         assertThat(result.getContent()).isEmpty();
         assertThat(result.getTotalElements()).isEqualTo(1);
     }
 
-    // ── Keyword filter ───────────────────────────────────────────────────────
-
     @Test
-    void keywordFilterMatchesExpertise() {
+    void paginationWithIntegerOverflowOffset_returnsEmptyPage() {
+        // page=Integer.MAX_VALUE with size>1 makes Pageable.getOffset() exceed
+        // Integer.MAX_VALUE; a naive `(int) offset` cast wraps to a negative
+        // start and crashes List.subList with IndexOutOfBoundsException.
+        // slicePage compares the offset in long-space first to keep the cast
+        // safe. Reachable through the public matching/search endpoints
+        // because clampPageable does not bound the page number.
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
+        stubMentorSearch(List.of(mentor));
 
-        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, "Java", pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-        verify(notificationEventPublisher).publishMatchFound(1L, result.getContent().get(0).getFirstName());
-    }
-
-    @Test
-    void keywordFilterNoMatchReturnsEmpty() {
-        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
-
-        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, "rust", pageable);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(
+                1L, null, PageRequest.of(Integer.MAX_VALUE, 2));
 
         assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isEqualTo(1);
+    }
+
+    // ── Keyword filter (now SQL-side) ─────────────────────────────────────
+
+    @Test
+    void keywordFilter_passesNormalisedKeywordToRepo() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
+
+        matchingService.getTopMentors(1L, "Java", pageable);
+
+        // Service normaliseKeyword: trim + lowercase + escape + wrap %...%.
+        verify(mentorRepository).findRankingCandidates(
+                eq("%java%"), any(), any(), any(), anyBoolean(), any(), any());
     }
 
     @Test
-    void nullKeywordReturnsAll() {
+    void shortKeyword_skipsKeywordFilter() {
+        // q="ab" length 2 < 3 — service treats as null, no filter applied.
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAll()).thenReturn(List.of(mentor));
+        stubMentorSearch(List.of(mentor));
 
-        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, pageable);
+        matchingService.getTopMentors(1L, "ab", pageable);
 
-        assertThat(result.getContent()).hasSize(1);
+        verify(mentorRepository).findRankingCandidates(
+                eq(null), any(), any(), any(), anyBoolean(), any(), any());
     }
 
-    // ── Ordering ─────────────────────────────────────────────────────────────
+    @Test
+    void blankKeyword_skipsKeywordFilter() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
+
+        matchingService.getTopMentors(1L, "   ", pageable);
+
+        verify(mentorRepository).findRankingCandidates(
+                eq(null), any(), any(), any(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    void nullKeyword_skipsKeywordFilter() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
+
+        matchingService.getTopMentors(1L, null, pageable);
+
+        verify(mentorRepository).findRankingCandidates(
+                eq(null), any(), any(), any(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    void wildcardEscape_keywordContainingPercent_isLiteralised() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
+
+        matchingService.getTopMentors(1L, "abc%def", pageable);
+
+        // Escape order: pipe first, then % and _. Result: "%abc|%def%".
+        verify(mentorRepository).findRankingCandidates(
+                eq("%abc|%def%"), any(), any(), any(), anyBoolean(), any(), any());
+    }
+
+    // ── Ordering ──────────────────────────────────────────────────────────
 
     @Test
     void resultsOrderedByScoreDescending() {
@@ -313,151 +281,131 @@ class MatchingServiceTest {
         lowScore.setId(7L);
         lowScore.setMaxMenteeCapacity(3);
         lowScore.setCurrentMenteeCount(0);
-        // no matching fields → score 0
-
-        mentee.setId(1L);
-        mentor.setId(2L);
+        // No matching fields → score 0.
 
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        when(mentorRepository.findAll()).thenReturn(List.of(lowScore, mentor));
+        stubMentorSearch(List.of(lowScore, mentor));
 
         Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, pageable);
 
-        assertThat(result.getContent().get(0).getMatchScore()).isGreaterThanOrEqualTo(result.getContent().get(1).getMatchScore());
-    }
-
-    @Test
-    void availabilityScoreUsesOverlapAndCapsAtTwelve() {
-    when(availabilitySlotRepository.findByMentorId(2L)).thenReturn(List.of(
-        mentorSlot(DayOfWeek.MONDAY, "09:00", "18:00")));
-    when(menteeAvailabilitySlotRepository.findByMenteeId(1L)).thenReturn(List.of(
-        menteeSlot(DayOfWeek.MONDAY, "09:00", "17:00")));
-
-    int score = matchingService.calculateAvailabilityScore(2L, 1L);
-
-    assertThat(score).isEqualTo(12);
-    }
-
-    @Test
-    void availabilityScoreReturnsZeroWithoutSlots() {
-    int score = matchingService.calculateAvailabilityScore(2L, 1L);
-
-    assertThat(score).isEqualTo(0);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getContent().get(0).getMatchScore())
+                .isGreaterThanOrEqualTo(result.getContent().get(1).getMatchScore());
     }
 
     @Test
     void availabilityCanBreakTieBetweenMentors() {
-    Mentor mentorWithoutOverlap = new Mentor();
-    mentorWithoutOverlap.setId(9L);
-    mentorWithoutOverlap.setMaxMenteeCapacity(3);
-    mentorWithoutOverlap.setCurrentMenteeCount(0);
-    mentorWithoutOverlap.setField(mentor.getField());
-    mentorWithoutOverlap.setPreferredMenteeMajor(mentor.getPreferredMenteeMajor());
-    mentorWithoutOverlap.setPreferredMenteeSkills(mentor.getPreferredMenteeSkills());
-    mentorWithoutOverlap.setInterests(mentor.getInterests());
-    mentorWithoutOverlap.setMentoringGoals(mentor.getMentoringGoals());
-    mentorWithoutOverlap.setExpertise(mentor.getExpertise());
+        Mentor mentorWithoutOverlap = new Mentor();
+        mentorWithoutOverlap.setId(9L);
+        mentorWithoutOverlap.setMaxMenteeCapacity(3);
+        mentorWithoutOverlap.setCurrentMenteeCount(0);
+        mentorWithoutOverlap.setField(mentor.getField());
+        mentorWithoutOverlap.setPreferredMenteeMajor(mentor.getPreferredMenteeMajor());
+        mentorWithoutOverlap.setPreferredMenteeSkills(mentor.getPreferredMenteeSkills());
+        mentorWithoutOverlap.setInterests(mentor.getInterests());
+        mentorWithoutOverlap.setMentoringGoals(mentor.getMentoringGoals());
+        mentorWithoutOverlap.setExpertise(mentor.getExpertise());
 
-    mentor.setId(2L);
-    mentee.setId(1L);
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentorWithoutOverlap, mentor));
 
-    when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-    when(mentorRepository.findAll()).thenReturn(List.of(mentorWithoutOverlap, mentor));
-    when(availabilitySlotRepository.findByMentorId(2L)).thenReturn(List.of(
-        mentorSlot(DayOfWeek.MONDAY, "10:00", "12:00")));
-    when(availabilitySlotRepository.findByMentorId(9L)).thenReturn(List.of(
-        mentorSlot(DayOfWeek.MONDAY, "14:00", "16:00")));
-    when(menteeAvailabilitySlotRepository.findByMenteeId(1L)).thenReturn(List.of(
-        menteeSlot(DayOfWeek.MONDAY, "10:30", "11:30")));
+        // Mentor 2L has overlapping slot; mentor 9L does not.
+        AvailabilitySlot mentor2Slot = new AvailabilitySlot();
+        mentor2Slot.setDayOfWeek(DayOfWeek.MONDAY);
+        mentor2Slot.setStartTime(LocalTime.parse("10:00"));
+        mentor2Slot.setEndTime(LocalTime.parse("12:00"));
+        mentor2Slot.setMentor(mentor);
+        AvailabilitySlot mentor9Slot = new AvailabilitySlot();
+        mentor9Slot.setDayOfWeek(DayOfWeek.MONDAY);
+        mentor9Slot.setStartTime(LocalTime.parse("14:00"));
+        mentor9Slot.setEndTime(LocalTime.parse("16:00"));
+        mentor9Slot.setMentor(mentorWithoutOverlap);
+        when(availabilitySlotRepository.findByMentorIdIn(anyCollection()))
+                .thenReturn(List.of(mentor2Slot, mentor9Slot));
 
-    Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, pageable);
+        MenteeAvailabilitySlot menteeSlot = new MenteeAvailabilitySlot();
+        menteeSlot.setDayOfWeek(DayOfWeek.MONDAY);
+        menteeSlot.setStartTime(LocalTime.parse("10:30"));
+        menteeSlot.setEndTime(LocalTime.parse("11:30"));
+        when(menteeAvailabilitySlotRepository.findByMenteeId(1L))
+                .thenReturn(List.of(menteeSlot));
 
-    assertThat(result.getContent()).hasSize(2);
-    assertThat(result.getContent().get(0).getId()).isEqualTo(2L);
-    assertThat(result.getContent().get(0).getMatchScore()).isGreaterThan(result.getContent().get(1).getMatchScore());
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, pageable);
+
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getContent().get(0).getId()).isEqualTo(2L);
+        assertThat(result.getContent().get(0).getMatchScore())
+                .isGreaterThan(result.getContent().get(1).getMatchScore());
     }
 
-    // ── Candidate mentees: preference matching ──────────────────────────────
+    // ── N+1 elimination — slot batch fetched once ─────────────────────────
 
     @Test
-    void candidateMenteesMatchesByInterest() {
-        assertThat(matchingService.matchesMentorPreferences(mentor, mentee)).isTrue();
-    }
+    void rankMentors_batchFetchesSlotsExactlyOnce() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
 
-    @Test
-    void candidateMenteesMatchesBySkill() {
-        Mentor m = new Mentor();
-        m.setPreferredMenteeSkills(List.of("Python"));
+        matchingService.getTopMentors(1L, null, pageable);
 
-        Mentee me = new Mentee();
-        me.setSkills(List.of("Python"));
-
-        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
-    }
-
-    @Test
-    void candidateMenteesMatchesByPreferredMajor() {
-        Mentor m = new Mentor();
-        m.setPreferredMenteeMajor("Computer Science");
-
-        Mentee me = new Mentee();
-        me.setMajor("Computer Science");
-
-        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
-    }
-
-    @Test
-    void candidateMenteesMatchesByField() {
-        Mentor m = new Mentor();
-        m.setField("Computer Science");
-
-        Mentee me = new Mentee();
-        me.setMajor("Computer Science");
-
-        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
+        verify(availabilitySlotRepository, times(1)).findByMentorIdIn(anyCollection());
+        verify(availabilitySlotRepository, never()).findByMentorId(anyLong());
+        verify(menteeAvailabilitySlotRepository, times(1)).findByMenteeId(1L);
     }
 
     @Test
-    void candidateMenteesNoOverlapReturnsfalse() {
-        Mentor m = new Mentor();
-        m.setField("Music");
-        m.setPreferredMenteeMajor("Music");
-        m.setPreferredMenteeSkills(List.of("Piano"));
-        m.setInterests(List.of("Jazz"));
+    void rankMentors_emptyResult_skipsSlotFetches() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of());
 
-        Mentee me = new Mentee();
-        me.setMajor("Computer Science");
-        me.setSkills(List.of("Java"));
-        me.setInterests(List.of("AI"));
+        matchingService.getTopMentors(1L, null, pageable);
 
-        assertThat(matchingService.matchesMentorPreferences(m, me)).isFalse();
+        verify(availabilitySlotRepository, never()).findByMentorIdIn(anyCollection());
+        verify(menteeAvailabilitySlotRepository, never()).findByMenteeId(anyLong());
     }
 
-    @Test
-    void candidateMenteesNullFieldsDoNotCrash() {
-        Mentor m = new Mentor();
-        Mentee me = new Mentee();
-
-        assertThat(matchingService.matchesMentorPreferences(m, me)).isFalse();
-    }
-
-    // ── Candidate mentees: active mentor exclusion ──────────────────────────
+    // ── Match-found notification gating ───────────────────────────────────
 
     @Test
-    void candidateMenteesExcludesActivelyMentoredMentees() {
-        Mentee activeMentee = new Mentee();
-        activeMentee.setActiveMentorId(99L);
-        activeMentee.setInterests(List.of("AI"));
+    void rankMentors_firesNotification_onPageZeroWithResults() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
 
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee, activeMentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
+        Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, PageRequest.of(0, 20));
 
         assertThat(result.getContent()).hasSize(1);
+        verify(notificationEventPublisher)
+                .publishMatchFound(eq(1L), eq(result.getContent().get(0).getFirstName()));
     }
 
-    // ── Candidate mentees: capacity check ───────────────────────────────────
+    @Test
+    void rankMentors_doesNotFireNotification_onSubsequentPages() {
+        List<Mentor> manyMentors = java.util.stream.IntStream.range(0, 30).mapToObj(i -> {
+            Mentor m = new Mentor();
+            m.setId((long) (10 + i));
+            m.setMaxMenteeCapacity(3);
+            m.setCurrentMenteeCount(0);
+            return m;
+        }).toList();
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(manyMentors);
+
+        // Page 1 (offset 20) → no notification because we're past page 0.
+        matchingService.getTopMentors(1L, null, PageRequest.of(1, 20));
+
+        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
+    }
+
+    @Test
+    void rankMentors_doesNotFireNotification_whenEmpty() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of());
+
+        matchingService.getTopMentors(1L, null, pageable);
+
+        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
+    }
+
+    // ── Candidate mentees: full capacity / mentor not found ───────────────
 
     @Test
     void candidateMenteesFullCapacityBlocksRequest() {
@@ -468,197 +416,6 @@ class MatchingServiceTest {
                 .isInstanceOf(com.group7.backend.exception.MatchingNotAllowedException.class)
                 .hasMessageContaining("capacity");
     }
-
-    // ── Candidate mentees: mentor not found ─────────────────────────────────
-
-    @Test
-    void candidateMenteesMentorNotFoundThrows() {
-        when(mentorRepository.findById(99L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> matchingService.getCandidateMentees(99L, null, pageable))
-                .isInstanceOf(ResourceNotFoundException.class);
-    }
-
-    // ── Candidate mentees: keyword filter ───────────────────────────────────
-
-    @Test
-    void candidateMenteesKeywordFilterMatchesGoals() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "machine", pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-    }
-
-    @Test
-    void candidateMenteesKeywordFilterNoMatchReturnsEmpty() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "rust", pageable);
-
-        assertThat(result.getContent()).isEmpty();
-    }
-
-    @Test
-    void candidateMenteesNullKeywordReturnsAll() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-    }
-
-    // ── Candidate mentees: case insensitivity ───────────────────────────────
-
-    @Test
-    void candidateMenteesMatchesByInterestCaseInsensitive() {
-        Mentor m = new Mentor();
-        m.setInterests(List.of("ai"));
-
-        Mentee me = new Mentee();
-        me.setInterests(List.of("AI"));
-
-        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
-    }
-
-    @Test
-    void candidateMenteesMatchesBySkillCaseInsensitive() {
-        Mentor m = new Mentor();
-        m.setPreferredMenteeSkills(List.of("JAVA"));
-
-        Mentee me = new Mentee();
-        me.setSkills(List.of("java"));
-
-        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
-    }
-
-    @Test
-    void candidateMenteesMatchesByMajorCaseInsensitive() {
-        Mentor m = new Mentor();
-        m.setPreferredMenteeMajor("computer science");
-
-        Mentee me = new Mentee();
-        me.setMajor("Computer Science");
-
-        assertThat(matchingService.matchesMentorPreferences(m, me)).isTrue();
-    }
-
-    // ── Candidate mentees: keyword on different fields ──────────────────────
-
-    @Test
-    void candidateMenteesKeywordFilterMatchesMajor() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "Computer", pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-    }
-
-    @Test
-    void candidateMenteesKeywordFilterMatchesSkill() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "Java", pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-    }
-
-    @Test
-    void candidateMenteesKeywordFilterMatchesInterest() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "AI", pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-    }
-
-    @Test
-    void candidateMenteesKeywordFilterMatchesCareerInterest() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "backend", pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-    }
-
-    @Test
-    void candidateMenteesKeywordFilterIsCaseInsensitive() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "MACHINE", pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-    }
-
-    @Test
-    void candidateMenteesEmptyKeywordReturnsAll() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "", pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-    }
-
-    // ── Candidate mentees: multiple mentees filtering ───────────────────────
-
-    @Test
-    void candidateMenteesFiltersOutNonMatchingMentees() {
-        Mentee nonMatching = new Mentee();
-        nonMatching.setMajor("Music");
-        nonMatching.setSkills(List.of("Piano"));
-        nonMatching.setInterests(List.of("Jazz"));
-
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee, nonMatching));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).getMajor()).isEqualTo("Computer Science");
-    }
-
-    @Test
-    void candidateMenteesReturnsMultipleMatchingMentees() {
-        Mentee secondMatch = new Mentee();
-        secondMatch.setInterests(List.of("AI"));
-        secondMatch.setSkills(List.of("Kotlin"));
-
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee, secondMatch));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
-
-        assertThat(result.getContent()).hasSize(2);
-    }
-
-    @Test
-    void candidateMenteesExcludesAllActivelyMentoredMentees() {
-        Mentee active1 = new Mentee();
-        active1.setActiveMentorId(10L);
-        active1.setInterests(List.of("AI"));
-
-        Mentee active2 = new Mentee();
-        active2.setActiveMentorId(20L);
-        active2.setInterests(List.of("Systems"));
-
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee, active1, active2));
-
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
-
-        assertThat(result.getContent()).hasSize(1);
-    }
-
-    // ── Candidate mentees: capacity edge cases ──────────────────────────────
 
     @Test
     void candidateMenteesExactCapacityBlocksRequest() {
@@ -671,27 +428,112 @@ class MatchingServiceTest {
     }
 
     @Test
-    void candidateMenteesOneSlotLeftAllowed() {
-        mentor.setMaxMenteeCapacity(3);
-        mentor.setCurrentMenteeCount(2);
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+    void candidateMenteesMentorNotFoundThrows() {
+        when(mentorRepository.findById(99L)).thenReturn(Optional.empty());
 
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
-
-        assertThat(result.getContent()).hasSize(1);
+        assertThatThrownBy(() -> matchingService.getCandidateMentees(99L, null, pageable))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // ── Candidate mentees: DTO mapping ──────────────────────────────────────
+    // ── Candidate mentees: SQL filters pushed correctly ───────────────────
+
+    @Test
+    void candidateMentees_invokesMenteeSearchWithRequireUnattachedTrue() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        stubMenteeSearch(List.of(mentee));
+
+        matchingService.getCandidateMentees(1L, null, pageable);
+
+        // requireUnattached=true (the SQL filter that replaced the old in-memory
+        // m -> m.getActiveMentorId() == null check). requesterMentorId is null
+        // because the matching path doesn't slot-filter candidate mentees —
+        // overlap is part of scoring, not filtering, and the mentee path here
+        // doesn't score.
+        verify(menteeRepository).findRankingCandidates(
+                any(), any(), any(), any(), eq(true),
+                org.mockito.ArgumentMatchers.isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void candidateMentees_keywordIsNormalisedAndPushed() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        stubMenteeSearch(List.of(mentee));
+
+        matchingService.getCandidateMentees(1L, "machine", pageable);
+
+        verify(menteeRepository).findRankingCandidates(
+                eq("%machine%"), any(), any(), any(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    void candidateMentees_doesNotInvokeRanker() {
+        // The mentor-side path scores via the ranker; the mentee-side path
+        // is filter-only. Verifying via no-batch-fetch on mentor slots since
+        // that's the only code path that would fire if the ranker were called.
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        stubMenteeSearch(List.of(mentee));
+
+        matchingService.getCandidateMentees(1L, null, pageable);
+
+        verify(availabilitySlotRepository, never()).findByMentorIdIn(anyCollection());
+    }
+
+    // ── Candidate mentees: pagination ─────────────────────────────────────
+
+    @Test
+    void candidateMenteesPagination_returnsRequestedSlice() {
+        // Mentees need at least one preference overlap with the mentor fixture
+        // (interests=[AI, Systems]) to survive the in-memory
+        // matchesMentorPreferences filter.
+        List<Mentee> manyMentees = java.util.stream.IntStream.range(0, 6).mapToObj(i -> {
+            Mentee me = new Mentee();
+            me.setId((long) (100 + i));
+            me.setInterests(List.of("AI"));
+            return me;
+        }).toList();
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        stubMenteeSearch(manyMentees);
+
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, PageRequest.of(0, 3));
+
+        assertThat(result.getContent()).hasSize(3);
+        assertThat(result.getTotalElements()).isEqualTo(6);
+    }
+
+    @Test
+    void candidateMentees_firesNotification_onPageZeroWithResults() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        stubMenteeSearch(List.of(mentee));
+
+        matchingService.getCandidateMentees(1L, null, PageRequest.of(0, 20));
+
+        verify(notificationEventPublisher).publishMatchFound(eq(1L), anyString());
+    }
+
+    @Test
+    void candidateMentees_doesNotFireNotification_onSubsequentPages() {
+        List<Mentee> manyMentees = java.util.stream.IntStream.range(0, 30).mapToObj(i -> {
+            Mentee me = new Mentee();
+            me.setId((long) (100 + i));
+            return me;
+        }).toList();
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        stubMenteeSearch(manyMentees);
+
+        matchingService.getCandidateMentees(1L, null, PageRequest.of(1, 20));
+
+        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
+    }
+
+    // ── Candidate mentees: DTO mapping ────────────────────────────────────
 
     @Test
     void candidateMenteesResponseContainsCorrectFields() {
         mentee.setFirstName("Elif");
         mentee.setBackgroundInfo("3rd year CS student");
         mentee.setMeetingFreqPref("Weekly");
-
         when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(mentee));
+        stubMenteeSearch(List.of(mentee));
 
         Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
 
@@ -707,22 +549,129 @@ class MatchingServiceTest {
         assertThat(dto.getMeetingFreqPref()).isEqualTo("Weekly");
     }
 
+    // ── Unpaginated getTopMentorsList ─────────────────────────────────────
+
     @Test
-    void candidateMenteesKeywordAndPreferenceFilterCombined() {
-        Mentee matchingWithKeyword = new Mentee();
-        matchingWithKeyword.setInterests(List.of("AI"));
-        matchingWithKeyword.setGoals("machine learning research");
+    void getTopMentorsList_returnsAllRanked_capPreserved() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
 
-        Mentee matchingWithoutKeyword = new Mentee();
-        matchingWithoutKeyword.setInterests(List.of("AI"));
-        matchingWithoutKeyword.setGoals("web development");
+        List<MentorMatchResponse> result = matchingService.getTopMentorsList(1L, null);
 
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        when(menteeRepository.findAll()).thenReturn(List.of(matchingWithKeyword, matchingWithoutKeyword));
+        assertThat(result).hasSize(1);
+        // Same 200-cap as the paginated path (verified via PageRequest.of(0, 200)).
+        verify(mentorRepository).findRankingCandidates(
+                any(), any(), any(), any(), anyBoolean(), any(), eq(PageRequest.of(0, 200)));
+    }
 
-        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, "machine", pageable);
+    @Test
+    void getTopMentorsList_firesNotification_onNonEmpty() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
 
-        assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).getGoals()).isEqualTo("machine learning research");
+        matchingService.getTopMentorsList(1L, null);
+
+        verify(notificationEventPublisher).publishMatchFound(eq(1L), anyString());
+    }
+
+    @Test
+    void getTopMentorsList_doesNotFireNotification_onEmpty() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of());
+
+        List<MentorMatchResponse> result = matchingService.getTopMentorsList(1L, null);
+
+        assertThat(result).isEmpty();
+        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
+    }
+
+    // ── matchesMentorPreferences edge cases ───────────────────────────────
+    // Pin the OR-of-categories filter behaviour and its null-guard branches.
+    // The mentor-side path always pre-filters via this in-memory check; getting
+    // it wrong silently empties candidate-mentee results.
+
+    @Test
+    void matchesMentorPreferences_matchesViaInterestOverlap() {
+        Mentor m = new Mentor();
+        m.setInterests(List.of("AI"));
+        Mentee me = new Mentee();
+        me.setInterests(List.of("AI"));
+        assertThat(MatchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    @Test
+    void matchesMentorPreferences_matchesViaSkill() {
+        Mentor m = new Mentor();
+        m.setPreferredMenteeSkills(List.of("Java"));
+        Mentee me = new Mentee();
+        me.setSkills(List.of("Java"));
+        assertThat(MatchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    @Test
+    void matchesMentorPreferences_matchesViaPreferredMajor() {
+        Mentor m = new Mentor();
+        m.setPreferredMenteeMajor("Computer Science");
+        Mentee me = new Mentee();
+        me.setMajor("Computer Science");
+        assertThat(MatchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    @Test
+    void matchesMentorPreferences_matchesViaField() {
+        Mentor m = new Mentor();
+        m.setField("Computer Science");
+        Mentee me = new Mentee();
+        me.setMajor("Computer Science");
+        assertThat(MatchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    @Test
+    void matchesMentorPreferences_returnsFalseWhenNothingOverlaps() {
+        Mentor m = new Mentor();
+        m.setInterests(List.of("AI"));
+        m.setPreferredMenteeSkills(List.of("Java"));
+        m.setPreferredMenteeMajor("CS");
+        Mentee me = new Mentee();
+        me.setInterests(List.of("Music"));
+        me.setSkills(List.of("Piano"));
+        me.setMajor("Music Theory");
+        assertThat(MatchingService.matchesMentorPreferences(m, me)).isFalse();
+    }
+
+    @Test
+    void matchesMentorPreferences_handlesAllNullFields() {
+        // Bare entities — no interests, skills, or major on either side.
+        // Must not throw NPE; returns false (no preference category fires).
+        assertThat(MatchingService.matchesMentorPreferences(new Mentor(), new Mentee())).isFalse();
+    }
+
+    @Test
+    void matchesMentorPreferences_isCaseInsensitive() {
+        Mentor m = new Mentor();
+        m.setInterests(List.of("AI"));
+        Mentee me = new Mentee();
+        me.setInterests(List.of("ai"));
+        assertThat(MatchingService.matchesMentorPreferences(m, me)).isTrue();
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    // The matching path uses findRankingCandidates (List, no count) — see
+    // MatchingService.rankAvailableMentors / getCandidateMentees. Tests of the
+    // SQL-side filter shape still use searchByFilters by name to capture the
+    // semantic intent (verify(... searchByFilters(...))) — those verifications
+    // were rewritten to target findRankingCandidates after the S1 refactor.
+
+    private void stubMentorSearch(List<Mentor> mentors) {
+        when(mentorRepository.findRankingCandidates(
+                any(), any(), any(), any(), anyBoolean(), any(), any(Pageable.class)))
+                .thenReturn(mentors);
+    }
+
+    private void stubMenteeSearch(List<Mentee> mentees) {
+        when(menteeRepository.findRankingCandidates(
+                any(), any(), any(), any(), anyBoolean(), any(), any(Pageable.class)))
+                .thenReturn(mentees);
     }
 }
