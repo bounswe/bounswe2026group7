@@ -1,5 +1,6 @@
 package com.group7.backend.controller;
 
+import com.group7.backend.controller.support.PageableSupport;
 import com.group7.backend.dto.request.MenteeProfileRequest;
 import com.group7.backend.dto.request.MentorProfileRequest;
 import com.group7.backend.dto.response.MenteeResponse;
@@ -16,7 +17,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -139,7 +139,7 @@ public class UserController {
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
-        Pageable pageable = clampPageable(page, size);
+        Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(userService.getAllUsersFiltered(requesterId, pageable));
     }
 
@@ -166,7 +166,7 @@ public class UserController {
     public ResponseEntity<Page<MentorResponse>> getAllMentors(
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = clampPageable(page, size);
+        Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(userService.getAllMentors(pageable));
     }
 
@@ -186,7 +186,7 @@ public class UserController {
     public ResponseEntity<Page<MenteeResponse>> getAllMentees(
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = clampPageable(page, size);
+        Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(userService.getAllMentees(pageable));
     }
 
@@ -207,10 +207,5 @@ public class UserController {
         }
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
-    }
-
-    private Pageable clampPageable(int page, int size) {
-        int clampedSize = Math.min(Math.max(size, 1), 100);
-        return PageRequest.of(Math.max(page, 0), clampedSize);
     }
 }
