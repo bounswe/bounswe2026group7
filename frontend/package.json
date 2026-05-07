@@ -11,6 +11,7 @@
     "test": "vitest --passWithNoTests --run"
   },
   "dependencies": {
+    "@stomp/stompjs": "^7.3.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.7.0",
     "react": "^19.2.4",
