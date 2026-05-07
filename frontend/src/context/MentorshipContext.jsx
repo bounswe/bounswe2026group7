@@ -154,7 +154,9 @@ export function MentorshipProvider({ children }) {
 
   const handleMentorRequestRejected = useCallback((requestId) => {
     setReceivedRequests(prev => prev.filter(r => r.id !== requestId))
-  }, [])
+    // Re-fetch from backend so sidebar/navbar/dashboard counts converge to the source of truth
+    loadMentorData()
+  }, [loadMentorData])
 
   const handleMentorRequestAccepted = useCallback((requestId, newMentorship) => {
     setReceivedRequests(prev => prev.filter(r => r.id !== requestId))
@@ -163,7 +165,9 @@ export function MentorshipProvider({ children }) {
       ? { ...prev, currentMenteeCount: (prev.currentMenteeCount || 0) + 1 }
       : prev
     )
-  }, [])
+    // Re-fetch from backend so all count surfaces reconcile (mentorStats, requests, mentorships)
+    loadMentorData()
+  }, [loadMentorData])
 
   const value = {
     mentorLoading,
