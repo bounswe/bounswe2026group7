@@ -94,35 +94,44 @@ public class FollowController {
 
     @GetMapping("/{id:\\d+}/followers")
     @Operation(summary = "List followers of a user",
-            description = "Paged list of users following the given user, newest follow first.")
+            description = "Paged list of users following the given user, newest follow first. "
+                    + "Mirrors GET /api/users/{id}'s privacy gate: admin's graph is never exposed; "
+                    + "mentees cannot view another mentee's graph.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paged followers list"),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Privacy gate (admin target / mentee→mentee)", content = @Content),
             @ApiResponse(responseCode = "404", description = "Target user not found", content = @Content)
     })
     public ResponseEntity<Page<UserSummary>> listFollowers(
             @Parameter(description = "User id whose followers to list") @PathVariable Long id,
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        Page<User> followers = followService.listFollowers(id, pageable);
+        Page<User> followers = followService.listFollowers(id, requesterId, pageable);
         return ResponseEntity.ok(followers.map(UserSummary::from));
     }
 
     @GetMapping("/{id:\\d+}/following")
     @Operation(summary = "List users a user is following",
-            description = "Paged list of users that the given user follows, newest follow first.")
+            description = "Paged list of users that the given user follows, newest follow first. "
+                    + "Same privacy gate as the followers list.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paged following list"),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Privacy gate (admin target / mentee→mentee)", content = @Content),
             @ApiResponse(responseCode = "404", description = "Target user not found", content = @Content)
     })
     public ResponseEntity<Page<UserSummary>> listFollowing(
             @Parameter(description = "User id whose following list to return") @PathVariable Long id,
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        Page<User> following = followService.listFollowing(id, pageable);
+        Page<User> following = followService.listFollowing(id, requesterId, pageable);
         return ResponseEntity.ok(following.map(UserSummary::from));
     }
 }

@@ -4,6 +4,7 @@ import com.group7.backend.config.JwtAuthenticationFilter;
 import com.group7.backend.config.SecurityConfig;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.User;
+import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.exception.SelfFollowException;
 import com.group7.backend.service.FollowResult;
@@ -139,7 +140,7 @@ class FollowControllerTest {
         mockMenteeJwt("alice-token", 1L);
         Mentee follower = mentee(2L, "Bob");
         Page<User> page = new PageImpl<>(List.<User>of(follower));
-        when(followService.listFollowers(eq(1L), any(Pageable.class))).thenReturn(page);
+        when(followService.listFollowers(eq(1L), eq(1L), any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/users/1/followers")
                         .header("Authorization", "Bearer alice-token"))
@@ -153,7 +154,7 @@ class FollowControllerTest {
     void listFollowers_clampsExcessiveSize() throws Exception {
         mockMenteeJwt("alice-token", 1L);
         Page<User> empty = new PageImpl<>(List.<User>of());
-        when(followService.listFollowers(eq(1L), any(Pageable.class))).thenReturn(empty);
+        when(followService.listFollowers(eq(1L), eq(1L), any(Pageable.class))).thenReturn(empty);
 
         mockMvc.perform(get("/api/users/1/followers")
                         .param("size", "100000")
@@ -164,7 +165,7 @@ class FollowControllerTest {
         // saw a Pageable with size <= 100.
         org.mockito.ArgumentCaptor<Pageable> captor =
                 org.mockito.ArgumentCaptor.forClass(Pageable.class);
-        verify(followService).listFollowers(eq(1L), captor.capture());
+        verify(followService).listFollowers(eq(1L), eq(1L), captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().getPageSize())
                 .isLessThanOrEqualTo(100);
     }
@@ -172,12 +173,26 @@ class FollowControllerTest {
     @Test
     void listFollowers_missingTarget_returns404() throws Exception {
         mockMenteeJwt("alice-token", 1L);
-        when(followService.listFollowers(eq(9999L), any(Pageable.class)))
+        when(followService.listFollowers(eq(9999L), eq(1L), any(Pageable.class)))
                 .thenThrow(new ResourceNotFoundException("User not found with id: 9999"));
 
         mockMvc.perform(get("/api/users/9999/followers")
                         .header("Authorization", "Bearer alice-token"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void listFollowers_privacyGate_returns403() throws Exception {
+        // Mentee→other-mentee follow-graph access is rejected by the
+        // service, mapped to 403 by ProfileNotVisibleExceptionHandler.
+        mockMenteeJwt("alice-token", 1L);
+        when(followService.listFollowers(eq(2L), eq(1L), any(Pageable.class)))
+                .thenThrow(new ProfileNotVisibleException(
+                        "Mentees cannot view other mentees' follow graph"));
+
+        mockMvc.perform(get("/api/users/2/followers")
+                        .header("Authorization", "Bearer alice-token"))
+                .andExpect(status().isForbidden());
     }
 
     // ── GET /following ───────────────────────────────────────────────────────
@@ -187,7 +202,7 @@ class FollowControllerTest {
         mockMenteeJwt("alice-token", 1L);
         Mentee following = mentee(3L, "Carol");
         Page<User> page = new PageImpl<>(List.<User>of(following));
-        when(followService.listFollowing(eq(1L), any(Pageable.class))).thenReturn(page);
+        when(followService.listFollowing(eq(1L), eq(1L), any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/users/1/following")
                         .header("Authorization", "Bearer alice-token"))

@@ -1,9 +1,12 @@
 package com.group7.backend.service;
 
+import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Follow;
 import com.group7.backend.entity.FollowId;
 import com.group7.backend.entity.Mentee;
+import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.User;
+import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.exception.SelfFollowException;
 import com.group7.backend.repository.FollowRepository;
@@ -20,6 +23,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -129,10 +133,11 @@ class FollowServiceTest {
     // ── listFollowers / listFollowing ────────────────────────────────────────
 
     @Test
-    void listFollowers_returns404_whenUserMissing() {
-        when(userRepository.existsById(ALICE)).thenReturn(false);
+    void listFollowers_returns404_whenTargetMissing() {
+        when(userRepository.findById(ALICE)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> followService.listFollowers(ALICE, PageRequest.of(0, 10)))
+        assertThatThrownBy(() ->
+                followService.listFollowers(ALICE, BOB, PageRequest.of(0, 10)))
                 .isInstanceOf(ResourceNotFoundException.class);
 
         verify(followRepository, never())
@@ -140,8 +145,56 @@ class FollowServiceTest {
     }
 
     @Test
+    void listFollowers_returns403_whenTargetIsAdmin() {
+        // Mirrors getProfileById's admin block — admin's follow graph is
+        // never exposed.
+        when(userRepository.findById(ALICE)).thenReturn(Optional.of(admin(ALICE)));
+
+        assertThatThrownBy(() ->
+                followService.listFollowers(ALICE, BOB, PageRequest.of(0, 10)))
+                .isInstanceOf(ProfileNotVisibleException.class)
+                .hasMessageContaining("Admin");
+
+        verify(followRepository, never())
+                .findByIdFolloweeIdOrderByCreatedAtDescIdFollowerIdDesc(anyLong(), any());
+    }
+
+    @Test
+    void listFollowers_returns403_whenMenteeViewsAnotherMentee() {
+        // Mirrors getProfileById line 244: mentees cannot enumerate other
+        // mentees through any surface, including the follow graph.
+        when(userRepository.findById(BOB)).thenReturn(Optional.of(mentee(BOB)));
+        when(userRepository.findById(ALICE)).thenReturn(Optional.of(mentee(ALICE)));
+
+        assertThatThrownBy(() ->
+                followService.listFollowers(BOB, ALICE, PageRequest.of(0, 10)))
+                .isInstanceOf(ProfileNotVisibleException.class)
+                .hasMessageContaining("Mentees cannot view other mentees");
+
+        verify(followRepository, never())
+                .findByIdFolloweeIdOrderByCreatedAtDescIdFollowerIdDesc(anyLong(), any());
+    }
+
+    @Test
+    void listFollowers_allowsMenteeViewingOwnGraph() {
+        // The mentee→mentee gate explicitly excludes self (matches
+        // getProfileById's targetId.equals(requesterId) carve-out).
+        Pageable page = PageRequest.of(0, 10);
+        Mentee self = mentee(ALICE);
+        when(userRepository.findById(ALICE)).thenReturn(Optional.of(self));
+        when(followRepository.findByIdFolloweeIdOrderByCreatedAtDescIdFollowerIdDesc(ALICE, page))
+                .thenReturn(new PageImpl<>(List.of(), page, 0));
+
+        Page<User> result = followService.listFollowers(ALICE, ALICE, page);
+
+        assertThat(result.getTotalElements()).isZero();
+    }
+
+    @Test
     void listFollowers_batchFetchesUsersWithSingleFindAllById() {
         Pageable page = PageRequest.of(0, 10);
+        Mentor target = mentor(ALICE);
+        Mentor requester = mentor(99L);
         Mentee bob = mentee(BOB);
         Mentee carol = mentee(CAROL);
         Page<Follow> follows = new PageImpl<>(List.of(
@@ -149,12 +202,13 @@ class FollowServiceTest {
                 follow(CAROL, ALICE)
         ), page, 2);
 
-        when(userRepository.existsById(ALICE)).thenReturn(true);
+        when(userRepository.findById(ALICE)).thenReturn(Optional.of(target));
+        when(userRepository.findById(99L)).thenReturn(Optional.of(requester));
         when(followRepository.findByIdFolloweeIdOrderByCreatedAtDescIdFollowerIdDesc(ALICE, page))
                 .thenReturn(follows);
         when(userRepository.findAllById(any())).thenReturn(List.of(bob, carol));
 
-        Page<User> result = followService.listFollowers(ALICE, page);
+        Page<User> result = followService.listFollowers(ALICE, 99L, page);
 
         assertThat(result.getTotalElements()).isEqualTo(2);
         assertThat(result.getContent()).extracting(User::getId).containsExactly(BOB, CAROL);
@@ -163,8 +217,38 @@ class FollowServiceTest {
     }
 
     @Test
+    void listFollowers_filtersAdminEntriesFromContent() {
+        // Defence-in-depth: production flows don't put admins in the graph,
+        // but if one ever appears, surfacing it would expose admin presence.
+        Pageable page = PageRequest.of(0, 10);
+        Mentor target = mentor(ALICE);
+        Mentor requester = mentor(99L);
+        Mentee bob = mentee(BOB);
+        Admin sneaky = admin(CAROL);
+        Page<Follow> follows = new PageImpl<>(List.of(
+                follow(BOB, ALICE),
+                follow(CAROL, ALICE)
+        ), page, 2);
+
+        when(userRepository.findById(ALICE)).thenReturn(Optional.of(target));
+        when(userRepository.findById(99L)).thenReturn(Optional.of(requester));
+        when(followRepository.findByIdFolloweeIdOrderByCreatedAtDescIdFollowerIdDesc(ALICE, page))
+                .thenReturn(follows);
+        when(userRepository.findAllById(any())).thenReturn(List.of(bob, sneaky));
+
+        Page<User> result = followService.listFollowers(ALICE, 99L, page);
+
+        // Admin is dropped from the visible page; the totalElements value
+        // still reflects the raw row count (under-full pages are an
+        // accepted shape — see resolveOtherSide javadoc).
+        assertThat(result.getContent()).extracting(User::getId).containsExactly(BOB);
+    }
+
+    @Test
     void listFollowing_resolvesFolloweeIdsRatherThanFollowerIds() {
         Pageable page = PageRequest.of(0, 10);
+        Mentor target = mentor(ALICE);
+        Mentor requester = mentor(99L);
         Mentee bob = mentee(BOB);
         Mentee carol = mentee(CAROL);
         Page<Follow> follows = new PageImpl<>(List.of(
@@ -172,14 +256,25 @@ class FollowServiceTest {
                 follow(ALICE, CAROL)
         ), page, 2);
 
-        when(userRepository.existsById(ALICE)).thenReturn(true);
+        when(userRepository.findById(ALICE)).thenReturn(Optional.of(target));
+        when(userRepository.findById(99L)).thenReturn(Optional.of(requester));
         when(followRepository.findByIdFollowerIdOrderByCreatedAtDescIdFolloweeIdDesc(ALICE, page))
                 .thenReturn(follows);
         when(userRepository.findAllById(any())).thenReturn(List.of(bob, carol));
 
-        Page<User> result = followService.listFollowing(ALICE, page);
+        Page<User> result = followService.listFollowing(ALICE, 99L, page);
 
         assertThat(result.getContent()).extracting(User::getId).containsExactly(BOB, CAROL);
+    }
+
+    @Test
+    void listFollowing_returns403_whenMenteeViewsAnotherMentee() {
+        when(userRepository.findById(BOB)).thenReturn(Optional.of(mentee(BOB)));
+        when(userRepository.findById(ALICE)).thenReturn(Optional.of(mentee(ALICE)));
+
+        assertThatThrownBy(() ->
+                followService.listFollowing(BOB, ALICE, PageRequest.of(0, 10)))
+                .isInstanceOf(ProfileNotVisibleException.class);
     }
 
     // ── counts ───────────────────────────────────────────────────────────────
@@ -212,6 +307,24 @@ class FollowServiceTest {
         m.setLastName("L");
         m.setEmail("u" + id + "@ex.com");
         return m;
+    }
+
+    private static Mentor mentor(Long id) {
+        Mentor m = new Mentor();
+        m.setId(id);
+        m.setFirstName("M" + id);
+        m.setLastName("L");
+        m.setEmail("m" + id + "@ex.com");
+        return m;
+    }
+
+    private static Admin admin(Long id) {
+        Admin a = new Admin();
+        a.setId(id);
+        a.setFirstName("A" + id);
+        a.setLastName("L");
+        a.setEmail("a" + id + "@ex.com");
+        return a;
     }
 
     private static Follow follow(Long followerId, Long followeeId) {

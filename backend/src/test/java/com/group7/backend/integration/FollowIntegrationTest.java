@@ -292,6 +292,45 @@ class FollowIntegrationTest {
         assertThat(followRepository.count()).as("still exactly one row").isEqualTo(1L);
     }
 
+    // ── Privacy gate: mentee → other-mentee follow graph is blocked ────────
+
+    @Test
+    void menteeViewingAnotherMenteesFollowers_returns403() throws Exception {
+        // Mirror of UserService.getProfileById line 244: a mentee cannot
+        // enumerate another mentee's identity through any surface, including
+        // the follow graph. Without this gate the follow lists would be a
+        // backdoor around the existing search/profile rules (review
+        // finding #1).
+        String tokenA = registerAndLoginAsMentee("priv_mentee_a@test.com");
+        registerAndLoginAsMentee("priv_mentee_b@test.com");
+        Long idB = userRepository.findByEmail("priv_mentee_b@test.com").orElseThrow().getId();
+
+        mockMvc.perform(get("/api/users/" + idB + "/followers")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/users/" + idB + "/following")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void menteeViewingOwnFollowers_isAllowed() throws Exception {
+        // The gate's self-carve-out (matches getProfileById's
+        // targetId.equals(requesterId) condition) lets a mentee see their
+        // own follower list — the count UI on /me would otherwise break.
+        String token = registerAndLoginAsMentee("priv_self@test.com");
+        Long id = userRepository.findByEmail("priv_self@test.com").orElseThrow().getId();
+
+        mockMvc.perform(get("/api/users/" + id + "/followers")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/users/" + id + "/following")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private record Pair(String tokenA, String tokenB, Long idA, Long idB) {
@@ -309,16 +348,25 @@ class FollowIntegrationTest {
     }
 
     private String registerAndLogin(String email) throws Exception {
+        // Default: register as mentor so the profile-detail count assertions
+        // don't trip the mentee→mentee privacy gate at
+        // UserService.getProfileById. Most scenarios in this test exercise
+        // the role-agnostic graph mechanics; the privacy-gate scenario
+        // explicitly opts into mentees via {@link #registerAndLoginAsMentee}.
+        return registerAndLoginAs(email, true);
+    }
+
+    private String registerAndLoginAsMentee(String email) throws Exception {
+        return registerAndLoginAs(email, false);
+    }
+
+    private String registerAndLoginAs(String email, boolean isMentor) throws Exception {
         RegisterRequest req = new RegisterRequest();
         req.setFirstName("Follow");
         req.setLastName("Tester");
         req.setEmail(email);
         req.setPassword("Password1");
-        // Register as mentors so the profile-detail count assertions don't
-        // trip the mentee→mentee privacy gate at UserService.getProfileById.
-        // The follow graph itself is role-agnostic; this is a test-side
-        // simplification, not a coverage gap.
-        req.setIsMentor(true);
+        req.setIsMentor(isMentor);
         mockMvc.perform(post("/api/auth/register")
                         .contentType("application/json")
                         .content(objectMapper.writeValueAsString(req)))
