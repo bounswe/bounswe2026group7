@@ -270,6 +270,39 @@ export async function saveMentorAvailability(data) {
   return handleResponse(res)
 }
 
+// ── Mentorship messages ────────────────────────────────────────────────────
+// Backend: MessageController @ /api/mentorships/{mentorshipId}/messages
+
+export async function getMentorshipMessages(mentorshipId, page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(
+    `${BASE_URL}/mentorships/${mentorshipId}/messages?page=${page}&size=${size}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  return handleResponse(res)
+}
+
+export async function sendMentorshipMessage(mentorshipId, { content, attachmentId } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { content }
+  if (attachmentId) body.attachmentId = attachmentId
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+export async function markMentorshipMessagesRead(mentorshipId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/messages/read`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 export async function getMenteeAvailability() {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentee-availability`, {
