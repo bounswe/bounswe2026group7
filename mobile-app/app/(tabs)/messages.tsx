@@ -810,7 +810,7 @@ function ConversationRow({
   item,
   onPress,
 }: {
-  item: MentorshipConversation;
+  item: ConversationItem;
   onPress: () => void;
 }) {
   return (
