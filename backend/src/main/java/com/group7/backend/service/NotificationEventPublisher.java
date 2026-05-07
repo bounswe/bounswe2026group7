@@ -68,6 +68,33 @@ public class NotificationEventPublisher {
         );
     }
 
+    public void publishTaskAssigned(Long menteeId, String taskTitle) {
+        publish(
+                menteeId,
+                NotificationType.TASK_ASSIGNED,
+                "New Task Assigned",
+                "Your mentor assigned you a new task: " + taskTitle
+        );
+    }
+
+    public void publishTaskSubmitted(Long mentorId, String menteeName, String taskTitle) {
+        publish(
+                mentorId,
+                NotificationType.TASK_SUBMITTED,
+                "Task Submitted",
+                menteeName + " submitted their work for task: " + taskTitle
+        );
+    }
+
+    public void publishTaskReviewed(Long menteeId, String taskTitle, boolean needsRevision) {
+        publish(
+                menteeId,
+                NotificationType.TASK_REVIEWED,
+                needsRevision ? "Task Needs Revision" : "Task Completed",
+                "Your mentor reviewed your submission for task: " + taskTitle
+        );
+    }
+
     public void publish(Long recipientId, NotificationType type, String title, String body) {
         applicationEventPublisher.publishEvent(new NotificationCreatedEvent(recipientId, type, title, body));
     }
