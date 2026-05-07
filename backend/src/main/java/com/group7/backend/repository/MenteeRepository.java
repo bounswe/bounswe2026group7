@@ -12,6 +12,16 @@ import java.util.List;
 public interface MenteeRepository extends JpaRepository<Mentee, Long> {
 
     /**
+     * IDs of all unattached mentees, ordered for test determinism. Used by
+     * {@code MatchNotificationScheduler} as the eligibility list — only
+     * unattached mentees are candidates for a "match found" notification.
+     * Returns just IDs to keep the per-tick memory bounded; the processor
+     * re-loads each mentee in its own transaction for the race re-check.
+     */
+    @Query("SELECT m.id FROM Mentee m WHERE m.activeMentorId IS NULL ORDER BY m.id")
+    List<Long> findUnattachedIds();
+
+    /**
      * Shared JPQL — see {@link MentorRepository#SEARCH_JPQL} for rationale.
      */
     String SEARCH_JPQL = """

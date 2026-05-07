@@ -32,7 +32,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -62,7 +61,6 @@ class MatchingServiceTest {
     @Mock private MentorRepository mentorRepository;
     @Mock private AvailabilitySlotRepository availabilitySlotRepository;
     @Mock private MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
-    @Mock private NotificationEventPublisher notificationEventPublisher;
 
     private MatchingService matchingService;
 
@@ -76,7 +74,7 @@ class MatchingServiceTest {
                 menteeRepository, mentorRepository,
                 availabilitySlotRepository, menteeAvailabilitySlotRepository,
                 new RuleBasedMentorRanker(),  // real ranker — pure function over already-loaded entities
-                notificationEventPublisher);
+                /*rankingWindow*/ 200);
 
         pageable = PageRequest.of(0, 20);
 
@@ -363,46 +361,44 @@ class MatchingServiceTest {
         verify(menteeAvailabilitySlotRepository, never()).findByMenteeId(anyLong());
     }
 
-    // ── Match-found notification gating ───────────────────────────────────
+    // ── Read paths are side-effect-free (#273 regression) ─────────────────
+    // Removing the publishMatchFound dependency from MatchingService is a
+    // structural change: the service no longer holds a NotificationEventPublisher
+    // field, so it cannot publish anything regardless of input. The tests below
+    // confirm the public methods still return the expected output without
+    // throwing; the runtime "no notification row appears" assertion lives in
+    // MatchNotificationIntegrationTest, where the full Spring stack confirms
+    // browse never persists a Notification row. The seven previous notification-
+    // firing tests moved to MatchNotificationProcessorTest.
 
     @Test
-    void rankMentors_firesNotification_onPageZeroWithResults() {
+    void getTopMentors_returnsRankedListWithoutSideEffects() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         stubMentorSearch(List.of(mentor));
 
         Page<MentorMatchResponse> result = matchingService.getTopMentors(1L, null, PageRequest.of(0, 20));
 
         assertThat(result.getContent()).hasSize(1);
-        verify(notificationEventPublisher)
-                .publishMatchFound(eq(1L), eq(result.getContent().get(0).getFirstName()));
     }
 
     @Test
-    void rankMentors_doesNotFireNotification_onSubsequentPages() {
-        List<Mentor> manyMentors = java.util.stream.IntStream.range(0, 30).mapToObj(i -> {
-            Mentor m = new Mentor();
-            m.setId((long) (10 + i));
-            m.setMaxMenteeCapacity(3);
-            m.setCurrentMenteeCount(0);
-            return m;
-        }).toList();
+    void getTopMentorsList_returnsRankedListWithoutSideEffects() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        stubMentorSearch(manyMentors);
+        stubMentorSearch(List.of(mentor));
 
-        // Page 1 (offset 20) → no notification because we're past page 0.
-        matchingService.getTopMentors(1L, null, PageRequest.of(1, 20));
+        List<MentorMatchResponse> result = matchingService.getTopMentorsList(1L, null);
 
-        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
+        assertThat(result).hasSize(1);
     }
 
     @Test
-    void rankMentors_doesNotFireNotification_whenEmpty() {
-        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        stubMentorSearch(List.of());
+    void getCandidateMentees_returnsCandidateListWithoutSideEffects() {
+        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
+        stubMenteeSearch(List.of(mentee));
 
-        matchingService.getTopMentors(1L, null, pageable);
+        Page<MenteeCandidateResponse> result = matchingService.getCandidateMentees(1L, null, pageable);
 
-        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
+        assertThat(result.getContent()).hasSize(1);
     }
 
     // ── Candidate mentees: full capacity / mentor not found ───────────────
@@ -500,31 +496,6 @@ class MatchingServiceTest {
         assertThat(result.getTotalElements()).isEqualTo(6);
     }
 
-    @Test
-    void candidateMentees_firesNotification_onPageZeroWithResults() {
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        stubMenteeSearch(List.of(mentee));
-
-        matchingService.getCandidateMentees(1L, null, PageRequest.of(0, 20));
-
-        verify(notificationEventPublisher).publishMatchFound(eq(1L), anyString());
-    }
-
-    @Test
-    void candidateMentees_doesNotFireNotification_onSubsequentPages() {
-        List<Mentee> manyMentees = java.util.stream.IntStream.range(0, 30).mapToObj(i -> {
-            Mentee me = new Mentee();
-            me.setId((long) (100 + i));
-            return me;
-        }).toList();
-        when(mentorRepository.findById(1L)).thenReturn(Optional.of(mentor));
-        stubMenteeSearch(manyMentees);
-
-        matchingService.getCandidateMentees(1L, null, PageRequest.of(1, 20));
-
-        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
-    }
-
     // ── Candidate mentees: DTO mapping ────────────────────────────────────
 
     @Test
@@ -565,24 +536,13 @@ class MatchingServiceTest {
     }
 
     @Test
-    void getTopMentorsList_firesNotification_onNonEmpty() {
-        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
-        stubMentorSearch(List.of(mentor));
-
-        matchingService.getTopMentorsList(1L, null);
-
-        verify(notificationEventPublisher).publishMatchFound(eq(1L), anyString());
-    }
-
-    @Test
-    void getTopMentorsList_doesNotFireNotification_onEmpty() {
+    void getTopMentorsList_returnsEmptyListWhenNoCandidates() {
         when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
         stubMentorSearch(List.of());
 
         List<MentorMatchResponse> result = matchingService.getTopMentorsList(1L, null);
 
         assertThat(result).isEmpty();
-        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
     }
 
     // ── matchesMentorPreferences edge cases ───────────────────────────────
@@ -655,10 +615,76 @@ class MatchingServiceTest {
         assertThat(MatchingService.matchesMentorPreferences(m, me)).isTrue();
     }
 
+    // ── Pure rank methods: precondition guards (#273) ─────────────────────
+    // The package-private rankMentorsFor / findCandidateMenteesFor were
+    // introduced so MatchNotificationProcessor can skip the redundant
+    // findById + eligibility check that the public path already does. The
+    // precondition guards turn caller-side bugs into loud IllegalStateExceptions
+    // rather than letting the methods silently rank for an ineligible user.
+
+    @Test
+    void rankMentorsFor_throwsIllegalStateException_whenMenteeIsNull() {
+        assertThatThrownBy(() -> matchingService.rankMentorsFor(null, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must not be null");
+    }
+
+    @Test
+    void rankMentorsFor_throwsIllegalStateException_whenMenteeHasActiveMentor() {
+        Mentee ineligible = new Mentee();
+        ineligible.setId(42L);
+        ineligible.setActiveMentorId(99L);
+
+        assertThatThrownBy(() -> matchingService.rankMentorsFor(ineligible, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("active mentor");
+    }
+
+    @Test
+    void rankMentorsFor_returnsRankedListForEligibleMentee() {
+        // Sanity: with a valid mentee the method delegates to the same SQL +
+        // ranker pipeline that getTopMentors uses.
+        stubMentorSearch(List.of(mentor));
+
+        List<MentorMatchResponse> result = matchingService.rankMentorsFor(mentee, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(mentor.getId());
+    }
+
+    @Test
+    void findCandidateMenteesFor_throwsIllegalStateException_whenMentorIsNull() {
+        assertThatThrownBy(() -> matchingService.findCandidateMenteesFor(null, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must not be null");
+    }
+
+    @Test
+    void findCandidateMenteesFor_throwsIllegalStateException_whenMentorAtFullCapacity() {
+        Mentor ineligible = new Mentor();
+        ineligible.setId(42L);
+        ineligible.setMaxMenteeCapacity(2);
+        ineligible.setCurrentMenteeCount(2);  // at cap
+
+        assertThatThrownBy(() -> matchingService.findCandidateMenteesFor(ineligible, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("full capacity");
+    }
+
+    @Test
+    void findCandidateMenteesFor_returnsCandidatesForEligibleMentor() {
+        stubMenteeSearch(List.of(mentee));
+
+        List<MenteeCandidateResponse> result = matchingService.findCandidateMenteesFor(mentor, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(mentee.getId());
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     // The matching path uses findRankingCandidates (List, no count) — see
-    // MatchingService.rankAvailableMentors / getCandidateMentees. Tests of the
+    // MatchingService.rankMentorsForId / getCandidateMentees. Tests of the
     // SQL-side filter shape still use searchByFilters by name to capture the
     // semantic intent (verify(... searchByFilters(...))) — those verifications
     // were rewritten to target findRankingCandidates after the S1 refactor.
