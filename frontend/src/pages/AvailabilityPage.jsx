@@ -102,7 +102,6 @@ export default function AvailabilityPage() {
       .then(data => {
         if (cancelled) return
         const slots = Array.isArray(data) ? data : data?.slots ?? []
-        if (data?.sessionDurationMinutes) setDuration(data.sessionDurationMinutes)
         if (slots.length === 0) return
         const byDay = {}
         for (const s of slots) {
@@ -153,8 +152,6 @@ export default function AvailabilityPage() {
     }
 
     const payload = {
-      timezone: USER_TIMEZONE,
-      sessionDurationMinutes: duration,
       slots: days
         .filter(d => d.on)
         .map(({ key, start, end }) => ({
