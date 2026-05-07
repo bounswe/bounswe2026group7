@@ -5,6 +5,13 @@ import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
 import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  loadNotificationPreferences,
+  saveNotificationPreferences,
+  type NotificationPreferenceKey,
+  type NotificationPreferences,
+} from '../../lib/notificationPreferences';
+import {
   View,
   Text,
   TextInput,
@@ -107,6 +114,134 @@ function TokenEditor({
           </View>
         ))}
       </View>
+    </View>
+  );
+}
+
+const NOTIFICATION_PREFERENCE_ITEMS: {
+  key: NotificationPreferenceKey;
+  title: string;
+  description: string;
+}[] = [
+  {
+    key: 'message',
+    title: 'Messages',
+    description: 'Direct messages and chat activity from your mentorship conversations.',
+  },
+  {
+    key: 'meeting',
+    title: 'Meetings',
+    description: 'Meeting reminders, confirmations, and schedule-related updates.',
+  },
+  {
+    key: 'request',
+    title: 'Requests',
+    description: 'Mentorship request status changes such as accepted or rejected requests.',
+  },
+  {
+    key: 'task',
+    title: 'Tasks',
+    description: 'Task assignments, due reminders, and submission-related activity.',
+  },
+  {
+    key: 'feedback',
+    title: 'Feedback',
+    description: 'Mentor feedback, reviews, and follow-up guidance on submitted work.',
+  },
+];
+
+function NotificationPreferencesCard() {
+  const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<NotificationPreferenceKey | null>(null);
+
+  useEffect(() => {
+    const loadPreferences = async () => {
+      try {
+        const currentUserId = await SecureStore.getItemAsync('userId');
+        if (!currentUserId) {
+          return;
+        }
+
+        setUserId(currentUserId);
+        const storedPreferences = await loadNotificationPreferences(currentUserId);
+        setPreferences(storedPreferences);
+      } catch (error) {
+        console.error('Failed to load notification preferences:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPreferences();
+  }, []);
+
+  const handleToggle = async (key: NotificationPreferenceKey) => {
+    if (!userId || savingKey) {
+      return;
+    }
+
+    const nextPreferences = {
+      ...preferences,
+      [key]: !preferences[key],
+    };
+
+    setPreferences(nextPreferences);
+    setSavingKey(key);
+
+    try {
+      await saveNotificationPreferences(userId, nextPreferences);
+    } catch (error) {
+      console.error('Failed to save notification preferences:', error);
+      setPreferences(preferences);
+      Alert.alert('Error', 'Could not save notification preferences. Please try again.');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  return (
+    <View style={styles.preferenceCard}>
+      <Text style={styles.preferenceTitle}>Notification Preferences</Text>
+      <Text style={styles.preferenceSubtitle}>
+        Manage which notification categories stay enabled on this device. Preferences are stored locally until a backend settings endpoint is available.
+      </Text>
+
+      {loading ? (
+        <Text style={styles.preferenceLoadingText}>Loading preferences...</Text>
+      ) : (
+        NOTIFICATION_PREFERENCE_ITEMS.map((item) => {
+          const isSaving = savingKey === item.key;
+          const enabled = preferences[item.key];
+
+          return (
+            <View key={item.key} style={styles.preferenceRow}>
+              <View style={styles.preferenceTextBlock}>
+                <Text style={styles.preferenceRowTitle}>{item.title}</Text>
+                <Text style={styles.preferenceRowDescription}>{item.description}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.preferenceToggle,
+                  enabled ? styles.preferenceToggleOn : styles.preferenceToggleOff,
+                  isSaving && styles.preferenceToggleDisabled,
+                ]}
+                onPress={() => handleToggle(item.key)}
+                disabled={isSaving || !userId}
+              >
+                <View
+                  style={[
+                    styles.preferenceToggleThumb,
+                    enabled ? styles.preferenceToggleThumbRight : styles.preferenceToggleThumbLeft,
+                  ]}
+                />
+              </TouchableOpacity>
+            </View>
+          );
+        })
+      )}
     </View>
   );
 }
@@ -362,6 +497,8 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             </TouchableOpacity>
           </View>
 
+          <NotificationPreferencesCard />
+
           <View style={styles.formCardMentee}>
             <Text style={styles.inputLabel}>Full Name</Text>
             <TextInput style={styles.input} value={fullName} onChangeText={setFullName} />
@@ -578,6 +715,8 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             </TouchableOpacity>
           </View>
 
+          <NotificationPreferencesCard />
+
           <View style={styles.formCardMentor}>
             <Text style={styles.inputLabel}>Display Name</Text>
             <TextInput style={styles.input} value={displayName} onChangeText={setDisplayName} />
@@ -685,6 +824,83 @@ const styles = StyleSheet.create({
   },
   quickActionIcon: { fontSize: 24, marginBottom: 6 },
   quickActionText: { color: '#2F563C', fontSize: 13, fontWeight: '700' },
+  preferenceCard: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#E2DDD5',
+  },
+  preferenceTitle: {
+    color: '#23372B',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  preferenceSubtitle: {
+    color: '#7E7368',
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 14,
+  },
+  preferenceLoadingText: {
+    color: '#7E7368',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#EEE8DE',
+    gap: 14,
+  },
+  preferenceTextBlock: {
+    flex: 1,
+  },
+  preferenceRowTitle: {
+    color: '#2F563C',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  preferenceRowDescription: {
+    color: '#7E7368',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  preferenceToggle: {
+    width: 54,
+    height: 31,
+    borderRadius: 16,
+    position: 'relative',
+  },
+  preferenceToggleOn: {
+    backgroundColor: '#4B7B57',
+  },
+  preferenceToggleOff: {
+    backgroundColor: '#D8D2C7',
+  },
+  preferenceToggleDisabled: {
+    opacity: 0.55,
+  },
+  preferenceToggleThumb: {
+    position: 'absolute',
+    top: 3,
+    width: 25,
+    height: 25,
+    borderRadius: 12.5,
+    backgroundColor: '#FFFFFF',
+  },
+  preferenceToggleThumbLeft: {
+    left: 3,
+  },
+  preferenceToggleThumbRight: {
+    right: 3,
+  },
   sectionHeaderText: { fontSize: 12, fontWeight: '700', letterSpacing: 2, color: '#8B8176', marginTop: 8, marginBottom: 12 },
   emptyRequestsCard: { backgroundColor: '#F8F6F2', borderRadius: 18, padding: 18, alignItems: 'center', marginBottom: 16 },
   emptyRequestsText: { color: '#9A8F82', fontSize: 14, fontWeight: '500' },

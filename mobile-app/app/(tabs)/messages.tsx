@@ -1,18 +1,29 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  Linking,
   ScrollView,
-  TouchableOpacity,
+  StyleSheet,
+  Text,
   TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+
+import apiClient from '../../api/client';
 import { useRole } from '../../components/RoleContext';
 
-type Conversation = {
-  id: string;
-  name: string;
+type MentorshipConversation = {
+  id: number;
+  counterpartId: number;
+  counterpartName: string;
   subtitle?: string;
   preview: string;
   time: string;
@@ -21,208 +32,140 @@ type Conversation = {
   initials: string;
   avatarBg: string;
   avatarText: string;
-  pinned?: boolean;
-  type?: 'mentor' | 'mentee' | 'support';
+  type: 'mentor' | 'mentee';
 };
 
-type Message = {
+type AttachmentSummary = {
+  id: string;
+  downloadUrl: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+};
+
+type ChatMessage = {
   id: string;
   sender: 'me' | 'them' | 'system';
   text: string;
   time?: string;
   attachment?: {
+    id?: string;
     name: string;
     meta: string;
+    downloadUrl?: string;
+    contentType?: string;
   };
 };
 
-const mentorConversations: Conversation[] = [
-  {
-    id: 'ovgu',
-    name: 'Övgü Su Afşar',
-    preview: "Got it! I'll push the changes tonight.",
-    time: 'now',
-    unread: 2,
-    online: true,
-    initials: 'ÖA',
-    avatarBg: '#D4E8DC',
-    avatarText: '#2D5A3D',
-    type: 'mentee',
-  },
-  {
-    id: 'zeynep',
-    name: 'Zeynep Demir',
-    preview: "Can we move Thursday's session?",
-    time: '14m',
-    unread: 1,
-    online: false,
-    initials: 'ZD',
-    avatarBg: '#E8E4D4',
-    avatarText: '#5A4E2D',
-    type: 'mentee',
-  },
-  {
-    id: 'ali',
-    name: 'Ali Çetin',
-    preview: 'Thanks for the feedback on my PR!',
-    time: '1h',
-    unread: 0,
-    online: true,
-    initials: 'AC',
-    avatarBg: '#D4DCE8',
-    avatarText: '#2D3A5A',
-    type: 'mentee',
-  },
-  {
-    id: 'merve',
-    name: 'Merve Rüzgar',
-    preview: 'Sent the final project draft.',
-    time: '3h',
-    unread: 0,
-    online: false,
-    initials: 'MR',
-    avatarBg: '#E8D4DC',
-    avatarText: '#5A2D3A',
-    type: 'mentee',
-  },
-];
+type PendingAttachment = {
+  uri: string;
+  name: string;
+  type: string;
+  size?: number;
+};
 
-const menteeConversations: Conversation[] = [
-  {
-    id: 'burak',
-    name: 'Burak Afşar',
-    subtitle: 'Your Mentor',
-    preview: "Also — here's a guide on writing clean component APIs.",
-    time: 'now',
-    unread: 1,
-    online: true,
-    initials: 'BA',
-    avatarBg: '#D4E8DC',
-    avatarText: '#2D5A3D',
-    pinned: true,
-    type: 'mentor',
-  },
-  {
-    id: 'mentornet',
-    name: 'MentorNet',
-    subtitle: 'Support',
-    preview: 'Your weekly progress report is ready.',
-    time: '1h',
-    unread: 1,
-    online: false,
-    initials: 'MN',
-    avatarBg: '#E8E4D4',
-    avatarText: '#5A4E2D',
-    type: 'support',
-  },
-  {
-    id: 'ayse',
-    name: 'Ayşe Yıldız',
-    subtitle: 'Mentor (ML)',
-    preview: 'Happy to help if you have questions!',
-    time: '2d',
-    unread: 0,
-    online: true,
-    initials: 'AY',
-    avatarBg: '#E8D4E8',
-    avatarText: '#5A2D5A',
-    type: 'mentor',
-  },
-];
+function formatRelativeTime(iso?: string | null) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
 
-const mentorChatMessages: Message[] = [
-  { id: '1', sender: 'system', text: 'Today, 14:18' },
-  {
-    id: '2',
-    sender: 'them',
-    text: 'Hey! I finished the FlatList implementation. Should I open a PR?',
-    time: '14:18',
-  },
-  {
-    id: '3',
-    sender: 'me',
-    text: 'Yes, go ahead! Make sure you add prop types and a loading state before you open it.',
-    time: '14:21',
-  },
-  {
-    id: '4',
-    sender: 'them',
-    text: "Got it! I'll push the changes tonight.",
-    time: '14:23',
-  },
-  {
-    id: '5',
-    sender: 'me',
-    text: "Also — here's a guide on writing clean component APIs. Worth a read before the PR.",
-    time: '14:25',
-    attachment: {
-      name: 'clean-component-apis.pdf',
-      meta: '180 KB · PDF',
-    },
-  },
-  { id: '6', sender: 'system', text: 'Session scheduled — Today at 15:00' },
-  {
-    id: '7',
-    sender: 'them',
-    text: 'Perfect, see you then!',
-    time: '14:27',
-  },
-];
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return 'now';
+  if (diffMinutes < 60) return `${diffMinutes}m`;
 
-const menteeChatMessages: Message[] = [
-  { id: '1', sender: 'system', text: 'Today, 14:18' },
-  {
-    id: '2',
-    sender: 'me',
-    text: 'Hey! I finished the FlatList implementation. Should I open a PR?',
-    time: '14:18',
-  },
-  {
-    id: '3',
-    sender: 'them',
-    text: 'Yes, go ahead! Make sure you add prop types and a loading state before you open it.',
-    time: '14:21',
-  },
-  {
-    id: '4',
-    sender: 'me',
-    text: "Got it! I'll push the changes tonight.",
-    time: '14:23',
-  },
-  {
-    id: '5',
-    sender: 'them',
-    text: "Also — here's a guide on writing clean component APIs. Worth a read before the PR.",
-    time: '14:25',
-    attachment: {
-      name: 'clean-component-apis.pdf',
-      meta: '180 KB · PDF',
-    },
-  },
-  { id: '6', sender: 'system', text: 'Session scheduled — Today at 15:00' },
-  {
-    id: '7',
-    sender: 'me',
-    text: 'Perfect, see you then!',
-    time: '14:27',
-  },
-];
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h`;
 
-const supportMessages: Message[] = [
-  { id: '1', sender: 'system', text: 'Today, 13:00 — Automated' },
-  {
-    id: '2',
-    sender: 'them',
-    text: "Hi Övgü! Here's your weekly progress summary.",
-    time: '13:00',
-  },
-  {
-    id: '3',
-    sender: 'them',
-    text: 'Keep it up! Your next session with Burak is tomorrow at 15:00. Anything you would like to prepare?',
-    time: '13:01',
-  },
-];
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d`;
+}
+
+function formatClock(iso?: string | null) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatAttachmentMeta(sizeBytes?: number, contentType?: string) {
+  const size = typeof sizeBytes === 'number'
+    ? sizeBytes >= 1024 * 1024
+      ? `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(sizeBytes / 1024))} KB`
+    : 'Unknown size';
+
+  const kind = contentType
+    ? contentType.includes('pdf')
+      ? 'PDF'
+      : contentType.includes('word')
+      ? 'DOCX'
+      : contentType.includes('text')
+      ? 'TXT'
+      : contentType.includes('image')
+      ? 'Image'
+      : contentType.toUpperCase()
+    : 'File';
+
+  return `${size} · ${kind}`;
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'U';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function avatarPalette(index: number) {
+  const palette = [
+    { bg: '#D4E8DC', text: '#2D5A3D' },
+    { bg: '#E8E4D4', text: '#5A4E2D' },
+    { bg: '#D4DCE8', text: '#2D3A5A' },
+    { bg: '#E8D4DC', text: '#5A2D3A' },
+  ];
+  return palette[index % palette.length];
+}
+
+function mapMessages(rawMessages: any[], currentUserId: number): ChatMessage[] {
+  const ordered = [...rawMessages].reverse();
+  const messages: ChatMessage[] = [];
+  let lastDayLabel = '';
+
+  for (const raw of ordered) {
+    const sentAt = raw.sentAt ? new Date(raw.sentAt) : null;
+    const dayLabel = sentAt && !Number.isNaN(sentAt.getTime())
+      ? sentAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      : '';
+
+    if (dayLabel && dayLabel !== lastDayLabel) {
+      messages.push({
+        id: `day-${dayLabel}`,
+        sender: 'system',
+        text: dayLabel,
+      });
+      lastDayLabel = dayLabel;
+    }
+
+    messages.push({
+      id: String(raw.id),
+      sender: raw.senderId === currentUserId ? 'me' : 'them',
+      text: raw.content,
+      time: formatClock(raw.sentAt),
+      attachment: raw.attachment
+        ? {
+            id: raw.attachment.id,
+            name: raw.attachment.filename,
+            meta: formatAttachmentMeta(raw.attachment.sizeBytes, raw.attachment.contentType),
+            downloadUrl: raw.attachment.downloadUrl,
+            contentType: raw.attachment.contentType,
+          }
+        : undefined,
+    });
+  }
+
+  return messages;
+}
 
 export default function MessagesScreen() {
   const { role } = useRole();
@@ -230,40 +173,289 @@ export default function MessagesScreen() {
   const params = useLocalSearchParams();
 
   const [search, setSearch] = useState('');
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [draft, setDraft] = useState('');
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [conversations, setConversations] = useState<MentorshipConversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<MentorshipConversation | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
 
-  const conversations = isMentor ? mentorConversations : menteeConversations;
+  useEffect(() => {
+    const loadConversations = async () => {
+      setListLoading(true);
+      try {
+        const storedUserId = await SecureStore.getItemAsync('userId');
+        const parsedUserId = storedUserId ? Number(storedUserId) : null;
+        setCurrentUserId(parsedUserId);
 
-  // connection-profile'dan "Open Messages" ile gelindiyse ilgili conversation'ı otomatik aç
+        const mentorshipsRes = await apiClient.get('/mentorships');
+        const mentorships = mentorshipsRes.data ?? [];
+
+        const enriched = await Promise.all(
+          mentorships.map(async (mentorship: any, index: number) => {
+            const counterpartName = isMentor
+              ? mentorship.menteeFirstName
+              : mentorship.mentorFirstName;
+            const counterpartId = isMentor
+              ? mentorship.menteeId
+              : mentorship.mentorId;
+            const colors = avatarPalette(index);
+
+            let preview = 'No messages yet';
+            let time = '';
+            try {
+              const threadRes = await apiClient.get(`/mentorships/${mentorship.id}/messages?page=0&size=1`);
+              const latest = threadRes.data?.content?.[0];
+              if (latest) {
+                preview = latest.attachment
+                  ? `${latest.content || 'Attachment'} · ${latest.attachment.filename}`
+                  : latest.content;
+                time = formatRelativeTime(latest.sentAt);
+              }
+            } catch {
+              // Keep list usable even if preview fetch fails for one mentorship.
+            }
+
+            return {
+              id: mentorship.id,
+              counterpartId,
+              counterpartName: counterpartName || 'Unknown User',
+              subtitle: isMentor ? 'Your Mentee' : 'Your Mentor',
+              preview,
+              time,
+              unread: 0,
+              online: false,
+              initials: getInitials(counterpartName || 'Unknown User'),
+              avatarBg: colors.bg,
+              avatarText: colors.text,
+              type: isMentor ? 'mentee' : 'mentor',
+            } satisfies MentorshipConversation;
+          })
+        );
+
+        setConversations(enriched);
+      } catch (error) {
+        console.error('Failed to load conversations:', error);
+        Alert.alert('Error', 'Could not load your conversations.');
+      } finally {
+        setListLoading(false);
+      }
+    };
+
+    loadConversations();
+  }, [isMentor]);
+
   useEffect(() => {
     const openWith = Array.isArray(params.openWith) ? params.openWith[0] : params.openWith;
-    if (!openWith) return;
-    const match = conversations.find((c) =>
-      c.name.toLowerCase().includes(openWith.toLowerCase())
+    if (!openWith || conversations.length === 0) return;
+
+    const match = conversations.find((conversation) =>
+      conversation.counterpartName.toLowerCase().includes(String(openWith).toLowerCase())
     );
-    if (match) setSelectedConversation(match);
+    if (match) {
+      setSelectedConversation(match);
+    }
   }, [params.openWith, conversations]);
+
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (!selectedConversation || currentUserId == null) {
+        return;
+      }
+
+      setThreadLoading(true);
+      try {
+        const res = await apiClient.get(`/mentorships/${selectedConversation.id}/messages?page=0&size=100`);
+        const rawMessages = res.data?.content ?? [];
+        setMessages(mapMessages(rawMessages, currentUserId));
+        await apiClient.patch(`/mentorships/${selectedConversation.id}/messages/read`).catch(() => undefined);
+      } catch (error) {
+        console.error('Failed to load thread:', error);
+        Alert.alert('Error', 'Could not load the message thread.');
+      } finally {
+        setThreadLoading(false);
+      }
+    };
+
+    loadMessages();
+  }, [selectedConversation, currentUserId]);
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return conversations;
     return conversations.filter(
       (item) =>
-        item.name.toLowerCase().includes(q) ||
+        item.counterpartName.toLowerCase().includes(q) ||
         item.preview.toLowerCase().includes(q) ||
         item.subtitle?.toLowerCase().includes(q)
     );
   }, [conversations, search]);
 
-  const currentMessages = useMemo(() => {
-    if (!selectedConversation) return [];
-    if (isMentor) return mentorChatMessages;
-    if (selectedConversation.type === 'support') return supportMessages;
-    return menteeChatMessages;
-  }, [isMentor, selectedConversation]);
-
   const titleLine = isMentor ? 'Your mentees.' : 'Your mentor.';
+
+  const pickImageAttachment = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow photo library access to attach images.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets?.[0]) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    setPendingAttachment({
+      uri: asset.uri,
+      name: asset.fileName || `image-${Date.now()}.jpg`,
+      type: asset.mimeType || 'image/jpeg',
+      size: asset.fileSize,
+    });
+  };
+
+  const pickDocumentAttachment = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain',
+        'image/*',
+      ],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+
+    if (result.canceled || !result.assets?.[0]) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    setPendingAttachment({
+      uri: asset.uri,
+      name: asset.name,
+      type: asset.mimeType || 'application/octet-stream',
+      size: asset.size,
+    });
+  };
+
+  const chooseAttachment = () => {
+    Alert.alert('Attach file', 'Choose what you want to attach.', [
+      { text: 'Photo', onPress: pickImageAttachment },
+      { text: 'Document', onPress: pickDocumentAttachment },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const sendMessage = async () => {
+    if (!selectedConversation || sending) {
+      return;
+    }
+
+    const trimmedDraft = draft.trim();
+    if (!trimmedDraft && !pendingAttachment) {
+      return;
+    }
+
+    setSending(true);
+    try {
+      let uploadedAttachment: AttachmentSummary | null = null;
+
+      if (pendingAttachment) {
+        const formData = new FormData();
+        formData.append('file', {
+          uri: pendingAttachment.uri,
+          name: pendingAttachment.name,
+          type: pendingAttachment.type,
+        } as any);
+
+        const uploadRes = await apiClient.post('/messages/attachments', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        uploadedAttachment = uploadRes.data;
+      }
+
+      const content = trimmedDraft || pendingAttachment?.name || 'Attachment';
+      const messageRes = await apiClient.post(`/mentorships/${selectedConversation.id}/messages`, {
+        content,
+        ...(uploadedAttachment ? { attachmentId: uploadedAttachment.id } : {}),
+      });
+
+      const rawMessage = messageRes.data;
+      const newMessages = mapMessages([rawMessage], currentUserId ?? -1).filter((m) => m.sender !== 'system');
+      setMessages((prev) => [...prev, ...newMessages]);
+
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === selectedConversation.id
+            ? {
+                ...conversation,
+                preview: uploadedAttachment
+                  ? `${content} · ${uploadedAttachment.filename}`
+                  : content,
+                time: 'now',
+              }
+            : conversation
+        )
+      );
+
+      setDraft('');
+      setPendingAttachment(null);
+    } catch (error: any) {
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Could not send the message.';
+      Alert.alert('Error', message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const openAttachment = async (attachment: NonNullable<ChatMessage['attachment']>) => {
+    if (!attachment.downloadUrl || !attachment.id || openingAttachmentId) {
+      return;
+    }
+
+    const token = await SecureStore.getItemAsync('userToken');
+    if (!token) {
+      Alert.alert('Error', 'You need to sign in again to open attachments.');
+      return;
+    }
+
+    setOpeningAttachmentId(attachment.id);
+    try {
+      const targetPath = `${FileSystem.cacheDirectory}${attachment.name}`;
+      const result = await FileSystem.downloadAsync(attachment.downloadUrl, targetPath, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(result.uri);
+      } else {
+        await Linking.openURL(result.uri);
+      }
+    } catch (error) {
+      console.error('Failed to open attachment:', error);
+      Alert.alert('Error', 'Could not open the attachment.');
+    } finally {
+      setOpeningAttachmentId(null);
+    }
+  };
 
   if (selectedConversation) {
     return (
@@ -283,190 +475,143 @@ export default function MessagesScreen() {
             </TouchableOpacity>
 
             <View style={styles.chatAvatarWrap}>
-              <View
-                style={[
-                  styles.avatar,
-                  {
-                    backgroundColor: selectedConversation.avatarBg,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.avatarText,
-                    { color: selectedConversation.avatarText },
-                  ]}
-                >
+              <View style={[styles.avatar, { backgroundColor: selectedConversation.avatarBg }]}>
+                <Text style={[styles.avatarText, { color: selectedConversation.avatarText }]}>
                   {selectedConversation.initials}
                 </Text>
               </View>
-              {selectedConversation.online ? <View style={styles.onlineDot} /> : null}
             </View>
 
             <View style={styles.chatHeaderInfo}>
-              <Text style={styles.chatHeaderName}>{selectedConversation.name}</Text>
-              <Text style={styles.chatHeaderSub}>
-                {selectedConversation.type === 'support'
-                  ? 'Progress report ready'
-                  : isMentor
-                  ? selectedConversation.online
-                    ? 'Online · Active now'
-                    : 'Last seen 2h ago'
-                  : 'Your Mentor · Online now'}
-              </Text>
-            </View>
-
-            <View style={styles.chatHeaderActions}>
-              <Text style={styles.chatHeaderIcon}>📅</Text>
-              <Text style={styles.chatHeaderIcon}>⋯</Text>
+              <Text style={styles.chatHeaderName}>{selectedConversation.counterpartName}</Text>
+              <Text style={styles.chatHeaderSub}>{selectedConversation.subtitle}</Text>
             </View>
           </View>
         </View>
 
-        {selectedConversation.type === 'support' ? (
-          <View style={styles.contextBar}>
-            <Text style={styles.badgeAmber}>Week 3 Summary</Text>
-            <Text style={styles.contextText}>Automated progress update</Text>
-          </View>
-        ) : isMentor ? (
-          <View style={styles.contextBar}>
-            <Text style={styles.badgeSage}>Week 3</Text>
-            <Text style={styles.contextText}>2 tasks open</Text>
-            <View style={styles.contextDivider} />
-            <Text style={styles.contextText}>Next session: Today 15:00</Text>
+        <View style={styles.contextBar}>
+          <Text style={styles.badgeSage}>Mentorship Chat</Text>
+          <Text style={styles.contextText}>Real messages and attachment support</Text>
+        </View>
+
+        {threadLoading ? (
+          <View style={styles.centeredState}>
+            <ActivityIndicator size="large" color="#3D6B52" />
+            <Text style={styles.stateText}>Loading messages...</Text>
           </View>
         ) : (
-          <View style={styles.contextBar}>
-            <Text style={styles.badgeAmber}>Today 15:00</Text>
-            <Text style={styles.contextText}>Code Review session</Text>
-            <TouchableOpacity style={styles.joinButton}>
-              <Text style={styles.joinButtonText}>Join</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <ScrollView
-          style={styles.chatScroll}
-          contentContainerStyle={styles.chatScrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {currentMessages.map((message) => {
-            if (message.sender === 'system') {
-              return (
-                <Text key={message.id} style={styles.systemMessage}>
-                  {message.text}
+          <ScrollView
+            style={styles.chatScroll}
+            contentContainerStyle={styles.chatScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {messages.length === 0 ? (
+              <View style={styles.emptyThreadCard}>
+                <Text style={styles.emptyThreadTitle}>No messages yet</Text>
+                <Text style={styles.emptyThreadText}>
+                  Start the conversation by sending a message or attaching a file.
                 </Text>
-              );
-            }
+              </View>
+            ) : (
+              messages.map((message) => {
+                if (message.sender === 'system') {
+                  return (
+                    <Text key={message.id} style={styles.systemMessage}>
+                      {message.text}
+                    </Text>
+                  );
+                }
 
-            const isMe = message.sender === 'me';
+                const isMe = message.sender === 'me';
 
-            return (
-              <View
-                key={message.id}
-                style={[
-                  styles.messageWrap,
-                  isMe ? styles.messageWrapRight : styles.messageWrapLeft,
-                ]}
-              >
-                <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-                  <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>
-                    {message.text}
-                  </Text>
-
-                  {message.attachment ? (
-                    <View style={styles.attachmentPill}>
-                      <Text style={styles.attachmentIcon}>📄</Text>
-                      <View>
-                        <Text style={styles.attachmentTitle}>{message.attachment.name}</Text>
-                        <Text style={styles.attachmentMeta}>{message.attachment.meta}</Text>
-                      </View>
-                    </View>
-                  ) : null}
-                </View>
-
-                {message.time ? (
-                  <Text
+                return (
+                  <View
+                    key={message.id}
                     style={[
-                      styles.messageTime,
-                      isMe ? styles.messageTimeRight : styles.messageTimeLeft,
+                      styles.messageWrap,
+                      isMe ? styles.messageWrapRight : styles.messageWrapLeft,
                     ]}
                   >
-                    {message.time}
-                  </Text>
-                ) : null}
-              </View>
-            );
-          })}
+                    <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
+                      <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>
+                        {message.text}
+                      </Text>
 
-          {isMentor && selectedConversation.type !== 'support' ? (
-            <View style={styles.cardSuggestion}>
-              <Text style={styles.cardSuggestionLabel}>Suggested Action</Text>
-              <Text style={styles.cardSuggestionText}>
-                Assign a task for reviewing the PDF before your 15:00 session?
-              </Text>
-              <View style={styles.row}>
-                <TouchableOpacity style={styles.primaryMiniButton}>
-                  <Text style={styles.primaryMiniButtonText}>Assign Task</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryMiniButton}>
-                  <Text style={styles.secondaryMiniButtonText}>Dismiss</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
+                      {message.attachment ? (
+                        <TouchableOpacity
+                          style={styles.attachmentPill}
+                          onPress={() => openAttachment(message.attachment!)}
+                          disabled={openingAttachmentId === message.attachment.id}
+                        >
+                          <Text style={styles.attachmentIcon}>
+                            {message.attachment.contentType?.includes('image') ? '🖼️' : '📄'}
+                          </Text>
+                          <View style={styles.attachmentTextWrap}>
+                            <Text style={styles.attachmentTitle}>{message.attachment.name}</Text>
+                            <Text style={styles.attachmentMeta}>
+                              {openingAttachmentId === message.attachment.id
+                                ? 'Opening...'
+                                : message.attachment.meta}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
 
-          {!isMentor && selectedConversation.type !== 'support' ? (
-            <View style={styles.cardSuggestion}>
-              <Text style={styles.cardSuggestionLabel}>New Task Assigned</Text>
-              <Text style={styles.cardSuggestionText}>
-                Read &quot;Clean Component APIs&quot; before your 15:00 session.
-              </Text>
-              <View style={styles.row}>
-                <TouchableOpacity style={styles.primaryMiniButton}>
-                  <Text style={styles.primaryMiniButtonText}>Mark as Done</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryMiniButton}>
-                  <Text style={styles.secondaryMiniButtonText}>View</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
+                    {message.time ? (
+                      <Text
+                        style={[
+                          styles.messageTime,
+                          isMe ? styles.messageTimeRight : styles.messageTimeLeft,
+                        ]}
+                      >
+                        {message.time}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })
+            )}
+          </ScrollView>
+        )}
 
-          {!isMentor && selectedConversation.type === 'support' ? (
-            <View style={styles.progressCard}>
-              <Text style={styles.progressTitle}>Week 3 Summary</Text>
-              <ProgressRow label="Tasks completed" value="3 / 5" progress={0.6} badge="amber" />
-              <ProgressRow label="Sessions attended" value="2 / 2" progress={1} badge="sage" />
-              <ProgressRow label="Overall progress" value="68%" progress={0.68} badge="blue" />
-              <View style={styles.progressDivider} />
-              <Text style={styles.progressNote}>
-                Mentor note: Great consistency this week. Focus on finishing the remaining 2 tasks
-                before your Friday session.
+        {pendingAttachment ? (
+          <View style={styles.pendingAttachmentBar}>
+            <View style={styles.pendingAttachmentInfo}>
+              <Text style={styles.pendingAttachmentTitle}>{pendingAttachment.name}</Text>
+              <Text style={styles.pendingAttachmentMeta}>
+                {formatAttachmentMeta(pendingAttachment.size, pendingAttachment.type)}
               </Text>
             </View>
-          ) : null}
-        </ScrollView>
+            <TouchableOpacity onPress={() => setPendingAttachment(null)}>
+              <Text style={styles.pendingAttachmentRemove}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         <View style={styles.inputBar}>
-          <Text style={styles.inputIcon}>📎</Text>
+          <TouchableOpacity onPress={chooseAttachment} disabled={sending}>
+            <Text style={styles.inputIcon}>📎</Text>
+          </TouchableOpacity>
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder={`Message ${selectedConversation.name.split(' ')[0]}...`}
+            placeholder={`Message ${selectedConversation.counterpartName.split(' ')[0]}...`}
             placeholderTextColor="#B7B0A4"
             style={styles.input}
+            multiline
           />
-          <TouchableOpacity style={styles.sendButton}>
-            <Text style={styles.sendButtonText}>➤</Text>
+          <TouchableOpacity
+            style={[styles.sendButton, sending && styles.sendButtonDisabled]}
+            onPress={sendMessage}
+            disabled={sending}
+          >
+            <Text style={styles.sendButtonText}>{sending ? '…' : '➤'}</Text>
           </TouchableOpacity>
         </View>
       </View>
     );
   }
-
-  const pinned = filteredConversations.filter((item) => item.pinned);
-  const others = filteredConversations.filter((item) => !item.pinned);
 
   return (
     <View style={styles.container}>
@@ -496,80 +641,43 @@ export default function MessagesScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listScroll}>
-        {isMentor ? (
-          <>
-            <View style={styles.filterRow}>
-              {['All', 'Unread', 'Active', 'Pending'].map((item, index) => (
-                <View
-                  key={item}
-                  style={[styles.filterChip, index === 0 && styles.filterChipActive]}
-                >
-                  <Text style={[styles.filterText, index === 0 && styles.filterTextActive]}>
-                    {item}
-                    {item === 'Unread' ? ' (3)' : ''}
+      {listLoading ? (
+        <View style={styles.centeredState}>
+          <ActivityIndicator size="large" color="#3D6B52" />
+          <Text style={styles.stateText}>Loading conversations...</Text>
+        </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listScroll}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Active Mentorships</Text>
+            <View style={styles.cardList}>
+              {filteredConversations.length === 0 ? (
+                <View style={styles.emptyConversationBlock}>
+                  <Text style={styles.emptyConversationTitle}>No conversations found</Text>
+                  <Text style={styles.emptyConversationText}>
+                    Once you have an active mentorship, your chat threads will appear here.
                   </Text>
                 </View>
-              ))}
-            </View>
-
-            <View style={styles.cardList}>
-              {filteredConversations.map((conversation) => (
-                <ConversationRow
-                  key={conversation.id}
-                  item={conversation}
-                  onPress={() => setSelectedConversation(conversation)}
-                />
-              ))}
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Quick Actions</Text>
-              <View style={styles.quickActionRow}>
-                <QuickActionCard emoji="📢" title="Announce" subtitle="to all mentees" />
-                <QuickActionCard emoji="📋" title="Assign Task" subtitle="send to mentee" />
-                <QuickActionCard emoji="📅" title="Schedule" subtitle="new session" />
-              </View>
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Pinned</Text>
-              <View style={styles.cardList}>
-                {pinned.map((conversation) => (
+              ) : (
+                filteredConversations.map((conversation) => (
                   <ConversationRow
                     key={conversation.id}
                     item={conversation}
                     onPress={() => setSelectedConversation(conversation)}
                   />
-                ))}
-              </View>
+                ))
+              )}
             </View>
+          </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Other</Text>
-              <View style={styles.cardList}>
-                {others.map((conversation) => (
-                  <ConversationRow
-                    key={conversation.id}
-                    item={conversation}
-                    onPress={() => setSelectedConversation(conversation)}
-                  />
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.tipCard}>
-              <Text style={styles.tipLabel}>Tip</Text>
-              <Text style={styles.tipText}>
-                Prepare 2–3 questions before each session to make the most of your mentor&apos;s
-                time.
-              </Text>
-            </View>
-          </>
-        )}
-      </ScrollView>
+          <View style={styles.tipCard}>
+            <Text style={styles.tipLabel}>Attachment Support</Text>
+            <Text style={styles.tipText}>
+              You can now attach images, PDF files, DOCX files, and TXT files directly from the chat composer.
+            </Text>
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -578,7 +686,7 @@ function ConversationRow({
   item,
   onPress,
 }: {
-  item: Conversation;
+  item: MentorshipConversation;
   onPress: () => void;
 }) {
   return (
@@ -587,97 +695,27 @@ function ConversationRow({
         <View style={[styles.avatar, { backgroundColor: item.avatarBg }]}>
           <Text style={[styles.avatarText, { color: item.avatarText }]}>{item.initials}</Text>
         </View>
-        {item.online ? <View style={styles.onlineDot} /> : null}
       </View>
 
       <View style={styles.conversationBody}>
         <View style={styles.conversationTop}>
           <View style={styles.conversationTitleWrap}>
-            <Text style={[styles.conversationName, item.unread ? styles.bold : null]}>
-              {item.name}
-            </Text>
+            <Text style={styles.conversationName}>{item.counterpartName}</Text>
             {item.subtitle ? <Text style={styles.conversationSubtitle}>{item.subtitle}</Text> : null}
           </View>
-          <Text style={[styles.conversationTime, item.unread ? styles.timeActive : null]}>
-            {item.time}
-          </Text>
+          <Text style={styles.conversationTime}>{item.time}</Text>
         </View>
 
-        <Text
-          numberOfLines={1}
-          style={[styles.conversationPreview, item.unread ? styles.previewUnread : null]}
-        >
+        <Text numberOfLines={1} style={styles.conversationPreview}>
           {item.preview}
         </Text>
       </View>
-
-      {item.unread ? (
-        <View style={styles.unreadBadge}>
-          <Text style={styles.unreadBadgeText}>{item.unread}</Text>
-        </View>
-      ) : null}
     </TouchableOpacity>
-  );
-}
-
-function QuickActionCard({
-  emoji,
-  title,
-  subtitle,
-}: {
-  emoji: string;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <TouchableOpacity style={styles.quickActionCard}>
-      <Text style={styles.quickActionEmoji}>{emoji}</Text>
-      <Text style={styles.quickActionTitle}>{title}</Text>
-      <Text style={styles.quickActionSubtitle}>{subtitle}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function ProgressRow({
-  label,
-  value,
-  progress,
-  badge,
-}: {
-  label: string;
-  value: string;
-  progress: number;
-  badge: 'sage' | 'amber' | 'blue';
-}) {
-  return (
-    <View style={styles.progressRow}>
-      <View style={styles.progressHeader}>
-        <Text style={styles.progressLabel}>{label}</Text>
-        <Text
-          style={[
-            styles.progressBadge,
-            badge === 'sage'
-              ? styles.badgeSageSmall
-              : badge === 'amber'
-              ? styles.badgeAmberSmall
-              : styles.badgeBlueSmall,
-          ]}
-        >
-          {value}
-        </Text>
-      </View>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-      </View>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F0E8',
-  },
+  container: { flex: 1, backgroundColor: '#F5F0E8' },
   header: {
     backgroundColor: '#3D5C4A',
     paddingTop: 54,
@@ -754,32 +792,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 28,
   },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 14,
-    marginBottom: 10,
-  },
-  filterChip: {
-    marginRight: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#E5DED2',
-    backgroundColor: '#FFFFFF',
-  },
-  filterChipActive: {
-    backgroundColor: '#D4E8DC',
-    borderColor: '#3D6B52',
-  },
-  filterText: {
-    color: '#9A9288',
-    fontSize: 11,
-  },
-  filterTextActive: {
-    color: '#2D5A3D',
-    fontWeight: '600',
-  },
   section: {
     paddingHorizontal: 14,
     marginTop: 12,
@@ -822,17 +834,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  onlineDot: {
-    position: 'absolute',
-    right: 1,
-    bottom: 1,
-    width: 11,
-    height: 11,
-    borderRadius: 999,
-    backgroundColor: '#6DD68A',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
   conversationBody: {
     flex: 1,
   },
@@ -848,6 +849,7 @@ const styles = StyleSheet.create({
   conversationName: {
     color: '#1A2E22',
     fontSize: 13,
+    fontWeight: '700',
   },
   conversationSubtitle: {
     color: '#9A9288',
@@ -858,64 +860,36 @@ const styles = StyleSheet.create({
     color: '#BBB4A8',
     fontSize: 10,
   },
-  timeActive: {
-    color: '#3D6B52',
-    fontWeight: '700',
-  },
   conversationPreview: {
     color: '#9A9288',
     fontSize: 11,
   },
-  previewUnread: {
-    color: '#5A5248',
-    fontWeight: '500',
-  },
-  unreadBadge: {
-    backgroundColor: '#3D6B52',
-    minWidth: 18,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+  centeredState: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+    paddingHorizontal: 24,
   },
-  unreadBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
+  stateText: {
+    marginTop: 12,
+    color: '#7E7368',
+    fontSize: 14,
   },
-  bold: {
-    fontWeight: '700',
-  },
-  quickActionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  quickActionCard: {
-    width: '31%',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#EDE8DF',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+  emptyConversationBlock: {
+    padding: 18,
     alignItems: 'center',
   },
-  quickActionEmoji: {
-    fontSize: 18,
-    marginBottom: 5,
-  },
-  quickActionTitle: {
-    color: '#1A2E22',
-    fontSize: 11,
+  emptyConversationTitle: {
+    color: '#2D4D3A',
+    fontSize: 14,
     fontWeight: '700',
+    marginBottom: 6,
   },
-  quickActionSubtitle: {
+  emptyConversationText: {
     color: '#9A9288',
-    fontSize: 10,
+    fontSize: 12,
+    lineHeight: 18,
     textAlign: 'center',
-    marginTop: 2,
   },
   tipCard: {
     marginHorizontal: 14,
@@ -965,14 +939,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 1,
   },
-  chatHeaderActions: {
-    flexDirection: 'row',
-  },
-  chatHeaderIcon: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 17,
-    marginLeft: 14,
-  },
   contextBar: {
     minHeight: 40,
     backgroundColor: '#F0EBE3',
@@ -993,38 +959,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
   },
-  badgeAmber: {
-    backgroundColor: '#F5E8CC',
-    color: '#7A5010',
-    fontSize: 10,
-    fontWeight: '600',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
   contextText: {
     color: '#9A9288',
     fontSize: 10,
     marginLeft: 8,
-  },
-  contextDivider: {
-    width: 1,
-    height: 12,
-    backgroundColor: '#D8D2C7',
-    marginHorizontal: 8,
-  },
-  joinButton: {
-    marginLeft: 'auto',
-    backgroundColor: '#3D6B52',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  joinButtonText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
   },
   chatScroll: {
     flex: 1,
@@ -1032,6 +970,26 @@ const styles = StyleSheet.create({
   chatScrollContent: {
     paddingHorizontal: 13,
     paddingVertical: 12,
+  },
+  emptyThreadCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EDE8DF',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+  },
+  emptyThreadTitle: {
+    color: '#2D4D3A',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptyThreadText: {
+    color: '#9A9288',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   systemMessage: {
     alignSelf: 'center',
@@ -1101,6 +1059,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginRight: 7,
   },
+  attachmentTextWrap: {
+    flex: 1,
+  },
   attachmentTitle: {
     color: '#2D5A3D',
     fontSize: 11,
@@ -1111,165 +1072,76 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 1,
   },
-  cardSuggestion: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#EDE8DF',
-    borderRadius: 14,
-    padding: 13,
-    marginTop: 4,
-    marginBottom: 6,
-  },
-  cardSuggestionLabel: {
-    color: '#8A8278',
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginBottom: 6,
-    letterSpacing: 0.7,
-  },
-  cardSuggestionText: {
-    color: '#2A2A2A',
-    fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  row: {
+  pendingAttachmentBar: {
     flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECF3EE',
+    borderTopWidth: 1,
+    borderTopColor: '#D6E3DA',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  primaryMiniButton: {
+  pendingAttachmentInfo: {
     flex: 1,
-    backgroundColor: '#D4E8DC',
-    borderRadius: 9,
-    paddingVertical: 8,
-    alignItems: 'center',
-    marginRight: 7,
   },
-  primaryMiniButtonText: {
+  pendingAttachmentTitle: {
     color: '#2D5A3D',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
-  secondaryMiniButton: {
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: '#EDE8DF',
-    backgroundColor: '#F5F0E8',
-    paddingVertical: 8,
-    paddingHorizontal: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryMiniButtonText: {
-    color: '#9A9288',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  progressCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#EDE8DF',
-    borderRadius: 14,
-    padding: 13,
-    marginBottom: 8,
-  },
-  progressTitle: {
-    color: '#2D4D3A',
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 10,
-  },
-  progressRow: {
-    marginBottom: 10,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  progressLabel: {
-    color: '#5A5248',
-    fontSize: 11,
-  },
-  progressBadge: {
+  pendingAttachmentMeta: {
+    color: '#6D7E72',
     fontSize: 10,
-    fontWeight: '600',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  badgeSageSmall: {
-    backgroundColor: '#D4E8DC',
-    color: '#2D5A3D',
-  },
-  badgeAmberSmall: {
-    backgroundColor: '#F5E8CC',
-    color: '#7A5010',
-  },
-  badgeBlueSmall: {
-    backgroundColor: '#DCEAF5',
-    color: '#1A4A6E',
-  },
-  progressTrack: {
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: '#F0EBE3',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: '#3D6B52',
-  },
-  progressDivider: {
-    height: 1,
-    backgroundColor: '#F0EBE3',
     marginTop: 2,
-    marginBottom: 8,
   },
-  progressNote: {
-    color: '#5A5248',
-    fontSize: 11,
-    lineHeight: 17,
+  pendingAttachmentRemove: {
+    color: '#7E7368',
+    fontSize: 18,
+    fontWeight: '700',
+    paddingHorizontal: 6,
   },
   inputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#EDE8DF',
+    borderTopColor: '#E5E0D8',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
   },
   inputIcon: {
-    fontSize: 19,
-    color: '#BBB4A8',
-    marginRight: 8,
+    fontSize: 18,
+    color: '#6D7E72',
+    marginRight: 10,
+    marginBottom: 12,
   },
   input: {
     flex: 1,
+    minHeight: 42,
+    maxHeight: 110,
     backgroundColor: '#F5F0E8',
-    borderWidth: 1,
-    borderColor: '#EDE8DF',
-    borderRadius: 20,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-    fontSize: 12,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     color: '#2A2A2A',
+    fontSize: 13,
   },
   sendButton: {
-    width: 33,
-    height: 33,
-    borderRadius: 999,
+    marginLeft: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#3D6B52',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+  },
+  sendButtonDisabled: {
+    opacity: 0.6,
   },
   sendButtonText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 18,
     fontWeight: '700',
   },
 });
