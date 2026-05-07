@@ -218,7 +218,7 @@ public class UserController {
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
-        Pageable pageable = clampPageable(page, size);
+        Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(userService.searchUsers(
                 role, q, interests, skills, major, hasAvailability, requesterId, pageable));
     }
