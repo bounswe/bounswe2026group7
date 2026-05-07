@@ -60,6 +60,13 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
+    @ExceptionHandler(MeetingConflictException.class)
+    public ResponseEntity<Map<String, String>> handleMeetingConflict(MeetingConflictException ex,
+                                                                     HttpServletRequest request) {
+        log.warn("Meeting conflict: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
+    }
+
     @ExceptionHandler(AuthenticationFailedException.class)
     public ResponseEntity<Map<String, String>> handleAuthenticationFailed(AuthenticationFailedException ex,
                                                                          HttpServletRequest request) {
