@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
+import Avatar from '../components/Avatar'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
 import { getAllMentors, getMatchingMentors, getMatchingMentees, getActiveMentorships, getSentMentorshipRequests, createMentorshipRequest } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -199,7 +200,7 @@ export default function ExplorePage() {
     setAiState('loading')
     try {
       const data = await getMatchingMentors()
-      const list = Array.isArray(data) ? data : []
+      const list = Array.isArray(data) ? data.slice(0, 5) : []
       setMatches(list)
       setAiState('done')
       setShowMatches(true)
@@ -389,7 +390,7 @@ export default function ExplorePage() {
               <div className="mentor-card" key={m.id}>
                 <div className="mc-header">
                   <div className="mc-info">
-                    <div className="mc-avatar">{m.firstName?.[0] ?? '?'}</div>
+                    <Avatar src={m.profilePhoto} initials={m.firstName?.[0]?.toUpperCase() ?? '?'} size="md" />
                     <div>
                       <div className="mc-name">{m.firstName}</div>
                       <div className="mc-sub">{[m.expertise, m.affiliation].filter(Boolean).join(' · ')}</div>
@@ -431,7 +432,7 @@ export default function ExplorePage() {
               <div className="mentor-card" key={m.id}>
                 <div className="mc-header">
                   <div className="mc-info">
-                    <div className="mc-avatar">{m.firstName?.[0] ?? '?'}</div>
+                    <Avatar src={m.profilePhoto} initials={m.firstName?.[0]?.toUpperCase() ?? '?'} size="md" />
                     <div>
                       <div className="mc-name">{m.firstName}</div>
                       <div className="mc-sub">{[m.major, m.careerInterest].filter(Boolean).join(' · ')}</div>
