@@ -6,6 +6,7 @@ import {
   acceptMentorshipRequest,
   rejectMentorshipRequest,
   getActiveMentorships,
+  getUserById,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
@@ -38,6 +39,7 @@ export default function HomePage() {
   // ── Mentee state ──────────────────────────────────────────────────────────
   const [hasActiveMentor, setHasActiveMentor] = useState(false)
   const [activeMentorship, setActiveMentorship] = useState(null)
+  const [activeMentorPhoto, setActiveMentorPhoto] = useState(null)
   const [menteeLoading, setMenteeLoading] = useState(true)
 
   const [acceptingId, setAcceptingId] = useState(null)   // request being accepted
@@ -70,6 +72,16 @@ export default function HomePage() {
     }
     loadMenteeData()
   }, [isMentee])
+
+  // ── Load active mentor's profile photo ────────────────────────────────────
+  useEffect(() => {
+    if (!activeMentorship?.mentorId) { setActiveMentorPhoto(null); return }
+    let cancelled = false
+    getUserById(activeMentorship.mentorId)
+      .then(user => { if (!cancelled) setActiveMentorPhoto(user?.profilePhoto || null) })
+      .catch(() => { if (!cancelled) setActiveMentorPhoto(null) })
+    return () => { cancelled = true }
+  }, [activeMentorship?.mentorId])
 
   // ── Toast helper ───────────────────────────────────────────────────────────
   const showToast = (message, type = 'success') => {
@@ -150,7 +162,11 @@ export default function HomePage() {
               <div className="active-mentorship-hero">
                 <div className="amh-glow" />
                 <div className="amh-top">
-                  <div className="amh-avatar">{activeMentorship.mentorFirstName?.[0] ?? '?'}</div>
+                  <div className="amh-avatar">
+                    {activeMentorPhoto
+                      ? <img src={activeMentorPhoto} alt={activeMentorship.mentorFirstName || 'Mentor'} />
+                      : (activeMentorship.mentorFirstName?.[0] ?? '?')}
+                  </div>
                   <div className="amh-info">
                     <div className="amh-label">Your Mentor</div>
                     <div className="amh-name">{activeMentorship.mentorFirstName}</div>
