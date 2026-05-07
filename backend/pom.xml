@@ -110,6 +110,13 @@
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
         </dependency>
+        <!-- RFC 5545 (iCalendar) producer for the mentor-availability ICS export
+             endpoint (#250). 4.x aligned with Java 21 and the jakarta namespace. -->
+        <dependency>
+            <groupId>org.mnode.ical4j</groupId>
+            <artifactId>ical4j</artifactId>
+            <version>4.0.6</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

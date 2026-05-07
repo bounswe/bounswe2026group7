@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
@@ -72,6 +73,15 @@ public class SecurityConfig {
                 // JwtChannelInterceptor authenticates the STOMP CONNECT frame
                 // before any subscription or send is allowed.
                 .requestMatchers("/ws/chat/**").permitAll()
+                // Mentor-availability iCalendar exports (#250). Calendar apps
+                // (Google, Apple, Outlook) cannot send Authorization headers
+                // on subscription URLs, so this is anonymous by necessity.
+                // Data exposed (mentor name + availability) is already visible
+                // to any authenticated user via GET /{mentorId}; this is a
+                // transport concession, not a sensitivity change. Drive-by
+                // enumeration is rate-limited by IP via the
+                // {@code availability-ical} rule in application.properties.
+                .requestMatchers(HttpMethod.GET, "/api/availability/*/ical").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -1,9 +1,13 @@
 package com.group7.backend.controller;
 
+import com.group7.backend.dto.request.AvailabilityOverrideRequest;
 import com.group7.backend.dto.request.AvailabilitySlotRequest;
 import com.group7.backend.dto.request.BulkAvailabilityRequest;
+import com.group7.backend.dto.response.AvailabilityOverrideResponse;
 import com.group7.backend.dto.response.AvailabilitySlotResponse;
+import com.group7.backend.service.AvailabilityOverrideService;
 import com.group7.backend.service.AvailabilityService;
+import com.group7.backend.service.CalendarExportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -13,7 +17,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -40,9 +49,15 @@ import java.util.List;
 public class AvailabilityController {
 
     private final AvailabilityService availabilityService;
+    private final AvailabilityOverrideService overrideService;
+    private final CalendarExportService calendarExportService;
 
-    public AvailabilityController(AvailabilityService availabilityService) {
+    public AvailabilityController(AvailabilityService availabilityService,
+                                  AvailabilityOverrideService overrideService,
+                                  CalendarExportService calendarExportService) {
         this.availabilityService = availabilityService;
+        this.overrideService = overrideService;
+        this.calendarExportService = calendarExportService;
     }
 
     /**
@@ -120,5 +135,121 @@ public class AvailabilityController {
         Long mentorId = (Long) authentication.getCredentials();
         availabilityService.removeSlot(mentorId, slotId);
         return ResponseEntity.noContent().build();
+    }
+
+    // ── One-off availability overrides (issue #250) ──────────────────────────
+
+    @GetMapping("/{mentorId}/overrides")
+    @Operation(
+            summary = "List mentor availability overrides",
+            description = "Returns the mentor's one-off availability overrides "
+                    + "(AVAILABLE additions or UNAVAILABLE blocks), paginated and "
+                    + "ordered by start time. Visible to any authenticated user — "
+                    + "mentor availability is part of the discoverable profile, "
+                    + "matching the policy of the recurring schedule above."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paginated overrides",
+                    content = @Content(schema = @Schema(implementation = AvailabilityOverrideResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Mentor not found", content = @Content)
+    })
+    public ResponseEntity<Page<AvailabilityOverrideResponse>> listOverrides(
+            @Parameter(description = "Mentor ID") @PathVariable Long mentorId,
+            @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = clampPageable(page, size);
+        return ResponseEntity.ok(overrideService.list(mentorId, pageable));
+    }
+
+    @PostMapping("/overrides")
+    @PreAuthorize("hasRole('MENTOR')")
+    @Operation(
+            summary = "Add availability override",
+            description = "Adds a one-off override (AVAILABLE addition or UNAVAILABLE block) "
+                    + "for the authenticated mentor. Same-kind overlapping ranges are rejected; "
+                    + "cross-kind overlap is allowed by design (an UNAVAILABLE can carve a hole "
+                    + "out of an AVAILABLE region or out of the recurring weekly schedule)."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Override created",
+                    content = @Content(schema = @Schema(implementation = AvailabilityOverrideResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation error (missing field or endAt <= startAt)",
+                    content = @Content),
+            @ApiResponse(responseCode = "403", description = "Caller is not a mentor", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentor not found", content = @Content),
+            @ApiResponse(responseCode = "409", description = "Overlapping same-kind override", content = @Content)
+    })
+    public ResponseEntity<AvailabilityOverrideResponse> addOverride(
+            @Valid @RequestBody AvailabilityOverrideRequest request,
+            Authentication authentication) {
+        Long mentorId = (Long) authentication.getCredentials();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(overrideService.add(mentorId, request));
+    }
+
+    @DeleteMapping("/overrides/{overrideId}")
+    @PreAuthorize("hasRole('MENTOR')")
+    @Operation(
+            summary = "Remove availability override",
+            description = "Removes a single override owned by the authenticated mentor. "
+                    + "Returns 403 if the override belongs to a different mentor (rather than 404, "
+                    + "which would leak whether the id exists)."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Override removed"),
+            @ApiResponse(responseCode = "403", description = "Override belongs to a different mentor",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "Override not found", content = @Content)
+    })
+    public ResponseEntity<Void> removeOverride(
+            @Parameter(description = "Override ID") @PathVariable Long overrideId,
+            Authentication authentication) {
+        Long mentorId = (Long) authentication.getCredentials();
+        overrideService.remove(mentorId, overrideId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ── iCalendar export (issue #250) ────────────────────────────────────────
+
+    @GetMapping(value = "/{mentorId}/ical", produces = "text/calendar;charset=UTF-8")
+    @Operation(
+            summary = "Export mentor availability as iCalendar",
+            description = "Returns the mentor's recurring weekly schedule and one-off "
+                    + "AVAILABLE/UNAVAILABLE overrides as an RFC 5545 (.ics) file. "
+                    + "Anonymous endpoint — calendar applications (Google, Apple, "
+                    + "Outlook) cannot send Authorization headers on subscription URLs, "
+                    + "so this is published openly. The data exposed (mentor name + "
+                    + "availability) is already visible to any authenticated user via "
+                    + "GET /{mentorId}; making the .ics path anonymous is a transport "
+                    + "concession, not a sensitivity change. Drive-by enumeration is "
+                    + "rate-limited by IP via the {@code availability-ical} bucket."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "iCalendar file",
+                    content = @Content(mediaType = "text/calendar")),
+            @ApiResponse(responseCode = "404", description = "Mentor not found",
+                    content = @Content),
+            @ApiResponse(responseCode = "429", description = "Rate limit exceeded",
+                    content = @Content)
+    })
+    public ResponseEntity<byte[]> exportIcal(
+            @Parameter(description = "Mentor ID") @PathVariable Long mentorId) {
+        byte[] body = calendarExportService.exportMentorAvailability(mentorId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/calendar;charset=UTF-8"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"mentor_" + mentorId + "_availability.ics\"")
+                .body(body);
+    }
+
+    /**
+     * Page+size clamp matching the convention used by {@code UserController}
+     * and {@code MatchingController} (size in {@code [1, 100]}, page ≥ 0).
+     * Inlined here for now; consolidate to a shared {@code PageableSupport}
+     * helper once #323's prep extraction lands on dev.
+     */
+    private static Pageable clampPageable(int page, int size) {
+        int clampedSize = Math.min(Math.max(size, 1), 100);
+        return PageRequest.of(Math.max(page, 0), clampedSize);
     }
 }
