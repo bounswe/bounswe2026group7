@@ -20,8 +20,12 @@ import * as Sharing from 'expo-sharing';
 import apiClient from '../../api/client';
 import { useRole } from '../../components/RoleContext';
 
-type MentorshipConversation = {
-  id: number;
+type ConversationListTab = 'mentorships' | 'mentorPeers';
+
+type ConversationItem = {
+  id: string;
+  threadKind: 'mentorship' | 'mentorPair';
+  mentorshipId?: number;
   counterpartId: number;
   counterpartName: string;
   subtitle?: string;
@@ -172,11 +176,14 @@ export default function MessagesScreen() {
   const isMentor = role === 'mentor';
   const params = useLocalSearchParams();
 
-  const [search, setSearch] = useState('');
+const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
+  const [activeListTab, setActiveListTab] = useState<ConversationListTab>('mentorships');
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-  const [conversations, setConversations] = useState<MentorshipConversation[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<MentorshipConversation | null>(null);
+  const [mentorshipConversations, setMentorshipConversations] = useState<ConversationItem[]>([]);
+  const [peerMentorConversations, setPeerMentorConversations] = useState<ConversationItem[]>([]);
+  const [mentorDirectoryOptions, setMentorDirectoryOptions] = useState<ConversationItem[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -195,7 +202,7 @@ export default function MessagesScreen() {
         const mentorshipsRes = await apiClient.get('/mentorships');
         const mentorships = mentorshipsRes.data ?? [];
 
-        const enriched = await Promise.all(
+        const mentorshipThreads = await Promise.all(
           mentorships.map(async (mentorship: any, index: number) => {
             const counterpartName = isMentor
               ? mentorship.menteeFirstName
@@ -221,7 +228,9 @@ export default function MessagesScreen() {
             }
 
             return {
-              id: mentorship.id,
+              id: `mentorship-${mentorship.id}`,
+              threadKind: 'mentorship',
+              mentorshipId: mentorship.id,
               counterpartId,
               counterpartName: counterpartName || 'Unknown User',
               subtitle: isMentor ? 'Your Mentee' : 'Your Mentor',
@@ -233,11 +242,69 @@ export default function MessagesScreen() {
               avatarBg: colors.bg,
               avatarText: colors.text,
               type: isMentor ? 'mentee' : 'mentor',
-            } satisfies MentorshipConversation;
+            } satisfies ConversationItem;
           })
         );
 
-        setConversations(enriched);
+        setMentorshipConversations(mentorshipThreads);
+
+        if (isMentor && parsedUserId != null) {
+          const [peerInboxRes, mentorsRes] = await Promise.all([
+            apiClient.get('/conversations/mentor-pair?page=0&size=100'),
+            apiClient.get('/users/mentors/all'),
+          ]);
+
+          const peerInboxItems = peerInboxRes.data?.content ?? [];
+          const peerInbox = peerInboxItems.map((conversation: any, index: number) => {
+            const colors = avatarPalette(index + mentorshipThreads.length);
+            return {
+              id: `mentor-pair-${conversation.peerId}`,
+              threadKind: 'mentorPair',
+              counterpartId: Number(conversation.peerId),
+              counterpartName: conversation.peerFirstName || 'Unknown Mentor',
+              subtitle: 'Peer Mentor',
+              preview: conversation.lastMessageContent || 'No messages yet',
+              time: formatRelativeTime(conversation.lastMessageSentAt),
+              unread: Number(conversation.unreadCount ?? 0),
+              online: false,
+              initials: getInitials(conversation.peerFirstName || 'Unknown Mentor'),
+              avatarBg: colors.bg,
+              avatarText: colors.text,
+              type: 'mentor',
+            } satisfies ConversationItem;
+          });
+          setPeerMentorConversations(peerInbox);
+
+          const allMentors = mentorsRes.data ?? [];
+          const peerMentors = allMentors
+            .filter((mentor: any) => Number(mentor.id) !== parsedUserId)
+            .map((mentor: any, index: number) => {
+              const fullName = mentor.lastName
+                ? `${mentor.firstName} ${mentor.lastName}`
+                : mentor.firstName || 'Unknown Mentor';
+              const colors = avatarPalette(index + mentorshipThreads.length + peerInbox.length);
+
+              return {
+                id: `mentor-pair-${mentor.id}`,
+                threadKind: 'mentorPair',
+                counterpartId: Number(mentor.id),
+                counterpartName: fullName,
+                subtitle: mentor.field || mentor.expertise || 'Peer Mentor',
+                preview: 'Open a peer conversation with this mentor.',
+                time: '',
+                unread: 0,
+                online: false,
+                initials: getInitials(fullName),
+                avatarBg: colors.bg,
+                avatarText: colors.text,
+                type: 'mentor',
+              } satisfies ConversationItem;
+            });
+          setMentorDirectoryOptions(peerMentors);
+        } else {
+          setPeerMentorConversations([]);
+          setMentorDirectoryOptions([]);
+        }
       } catch (error) {
         console.error('Failed to load conversations:', error);
         Alert.alert('Error', 'Could not load your conversations.');
@@ -251,15 +318,16 @@ export default function MessagesScreen() {
 
   useEffect(() => {
     const openWith = Array.isArray(params.openWith) ? params.openWith[0] : params.openWith;
-    if (!openWith || conversations.length === 0) return;
+    const allConversations = [...mentorshipConversations, ...peerMentorConversations];
+    if (!openWith || allConversations.length === 0) return;
 
-    const match = conversations.find((conversation) =>
+    const match = allConversations.find((conversation) =>
       conversation.counterpartName.toLowerCase().includes(String(openWith).toLowerCase())
     );
     if (match) {
       setSelectedConversation(match);
     }
-  }, [params.openWith, conversations]);
+  }, [params.openWith, mentorshipConversations, peerMentorConversations]);
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -269,10 +337,17 @@ export default function MessagesScreen() {
 
       setThreadLoading(true);
       try {
-        const res = await apiClient.get(`/mentorships/${selectedConversation.id}/messages?page=0&size=100`);
+        const endpoint = selectedConversation.threadKind === 'mentorship'
+          ? `/mentorships/${selectedConversation.mentorshipId}/messages?page=0&size=100`
+          : `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages?page=0&size=100`;
+        const readEndpoint = selectedConversation.threadKind === 'mentorship'
+          ? `/mentorships/${selectedConversation.mentorshipId}/messages/read`
+          : `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages/read`;
+
+        const res = await apiClient.get(endpoint);
         const rawMessages = res.data?.content ?? [];
         setMessages(mapMessages(rawMessages, currentUserId));
-        await apiClient.patch(`/mentorships/${selectedConversation.id}/messages/read`).catch(() => undefined);
+        await apiClient.patch(readEndpoint).catch(() => undefined);
       } catch (error) {
         console.error('Failed to load thread:', error);
         Alert.alert('Error', 'Could not load the message thread.');
@@ -284,18 +359,50 @@ export default function MessagesScreen() {
     loadMessages();
   }, [selectedConversation, currentUserId]);
 
+  const visibleConversations = useMemo(() => {
+    if (!isMentor) {
+      return mentorshipConversations;
+    }
+    return activeListTab === 'mentorships'
+      ? mentorshipConversations
+      : peerMentorConversations;
+  }, [activeListTab, isMentor, mentorshipConversations, peerMentorConversations]);
+
+  const filteredMentorDirectoryOptions = useMemo(() => {
+    if (!isMentor || activeListTab !== 'mentorPeers') {
+      return [];
+    }
+
+    const existingPeerIds = new Set(peerMentorConversations.map((item) => item.counterpartId));
+    const availableMentors = mentorDirectoryOptions.filter(
+      (item) => !existingPeerIds.has(item.counterpartId)
+    );
+
+    const q = search.trim().toLowerCase();
+    if (!q) {
+      return availableMentors;
+    }
+
+    return availableMentors.filter(
+      (item) =>
+        item.counterpartName.toLowerCase().includes(q) ||
+        item.subtitle?.toLowerCase().includes(q) ||
+        item.preview.toLowerCase().includes(q)
+    );
+  }, [activeListTab, isMentor, mentorDirectoryOptions, peerMentorConversations, search]);
+
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return conversations;
-    return conversations.filter(
+    if (!q) return visibleConversations;
+    return visibleConversations.filter(
       (item) =>
         item.counterpartName.toLowerCase().includes(q) ||
         item.preview.toLowerCase().includes(q) ||
         item.subtitle?.toLowerCase().includes(q)
     );
-  }, [conversations, search]);
+  }, [visibleConversations, search]);
 
-  const titleLine = isMentor ? 'Your mentees.' : 'Your mentor.';
+  const titleLine = isMentor ? 'Your mentees and mentor peers.' : 'Your mentor.';
 
   const pickImageAttachment = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -387,7 +494,11 @@ export default function MessagesScreen() {
       }
 
       const content = trimmedDraft || pendingAttachment?.name || 'Attachment';
-      const messageRes = await apiClient.post(`/mentorships/${selectedConversation.id}/messages`, {
+      const messageEndpoint = selectedConversation.threadKind === 'mentorship'
+        ? `/mentorships/${selectedConversation.mentorshipId}/messages`
+        : `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages`;
+
+      const messageRes = await apiClient.post(messageEndpoint, {
         content,
         ...(uploadedAttachment ? { attachmentId: uploadedAttachment.id } : {}),
       });
@@ -396,8 +507,8 @@ export default function MessagesScreen() {
       const newMessages = mapMessages([rawMessage], currentUserId ?? -1).filter((m) => m.sender !== 'system');
       setMessages((prev) => [...prev, ...newMessages]);
 
-      setConversations((prev) =>
-        prev.map((conversation) =>
+      const applyPreviewUpdate = (items: ConversationItem[]) =>
+        items.map((conversation) =>
           conversation.id === selectedConversation.id
             ? {
                 ...conversation,
@@ -407,8 +518,13 @@ export default function MessagesScreen() {
                 time: 'now',
               }
             : conversation
-        )
-      );
+        );
+
+      if (selectedConversation.threadKind === 'mentorship') {
+        setMentorshipConversations((prev) => applyPreviewUpdate(prev));
+      } else {
+        setPeerMentorConversations((prev) => applyPreviewUpdate(prev));
+      }
 
       setDraft('');
       setPendingAttachment(null);
@@ -490,8 +606,14 @@ export default function MessagesScreen() {
         </View>
 
         <View style={styles.contextBar}>
-          <Text style={styles.badgeSage}>Mentorship Chat</Text>
-          <Text style={styles.contextText}>Real messages and attachment support</Text>
+          <Text style={styles.badgeSage}>
+            {selectedConversation.threadKind === 'mentorPair' ? 'Peer Mentor Chat' : 'Mentorship Chat'}
+          </Text>
+          <Text style={styles.contextText}>
+            {selectedConversation.threadKind === 'mentorPair'
+              ? 'Private mentor-to-mentor conversation with attachment support'
+              : 'Real messages and attachment support'}
+          </Text>
         </View>
 
         {threadLoading ? (
@@ -628,12 +750,55 @@ export default function MessagesScreen() {
           <Text style={styles.title}>Messages</Text>
           <Text style={styles.titleItalic}>{titleLine}</Text>
 
+          {isMentor ? (
+            <View style={styles.listTabRow}>
+              <TouchableOpacity
+                style={[
+                  styles.listTabButton,
+                  activeListTab === 'mentorships' && styles.listTabButtonActive,
+                ]}
+                onPress={() => setActiveListTab('mentorships')}
+              >
+                <Text
+                  style={[
+                    styles.listTabButtonText,
+                    activeListTab === 'mentorships' && styles.listTabButtonTextActive,
+                  ]}
+                >
+                  Active Mentees
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.listTabButton,
+                  activeListTab === 'mentorPeers' && styles.listTabButtonActive,
+                ]}
+                onPress={() => setActiveListTab('mentorPeers')}
+              >
+                <Text
+                  style={[
+                    styles.listTabButtonText,
+                    activeListTab === 'mentorPeers' && styles.listTabButtonTextActive,
+                  ]}
+                >
+                  Mentor Network
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           <View style={styles.searchBar}>
             <Text style={styles.searchIcon}>🔍</Text>
             <TextInput
               value={search}
               onChangeText={setSearch}
-              placeholder={isMentor ? 'Search conversations...' : 'Search messages...'}
+              placeholder={
+                isMentor && activeListTab === 'mentorPeers'
+                  ? 'Search mentor peers...'
+                  : isMentor
+                  ? 'Search conversations...'
+                  : 'Search messages...'
+              }
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.searchInput}
             />
@@ -649,13 +814,17 @@ export default function MessagesScreen() {
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listScroll}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Active Mentorships</Text>
+            <Text style={styles.sectionTitle}>
+              {isMentor && activeListTab === 'mentorPeers' ? 'Mentor Network' : 'Active Mentorships'}
+            </Text>
             <View style={styles.cardList}>
               {filteredConversations.length === 0 ? (
                 <View style={styles.emptyConversationBlock}>
                   <Text style={styles.emptyConversationTitle}>No conversations found</Text>
                   <Text style={styles.emptyConversationText}>
-                    Once you have an active mentorship, your chat threads will appear here.
+                    {isMentor && activeListTab === 'mentorPeers'
+                      ? 'No existing mentor-to-mentor conversations matched your search.'
+                      : 'Once you have an active mentorship, your chat threads will appear here.'}
                   </Text>
                 </View>
               ) : (
@@ -670,10 +839,38 @@ export default function MessagesScreen() {
             </View>
           </View>
 
+          {isMentor && activeListTab === 'mentorPeers' ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Start New Conversation</Text>
+              <View style={styles.cardList}>
+                {filteredMentorDirectoryOptions.length === 0 ? (
+                  <View style={styles.emptyConversationBlock}>
+                    <Text style={styles.emptyConversationTitle}>No mentors available</Text>
+                    <Text style={styles.emptyConversationText}>
+                      Every visible mentor is already in your mentor-pair inbox, or none matched your search.
+                    </Text>
+                  </View>
+                ) : (
+                  filteredMentorDirectoryOptions.map((conversation) => (
+                    <ConversationRow
+                      key={`directory-${conversation.counterpartId}`}
+                      item={conversation}
+                      onPress={() => setSelectedConversation(conversation)}
+                    />
+                  ))
+                )}
+              </View>
+            </View>
+          ) : null}
+
           <View style={styles.tipCard}>
-            <Text style={styles.tipLabel}>Attachment Support</Text>
+            <Text style={styles.tipLabel}>
+              {isMentor && activeListTab === 'mentorPeers' ? 'Peer Messaging' : 'Attachment Support'}
+            </Text>
             <Text style={styles.tipText}>
-              You can now attach images, PDF files, DOCX files, and TXT files directly from the chat composer.
+              {isMentor && activeListTab === 'mentorPeers'
+                ? 'Mentors can start private peer conversations here and reuse the same attachment-enabled chat flow.'
+                : 'You can now attach images, PDF files, DOCX files, and TXT files directly from the chat composer.'}
             </Text>
           </View>
         </ScrollView>
@@ -686,7 +883,7 @@ function ConversationRow({
   item,
   onPress,
 }: {
-  item: MentorshipConversation;
+  item: ConversationItem;
   onPress: () => void;
 }) {
   return (
@@ -791,6 +988,32 @@ const styles = StyleSheet.create({
   listScroll: {
     paddingTop: 10,
     paddingBottom: 28,
+  },
+  listTabRow: {
+    flexDirection: 'row',
+    marginTop: 12,
+    marginBottom: 2,
+  },
+  listTabButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    marginRight: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  listTabButtonActive: {
+    backgroundColor: '#D4E8DC',
+    borderColor: '#D4E8DC',
+  },
+  listTabButtonText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  listTabButtonTextActive: {
+    color: '#2D5A3D',
   },
   section: {
     paddingHorizontal: 14,
