@@ -2065,6 +2065,55 @@
 }
 .md-message-mine .md-message-time { color: rgba(255,255,255,0.7); }
 
+/* ── CHAT COMPOSER ── */
+.md-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: #fff;
+  position: sticky;
+  bottom: 0;
+  flex-wrap: wrap;
+}
+.md-composer-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  max-height: 140px;
+  outline: none;
+  background: #fff;
+}
+.md-composer-input:focus { border-color: var(--green-dark); }
+.md-composer-input:disabled { background: var(--green-bg); cursor: not-allowed; }
+.md-composer-send {
+  background: var(--green-dark);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.md-composer-send:hover:not(:disabled) { background: #15693a; }
+.md-composer-send:disabled { opacity: 0.5; cursor: not-allowed; }
+.md-composer-error {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #c53030;
+  padding-left: 4px;
+}
+
 /* ── MESSAGES CONVERSATION LIST ── */
 .md-conv-list { display: flex; flex-direction: column; gap: 8px; }
 .md-conv-item {
