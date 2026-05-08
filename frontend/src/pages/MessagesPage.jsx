@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
@@ -10,6 +10,10 @@ import {
   getMentorshipMessages,
   sendMentorshipMessage,
   markMentorshipMessagesRead,
+  getMentorPairInbox,
+  getMentorPairMessages,
+  sendMentorPairMessage,
+  markMentorPairMessagesRead,
 } from '../services/api'
 import { uploadMessageAttachment } from '../services/attachmentService'
 import useConversationSubscription from '../hooks/useConversationSubscription'
@@ -39,7 +43,7 @@ function relativeTime(iso) {
   return `${dys}d`
 }
 
-function counterpart(m, role) {
+function mentorshipCounterpart(m, role) {
   return role === 'MENTOR' ? m.menteeFirstName : m.mentorFirstName
 }
 
@@ -71,32 +75,64 @@ function pageToOldestFirst(page) {
 export default function MessagesPage() {
   const [params] = useSearchParams()
   const mentorshipId = params.get('mentorshipId')
+  const peerId = params.get('peerId')
   const navigate = useNavigate()
   const { role, userId } = useAuth()
+  const isMentor = role === 'MENTOR'
 
-  // Thread state (when mentorshipId is in URL)
+  // ── Polymorphic chat-route descriptor ────────────────────────────────────
+  // Either ?mentorshipId= (mentee↔mentor) or ?peerId= (mentor↔mentor) selects
+  // the chat. The descriptor encapsulates which API to call so the rest of
+  // the page is endpoint-agnostic.
+  const chatRoute = useMemo(() => {
+    if (mentorshipId) {
+      return {
+        kind: 'MENTORSHIP',
+        key: mentorshipId,
+        loadMessages: (k, page, size) => getMentorshipMessages(k, page, size),
+        send: (k, body) => sendMentorshipMessage(k, body),
+        markRead: (k) => markMentorshipMessagesRead(k),
+        backHref: `/mentorships/${mentorshipId}`,
+        backLabel: '← Back to mentorship',
+      }
+    }
+    if (peerId) {
+      return {
+        kind: 'MENTOR_PAIR',
+        key: peerId,
+        loadMessages: (k, page, size) => getMentorPairMessages(k, page, size),
+        send: (k, body) => sendMentorPairMessage(k, body),
+        markRead: (k) => markMentorPairMessagesRead(k),
+        backHref: `/users/${peerId}`,
+        backLabel: '← Back to profile',
+      }
+    }
+    return null
+  }, [mentorshipId, peerId])
+
+  // Thread state
   const [messages, setMessages] = useState([])
   const [conversationId, setConversationId] = useState(null)
   const [threadLoading, setThreadLoading] = useState(false)
   const [threadError, setThreadError] = useState(null)
 
-  // Conversation list state (when no mentorshipId)
+  // Conversation list state
   const [conversations, setConversations] = useState([])
   const [listLoading, setListLoading] = useState(false)
 
   // ── Thread loader: real API ───────────────────────────────────────────────
   useEffect(() => {
-    if (!mentorshipId) return undefined
+    if (!chatRoute) return undefined
     let cancelled = false
+    setMessages([])
+    setConversationId(null)
     setThreadLoading(true)
     setThreadError(null)
-    getMentorshipMessages(mentorshipId, 0, 50)
+    chatRoute.loadMessages(chatRoute.key, 0, 50)
       .then(page => {
         if (cancelled) return
         const ordered = pageToOldestFirst(page)
         setMessages(ordered)
-        // Pull conversationId off the first message if any. For an empty
-        // conversation it stays null until the first send response carries it.
         if (ordered.length > 0 && ordered[0].conversationId != null) {
           setConversationId(ordered[0].conversationId)
         }
@@ -104,64 +140,100 @@ export default function MessagesPage() {
       .catch(err => { if (!cancelled) setThreadError(err.message || 'Failed to load messages') })
       .finally(() => { if (!cancelled) setThreadLoading(false) })
     return () => { cancelled = true }
-  }, [mentorshipId])
+  }, [chatRoute])
 
   // ── Mark messages as read once a thread is open ───────────────────────────
   useEffect(() => {
-    if (!mentorshipId) return
-    // Best-effort, ignore failures — read receipts are non-critical for the chat baseline
-    markMentorshipMessagesRead(mentorshipId).catch(() => { /* ignore */ })
-  }, [mentorshipId, messages.length])
+    if (!chatRoute) return
+    chatRoute.markRead(chatRoute.key).catch(() => { /* ignore */ })
+  }, [chatRoute, messages.length])
 
   // ── Live updates via STOMP ────────────────────────────────────────────────
   useConversationSubscription(conversationId, (incoming) => {
     setMessages(prev => {
-      // Skip duplicates: backend re-broadcasts after AFTER_COMMIT, which races
-      // with the optimistic append done in handleSend.
       if (prev.some(m => m.id === incoming.id)) return prev
       return [...prev, incoming]
     })
   })
 
-  // ── Conversation list loader: real API previews ───────────────────────────
+  // ── Conversation list loader: merge mentorship + mentor-pair inboxes ──────
   useEffect(() => {
-    if (mentorshipId) return undefined
+    if (chatRoute) return undefined
     let cancelled = false
     setListLoading(true)
-    getActiveMentorships()
-      .then(async list => {
-        const enriched = await Promise.all(
+
+    async function loadMentorshipConvs() {
+      try {
+        const list = await getActiveMentorships()
+        return await Promise.all(
           (list || []).map(async m => {
             try {
               const page = await getMentorshipMessages(m.id, 0, 1)
               const last = page?.content?.[0] || null
               return {
                 kind: 'MENTORSHIP',
-                mentorship: m,
+                id: `mentorship-${m.id}`,
+                href: `/messages?mentorshipId=${m.id}`,
+                name: mentorshipCounterpart(m, role) || '—',
                 preview: last?.content || '',
                 lastAt: last?.sentAt || null,
               }
             } catch {
-              return { kind: 'MENTORSHIP', mentorship: m, preview: '', lastAt: null }
+              return {
+                kind: 'MENTORSHIP',
+                id: `mentorship-${m.id}`,
+                href: `/messages?mentorshipId=${m.id}`,
+                name: mentorshipCounterpart(m, role) || '—',
+                preview: '',
+                lastAt: null,
+              }
             }
           })
         )
-        return enriched.sort((a, b) => new Date(b.lastAt || 0) - new Date(a.lastAt || 0))
+      } catch {
+        return []
+      }
+    }
+
+    async function loadMentorPairConvs() {
+      // Only mentors have a mentor-pair inbox (backend gates with hasRole('MENTOR'))
+      if (!isMentor) return []
+      try {
+        const inbox = await getMentorPairInbox(0, 50)
+        return (inbox?.content || []).map(item => ({
+          kind: 'MENTOR_PAIR',
+          id: `pair-${item.peerId}`,
+          href: `/messages?peerId=${item.peerId}`,
+          name: item.peerFirstName || '—',
+          preview: item.lastMessageContent || '',
+          lastAt: item.lastMessageSentAt || null,
+        }))
+      } catch {
+        return []
+      }
+    }
+
+    Promise.all([loadMentorshipConvs(), loadMentorPairConvs()])
+      .then(([mentorships, pairs]) => {
+        const merged = [...mentorships, ...pairs]
+          .sort((a, b) => new Date(b.lastAt || 0) - new Date(a.lastAt || 0))
+        if (!cancelled) setConversations(merged)
       })
-      .then(c => { if (!cancelled) setConversations(c) })
       .catch(() => { if (!cancelled) setConversations([]) })
       .finally(() => { if (!cancelled) setListLoading(false) })
+
     return () => { cancelled = true }
-  }, [mentorshipId])
+  }, [chatRoute, role, isMentor])
 
   // ── Send handler ──────────────────────────────────────────────────────────
   // Backend requires non-empty content even when an attachment is present, so
   // we substitute a single space when the user only sends a file.
   async function handleSend(content, attachment) {
+    if (!chatRoute) return
     const safeContent = content && content.length > 0 ? content : ' '
     const payload = { content: safeContent }
     if (attachment?.id) payload.attachmentId = attachment.id
-    const created = await sendMentorshipMessage(mentorshipId, payload)
+    const created = await chatRoute.send(chatRoute.key, payload)
     setMessages(prev => {
       if (prev.some(m => m.id === created.id)) return prev
       return [...prev, created]
@@ -172,35 +244,37 @@ export default function MessagesPage() {
   }
 
   // ── Conversation list view ────────────────────────────────────────────────
-  if (!mentorshipId) {
+  if (!chatRoute) {
     return (
       <MainLayout>
         <div className="page-header">
           <div>
             <div className="page-title">Messages</div>
-            <div className="page-sub">Your active mentorship conversations</div>
+            <div className="page-sub">Your conversations</div>
           </div>
         </div>
 
         {listLoading ? (
           <div className="md-loading">Loading conversations…</div>
         ) : conversations.length === 0 ? (
-          <div className="empty-state">No active conversations yet.</div>
+          <div className="empty-state">No conversations yet.</div>
         ) : (
           <div className="md-conv-list">
             {conversations.map(c => {
-              const name = counterpart(c.mentorship, role) || '—'
-              const initials = (name?.[0] || '?').toUpperCase()
+              const initials = (c.name?.[0] || '?').toUpperCase()
               return (
                 <button
-                  key={`${c.kind}-${c.mentorship.id}`}
+                  key={c.id}
                   className="md-conv-item"
-                  onClick={() => navigate(`/messages?mentorshipId=${c.mentorship.id}`)}
+                  onClick={() => navigate(c.href)}
                 >
                   <Avatar initials={initials} size="md" />
                   <div className="md-conv-info">
                     <div className="md-conv-top">
-                      <span className="md-conv-name">{name}</span>
+                      <span className="md-conv-name">{c.name}</span>
+                      {c.kind === 'MENTOR_PAIR' && (
+                        <span className="md-conv-badge">Mentor</span>
+                      )}
                       {c.lastAt && <span className="md-conv-time">{relativeTime(c.lastAt)}</span>}
                     </div>
                     <div className="md-conv-preview">{c.preview || 'No messages yet'}</div>
@@ -220,10 +294,10 @@ export default function MessagesPage() {
       <div className="page-header">
         <div>
           <button
-            onClick={() => navigate(`/mentorships/${mentorshipId}`)}
+            onClick={() => navigate(chatRoute.backHref)}
             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '13px', padding: 0, marginBottom: '8px' }}
           >
-            ← Back to mentorship
+            {chatRoute.backLabel}
           </button>
           <div className="page-title">Messages</div>
         </div>
