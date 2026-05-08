@@ -89,12 +89,9 @@ public class Report {
     @Column(name = "reviewed_by_id")
     private Long reviewedById;
 
-    /**
-     * Initialised to {@code 0L} so {@code Hibernate.isNew(entity)}
-     * returns the same answer for both freshly-constructed and
-     * persisted entities, making {@code save()} reliably take the
-     * merge() path on subsequent calls.
-     */
+    // Initialised to 0L for first persist; bumps on every save. The
+    // class-level Javadoc covers why the column exists (concurrent admin
+    // transitions on the same report).
     @Version
     @Column(nullable = false)
     private Long version = 0L;
