@@ -106,11 +106,13 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
      * "don't filter on this dimension." When both are non-null, both
      * must match (AND semantics).
      *
-     * <p>Keyword matching uses {@code LOWER(p.body) LIKE '%' || :keyword || '%'}
+     * <p>Keyword matching uses {@code LOWER(p.body) LIKE '%' || :keyword || '%' ESCAPE '\\'}
      * which the {@code idx_feed_posts_body_trgm} GIN index accelerates
      * for keywords ≥ 3 chars; shorter keywords silently seq-scan (the
      * pg_trgm minimum). The service caller normalises the keyword
-     * (lowercase, trim) before passing in.
+     * (lowercase, trim) AND escapes LIKE metacharacters {@code %} {@code _}
+     * {@code \} before passing in — otherwise a user searching for
+     * {@code %} would match every post.
      *
      * <p>Hashtag matching joins {@code feed_post_hashtags}; the service
      * passes the tag through {@code HashtagNormalizer} so the lookup
@@ -120,7 +122,7 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             SELECT DISTINCT p.* FROM feed_posts p
             LEFT JOIN feed_post_hashtags h ON h.post_id = p.id
             WHERE p.deleted_at IS NULL
-              AND (:keyword IS NULL OR LOWER(p.body) LIKE '%' || :keyword || '%')
+              AND (:keyword IS NULL OR LOWER(p.body) LIKE '%' || :keyword || '%' ESCAPE '\\')
               AND (:hashtag IS NULL OR h.tag = :hashtag)
             ORDER BY p.created_at DESC, p.id DESC
             """,
@@ -128,7 +130,7 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             SELECT COUNT(DISTINCT p.id) FROM feed_posts p
             LEFT JOIN feed_post_hashtags h ON h.post_id = p.id
             WHERE p.deleted_at IS NULL
-              AND (:keyword IS NULL OR LOWER(p.body) LIKE '%' || :keyword || '%')
+              AND (:keyword IS NULL OR LOWER(p.body) LIKE '%' || :keyword || '%' ESCAPE '\\')
               AND (:hashtag IS NULL OR h.tag = :hashtag)
             """,
             nativeQuery = true)
