@@ -81,6 +81,14 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
+    @ExceptionHandler(DuplicateReportException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicateReport(DuplicateReportException ex,
+                                                                     HttpServletRequest request) {
+        log.warn("Duplicate report rejected: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
+    }
+
     @ExceptionHandler(InvalidTokenException.class)
     public ResponseEntity<Map<String, String>> handleInvalidToken(InvalidTokenException ex,
                                                                   HttpServletRequest request) {
