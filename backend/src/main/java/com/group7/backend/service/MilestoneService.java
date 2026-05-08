@@ -8,14 +8,15 @@ import com.group7.backend.dto.response.MilestoneActionItemResponse;
 import com.group7.backend.dto.response.MilestoneDetailResponse;
 import com.group7.backend.dto.response.MilestoneSummaryResponse;
 import com.group7.backend.entity.*;
+import com.group7.backend.exception.MilestoneConflictException;
+import com.group7.backend.exception.ProfileNotVisibleException;
+import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.MilestoneActionItemRepository;
 import com.group7.backend.repository.MilestoneRepository;
 import com.group7.backend.repository.UserRepository;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -46,10 +47,10 @@ public class MilestoneService {
 
     public MilestoneDetailResponse createMilestone(Long mentorshipId, Long mentorId, MilestoneCreateRequest request) {
         Mentorship mentorship = mentorshipRepository.findById(mentorshipId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentorship not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Mentorship not found"));
 
         if (!mentorship.getMentor().getId().equals(mentorId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only mentors can create milestones");
+            throw new ProfileNotVisibleException("Only mentors can create milestones");
         }
         checkMentorshipActive(mentorship);
 
@@ -75,7 +76,7 @@ public class MilestoneService {
     @Transactional(readOnly = true)
     public List<MilestoneSummaryResponse> listMilestones(Long mentorshipId, Long userId) {
         Mentorship mentorship = mentorshipRepository.findById(mentorshipId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentorship not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Mentorship not found"));
 
         validateParticipant(mentorship, userId);
 
@@ -88,7 +89,7 @@ public class MilestoneService {
     @Transactional(readOnly = true)
     public MilestoneDetailResponse getMilestone(Long id, Long userId) {
         Milestone milestone = milestoneRepository.findByIdWithMentorship(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Milestone not found"));
 
         validateParticipant(milestone.getMentorship(), userId);
 
@@ -97,10 +98,10 @@ public class MilestoneService {
 
     public MilestoneDetailResponse updateMilestone(Long id, Long mentorId, MilestoneUpdateRequest request) {
         Milestone milestone = milestoneRepository.findByIdWithMentorship(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Milestone not found"));
 
         if (!milestone.getMentorship().getMentor().getId().equals(mentorId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only mentors can update milestones");
+            throw new ProfileNotVisibleException("Only mentors can update milestones");
         }
         checkMentorshipActive(milestone.getMentorship());
 
@@ -131,10 +132,10 @@ public class MilestoneService {
 
     public void deleteMilestone(Long id, Long mentorId) {
         Milestone milestone = milestoneRepository.findByIdWithMentorship(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Milestone not found"));
 
         if (!milestone.getMentorship().getMentor().getId().equals(mentorId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only mentors can delete milestones");
+            throw new ProfileNotVisibleException("Only mentors can delete milestones");
         }
         checkMentorshipActive(milestone.getMentorship());
 
@@ -145,10 +146,10 @@ public class MilestoneService {
 
     public MilestoneActionItemResponse addActionItem(Long milestoneId, Long mentorId, MilestoneActionItemCreateRequest request) {
         Milestone milestone = milestoneRepository.findByIdWithMentorship(milestoneId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Milestone not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Milestone not found"));
 
         if (!milestone.getMentorship().getMentor().getId().equals(mentorId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only mentors can add action items");
+            throw new ProfileNotVisibleException("Only mentors can add action items");
         }
         checkMentorshipActive(milestone.getMentorship());
 
@@ -165,7 +166,7 @@ public class MilestoneService {
 
     public MilestoneActionItemResponse updateActionItem(Long id, Long userId, MilestoneActionItemUpdateRequest request) {
         MilestoneActionItem item = actionItemRepository.findByIdWithMilestoneAndMentorship(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Action item not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Action item not found"));
 
         Mentorship mentorship = item.getMilestone().getMentorship();
         validateParticipant(mentorship, userId);
@@ -176,7 +177,7 @@ public class MilestoneService {
         // Text editing is mentor-only
         if (request.getText() != null) {
             if (!isMentor) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only mentors can edit action item text");
+                throw new ProfileNotVisibleException("Only mentors can edit action item text");
             }
             item.setText(request.getText());
         }
@@ -184,7 +185,7 @@ public class MilestoneService {
         // Order editing is mentor-only
         if (request.getOrderIndex() != null) {
             if (!isMentor) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only mentors can reorder action items");
+                throw new ProfileNotVisibleException("Only mentors can reorder action items");
             }
             item.setOrderIndex(request.getOrderIndex());
         }
@@ -215,10 +216,10 @@ public class MilestoneService {
 
     public void deleteActionItem(Long id, Long mentorId) {
         MilestoneActionItem item = actionItemRepository.findByIdWithMilestoneAndMentorship(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Action item not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Action item not found"));
 
         if (!item.getMilestone().getMentorship().getMentor().getId().equals(mentorId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only mentors can delete action items");
+            throw new ProfileNotVisibleException("Only mentors can delete action items");
         }
         checkMentorshipActive(item.getMilestone().getMentorship());
 
@@ -231,13 +232,13 @@ public class MilestoneService {
         boolean isMentor = mentorship.getMentor().getId().equals(userId);
         boolean isMentee = mentorship.getMentee().getId().equals(userId);
         if (!isMentor && !isMentee) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not a participant in this mentorship");
+            throw new ProfileNotVisibleException("You are not a participant in this mentorship");
         }
     }
 
     private void checkMentorshipActive(Mentorship mentorship) {
         if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Mentorship is not active");
+            throw new MilestoneConflictException("Mentorship is not active");
         }
     }
 
@@ -292,7 +293,7 @@ public class MilestoneService {
         OffsetDateTime mentorshipStart = mentorship.getStartDate();
         OffsetDateTime mentorshipEnd = mentorship.getEndDate();
         if (targetDate.isBefore(mentorshipStart) || targetDate.isAfter(mentorshipEnd)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Milestone target date must be within the mentorship duration");
+            throw new IllegalArgumentException("Milestone target date must be within the mentorship duration");
         }
     }
 }
