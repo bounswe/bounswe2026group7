@@ -78,4 +78,15 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId> {
      */
     @Query("SELECT f.id.followeeId FROM Follow f WHERE f.id.followerId = :followerId")
     java.util.Set<Long> findFolloweeIdsByFollowerId(@Param("followerId") Long followerId);
+
+    /**
+     * Returns the unbounded set of {@code followerId}s that follow
+     * {@code followeeId} (#349). Used by {@link
+     * com.group7.backend.event.FeedFanoutListener} to fan out a STOMP
+     * push to every follower of a post's author. Mirror of {@link
+     * #findFolloweeIdsByFollowerId} on the symmetric direction; same
+     * unbounded-projection rationale (no pagination, no DTO, no order).
+     */
+    @Query("SELECT f.id.followerId FROM Follow f WHERE f.id.followeeId = :followeeId")
+    java.util.Set<Long> findFollowerIdsByFolloweeId(@Param("followeeId") Long followeeId);
 }

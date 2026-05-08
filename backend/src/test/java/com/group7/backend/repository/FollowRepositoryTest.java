@@ -231,6 +231,35 @@ class FollowRepositoryTest {
         assertThat(remaining).isZero();
     }
 
+    // ── Unbounded id projections (#350 / #349) ───────────────────────────────
+
+    @Test
+    void findFollowerIdsByFolloweeId_returnsExactlyTheFollowersOfTheFolloweee() {
+        Mentee target = saveMentee("ffi_target", "T");
+        Mentee f1 = saveMentee("ffi_f1", "F1");
+        Mentee f2 = saveMentee("ffi_f2", "F2");
+        Mentee unrelated = saveMentee("ffi_unrelated", "U");
+
+        followRepository.upsertFollow(f1.getId(), target.getId());
+        followRepository.upsertFollow(f2.getId(), target.getId());
+        followRepository.upsertFollow(unrelated.getId(), f1.getId()); // noise
+
+        java.util.Set<Long> followers =
+                followRepository.findFollowerIdsByFolloweeId(target.getId());
+
+        assertThat(followers).containsExactlyInAnyOrder(f1.getId(), f2.getId());
+    }
+
+    @Test
+    void findFollowerIdsByFolloweeId_returnsEmptySet_forUserWithNoFollowers() {
+        Mentee lonely = saveMentee("ffi_lonely", "L");
+
+        java.util.Set<Long> followers =
+                followRepository.findFollowerIdsByFolloweeId(lonely.getId());
+
+        assertThat(followers).isEmpty();
+    }
+
     // ── Fixtures ─────────────────────────────────────────────────────────────
 
     private Mentee saveMentee(String suffix, String firstName) {
