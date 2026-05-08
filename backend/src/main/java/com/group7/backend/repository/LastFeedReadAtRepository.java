@@ -34,7 +34,13 @@ public interface LastFeedReadAtRepository extends JpaRepository<LastFeedReadAt, 
      * Set the user's read cursor to the current statement-start wall
      * clock. Returns 1 on a fresh insert and 1 on an in-place update
      * (Postgres' {@code ON CONFLICT DO UPDATE} reports both as a single
-     * affected row); never throws on conflict.
+     * affected row); the {@code ON CONFLICT} branch never throws on
+     * primary-key conflict. {@code DataIntegrityViolationException} is
+     * still possible if {@code userId} doesn't reference an existing
+     * {@code users} row (FK violation) — callers reach this method via
+     * the JWT-auth chain, so the user existed at token-issue time and
+     * the only realistic FK-violation path is the user being deleted in
+     * the narrow window between auth and this write.
      *
      * <p><b>{@code clock_timestamp()}, not {@code NOW()}.</b> {@code NOW()}
      * is the start-of-transaction timestamp — two consecutive {@code
