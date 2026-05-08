@@ -9,6 +9,7 @@ import {
   sendMentorshipMessage,
   markMentorshipMessagesRead,
 } from '../services/api'
+import { uploadMessageAttachment } from '../services/attachmentService'
 import useConversationSubscription from '../hooks/useConversationSubscription'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -133,8 +134,13 @@ export default function MessagesPage() {
   }, [mentorshipId])
 
   // ── Send handler ──────────────────────────────────────────────────────────
-  async function handleSend(content) {
-    const created = await sendMentorshipMessage(mentorshipId, { content })
+  // Backend requires non-empty content even when an attachment is present, so
+  // we substitute a single space when the user only sends a file.
+  async function handleSend(content, attachment) {
+    const safeContent = content && content.length > 0 ? content : ' '
+    const payload = { content: safeContent }
+    if (attachment?.id) payload.attachmentId = attachment.id
+    const created = await sendMentorshipMessage(mentorshipId, payload)
     setMessages(prev => {
       if (prev.some(m => m.id === created.id)) return prev
       return [...prev, created]
@@ -228,7 +234,11 @@ export default function MessagesPage() {
               )
             })}
           </div>
-          <ChatComposer onSend={handleSend} placeholder="Type a message…" />
+          <ChatComposer
+            onSend={handleSend}
+            onUpload={uploadMessageAttachment}
+            placeholder="Type a message…"
+          />
         </>
       )}
     </MainLayout>
