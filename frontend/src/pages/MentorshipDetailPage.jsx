@@ -5,6 +5,7 @@ import Avatar from '../components/Avatar'
 import { getMentorshipById, getUserById, updateSharedGoal } from '../services/api'
 import { endMentorship, getNextUpcomingMeeting } from '../services/mentorshipMocks'
 import { useAuth } from '../context/AuthContext'
+import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
 import '../styles/modal.css'
 
@@ -87,6 +88,7 @@ export default function MentorshipDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { userId } = useAuth()
+  const { refresh } = useMentorship()
 
   const [mentorship, setMentorship] = useState(null)
   const [otherUser, setOtherUser] = useState(null)
@@ -153,6 +155,8 @@ export default function MentorshipDetailPage() {
     try {
       await endMentorship(mentorship.id)
       setEndOpen(false)
+      // Re-fetch mentorship counts so navbar dropdown / sidebar / dashboard reflect the ended state
+      refresh()
       navigate('/home')
     } catch {
       setEndLoading(false)

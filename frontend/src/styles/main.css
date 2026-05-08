@@ -2056,7 +2056,9 @@
   color: #fff;
   border-color: var(--green-dark);
 }
-.md-message-text { font-size: 14px; line-height: 1.5; }
+.md-message-text { font-size: 14px; line-height: 1.5; word-break: break-word; }
+.md-message-link { color: var(--green-dark); text-decoration: underline; }
+.md-message-mine .md-message-link { color: #fff; text-decoration: underline; }
 .md-message-time {
   font-size: 11px;
   color: var(--text-muted);
@@ -2064,6 +2066,174 @@
   text-align: right;
 }
 .md-message-mine .md-message-time { color: rgba(255,255,255,0.7); }
+
+/* ── MESSAGE ATTACHMENTS ── */
+.md-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.md-attach--doc {
+  background: rgba(0,0,0,0.04);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  max-width: 100%;
+}
+.md-message-mine .md-attach--doc {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.25);
+  color: #fff;
+}
+.md-attach-filename {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.md-attach-download {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+}
+.md-attach-download:disabled { opacity: 0.5; cursor: not-allowed; }
+.md-attach--loading,
+.md-attach--err { color: var(--text-muted); font-style: italic; }
+.md-message-mine .md-attach--loading,
+.md-message-mine .md-attach--err { color: rgba(255,255,255,0.75); }
+.md-attach-image-link {
+  display: inline-block;
+  margin-top: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.md-attach-image {
+  display: block;
+  max-width: 240px;
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+}
+.md-attach-error {
+  font-size: 11px;
+  color: #c53030;
+  flex-basis: 100%;
+}
+
+/* ── CHAT COMPOSER ── */
+.md-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: #fff;
+  position: sticky;
+  bottom: 0;
+  flex-wrap: wrap;
+}
+.md-composer-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  max-height: 140px;
+  outline: none;
+  background: #fff;
+}
+.md-composer-input:focus { border-color: var(--green-dark); }
+.md-composer-input:disabled { background: var(--green-bg); cursor: not-allowed; }
+.md-composer-send {
+  background: var(--green-dark);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.md-composer-send:hover:not(:disabled) { background: #15693a; }
+.md-composer-send:disabled { opacity: 0.5; cursor: not-allowed; }
+.md-composer-error {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #c53030;
+  padding-left: 4px;
+}
+.md-composer-status {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding-left: 4px;
+}
+.md-composer-attach {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  width: 38px;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.md-composer-attach:hover:not(:disabled) {
+  background: var(--green-bg);
+  color: var(--green-dark);
+  border-color: var(--green-dark);
+}
+.md-composer-attach:disabled { opacity: 0.4; cursor: not-allowed; }
+.md-composer-chip {
+  flex-basis: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--green-bg);
+  border: 1px solid var(--green-dark);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-dark);
+  max-width: 100%;
+}
+.md-composer-chip-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.md-composer-chip-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+}
+.md-composer-chip-remove:hover:not(:disabled) { color: #c53030; }
+.md-composer-chip-remove:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── MESSAGES CONVERSATION LIST ── */
 .md-conv-list { display: flex; flex-direction: column; gap: 8px; }

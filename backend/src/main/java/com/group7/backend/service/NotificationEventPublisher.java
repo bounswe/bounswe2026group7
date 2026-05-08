@@ -92,6 +92,75 @@ public class NotificationEventPublisher {
                 NotificationType.TASK_REVIEWED,
                 needsRevision ? "Task Needs Revision" : "Task Completed",
                 "Your mentor reviewed your submission for task: " + taskTitle
+    public void publishMeetingPendingConfirmation(Long recipientId, String mentorName) {
+        publish(
+                recipientId,
+                NotificationType.MEETING_PENDING_CONFIRMATION,
+                "Meeting pending confirmation",
+                mentorName + " scheduled a meeting. Please confirm or decline."
+        );
+    }
+
+    public void publishMeetingConfirmed(Long recipientId, String menteeName) {
+        publish(
+                recipientId,
+                NotificationType.MEETING_CONFIRMED,
+                "Meeting confirmed",
+                menteeName + " confirmed the meeting."
+        );
+    }
+
+    public void publishMeetingDeclined(Long recipientId, String menteeName) {
+        publish(
+                recipientId,
+                NotificationType.MEETING_DECLINED,
+                "Meeting declined",
+                menteeName + " declined the meeting."
+        );
+    }
+
+    public void publishMeetingAutoDeclined(Long recipientId, String menteeName) {
+        publish(
+                recipientId,
+                NotificationType.MEETING_AUTO_DECLINED,
+                "Meeting auto-declined",
+                "The meeting with " + menteeName + " expired without confirmation."
+        );
+    }
+
+    public void publishMeetingRescheduleRequested(Long recipientId, String requesterName) {
+        publish(
+                recipientId,
+                NotificationType.MEETING_RESCHEDULE_REQUESTED,
+                "Meeting reschedule requested",
+                requesterName + " requested to reschedule the meeting."
+        );
+    }
+
+    public void publishMeetingRescheduleApproved(Long recipientId, String approverName) {
+        publish(
+                recipientId,
+                NotificationType.MEETING_RESCHEDULE_APPROVED,
+                "Meeting reschedule approved",
+                approverName + " approved the reschedule request."
+        );
+    }
+
+    public void publishMeetingRescheduleRejected(Long recipientId, String approverName) {
+        publish(
+                recipientId,
+                NotificationType.MEETING_RESCHEDULE_REJECTED,
+                "Meeting reschedule rejected",
+                approverName + " rejected the reschedule request."
+        );
+    }
+
+    public void publishMeetingCancelled(Long recipientId, String mentorName) {
+        publish(
+                recipientId,
+                NotificationType.MEETING_CANCELLED,
+                "Meeting cancelled",
+                mentorName + " cancelled the meeting."
         );
     }
 

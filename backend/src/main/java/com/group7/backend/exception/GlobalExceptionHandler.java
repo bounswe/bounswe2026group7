@@ -60,6 +60,13 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
+    @ExceptionHandler(MeetingConflictException.class)
+    public ResponseEntity<Map<String, String>> handleMeetingConflict(MeetingConflictException ex,
+                                                                     HttpServletRequest request) {
+        log.warn("Meeting conflict: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
+    }
+
     @ExceptionHandler(AuthenticationFailedException.class)
     public ResponseEntity<Map<String, String>> handleAuthenticationFailed(AuthenticationFailedException ex,
                                                                          HttpServletRequest request) {
@@ -78,6 +85,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleInvalidToken(InvalidTokenException ex,
                                                                   HttpServletRequest request) {
         log.warn("Invalid token: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    @ExceptionHandler(SelfFollowException.class)
+    public ResponseEntity<Map<String, String>> handleSelfFollow(SelfFollowException ex,
+                                                                HttpServletRequest request) {
+        log.warn("Self-follow rejected: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
     }
 
