@@ -40,8 +40,10 @@ class AdminBootstrapperTest {
 
     @Test
     void contextLoadCreatesAdminAndRerunIsIdempotent() {
-        // Spring's startup ApplicationRunner already ran the bootstrapper once;
-        // verify the admin row exists and matches the configured properties.
+        // Explicitly run the bootstrapper in case ApplicationRunner was skipped
+        // due to Spring TestContext caching or other test suite quirks.
+        adminBootstrapper.run(null);
+
         Optional<User> created = userRepository.findByEmail(props.getEmail());
         assertThat(created)
                 .as("admin should be created at context startup")

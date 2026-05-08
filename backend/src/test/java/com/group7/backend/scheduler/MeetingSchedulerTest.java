@@ -52,6 +52,7 @@ class MeetingSchedulerTest {
     @BeforeEach
     void setUp() {
         MeetingProperties properties = new MeetingProperties();
+        properties.setReminderOffsetHours(List.of(24));
         MeetingSchedulerProcessor processor = new MeetingSchedulerProcessor(meetingRepository, reminderStateRepository, notificationEventPublisher, properties);
         scheduler = new MeetingScheduler(meetingRepository, processor, clock);
 

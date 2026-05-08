@@ -18,6 +18,8 @@ create table meetings (
   confirmed_at          timestamptz,
   confirmation_deadline timestamptz,
   notes                 text,
+  notes_updated_at      timestamptz,
+  notes_updated_by_id   bigint references users(id) on delete set null,
   created_at            timestamptz not null default now()
 );
 
