@@ -5,6 +5,7 @@ import com.group7.backend.dto.response.ReportResponse;
 import com.group7.backend.entity.Mentorship;
 import com.group7.backend.entity.Report;
 import com.group7.backend.entity.ReportStatus;
+import com.group7.backend.entity.ReportStatusMachine;
 import com.group7.backend.entity.ReportTargetType;
 import com.group7.backend.exception.DuplicateReportException;
 import com.group7.backend.exception.ResourceNotFoundException;
@@ -22,8 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Service layer for the user-reporting + admin-moderation surface (#135).
@@ -66,22 +65,6 @@ import java.util.Set;
 public class ReportService {
 
     private static final Logger log = LoggerFactory.getLogger(ReportService.class);
-
-    /**
-     * State machine for {@code status} transitions. Map keys list every
-     * possible <em>from</em> state; the value is the set of legal <em>to</em>
-     * states. {@code RESOLVED} and {@code DISMISSED} carry empty sets —
-     * they are terminal.
-     */
-    private static final Map<ReportStatus, Set<ReportStatus>> ALLOWED_TRANSITIONS = Map.of(
-            ReportStatus.OPEN,         Set.of(ReportStatus.UNDER_REVIEW,
-                                              ReportStatus.RESOLVED,
-                                              ReportStatus.DISMISSED),
-            ReportStatus.UNDER_REVIEW, Set.of(ReportStatus.RESOLVED,
-                                              ReportStatus.DISMISSED),
-            ReportStatus.RESOLVED,     Set.of(),
-            ReportStatus.DISMISSED,    Set.of()
-    );
 
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
@@ -225,7 +208,7 @@ public class ReportService {
     }
 
     private static void validateTransition(ReportStatus from, ReportStatus to) {
-        if (!ALLOWED_TRANSITIONS.get(from).contains(to)) {
+        if (!ReportStatusMachine.canTransition(from, to)) {
             throw new IllegalArgumentException(
                     "Invalid status transition: " + from + " → " + to);
         }
