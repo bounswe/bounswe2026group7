@@ -12,7 +12,6 @@ import com.group7.backend.entity.UserDevice;
 import com.group7.backend.repository.UserDeviceRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -42,8 +41,16 @@ public class FcmPushDeliveryService implements PushDeliveryService {
         this.userDeviceRepository = userDeviceRepository;
     }
 
+    /**
+     * Intentionally not {@code @Transactional}: the FCM HTTP round-trip
+     * runs across a network boundary and would otherwise pin a HikariCP
+     * connection for its entire duration, defeating the pool under load.
+     * The two repository touches below auto-commit per call; pruning is
+     * idempotent across subsequent dispatches so atomicity with the FCM
+     * result is not required. Mirrors {@code EmailService}, which is the
+     * project's other network-bound service and is also not transactional.
+     */
     @Override
-    @Transactional
     public void send(Long recipientId, NotificationType type, String title, String body) {
         List<UserDevice> devices = userDeviceRepository.findByUser_IdOrderByLastSeenAtDesc(recipientId);
         if (devices.isEmpty()) {

@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Per-user notification-preferences accessor (#136). The row is created
  * lazily on first read so that callers never observe a missing row;
  * defaults are all-enabled and match the DB-level defaults in
- * {@code V22__push_notifications.sql}.
+ * {@code V24__push_notifications.sql}.
  */
 @Service
 public class UserNotificationPreferencesService {

@@ -5,6 +5,8 @@ import com.group7.backend.entity.UserDevice;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.UserDeviceRepository;
 import com.group7.backend.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,8 @@ import java.util.Optional;
  */
 @Service
 public class UserDeviceService {
+
+    private static final Logger log = LoggerFactory.getLogger(UserDeviceService.class);
 
     private final UserDeviceRepository userDeviceRepository;
     private final UserRepository userRepository;
@@ -41,8 +45,11 @@ public class UserDeviceService {
     /**
      * Idempotent on {@code token}. If the token already exists for the
      * caller, refresh {@code lastSeenAt}. If it exists for a different
-     * user (rare; e.g. shared phone), reassign it. If the caller is at
-     * the cap, evict the oldest-by-{@code lastSeenAt} device first.
+     * user (rare; e.g. shared phone, or a logout/login on the same device),
+     * reassign it — and emit a WARN so the path is auditable. Per Firebase
+     * docs, an FCM token represents a single app install at a time;
+     * reassignment is the correct outcome on re-registration. If the caller
+     * is at the cap, evict the oldest-by-{@code lastSeenAt} device first.
      */
     @Transactional
     public UserDevice register(Long userId, String token) {
@@ -53,6 +60,11 @@ public class UserDeviceService {
         Optional<UserDevice> existing = userDeviceRepository.findByToken(token);
         if (existing.isPresent()) {
             UserDevice device = existing.get();
+            Long previousOwnerId = device.getUser() != null ? device.getUser().getId() : null;
+            if (previousOwnerId != null && !previousOwnerId.equals(userId)) {
+                log.warn("FCM token reassigned across users: previousUserId={}, newUserId={}",
+                        previousOwnerId, userId);
+            }
             device.setUser(user);
             device.setLastSeenAt(now);
             return userDeviceRepository.save(device);

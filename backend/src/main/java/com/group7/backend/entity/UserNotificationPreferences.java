@@ -16,8 +16,10 @@ import java.time.ZoneOffset;
  *
  * <p>The {@link #isEnabledFor(NotificationType)} dispatch is exhaustive
  * over {@link NotificationType}. New enum values must be added to the
- * switch — the compiler will flag missing cases as a tripwire when other
- * features (Tasks #370, Meetings #352) introduce new types.
+ * switch — the compiler flags missing cases at build time, which is why
+ * we treat the switch as the project's source of truth for category-to-
+ * preference mapping. DB column defaults match this in
+ * {@code V24__push_notifications.sql}.
  */
 @Entity
 @Table(name = "user_notification_preferences")
@@ -69,7 +71,11 @@ public class UserNotificationPreferences {
         return switch (type) {
             case MATCH_FOUND -> matchesEnabled;
             case NEW_MESSAGE -> messagesEnabled;
-            case MEETING_REMINDER -> meetingsEnabled;
+            case MEETING_REMINDER, MEETING_PENDING_CONFIRMATION, MEETING_CONFIRMED,
+                 MEETING_DECLINED, MEETING_AUTO_DECLINED, MEETING_RESCHEDULE_REQUESTED,
+                 MEETING_RESCHEDULE_APPROVED, MEETING_RESCHEDULE_REJECTED,
+                 MEETING_CANCELLED -> meetingsEnabled;
+            case TASK_ASSIGNED, TASK_SUBMITTED, TASK_REVIEWED -> tasksEnabled;
             case REQUEST_RECEIVED, REQUEST_ACCEPTED, REQUEST_REJECTED,
                  REQUEST_SUBMITTED -> requestsEnabled;
         };

@@ -74,7 +74,7 @@ public class NotificationEventListener {
         // Preference gate is applied at the listener (not the transport) so
         // every transport implementation — FCM, no-op, or test mock — sees
         // the same policy. A missing preferences row defaults to all-enabled,
-        // matching the DB defaults in V22.
+        // matching the DB defaults in V24.
         UserNotificationPreferences prefs =
                 preferencesRepository.findById(event.recipientId()).orElse(null);
         if (prefs != null && !prefs.isEnabledFor(event.type())) {
