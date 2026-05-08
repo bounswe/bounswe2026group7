@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import ChatComposer from '../components/ChatComposer'
+import MessageAttachment from '../components/MessageAttachment'
 import {
   getActiveMentorships,
   getMentorshipMessages,
@@ -229,6 +230,9 @@ export default function MessagesPage() {
                   className={`md-message-bubble${mine ? ' md-message-mine' : ''}`}
                 >
                   <div className="md-message-text">{m.content}</div>
+                  {m.attachment && (
+                    <MessageAttachment attachment={m.attachment} mine={mine} />
+                  )}
                   <div className="md-message-time">{formatTime(m.sentAt)}</div>
                 </div>
               )

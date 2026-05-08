@@ -2065,6 +2065,67 @@
 }
 .md-message-mine .md-message-time { color: rgba(255,255,255,0.7); }
 
+/* ── MESSAGE ATTACHMENTS ── */
+.md-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.md-attach--doc {
+  background: rgba(0,0,0,0.04);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  max-width: 100%;
+}
+.md-message-mine .md-attach--doc {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.25);
+  color: #fff;
+}
+.md-attach-filename {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.md-attach-download {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+}
+.md-attach-download:disabled { opacity: 0.5; cursor: not-allowed; }
+.md-attach--loading,
+.md-attach--err { color: var(--text-muted); font-style: italic; }
+.md-message-mine .md-attach--loading,
+.md-message-mine .md-attach--err { color: rgba(255,255,255,0.75); }
+.md-attach-image-link {
+  display: inline-block;
+  margin-top: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.md-attach-image {
+  display: block;
+  max-width: 240px;
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+}
+.md-attach-error {
+  font-size: 11px;
+  color: #c53030;
+  flex-basis: 100%;
+}
+
 /* ── CHAT COMPOSER ── */
 .md-composer {
   display: flex;
