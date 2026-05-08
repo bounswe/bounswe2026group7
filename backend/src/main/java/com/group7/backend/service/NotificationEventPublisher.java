@@ -176,6 +176,37 @@ public class NotificationEventPublisher {
         );
     }
 
+    public void publishMilestoneCreated(Long menteeId, String milestoneTitle) {
+        publish(
+                menteeId,
+                NotificationType.MILESTONE_CREATED,
+                "New Milestone Created",
+                "Your mentor has created a new milestone: " + milestoneTitle + "."
+        );
+    }
+
+    public void publishMilestoneCompleted(Long userId, String milestoneTitle, boolean isMentor) {
+        String message = isMentor 
+                ? "Your mentee's milestone is completed: " + milestoneTitle + "."
+                : "Your mentor marked a milestone as completed: " + milestoneTitle + ".";
+        publish(
+                userId,
+                NotificationType.MILESTONE_COMPLETED,
+                "Milestone Completed!",
+                message
+        );
+    }
+
+    public void publishActionItemCompleted(Long mentorId, String menteeName, String itemText) {
+        String truncated = itemText.length() > 80 ? itemText.substring(0, 80) + "…" : itemText;
+        publish(
+                mentorId,
+                NotificationType.ACTION_ITEM_COMPLETED,
+                "Action Item Completed",
+                menteeName + " completed the action item: " + truncated + "."
+        );
+    }
+
     public void publish(Long recipientId, NotificationType type, String title, String body) {
         applicationEventPublisher.publishEvent(new NotificationCreatedEvent(recipientId, type, title, body));
     }
