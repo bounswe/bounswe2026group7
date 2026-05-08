@@ -83,9 +83,23 @@ public class FeedInteractionService {
     // ── Likes ──────────────────────────────────────────────────────────────
 
     /**
-     * Idempotent like toggle. Returns the new state ({@code true} =
-     * now liked, {@code false} = now unliked). 404 if the post is
-     * missing or soft-deleted.
+     * Idempotent like toggle. Returns the post's full interaction state
+     * after applying the toggle. 404 if the post is missing or
+     * soft-deleted.
+     *
+     * <p><b>Concurrency caveat — rapid double-click.</b> The toggle is
+     * not transactionally atomic across the {@code existsBy*} read and
+     * the subsequent insert/delete: under sub-millisecond contention
+     * (the user double-clicks, both requests race in parallel), both
+     * reads can see the same prior state and both can attempt the same
+     * action. The {@code INSERT ... ON CONFLICT DO NOTHING} keeps the
+     * row count consistent; the {@code deleteById} is silent on missing.
+     * Net effect: the final DB state matches whichever click won the
+     * race; the second-arriving response reports the state the racing
+     * call already established. Frontend debouncing on the like button
+     * is the recommended mitigation; a true atomic toggle would need a
+     * stored procedure or a single-row {@code UPSERT ... DO UPDATE} on
+     * a boolean — neither is justified at v1.
      */
     @Transactional
     public FeedPostInteractionState toggleLike(Long postId, Long userId) {
@@ -105,6 +119,12 @@ public class FeedInteractionService {
 
     // ── Bookmarks ──────────────────────────────────────────────────────────
 
+    /**
+     * Idempotent bookmark toggle. Same shape and concurrency caveat as
+     * {@link #toggleLike}: under rapid double-click contention the second
+     * response reports the state the racing call already established.
+     * Frontend debouncing is the recommended mitigation.
+     */
     @Transactional
     public FeedPostInteractionState toggleBookmark(Long postId, Long userId) {
         requireVisiblePost(postId);
@@ -217,6 +237,28 @@ public class FeedInteractionService {
 
     // ── Aggregate state ────────────────────────────────────────────────────
 
+    /**
+     * Public read of the interaction state for a single post (#347).
+     * Companion to {@code GET /api/feed/posts/{id}} — returns counts +
+     * viewer-relative toggles so the UI can render the post detail
+     * fully in one fetch pair, without having to toggle to learn the
+     * current state.
+     *
+     * <p>404 if the post is missing or soft-deleted (uniform with
+     * {@code FeedPostService.getById}).
+     */
+    public FeedPostInteractionState getInteractionState(Long postId, Long viewerId) {
+        requireVisiblePost(postId);
+        return interactionState(postId, viewerId);
+    }
+
+    /**
+     * Internal read used by the toggle / share endpoints to decorate
+     * their responses. Skips the visibility check because the calling
+     * mutation already validated the post exists; calling this directly
+     * for an invisible post would silently return zero counts, which
+     * isn't what any caller wants.
+     */
     public FeedPostInteractionState interactionState(Long postId, Long viewerId) {
         long likes = likeRepository.countByIdPostId(postId);
         long bookmarks = bookmarkRepository.countByIdPostId(postId);

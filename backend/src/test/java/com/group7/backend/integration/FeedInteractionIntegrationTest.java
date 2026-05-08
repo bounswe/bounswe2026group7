@@ -314,6 +314,65 @@ class FeedInteractionIntegrationTest {
         assertThat(comments).isZero();
     }
 
+    // ── GET /interactions — read-without-toggle ────────────────────────────
+
+    @Test
+    void getInteractions_returnsAllCounts_andViewerFlags() throws Exception {
+        // Build state: A creates a post; B likes + bookmarks + shares + comments
+        // on it. C reads /interactions and sees the counts but no viewer
+        // flags. B reads and sees the same counts plus their flags set.
+        String tokenA = registerAndLogin("ix_a@test.com");
+        String tokenB = registerAndLogin("ix_b@test.com");
+        String tokenC = registerAndLogin("ix_c@test.com");
+        long pid = createPost(tokenA, "post for interactions", List.of());
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/like")
+                        .header("Authorization", "Bearer " + tokenB))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/bookmark")
+                        .header("Authorization", "Bearer " + tokenB))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/share")
+                        .header("Authorization", "Bearer " + tokenB))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/comments")
+                        .header("Authorization", "Bearer " + tokenB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\": \"nice\"}"))
+                .andExpect(status().isCreated());
+
+        // C reads — sees all counts, no viewer flags.
+        mockMvc.perform(get("/api/feed/posts/" + pid + "/interactions")
+                        .header("Authorization", "Bearer " + tokenC))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(1))
+                .andExpect(jsonPath("$.bookmarkCount").value(1))
+                .andExpect(jsonPath("$.shareCount").value(1))
+                .andExpect(jsonPath("$.commentCount").value(1))
+                .andExpect(jsonPath("$.viewerHasLiked").value(false))
+                .andExpect(jsonPath("$.viewerHasBookmarked").value(false));
+
+        // B reads — same counts, viewer flags set.
+        mockMvc.perform(get("/api/feed/posts/" + pid + "/interactions")
+                        .header("Authorization", "Bearer " + tokenB))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.viewerHasLiked").value(true))
+                .andExpect(jsonPath("$.viewerHasBookmarked").value(true));
+    }
+
+    @Test
+    void getInteractions_softDeletedPost_returns404() throws Exception {
+        String tokenA = registerAndLogin("ix_del@test.com");
+        long pid = createPost(tokenA, "delete me", List.of());
+        mockMvc.perform(delete("/api/feed/posts/" + pid)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/feed/posts/" + pid + "/interactions")
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNotFound());
+    }
+
     // ── Auth gate ──────────────────────────────────────────────────────────
 
     @Test
@@ -323,6 +382,7 @@ class FeedInteractionIntegrationTest {
         mockMvc.perform(post("/api/feed/posts/1/share")).andExpect(status().isForbidden());
         mockMvc.perform(post("/api/feed/posts/1/comments")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/me/bookmarks")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/feed/posts/1/interactions")).andExpect(status().isForbidden());
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
