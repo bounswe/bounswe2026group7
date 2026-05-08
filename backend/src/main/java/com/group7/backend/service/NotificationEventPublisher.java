@@ -5,6 +5,8 @@ import com.group7.backend.event.NotificationCreatedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import java.util.Locale;
+
 @Service
 public class NotificationEventPublisher {
 
@@ -182,7 +184,7 @@ public class NotificationEventPublisher {
                 NotificationType.REPORT_RECEIVED,
                 "New report received",
                 reporterFirstName + " submitted a report against a "
-                        + targetType.name().toLowerCase() + "."
+                        + targetType.name().toLowerCase(Locale.ROOT) + "."
         );
     }
 
