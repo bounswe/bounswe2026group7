@@ -194,6 +194,32 @@ class ReportServiceTest {
     }
 
     @Test
+    void createReport_acceptsMentorshipReport_whenReporterIsTheMentee() {
+        // The OR check in validateTargetExists short-circuits on the
+        // mentor branch when reporter == mentor (covered by the
+        // …whenReporterIsParticipant test). This test exercises the
+        // other side: reporter is the mentee, so the mentor branch
+        // returns false and the mentee branch is the one that admits.
+        Mentor mentor = mentorWithId(99L);
+        Mentee mentee = menteeWithFirstName(REPORTER_ID, "Reporter");
+        Mentorship m = mentorshipBetween(mentor, mentee);
+        when(mentorshipRepository.findById(50L)).thenReturn(Optional.of(m));
+        when(reportRepository.save(any(Report.class))).thenAnswer(inv -> {
+            Report r = inv.getArgument(0);
+            r.setId(800L);
+            return r;
+        });
+        when(reportMapper.toResponse(any(Report.class), anyBoolean()))
+                .thenReturn(stubResponse(800L));
+
+        ReportResponse out = reportService.createReport(REPORTER_ID,
+                request(ReportTargetType.MENTORSHIP, 50L));
+
+        assertThat(out).isNotNull();
+        verify(reportRepository).save(any(Report.class));
+    }
+
+    @Test
     void createReport_acceptsMentorshipReport_whenReporterIsParticipant() {
         Mentor mentor = mentorWithId(REPORTER_ID);
         Mentee mentee = menteeWithFirstName(99L, "Bob");
