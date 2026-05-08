@@ -33,16 +33,6 @@ import java.util.stream.Collectors;
 @Component
 public class FeedPostMapper {
 
-    /**
-     * Tolerance (in seconds) between {@code createdAt} and {@code updatedAt}
-     * before {@code isEdited} flips to {@code true}. Absorbs same-
-     * transaction clock skew (the service sets {@code createdAt} and
-     * {@code updatedAt} to the same value on create, but
-     * {@code OffsetDateTime.now()} called twice in succession can differ
-     * by sub-millisecond amounts that are still strictly increasing).
-     */
-    private static final long EDIT_TOLERANCE_SECONDS = 1L;
-
     private final UserRepository userRepository;
 
     public FeedPostMapper(UserRepository userRepository) {
@@ -86,12 +76,25 @@ public class FeedPostMapper {
 
     private static FeedPostResponse mapOne(FeedPost post, Long viewerId, Map<Long, String> names) {
         boolean isAuthor = viewerId != null && viewerId.equals(post.getAuthorId());
+        // Strict isAfter: the service explicitly sets createdAt and
+        // updatedAt to the exact same OffsetDateTime instance on create,
+        // so equality holds for fresh posts. Any later PATCH calls
+        // OffsetDateTime.now() afresh, which is guaranteed to be after
+        // createdAt because System.nanoTime is monotonic on every
+        // supported platform. No tolerance needed.
         boolean isEdited = post.getUpdatedAt() != null
                 && post.getCreatedAt() != null
-                && post.getUpdatedAt().isAfter(post.getCreatedAt().plusSeconds(EDIT_TOLERANCE_SECONDS));
+                && post.getUpdatedAt().isAfter(post.getCreatedAt());
+        // Always alphabetical in the DTO. The entity's @OrderBy("id.tag ASC")
+        // already returns reads in this order, but the create / update paths
+        // build the in-memory collection in insertion order; sorting in the
+        // mapper guarantees the DTO is identical whether the entity was
+        // freshly built (insertion-ordered LinkedHashSet) or reloaded from
+        // the DB (alphabetical via @OrderBy). One contract, one path.
         List<String> tags = post.getHashtags().stream()
                 .map(FeedPostHashtag::getId)
                 .map(id -> id.getTag())
+                .sorted()
                 .toList();
         return new FeedPostResponse(
                 post.getId(),
@@ -106,11 +109,4 @@ public class FeedPostMapper {
         );
     }
 
-    // Visible to other components in the same package if they need to
-    // resolve names without re-implementing the batch logic. Keep package-
-    // private rather than public — exposes intent without bloating the
-    // public surface.
-    Map<Long, String> resolveNamesForCallers(Set<Long> authorIds) {
-        return resolveAuthorNames(authorIds);
-    }
 }
