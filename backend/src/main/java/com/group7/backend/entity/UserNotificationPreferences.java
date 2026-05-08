@@ -78,6 +78,9 @@ public class UserNotificationPreferences {
             case TASK_ASSIGNED, TASK_SUBMITTED, TASK_REVIEWED -> tasksEnabled;
             case REQUEST_RECEIVED, REQUEST_ACCEPTED, REQUEST_REJECTED,
                  REQUEST_SUBMITTED -> requestsEnabled;
+            // Auto-ban system (#134) — system-mandated communications, always
+            // enabled. Users cannot opt out of "you have been banned" notices.
+            case USER_BANNED, BAN_LIFTED, BAN_EXPIRED -> true;
         };
     }
 }

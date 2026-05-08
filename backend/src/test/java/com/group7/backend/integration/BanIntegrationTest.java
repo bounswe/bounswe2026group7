@@ -32,11 +32,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.awaitility.Awaitility;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -171,7 +171,7 @@ class BanIntegrationTest {
         Long menteeId = menteeRepository.findAll().stream()
                 .filter(m -> m.getEmail().equals("ban_mentee3@test.com"))
                 .findFirst().orElseThrow().getId();
-        assertThat(waitForNotification(menteeId, NotificationType.USER_BANNED)).isNotNull();
+        awaitNotificationFor(menteeId, NotificationType.USER_BANNED);
     }
 
     // ── Admin endpoints ──────────────────────────────────────────────────
@@ -216,7 +216,7 @@ class BanIntegrationTest {
         assertThat(refreshed.getLiftedByAdminId()).isEqualTo(admin.getId());
 
         // BAN_LIFTED notification fired.
-        assertThat(waitForNotification(mentee.getId(), NotificationType.BAN_LIFTED)).isNotNull();
+        awaitNotificationFor(mentee.getId(), NotificationType.BAN_LIFTED);
     }
 
     @Test
@@ -255,7 +255,7 @@ class BanIntegrationTest {
 
         Ban refreshed = banRepository.findById(saved.getId()).orElseThrow();
         assertThat(refreshed.isExpiryNotified()).isTrue();
-        assertThat(waitForNotification(mentee.getId(), NotificationType.BAN_EXPIRED)).isNotNull();
+        awaitNotificationFor(mentee.getId(), NotificationType.BAN_EXPIRED);
 
         // Idempotent: second sweep does not double-fire.
         long beforeCount = notificationRepository.findAll().stream()
@@ -304,23 +304,17 @@ class BanIntegrationTest {
                 .andExpect(status().isNoContent());
     }
 
-    private Notification waitForNotification(Long recipientId, NotificationType type) {
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(5));
-        while (Instant.now().isBefore(deadline)) {
-            List<Notification> notifications = notificationRepository.findForUser(recipientId, false);
-            for (Notification n : notifications) {
-                if (n.getType() == type) {
-                    return n;
-                }
-            }
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-        return null;
+    private void awaitNotificationFor(Long recipientId, NotificationType type) {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .pollInterval(Duration.ofMillis(100))
+                .untilAsserted(() -> {
+                    List<Notification> notifications =
+                            notificationRepository.findForUser(recipientId, false);
+                    assertThat(notifications)
+                            .extracting(Notification::getType)
+                            .contains(type);
+                });
     }
 
     private Admin seedAdmin() {
