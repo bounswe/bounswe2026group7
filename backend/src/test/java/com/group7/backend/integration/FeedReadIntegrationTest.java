@@ -203,6 +203,26 @@ class FeedReadIntegrationTest {
     }
 
     @Test
+    void search_emptyFilters_returns400() throws Exception {
+        // /search is a filtered surface — empty filters would return the
+        // whole feed and mask pagination cost as the system grows. Clients
+        // that want everything should call /for-you or /following.
+        String token = registerAndLogin("search_empty@test.com", true);
+        createPost(token, "post body", List.of("ai"));
+
+        mockMvc.perform(get("/api/feed/search")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+
+        // Whitespace-only filters also count as empty.
+        mockMvc.perform(get("/api/feed/search")
+                        .param("q", "   ")
+                        .param("hashtag", "   ")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void search_invalidHashtag_returnsEmpty() throws Exception {
         String tokenA = registerAndLogin("search_bad@test.com", true);
         createPost(tokenA, "post body", List.of("ai"));
