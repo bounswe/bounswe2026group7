@@ -41,6 +41,15 @@ public class NotificationEventPublisher {
         );
     }
 
+    public void publishRequestSubmitted(Long recipientId, String mentorFirstName) {
+        publish(
+                recipientId,
+                NotificationType.REQUEST_SUBMITTED,
+                "Mentorship request submitted",
+                "Your mentorship request to " + mentorFirstName + " has been submitted."
+        );
+    }
+
     public void publishMatchFound(Long recipientId, String counterpartName) {
         publish(
                 recipientId,

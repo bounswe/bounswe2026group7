@@ -35,6 +35,8 @@ class NotificationEventListenerClockTest {
 
     @Mock private NotificationRepository notificationRepository;
     @Mock private UserRepository userRepository;
+    @Mock private com.group7.backend.repository.UserNotificationPreferencesRepository preferencesRepository;
+    @Mock private com.group7.backend.service.PushDeliveryService pushDeliveryService;
 
     private static final Instant FIXED = Instant.parse("2026-04-29T12:00:00Z");
     private final Clock fixedClock = Clock.fixed(FIXED, ZoneOffset.UTC);
@@ -42,7 +44,8 @@ class NotificationEventListenerClockTest {
     @Test
     void matchFoundDedup_queriesRepoWithFixedClockMinus24h() {
         NotificationEventListener listener =
-                new NotificationEventListener(notificationRepository, userRepository, fixedClock);
+                new NotificationEventListener(notificationRepository, userRepository,
+                        preferencesRepository, pushDeliveryService, fixedClock);
 
         User recipient = new Mentee();
         recipient.setId(7L);

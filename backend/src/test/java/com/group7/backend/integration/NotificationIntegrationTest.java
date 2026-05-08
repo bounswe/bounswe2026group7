@@ -153,6 +153,9 @@ class NotificationIntegrationTest {
         Notification created = waitForNotification(mentee.getId(), NotificationType.REQUEST_ACCEPTED);
         assertThat(created).isNotNull();
 
+        // After #136, the mentee also receives a REQUEST_SUBMITTED confirmation
+        // when they create the request. The unread list is ordered newest-first,
+        // so [0] is REQUEST_ACCEPTED (the most recent) and [1] is REQUEST_SUBMITTED.
         MvcResult listResult = mockMvc.perform(get("/api/notifications")
                         .header("Authorization", "Bearer " + menteeToken)
                         .param("unreadOnly", "true"))
@@ -162,12 +165,18 @@ class NotificationIntegrationTest {
                 .andReturn();
 
         JsonNode listJson = objectMapper.readTree(listResult.getResponse().getContentAsString());
-        Long notificationId = listJson.get(0).get("id").asLong();
+        Long acceptedId = listJson.get(0).get("id").asLong();
 
-        mockMvc.perform(patch("/api/notifications/" + notificationId + "/read")
+        mockMvc.perform(patch("/api/notifications/" + acceptedId + "/read")
                         .header("Authorization", "Bearer " + menteeToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.read").value(true));
+
+        // REQUEST_SUBMITTED remains unread; clear it via the bulk endpoint and
+        // confirm the unread list is then empty.
+        mockMvc.perform(patch("/api/notifications/read-all")
+                        .header("Authorization", "Bearer " + menteeToken))
+                .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/notifications")
                         .header("Authorization", "Bearer " + menteeToken)
