@@ -1,5 +1,6 @@
 package com.group7.backend.service;
 
+import com.group7.backend.dto.response.FeedPostListItem;
 import com.group7.backend.dto.response.FeedPostResponse;
 import com.group7.backend.entity.FeedPost;
 import com.group7.backend.entity.FeedPostHashtag;
@@ -66,6 +67,50 @@ public class FeedPostMapper {
         return posts.stream()
                 .map(p -> mapOne(p, viewerId, names))
                 .toList();
+    }
+
+    /**
+     * Slim list mapping for #350's read surfaces (For-You, Following,
+     * search) and #347's bookmark listing. Same batch-author-resolution
+     * shape as {@link #toResponses}; consolidating both list paths in
+     * the mapper keeps the N+1-avoidance discipline in one file.
+     *
+     * <p>Returns a {@link List} (not a {@link org.springframework.data.domain.Page})
+     * because callers may need to construct the page wrapper from a
+     * non-Page input (e.g. an in-memory ranking slice). Wrap with
+     * {@code new PageImpl<>(items, pageable, total)} at the call site.
+     */
+    public List<FeedPostListItem> toListItems(List<FeedPost> posts) {
+        if (posts == null || posts.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> authorIds = posts.stream()
+                .map(FeedPost::getAuthorId)
+                .collect(Collectors.toSet());
+        Map<Long, String> names = resolveAuthorNames(authorIds);
+        return posts.stream()
+                .map(p -> mapListItem(p, names))
+                .toList();
+    }
+
+    private static FeedPostListItem mapListItem(FeedPost post, Map<Long, String> names) {
+        List<String> tags = post.getHashtags().stream()
+                .map(FeedPostHashtag::getId)
+                .map(id -> id.getTag())
+                .sorted()
+                .toList();
+        // likeCount / commentCount placeholders 0L — populated by #347's
+        // dedicated GET /interactions endpoint when the UI needs them.
+        return new FeedPostListItem(
+                post.getId(),
+                post.getAuthorId(),
+                names.getOrDefault(post.getAuthorId(), null),
+                post.getBody(),
+                tags,
+                post.getCreatedAt(),
+                0L,
+                0L
+        );
     }
 
     private Map<Long, String> resolveAuthorNames(Set<Long> authorIds) {
