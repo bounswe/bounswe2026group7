@@ -1,6 +1,5 @@
 package com.group7.backend.event;
 
-import com.group7.backend.entity.User;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.service.NotificationEventPublisher;
 import org.slf4j.Logger;
@@ -18,14 +17,14 @@ import java.util.List;
  * (#135).
  *
  * <p><b>Why AFTER_COMMIT.</b> A synchronous fanout from
- * {@code ReportService.createReport} would do two extra DB reads
- * (reporter lookup + admin-id list) and N publishEvent calls inside
- * the write transaction, holding row locks longer than necessary and
- * coupling the report-submit response to admin-list size.
- * {@link TransactionPhase#AFTER_COMMIT} keeps the submit endpoint fast,
- * ensures fan-out fires only for committed reports (rolled-back
- * submissions produce zero notifications), and matches
- * {@link FeedFanoutListener}'s shape for #349.
+ * {@code ReportService.createReport} would do an extra DB read (admin-id
+ * list) and N publishEvent calls inside the write transaction, holding
+ * row locks longer than necessary and coupling the report-submit
+ * response to admin-list size. {@link TransactionPhase#AFTER_COMMIT}
+ * keeps the submit endpoint fast, ensures fan-out fires only for
+ * committed reports (rolled-back submissions produce zero
+ * notifications), and matches {@link FeedFanoutListener}'s shape for
+ * #349.
  *
  * <p><b>Why {@code @Async}.</b> Notification fan-out spans every admin;
  * even with admin counts in single digits today, running on a worker
@@ -67,9 +66,12 @@ public class ReportFanoutListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onReportSubmitted(ReportSubmittedEvent event) {
         try {
-            String reporterFirstName = userRepository.findById(event.reporterId())
-                    .map(User::getFirstName)
-                    .orElse("Someone");
+            // The publisher already carries reporterFirstName so the
+            // listener avoids a per-fanout user lookup. Fall back to a
+            // generic placeholder if the publisher couldn't load the
+            // name (rare — reporter deleted between submit and fanout).
+            String reporterFirstName = event.reporterFirstName() != null
+                    ? event.reporterFirstName() : "Someone";
             List<Long> adminIds = userRepository.findAllAdminIds();
             for (Long adminId : adminIds) {
                 notificationEventPublisher.publishReportReceived(
