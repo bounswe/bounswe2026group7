@@ -72,15 +72,18 @@ public class FeedPostService {
     private final UserRepository userRepository;
     private final HashtagNormalizer hashtagNormalizer;
     private final FeedPostMapper feedPostMapper;
+    private final FeedPostEventPublisher feedPostEventPublisher;
 
     public FeedPostService(FeedPostRepository feedPostRepository,
                            UserRepository userRepository,
                            HashtagNormalizer hashtagNormalizer,
-                           FeedPostMapper feedPostMapper) {
+                           FeedPostMapper feedPostMapper,
+                           FeedPostEventPublisher feedPostEventPublisher) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
         this.hashtagNormalizer = hashtagNormalizer;
         this.feedPostMapper = feedPostMapper;
+        this.feedPostEventPublisher = feedPostEventPublisher;
     }
 
     /**
@@ -119,6 +122,12 @@ public class FeedPostService {
 
         log.info("Created feed post: id={}, authorId={}, hashtags={}",
                 saved.getId(), authorId, normalisedTags.size());
+
+        // Publish inside the @Transactional boundary so AFTER_COMMIT
+        // delivery in FeedFanoutListener is bound to a real commit (#349).
+        // Spring's TransactionSynchronizationManager queues the event and
+        // delivers only on successful commit; rollback discards it.
+        feedPostEventPublisher.publishCreated(saved, author);
 
         return feedPostMapper.toResponse(saved, authorId);
     }
