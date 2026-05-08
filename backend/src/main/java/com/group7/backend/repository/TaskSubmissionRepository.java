@@ -1,6 +1,8 @@
 package com.group7.backend.repository;
 
 import com.group7.backend.entity.TaskSubmission;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -15,3 +17,4 @@ public interface TaskSubmissionRepository extends JpaRepository<TaskSubmission, 
 
     Optional<TaskSubmission> findFirstByTaskIdOrderBySubmittedAtDescIdDesc(Long taskId);
 }
+

@@ -2,6 +2,9 @@ package com.group7.backend.dto.request;
 
 import com.group7.backend.entity.TaskStatus;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -19,3 +22,4 @@ public class TaskReviewRequest {
     @Schema(description = "Must be COMPLETED or REVISION_REQUESTED")
     private TaskStatus status;
 }
+
