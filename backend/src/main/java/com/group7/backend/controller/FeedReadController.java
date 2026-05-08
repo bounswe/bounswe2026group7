@@ -90,12 +90,16 @@ public class FeedReadController {
 
     @GetMapping("/search")
     @Operation(summary = "Search feed posts by keyword and / or hashtag",
-            description = "Either filter is optional — both null returns the full visible "
-                    + "feed by recency. Keyword uses pg_trgm-accelerated LIKE on the body. "
-                    + "Hashtag matches the normalised tag value (lowercased, leading-# "
-                    + "stripped). Combined queries AND the two predicates.")
+            description = "At least one of `q` or `hashtag` is required — both null returns "
+                    + "400. Use `/api/feed/for-you` or `/api/feed/following` for the full "
+                    + "feed without a filter. Keyword uses pg_trgm-accelerated LIKE on the "
+                    + "body and is escaped at the service boundary so `%` and `_` cannot act "
+                    + "as wildcards. Hashtag matches the normalised tag value (lowercased, "
+                    + "leading-# stripped); a hashtag that fails normalisation returns an "
+                    + "empty page rather than 400. Combined queries AND the two predicates.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paged matching posts"),
+            @ApiResponse(responseCode = "400", description = "Both `q` and `hashtag` missing", content = @Content),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
     })
     public ResponseEntity<Page<FeedPostListItem>> search(

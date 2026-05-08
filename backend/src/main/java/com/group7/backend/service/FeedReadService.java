@@ -100,11 +100,18 @@ public class FeedReadService {
         }
 
         FeedRanker.FeedRankingContext context = buildRankingContext(viewerId);
-        // Score once, sort once, slice once. Cheap enough for our scale; if
-        // the candidate window grows past a few thousand posts a partial
-        // selection algorithm (k-largest) would be the next move.
+        // Score once, sort once, slice once. Comparator.comparingDouble re-runs
+        // its key extractor on every compare(a, b), so a naive
+        // .sorted(comparingDouble(p -> ranker.score(p, ctx))) calls the ranker
+        // O(N log N) times instead of N. Schwartzian transform fixes that:
+        // materialise (score, post) tuples once, sort by the cached score, then
+        // unwrap. Cheap enough for our 200-candidate window; if the window
+        // grows past a few thousand a partial-selection (k-largest) is the
+        // next move.
         List<FeedPost> ranked = candidates.stream()
-                .sorted(Comparator.comparingDouble((FeedPost p) -> feedRanker.score(p, context)).reversed())
+                .map(p -> new Scored(feedRanker.score(p, context), p))
+                .sorted(Comparator.comparingDouble(Scored::score).reversed())
+                .map(Scored::post)
                 .toList();
         return slicePage(ranked, pageable);
     }
@@ -271,4 +278,8 @@ public class FeedReadService {
                 0L
         );
     }
+
+    /** Holds a feed post alongside its computed ranker score so the sort
+     *  key is materialised exactly once per post (Schwartzian transform). */
+    private record Scored(double score, FeedPost post) {}
 }
