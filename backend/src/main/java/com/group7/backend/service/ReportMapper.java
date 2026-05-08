@@ -32,9 +32,11 @@ import java.util.stream.Collectors;
  *       to three {@code findById} calls per call.</li>
  *   <li>{@link #toResponses(Page, boolean)} — batched, used by both list
  *       endpoints. Pre-loads every reporter / reviewer / target row in
- *       at most four queries (one user-batch, one mentorship-batch, one
- *       post-batch, plus the reporter+reviewer-only user-batch when no
- *       target summary is needed). Mirrors the
+ *       at most three queries: one user-batch always (reporter + reviewer
+ *       + USER-target ids when {@code includeTargetSummary} is true);
+ *       one mentorship-batch + one post-batch only when
+ *       {@code includeTargetSummary} is true and the page actually
+ *       contains rows of those types. Mirrors the
  *       {@code FeedPostMapper.toListItems} pattern from #350 to keep
  *       paged reads N+1-free.</li>
  * </ul>
@@ -99,9 +101,9 @@ public class ReportMapper {
      */
     public Page<ReportResponse> toResponses(Page<Report> page, boolean includeTargetSummary) {
         List<Report> rows = page.getContent();
-        if (rows.isEmpty()) {
-            return page.map(r -> null);
-        }
+        // Each preload returns Map.of() for empty input, so the empty-page
+        // case naturally short-circuits without an explicit guard. The
+        // page.map(...) lambda is never invoked when content is empty.
         Map<Long, User> usersById = preloadUsers(rows, includeTargetSummary);
         Map<Long, Mentorship> mentorshipsById = includeTargetSummary
                 ? preloadMentorships(rows) : Map.of();
