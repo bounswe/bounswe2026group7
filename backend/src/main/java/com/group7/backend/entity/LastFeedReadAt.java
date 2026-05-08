@@ -34,7 +34,7 @@ import java.time.OffsetDateTime;
 public class LastFeedReadAt {
 
     @Id
-    @Column(name = "user_id")
+    @Column(name = "user_id", nullable = false)
     private Long userId;
 
     @Column(name = "last_read_at", nullable = false)
