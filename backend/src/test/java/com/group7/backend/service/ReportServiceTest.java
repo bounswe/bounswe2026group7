@@ -17,7 +17,10 @@ import com.group7.backend.entity.ReportStatus;
 import com.group7.backend.entity.ReportTargetType;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.DuplicateReportException;
+import com.group7.backend.exception.InvalidReportTransitionException;
+import com.group7.backend.exception.ReportNotPermittedException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.exception.SelfReportException;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.ReportRepository;
@@ -122,7 +125,7 @@ class ReportServiceTest {
         assertThatThrownBy(() ->
                 reportService.createReport(REPORTER_ID,
                         request(ReportTargetType.USER, REPORTER_ID)))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(SelfReportException.class)
                 .hasMessageContaining("themselves");
 
         verify(reportRepository, never()).save(any(Report.class));
@@ -163,7 +166,7 @@ class ReportServiceTest {
         assertThatThrownBy(() ->
                 reportService.createReport(REPORTER_ID,
                         request(ReportTargetType.MENTORSHIP, 50L)))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(ReportNotPermittedException.class)
                 .hasMessageContaining("not a participant");
     }
 
@@ -352,7 +355,7 @@ class ReportServiceTest {
         when(reportRepository.findById(1L)).thenReturn(Optional.of(r));
 
         assertThatThrownBy(() -> reportService.updateStatus(1L, ADMIN_A_ID, to))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidReportTransitionException.class)
                 .hasMessageContaining("transition");
 
         verify(reportRepository, never()).save(any(Report.class));
