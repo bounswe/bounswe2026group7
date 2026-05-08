@@ -7,8 +7,12 @@ import com.group7.backend.dto.response.AttachmentSummary;
 import com.group7.backend.dto.response.TaskDetailResponse;
 import com.group7.backend.dto.response.TaskSubmissionResponse;
 import com.group7.backend.dto.response.TaskSummaryResponse;
-import com.group7.backend.entity.*;
-
+import com.group7.backend.entity.Attachment;
+import com.group7.backend.entity.Mentorship;
+import com.group7.backend.entity.MentorshipStatus;
+import com.group7.backend.entity.Task;
+import com.group7.backend.entity.TaskStatus;
+import com.group7.backend.entity.TaskSubmission;
 import com.group7.backend.repository.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -52,6 +56,10 @@ public class TaskService {
         }
         if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Mentorship is not active");
+        }
+
+        if (request.getDueDate() != null && request.getDueDate().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Due date must be in the future");
         }
 
         Task task = new Task();
@@ -142,15 +150,26 @@ public class TaskService {
         if (task.getMentorship().getStatus() != MentorshipStatus.ACTIVE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Mentorship is not active");
         }
+        if (request.getStatus() != TaskStatus.COMPLETED && request.getStatus() != TaskStatus.REVISION_REQUESTED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Review status must be COMPLETED or REVISION_REQUESTED");
+        }
+        if (task.getStatus() == TaskStatus.COMPLETED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Task is already completed and cannot be reviewed again");
+        }
         if (task.getStatus() == TaskStatus.PENDING) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Task has not been submitted yet");
         }
 
-        TaskSubmission latestSubmission = taskSubmissionRepository.findFirstByTaskIdOrderBySubmittedAtDesc(taskId)
+        TaskSubmission latestSubmission = taskSubmissionRepository.findFirstByTaskIdOrderBySubmittedAtDescIdDesc(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "No submission found for this task"));
+                
+        if (latestSubmission.getReviewedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This submission has already been reviewed");
+        }
 
         latestSubmission.setFeedback(request.getFeedback());
         latestSubmission.setReviewedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        latestSubmission.setReviewedBy(task.getMentorship().getMentor());
         taskSubmissionRepository.save(latestSubmission);
 
         task.setStatus(request.getStatus());
@@ -213,7 +232,7 @@ public class TaskService {
         dto.setStatus(task.getStatus());
         dto.setCreatedAt(task.getCreatedAt());
         
-        boolean overdue = task.getStatus() == TaskStatus.PENDING 
+        boolean overdue = (task.getStatus() == TaskStatus.PENDING || task.getStatus() == TaskStatus.REVISION_REQUESTED) 
                 && task.getDueDate() != null 
                 && task.getDueDate().isBefore(OffsetDateTime.now(ZoneOffset.UTC));
         dto.setOverdue(overdue);
@@ -230,7 +249,7 @@ public class TaskService {
         dto.setStatus(task.getStatus());
         dto.setCreatedAt(task.getCreatedAt());
 
-        boolean overdue = task.getStatus() == TaskStatus.PENDING
+        boolean overdue = (task.getStatus() == TaskStatus.PENDING || task.getStatus() == TaskStatus.REVISION_REQUESTED)
                 && task.getDueDate() != null
                 && task.getDueDate().isBefore(OffsetDateTime.now(ZoneOffset.UTC));
         dto.setOverdue(overdue);
@@ -239,7 +258,7 @@ public class TaskService {
                 .map(this::mapToAttachmentSummary)
                 .collect(Collectors.toList()));
 
-        List<TaskSubmissionResponse> subDtos = taskSubmissionRepository.findByTaskIdOrderBySubmittedAtDesc(task.getId())
+        List<TaskSubmissionResponse> subDtos = taskSubmissionRepository.findByTaskIdOrderBySubmittedAtDescIdDesc(task.getId())
                 .stream()
                 .map(sub -> {
                     TaskSubmissionResponse sDto = new TaskSubmissionResponse();

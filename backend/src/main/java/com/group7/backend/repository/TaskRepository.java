@@ -14,6 +14,6 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     List<Task> findByMentorshipIdOrderByCreatedAtDesc(Long mentorshipId);
 
-    @Query("SELECT t FROM Task t JOIN FETCH t.mentorship m WHERE t.id = :id")
+    @Query("SELECT t FROM Task t JOIN FETCH t.mentorship m JOIN FETCH m.mentor JOIN FETCH m.mentee WHERE t.id = :id")
     Optional<Task> findByIdWithMentorship(@Param("id") Long id);
 }

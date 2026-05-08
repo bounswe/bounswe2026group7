@@ -21,7 +21,10 @@ CREATE TABLE task_submissions (
     submission_text TEXT NOT NULL,
     feedback TEXT,
     submitted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    reviewed_at TIMESTAMPTZ
+    reviewed_at TIMESTAMPTZ,
+    reviewed_by_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ
 );
 
 CREATE TABLE task_submission_attachments (

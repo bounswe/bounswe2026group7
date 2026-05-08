@@ -45,10 +45,27 @@ public class TaskSubmission {
     @Column(name = "reviewed_at")
     private OffsetDateTime reviewedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_id")
+    private User reviewedBy;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private OffsetDateTime updatedAt;
+
     @PrePersist
     protected void onCreate() {
         if (submittedAt == null) {
             submittedAt = OffsetDateTime.now(ZoneOffset.UTC);
         }
+        this.createdAt = OffsetDateTime.now(ZoneOffset.UTC);
+        this.updatedAt = this.createdAt;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 }

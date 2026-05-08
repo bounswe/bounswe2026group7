@@ -11,9 +11,11 @@ import lombok.Setter;
 @NoArgsConstructor
 public class TaskReviewRequest {
 
-    @NotNull(message = "Feedback text is required")
+    @NotBlank(message = "Feedback cannot be empty")
+    @Size(max = 4000, message = "Feedback is too long")
     private String feedback;
 
-    @NotNull(message = "New task status is required")
+    @NotNull(message = "Status is required")
+    @Schema(description = "Must be COMPLETED or REVISION_REQUESTED")
     private TaskStatus status;
 }

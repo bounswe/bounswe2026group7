@@ -16,5 +16,6 @@ public class TaskSubmissionRequest {
     @NotBlank(message = "Submission text is required")
     private String submissionText;
 
+    @Size(max = 20, message = "Maximum 20 attachments allowed")
     private List<UUID> attachmentIds;
 }

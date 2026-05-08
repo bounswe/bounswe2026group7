@@ -19,7 +19,9 @@ public class TaskCreateRequest {
 
     private String description;
 
+    @Future(message = "Due date must be in the future")
     private OffsetDateTime dueDate;
 
+    @Size(max = 20, message = "Maximum 20 attachments allowed")
     private List<UUID> assignmentAttachmentIds;
 }

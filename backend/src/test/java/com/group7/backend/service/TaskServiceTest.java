@@ -110,6 +110,17 @@ class TaskServiceTest {
     }
 
     @Test
+    void createTask_PastDueDate_BadRequest() {
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+        TaskCreateRequest req = new TaskCreateRequest();
+        req.setDueDate(OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+
+        assertThatThrownBy(() -> taskService.createTask(10L, 1L, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Due date must be in the future");
+    }
+
+    @Test
     void submitTask_Success() {
         when(taskRepository.findByIdWithMentorship(100L)).thenReturn(Optional.of(pendingTask));
         when(taskSubmissionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -137,7 +148,7 @@ class TaskServiceTest {
     void reviewTask_Success_Completed() {
         when(taskRepository.findByIdWithMentorship(200L)).thenReturn(Optional.of(submittedTask));
         TaskSubmission submission = new TaskSubmission();
-        when(taskSubmissionRepository.findFirstByTaskIdOrderBySubmittedAtDesc(200L)).thenReturn(Optional.of(submission));
+        when(taskSubmissionRepository.findFirstByTaskIdOrderBySubmittedAtDescIdDesc(200L)).thenReturn(Optional.of(submission));
 
         TaskReviewRequest req = new TaskReviewRequest();
         req.setFeedback("Great job!");
@@ -147,7 +158,46 @@ class TaskServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(TaskStatus.COMPLETED);
         assertThat(submission.getFeedback()).isEqualTo("Great job!");
+        assertThat(submission.getReviewedBy().getId()).isEqualTo(1L);
         verify(notificationEventPublisher).publishTaskReviewed(2L, "Submitted Task", false);
+    }
+
+    @Test
+    void reviewTask_InvalidStatus_BadRequest() {
+        when(taskRepository.findByIdWithMentorship(200L)).thenReturn(Optional.of(submittedTask));
+        TaskReviewRequest req = new TaskReviewRequest();
+        req.setStatus(TaskStatus.PENDING); // Invalid for review
+
+        assertThatThrownBy(() -> taskService.reviewTask(200L, 1L, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Review status must be COMPLETED or REVISION_REQUESTED");
+    }
+
+    @Test
+    void reviewTask_AlreadyCompleted_Conflict() {
+        submittedTask.setStatus(TaskStatus.COMPLETED);
+        when(taskRepository.findByIdWithMentorship(200L)).thenReturn(Optional.of(submittedTask));
+        TaskReviewRequest req = new TaskReviewRequest();
+        req.setStatus(TaskStatus.COMPLETED);
+
+        assertThatThrownBy(() -> taskService.reviewTask(200L, 1L, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Task is already completed");
+    }
+
+    @Test
+    void reviewTask_AlreadyReviewed_Conflict() {
+        when(taskRepository.findByIdWithMentorship(200L)).thenReturn(Optional.of(submittedTask));
+        TaskSubmission submission = new TaskSubmission();
+        submission.setReviewedAt(OffsetDateTime.now(ZoneOffset.UTC)); // Already reviewed
+        when(taskSubmissionRepository.findFirstByTaskIdOrderBySubmittedAtDescIdDesc(200L)).thenReturn(Optional.of(submission));
+
+        TaskReviewRequest req = new TaskReviewRequest();
+        req.setStatus(TaskStatus.COMPLETED);
+
+        assertThatThrownBy(() -> taskService.reviewTask(200L, 1L, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("This submission has already been reviewed");
     }
 
     @Test
@@ -168,5 +218,61 @@ class TaskServiceTest {
         var response = taskService.getTask(200L, 1L);
 
         assertThat(response.isOverdue()).isFalse(); // Submitted tasks are never overdue
+    }
+
+    @Test
+    void deleteTask_Success() {
+        when(taskRepository.findByIdWithMentorship(100L)).thenReturn(Optional.of(pendingTask));
+
+        taskService.deleteTask(100L, 1L);
+
+        verify(taskRepository).delete(pendingTask);
+    }
+
+    @Test
+    void deleteTask_MenteeForbidden() {
+        when(taskRepository.findByIdWithMentorship(100L)).thenReturn(Optional.of(pendingTask));
+
+        assertThatThrownBy(() -> taskService.deleteTask(100L, 2L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Only the mentor can delete");
+    }
+
+    @Test
+    void deleteTask_AlreadySubmitted_Conflict() {
+        when(taskRepository.findByIdWithMentorship(200L)).thenReturn(Optional.of(submittedTask));
+
+        assertThatThrownBy(() -> taskService.deleteTask(200L, 1L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Cannot delete a task that has already been submitted");
+    }
+
+    @Test
+    void listTasks_NonParticipantForbidden() {
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+
+        assertThatThrownBy(() -> taskService.listTasks(10L, 999L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("You are not a participant");
+    }
+
+    @Test
+    void fetchAttachments_OtherUser_Forbidden() {
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+        
+        Attachment att = new Attachment();
+        User otherUser = new Mentee();
+        otherUser.setId(999L);
+        att.setUploader(otherUser);
+        
+        UUID uuid = UUID.randomUUID();
+        when(attachmentRepository.findAllById(List.of(uuid))).thenReturn(List.of(att));
+        
+        TaskCreateRequest req = new TaskCreateRequest();
+        req.setAssignmentAttachmentIds(List.of(uuid));
+
+        assertThatThrownBy(() -> taskService.createTask(10L, 1L, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("You cannot attach files uploaded by someone else");
     }
 }

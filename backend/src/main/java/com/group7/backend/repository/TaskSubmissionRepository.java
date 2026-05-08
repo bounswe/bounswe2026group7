@@ -10,7 +10,8 @@ import java.util.Optional;
 @Repository
 public interface TaskSubmissionRepository extends JpaRepository<TaskSubmission, Long> {
 
-    List<TaskSubmission> findByTaskIdOrderBySubmittedAtDesc(Long taskId);
+    @EntityGraph(attributePaths = {"attachments", "attachments.uploader"})
+    List<TaskSubmission> findByTaskIdOrderBySubmittedAtDescIdDesc(Long taskId);
 
-    Optional<TaskSubmission> findFirstByTaskIdOrderBySubmittedAtDesc(Long taskId);
+    Optional<TaskSubmission> findFirstByTaskIdOrderBySubmittedAtDescIdDesc(Long taskId);
 }
