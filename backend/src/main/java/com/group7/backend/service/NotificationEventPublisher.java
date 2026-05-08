@@ -92,6 +92,9 @@ public class NotificationEventPublisher {
                 NotificationType.TASK_REVIEWED,
                 needsRevision ? "Task Needs Revision" : "Task Completed",
                 "Your mentor reviewed your submission for task: " + taskTitle
+        );
+    }
+
     public void publishMeetingPendingConfirmation(Long recipientId, String mentorName) {
         publish(
                 recipientId,
