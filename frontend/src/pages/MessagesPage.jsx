@@ -4,6 +4,7 @@ import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import ChatComposer from '../components/ChatComposer'
 import MessageAttachment from '../components/MessageAttachment'
+import { linkify } from '../utils/linkify'
 import {
   getActiveMentorships,
   getMentorshipMessages,
@@ -40,6 +41,25 @@ function relativeTime(iso) {
 
 function counterpart(m, role) {
   return role === 'MENTOR' ? m.menteeFirstName : m.mentorFirstName
+}
+
+function renderMessageText(content) {
+  return linkify(content).map((part, i) => {
+    if (part && typeof part === 'object' && part.kind === 'url') {
+      return (
+        <a
+          key={i}
+          href={part.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="md-message-link"
+        >
+          {part.url}
+        </a>
+      )
+    }
+    return <span key={i}>{part}</span>
+  })
 }
 
 // Backend pages messages newest-first; UI renders oldest-first so we reverse.
@@ -229,7 +249,7 @@ export default function MessagesPage() {
                   key={m.id}
                   className={`md-message-bubble${mine ? ' md-message-mine' : ''}`}
                 >
-                  <div className="md-message-text">{m.content}</div>
+                  <div className="md-message-text">{renderMessageText(m.content)}</div>
                   {m.attachment && (
                     <MessageAttachment attachment={m.attachment} mine={mine} />
                   )}

@@ -2056,7 +2056,9 @@
   color: #fff;
   border-color: var(--green-dark);
 }
-.md-message-text { font-size: 14px; line-height: 1.5; }
+.md-message-text { font-size: 14px; line-height: 1.5; word-break: break-word; }
+.md-message-link { color: var(--green-dark); text-decoration: underline; }
+.md-message-mine .md-message-link { color: #fff; text-decoration: underline; }
 .md-message-time {
   font-size: 11px;
   color: var(--text-muted);
