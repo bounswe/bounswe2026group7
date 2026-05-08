@@ -42,6 +42,26 @@ public class FeedInteractionController {
         this.interactionService = interactionService;
     }
 
+    // ── Aggregate state ────────────────────────────────────────────────────
+
+    @GetMapping("/api/feed/posts/{id:\\d+}/interactions")
+    @Operation(summary = "Read interaction state for a feed post",
+            description = "Returns counts (likes, comments, shares, bookmarks) plus "
+                    + "the viewer-relative toggle state (viewerHasLiked / viewerHasBookmarked). "
+                    + "Lets the UI render the post detail without a follow-up call after "
+                    + "every interaction. Companion to GET /api/feed/posts/{id}.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Current interaction state"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post not found or soft-deleted", content = @Content)
+    })
+    public ResponseEntity<FeedPostInteractionState> getInteractions(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            Authentication authentication) {
+        Long viewerId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(interactionService.getInteractionState(id, viewerId));
+    }
+
     // ── Likes ──────────────────────────────────────────────────────────────
 
     @PostMapping("/api/feed/posts/{id:\\d+}/like")
