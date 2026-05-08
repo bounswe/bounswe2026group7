@@ -8,6 +8,7 @@ import com.group7.backend.dto.response.ReportResponse;
 import com.group7.backend.entity.ProblemType;
 import com.group7.backend.entity.ReportStatus;
 import com.group7.backend.entity.ReportTargetType;
+import com.group7.backend.exception.InvalidReportTransitionException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.service.JwtService;
 import com.group7.backend.service.ReportService;
@@ -176,7 +177,8 @@ class AdminReportControllerTest {
     void transition_returns400_onInvalidTransition() throws Exception {
         mockAdminJwt("admin-token", 100L);
         when(reportService.updateStatus(eq(7L), eq(100L), eq(ReportStatus.OPEN)))
-                .thenThrow(new IllegalArgumentException("Invalid status transition: RESOLVED → OPEN"));
+                .thenThrow(new InvalidReportTransitionException(
+                        ReportStatus.RESOLVED, ReportStatus.OPEN));
 
         UpdateReportStatusRequest body = new UpdateReportStatusRequest(ReportStatus.OPEN);
         mockMvc.perform(patch("/api/admin/reports/7")

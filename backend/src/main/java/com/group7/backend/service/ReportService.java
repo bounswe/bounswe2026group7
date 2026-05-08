@@ -8,7 +8,10 @@ import com.group7.backend.entity.ReportStatus;
 import com.group7.backend.entity.ReportStatusMachine;
 import com.group7.backend.entity.ReportTargetType;
 import com.group7.backend.exception.DuplicateReportException;
+import com.group7.backend.exception.InvalidReportTransitionException;
+import com.group7.backend.exception.ReportNotPermittedException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.exception.SelfReportException;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.ReportRepository;
@@ -175,7 +178,7 @@ public class ReportService {
     private static void rejectSelfReport(CreateReportRequest request, Long reporterId) {
         if (request.targetType() == ReportTargetType.USER
                 && reporterId.equals(request.targetId())) {
-            throw new IllegalArgumentException("Users cannot report themselves");
+            throw new SelfReportException("Users cannot report themselves");
         }
     }
 
@@ -194,7 +197,7 @@ public class ReportService {
                         m.getMentor().getId().equals(reporterId)
                                 || m.getMentee().getId().equals(reporterId);
                 if (!isParticipant) {
-                    throw new IllegalArgumentException(
+                    throw new ReportNotPermittedException(
                             "Reporter is not a participant of this mentorship");
                 }
             }
@@ -209,8 +212,7 @@ public class ReportService {
 
     private static void validateTransition(ReportStatus from, ReportStatus to) {
         if (!ReportStatusMachine.canTransition(from, to)) {
-            throw new IllegalArgumentException(
-                    "Invalid status transition: " + from + " → " + to);
+            throw new InvalidReportTransitionException(from, to);
         }
     }
 
