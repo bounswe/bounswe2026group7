@@ -5,6 +5,8 @@ import com.group7.backend.event.NotificationCreatedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
+
 @Service
 public class NotificationEventPublisher {
 
@@ -173,6 +175,34 @@ public class NotificationEventPublisher {
                 NotificationType.MEETING_CANCELLED,
                 "Meeting cancelled",
                 mentorName + " cancelled the meeting."
+        );
+    }
+
+    public void publishUserBanned(Long recipientId, OffsetDateTime expiresAt, String reason, int banCount) {
+        publish(
+                recipientId,
+                NotificationType.USER_BANNED,
+                "Account temporarily restricted",
+                "Your account has been restricted (ban #" + banCount + ") until " + expiresAt
+                        + ". Reason: " + reason
+        );
+    }
+
+    public void publishBanLifted(Long recipientId) {
+        publish(
+                recipientId,
+                NotificationType.BAN_LIFTED,
+                "Ban lifted",
+                "Your account restriction has been lifted by an administrator."
+        );
+    }
+
+    public void publishBanExpired(Long recipientId) {
+        publish(
+                recipientId,
+                NotificationType.BAN_EXPIRED,
+                "Ban expired",
+                "Your account restriction has expired. You can resume normal use."
         );
     }
 
