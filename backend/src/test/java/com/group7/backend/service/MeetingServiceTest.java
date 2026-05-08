@@ -177,6 +177,19 @@ class MeetingServiceTest {
     }
 
     @Test
+    void createMeetings_rejectsEndAfterMentorshipEnd() {
+        OffsetDateTime start = OffsetDateTime.of(2026, 5, 25, 9, 0, 0, 0, ZoneOffset.UTC);
+        OffsetDateTime end = OffsetDateTime.of(2026, 5, 25, 11, 0, 0, 0, ZoneOffset.UTC);
+        MeetingCreateRequest request = baseCreateRequest(start, end);
+
+        when(mentorshipRepository.findById(11L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> meetingService.createMeetings(11L, 1L, request))
+                .isInstanceOf(MeetingConflictException.class)
+                .hasMessageContaining("within the mentorship duration");
+    }
+
+    @Test
     void confirmMeeting_setsStatusAndPublishes() {
         Meeting meeting = meetingWithStatus(MeetingStatus.PENDING_CONFIRMATION);
         when(meetingRepository.findById(55L)).thenReturn(Optional.of(meeting));
@@ -210,6 +223,20 @@ class MeetingServiceTest {
         meetingService.requestReschedule(55L, 1L, request);
 
         verify(notificationEventPublisher).publishMeetingRescheduleRequested(2L, "Ada");
+    }
+
+    @Test
+    void requestReschedule_rejectsOutsideMentorship() {
+        Meeting meeting = meetingWithStatus(MeetingStatus.CONFIRMED);
+        when(meetingRepository.findById(55L)).thenReturn(Optional.of(meeting));
+
+        MeetingRescheduleCreateRequest request = new MeetingRescheduleCreateRequest();
+        request.setProposedStart(mentorship.getEndDate().plusDays(1));
+        request.setProposedEnd(mentorship.getEndDate().plusDays(1).plusHours(1));
+
+        assertThatThrownBy(() -> meetingService.requestReschedule(55L, 1L, request))
+                .isInstanceOf(MeetingConflictException.class)
+                .hasMessageContaining("within the mentorship duration");
     }
 
     @Test

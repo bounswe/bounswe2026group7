@@ -7,6 +7,7 @@ import com.group7.backend.entity.MeetingStatus;
 import com.group7.backend.repository.MeetingReminderStateRepository;
 import com.group7.backend.repository.MeetingRepository;
 import com.group7.backend.service.NotificationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -57,16 +58,22 @@ public class MeetingSchedulerProcessor {
                         meeting.getId(), offsetMinutes)) {
                     continue;
                 }
-                String reminderText = "Meeting starts at " + meeting.getStartTime();
-                notificationEventPublisher.publishMeetingReminder(
-                        meeting.getMentorship().getMentor().getId(), reminderText);
-                notificationEventPublisher.publishMeetingReminder(
-                        meeting.getMentorship().getMentee().getId(), reminderText);
-
                 MeetingReminderState state = new MeetingReminderState();
                 state.setMeeting(meeting);
                 state.setReminderOffsetMinutes(offsetMinutes);
-                reminderStateRepository.save(state);
+                try {
+                    reminderStateRepository.save(state);
+                } catch (DataIntegrityViolationException ex) {
+                    log.debug("Reminder already sent for meeting {} at offset {} minutes",
+                        meeting.getId(), offsetMinutes);
+                    continue;
+                }
+
+                String reminderText = "Meeting starts at " + meeting.getStartTime();
+                notificationEventPublisher.publishMeetingReminder(
+                    meeting.getMentorship().getMentor().getId(), reminderText);
+                notificationEventPublisher.publishMeetingReminder(
+                    meeting.getMentorship().getMentee().getId(), reminderText);
             }
         }
     }

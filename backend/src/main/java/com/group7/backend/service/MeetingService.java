@@ -81,17 +81,17 @@ public class MeetingService {
 
         OffsetDateTime start = request.getStartTime();
         OffsetDateTime end = request.getEndTime();
-        OffsetDateTime mentorshipStart = mentorship.getStartDate();
         OffsetDateTime mentorshipEnd = mentorship.getEndDate();
 
-        if (start.isBefore(mentorshipStart) || start.isAfter(mentorshipEnd)) {
-            throw new MeetingConflictException("Meeting start time must be within the mentorship duration");
-        }
+        ensureWithinMentorship(mentorship, start, end);
 
         mentorshipRepository.acquireAdvisoryLock(mentorship.getId());
         long durationMinutes = java.time.Duration.between(start, end).toMinutes();
 
         do {
+            if (end.isAfter(mentorshipEnd)) {
+                break;
+            }
             ensureNoConflicts(mentorship, start, end, null);
             warnIfOutsideAvailability(mentorship.getMentor(), start, end, warnings);
 
@@ -191,6 +191,7 @@ public class MeetingService {
             throw new MeetingConflictException("Meeting cannot be rescheduled in its current state");
         }
         validateTimeRange(request.getProposedStart(), request.getProposedEnd());
+        ensureWithinMentorship(meeting.getMentorship(), request.getProposedStart(), request.getProposedEnd());
 
         if (rescheduleRepository.findByMeetingIdAndStatus(meetingId, MeetingRescheduleStatus.PENDING).isPresent()) {
             throw new MeetingConflictException("A pending reschedule request already exists for this meeting");
@@ -229,6 +230,8 @@ public class MeetingService {
         if (!canReschedule(meeting.getStatus())) {
             throw new MeetingConflictException("Meeting cannot be rescheduled in its current state");
         }
+
+        ensureWithinMentorship(meeting.getMentorship(), req.getProposedStart(), req.getProposedEnd());
 
         mentorshipRepository.acquireAdvisoryLock(meeting.getMentorship().getId());
         ensureNoConflicts(meeting.getMentorship(), req.getProposedStart(), req.getProposedEnd(), meeting.getId());
@@ -290,6 +293,8 @@ public class MeetingService {
     public MeetingDetailResponse updateNotes(Long meetingId, Long userId, MeetingNotesRequest request) {
         Meeting meeting = getMeetingForUser(meetingId, userId);
         meeting.setNotes(request.getNotes());
+        meeting.setNotesUpdatedBy(loadUser(userId));
+        meeting.setNotesUpdatedAt(OffsetDateTime.now(clock));
         Meeting saved = meetingRepository.save(meeting);
         List<MeetingActionItemResponse> items = actionItemRepository
                 .findByMeetingIdOrderByOrderIndexAscIdAsc(meetingId)
@@ -405,6 +410,14 @@ public class MeetingService {
         }
         if (start.isBefore(OffsetDateTime.now(clock).minusMinutes(1))) {
             throw new IllegalArgumentException("Meeting start time must be in the future");
+        }
+    }
+
+    private void ensureWithinMentorship(Mentorship mentorship, OffsetDateTime start, OffsetDateTime end) {
+        OffsetDateTime mentorshipStart = mentorship.getStartDate();
+        OffsetDateTime mentorshipEnd = mentorship.getEndDate();
+        if (start.isBefore(mentorshipStart) || end.isAfter(mentorshipEnd)) {
+            throw new MeetingConflictException("Meeting time must be within the mentorship duration");
         }
     }
 
