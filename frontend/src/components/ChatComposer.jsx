@@ -1,44 +1,53 @@
 import { useState, useRef } from 'react'
+import { Paperclip, X } from 'lucide-react'
+import { ALLOWED_ATTACHMENT_TYPES, AttachmentValidationError } from '../services/attachmentService'
 
 /**
- * Minimal chat composer: textarea + send button.
+ * Chat composer: textarea + send button, with optional file attachment.
  *
+ * Behavior:
  * - Enter sends; Shift+Enter inserts a newline.
- * - Disabled while submitting or when `disabled` prop is true.
- * - The paperclip slot is rendered conditionally when an `attachmentSlot`
- *   element is supplied (issue #122 plugs into this slot).
+ * - Send is allowed when EITHER text OR an attachment is present.
+ * - When `onUpload` is provided, a paperclip button is rendered. Picking a
+ *   file uploads it immediately; a chip with the filename + remove button
+ *   shows the pending attachment until the message is sent (or dismissed).
  *
  * Props:
- *   onSend(content): Promise<void> — must resolve when the send completes.
- *                    The composer clears its textarea on resolve and surfaces
- *                    `error.message` inline on reject.
- *   disabled: boolean — disables the textarea + send.
- *   placeholder: string — textarea placeholder.
- *   attachmentSlot: ReactNode — optional element rendered to the left of the
- *                    textarea (used by #122 to inject the paperclip button).
+ *   onSend(content, attachment): Promise<void>
+ *     - `content` is the trimmed text (may be empty if only an attachment is sent)
+ *     - `attachment` is the AttachmentSummary returned by `onUpload`, or null
+ *   onUpload(file): Promise<AttachmentSummary>     (optional)
+ *   disabled: boolean                              (optional)
+ *   placeholder: string                            (optional)
  */
 export default function ChatComposer({
   onSend,
+  onUpload = null,
   disabled = false,
   placeholder = 'Type a message…',
-  attachmentSlot = null,
 }) {
   const [value, setValue] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
-  const textareaRef = useRef(null)
 
-  const isBlocked = disabled || submitting
+  const [attachment, setAttachment] = useState(null) // AttachmentSummary or null
+  const [uploading, setUploading] = useState(false)
+
+  const textareaRef = useRef(null)
+  const fileInputRef = useRef(null)
+
+  const isBlocked = disabled || submitting || uploading
   const trimmed = value.trim()
+  const canSend = !isBlocked && (trimmed.length > 0 || attachment != null)
 
   async function submit() {
-    if (!trimmed || isBlocked) return
+    if (!canSend) return
     setSubmitting(true)
     setError(null)
     try {
-      await onSend(trimmed)
+      await onSend(trimmed, attachment)
       setValue('')
-      // Refocus so power users can keep typing
+      setAttachment(null)
       textareaRef.current?.focus()
     } catch (err) {
       setError(err?.message || 'Failed to send')
@@ -54,9 +63,50 @@ export default function ChatComposer({
     }
   }
 
+  async function handleFilePick(e) {
+    const file = e.target.files?.[0]
+    // Reset the input so re-picking the same file fires onChange again
+    e.target.value = ''
+    if (!file || !onUpload) return
+    setError(null)
+    setUploading(true)
+    try {
+      const summary = await onUpload(file)
+      setAttachment(summary)
+    } catch (err) {
+      const msg = err instanceof AttachmentValidationError
+        ? err.message
+        : (err?.message || 'Upload failed')
+      setError(msg)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <div className="md-composer">
-      {attachmentSlot}
+      {onUpload && (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={Array.from(ALLOWED_ATTACHMENT_TYPES).join(',')}
+            onChange={handleFilePick}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            className="md-composer-attach"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isBlocked || attachment != null}
+            aria-label="Attach file"
+            title="Attach file"
+          >
+            <Paperclip size={18} strokeWidth={1.75} />
+          </button>
+        </>
+      )}
+
       <textarea
         ref={textareaRef}
         className="md-composer-input"
@@ -72,11 +122,29 @@ export default function ChatComposer({
         type="button"
         className="md-composer-send"
         onClick={submit}
-        disabled={isBlocked || !trimmed}
+        disabled={!canSend}
         aria-label="Send message"
       >
         {submitting ? 'Sending…' : 'Send'}
       </button>
+
+      {attachment && (
+        <div className="md-composer-chip" role="status">
+          <span className="md-composer-chip-name" title={attachment.filename}>
+            📎 {attachment.filename}
+          </span>
+          <button
+            type="button"
+            className="md-composer-chip-remove"
+            onClick={() => setAttachment(null)}
+            aria-label="Remove attachment"
+            disabled={submitting}
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        </div>
+      )}
+      {uploading && <div className="md-composer-status">Uploading…</div>}
       {error && <div className="md-composer-error" role="alert">{error}</div>}
     </div>
   )

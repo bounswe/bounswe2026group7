@@ -3,12 +3,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import ChatComposer from '../components/ChatComposer'
+import MessageAttachment from '../components/MessageAttachment'
+import { linkify } from '../utils/linkify'
 import {
   getActiveMentorships,
   getMentorshipMessages,
   sendMentorshipMessage,
   markMentorshipMessagesRead,
 } from '../services/api'
+import { uploadMessageAttachment } from '../services/attachmentService'
 import useConversationSubscription from '../hooks/useConversationSubscription'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -38,6 +41,25 @@ function relativeTime(iso) {
 
 function counterpart(m, role) {
   return role === 'MENTOR' ? m.menteeFirstName : m.mentorFirstName
+}
+
+function renderMessageText(content) {
+  return linkify(content).map((part, i) => {
+    if (part && typeof part === 'object' && part.kind === 'url') {
+      return (
+        <a
+          key={i}
+          href={part.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="md-message-link"
+        >
+          {part.url}
+        </a>
+      )
+    }
+    return <span key={i}>{part}</span>
+  })
 }
 
 // Backend pages messages newest-first; UI renders oldest-first so we reverse.
@@ -133,8 +155,13 @@ export default function MessagesPage() {
   }, [mentorshipId])
 
   // ── Send handler ──────────────────────────────────────────────────────────
-  async function handleSend(content) {
-    const created = await sendMentorshipMessage(mentorshipId, { content })
+  // Backend requires non-empty content even when an attachment is present, so
+  // we substitute a single space when the user only sends a file.
+  async function handleSend(content, attachment) {
+    const safeContent = content && content.length > 0 ? content : ' '
+    const payload = { content: safeContent }
+    if (attachment?.id) payload.attachmentId = attachment.id
+    const created = await sendMentorshipMessage(mentorshipId, payload)
     setMessages(prev => {
       if (prev.some(m => m.id === created.id)) return prev
       return [...prev, created]
@@ -222,13 +249,20 @@ export default function MessagesPage() {
                   key={m.id}
                   className={`md-message-bubble${mine ? ' md-message-mine' : ''}`}
                 >
-                  <div className="md-message-text">{m.content}</div>
+                  <div className="md-message-text">{renderMessageText(m.content)}</div>
+                  {m.attachment && (
+                    <MessageAttachment attachment={m.attachment} mine={mine} />
+                  )}
                   <div className="md-message-time">{formatTime(m.sentAt)}</div>
                 </div>
               )
             })}
           </div>
-          <ChatComposer onSend={handleSend} placeholder="Type a message…" />
+          <ChatComposer
+            onSend={handleSend}
+            onUpload={uploadMessageAttachment}
+            placeholder="Type a message…"
+          />
         </>
       )}
     </MainLayout>
