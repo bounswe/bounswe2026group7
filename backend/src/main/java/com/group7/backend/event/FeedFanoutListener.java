@@ -39,11 +39,15 @@ import java.util.Set;
  * not in the snapshot and misses this single push. Acceptable: F's next
  * pull-refresh / unread-count call recovers the post immediately.
  *
- * <p><b>Top-level try/catch.</b> The codebase has no
- * {@code AsyncUncaughtExceptionHandler}, so a throw from anywhere
- * outside {@code broadcastTo}'s per-recipient try/catch would be silently
- * swallowed by Spring's default {@code SimpleAsyncTaskExecutor}. Wrap
- * the entire body so the failure surfaces in logs.
+ * <p><b>Top-level try/catch.</b> The global
+ * {@link com.group7.backend.config.AsyncConfig} handler logs uncaught
+ * async failures at ERROR, but with only the method signature for
+ * context. The local catch is still load-bearing because it logs the
+ * same failure with {@code postId} and {@code authorId} attached —
+ * those are the fields production triage actually greps for. Defence
+ * in depth: the local catch handles the expected case (DB hiccup mid
+ * fanout, broker timeout); the global handler is the last-resort net
+ * for anything that escapes.
  */
 @Component
 public class FeedFanoutListener {
@@ -71,6 +75,9 @@ public class FeedFanoutListener {
             log.info("Feed fanout: postId={}, authorId={}, recipients={}, delivered={}",
                     event.postId(), event.authorId(), followers.size(), delivered);
         } catch (RuntimeException ex) {
+            // Logged here with postId/authorId context. AsyncConfig's
+            // AsyncUncaughtExceptionHandler is the last-resort safety net
+            // for anything we missed.
             log.error("Feed fanout aborted: postId={}, authorId={}: {}",
                     event.postId(), event.authorId(), ex.getMessage(), ex);
         }
