@@ -303,6 +303,53 @@ export async function markMentorshipMessagesRead(mentorshipId) {
   return handleResponse(res)
 }
 
+// ── Mentor-pair (mentor-to-mentor) messaging ──────────────────────────────
+// Backend: MentorPairInboxController + MentorPairMessageController, both
+// gated by @PreAuthorize("hasRole('MENTOR')"). Conversations are auto-created
+// on first GET/POST per peer mentor id.
+
+export async function getMentorPairInbox(page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(
+    `${BASE_URL}/conversations/mentor-pair?page=${page}&size=${size}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  return handleResponse(res)
+}
+
+export async function getMentorPairMessages(otherMentorId, page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(
+    `${BASE_URL}/conversations/mentor-pair/${otherMentorId}/messages?page=${page}&size=${size}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  return handleResponse(res)
+}
+
+export async function sendMentorPairMessage(otherMentorId, { content, attachmentId } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { content }
+  if (attachmentId) body.attachmentId = attachmentId
+  const res = await fetch(
+    `${BASE_URL}/conversations/mentor-pair/${otherMentorId}/messages`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    },
+  )
+  return handleResponse(res)
+}
+
+export async function markMentorPairMessagesRead(otherMentorId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(
+    `${BASE_URL}/conversations/mentor-pair/${otherMentorId}/messages/read`,
+    { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } },
+  )
+  return handleResponse(res)
+}
+
 export async function getMenteeAvailability() {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentee-availability`, {
