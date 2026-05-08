@@ -53,6 +53,10 @@ public class MilestoneService {
         }
         checkMentorshipActive(mentorship);
 
+        if (request.getTargetDate() != null) {
+            ensureWithinMentorship(mentorship, request.getTargetDate());
+        }
+
         Milestone milestone = new Milestone();
         milestone.setMentorship(mentorship);
         milestone.setTitle(request.getTitle());
@@ -102,7 +106,10 @@ public class MilestoneService {
 
         if (request.getTitle() != null) milestone.setTitle(request.getTitle());
         if (request.getDescription() != null) milestone.setDescription(request.getDescription());
-        if (request.getTargetDate() != null) milestone.setTargetDate(request.getTargetDate());
+        if (request.getTargetDate() != null) {
+            ensureWithinMentorship(milestone.getMentorship(), request.getTargetDate());
+            milestone.setTargetDate(request.getTargetDate());
+        }
         if (request.getOrderIndex() != null) milestone.setOrderIndex(request.getOrderIndex());
         
         if (request.getStatus() != null && milestone.getStatus() != request.getStatus()) {
@@ -188,6 +195,15 @@ public class MilestoneService {
             if (request.getIsCompleted()) {
                 item.setCompletedAt(OffsetDateTime.now(ZoneOffset.UTC));
                 item.setCompletedBy(userRepository.getReferenceById(userId));
+                
+                // If the mentee completes the item, notify the mentor
+                if (!isMentor) {
+                    notificationEventPublisher.publishActionItemCompleted(
+                            mentorship.getMentor().getId(),
+                            mentorship.getMentee().getFirstName(),
+                            item.getText()
+                    );
+                }
             } else {
                 item.setCompletedAt(null);
                 item.setCompletedBy(null);
@@ -270,5 +286,13 @@ public class MilestoneService {
         }
         dto.setCreatedAt(item.getCreatedAt());
         return dto;
+    }
+
+    private void ensureWithinMentorship(Mentorship mentorship, OffsetDateTime targetDate) {
+        OffsetDateTime mentorshipStart = mentorship.getStartDate();
+        OffsetDateTime mentorshipEnd = mentorship.getEndDate();
+        if (targetDate.isBefore(mentorshipStart) || targetDate.isAfter(mentorshipEnd)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Milestone target date must be within the mentorship duration");
+        }
     }
 }
