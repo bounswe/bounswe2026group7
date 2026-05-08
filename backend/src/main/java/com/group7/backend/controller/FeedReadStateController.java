@@ -50,7 +50,7 @@ public class FeedReadStateController {
                     "Server-side timestamp; client does not supply one (avoids clock skew).")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Cursor updated"),
-            @ApiResponse(responseCode = "403", description = "Unauthenticated", content = @Content)
+            @ApiResponse(responseCode = "403", description = "Missing or invalid credentials", content = @Content)
     })
     public ResponseEntity<Void> markRead(Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
@@ -65,7 +65,7 @@ public class FeedReadStateController {
                     "(default 99). The cappedAtMax flag tells the UI whether to render '99+'.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Capped unread count"),
-            @ApiResponse(responseCode = "403", description = "Unauthenticated", content = @Content)
+            @ApiResponse(responseCode = "403", description = "Missing or invalid credentials", content = @Content)
     })
     public ResponseEntity<FeedUnreadCountResponse> unreadCount(Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
