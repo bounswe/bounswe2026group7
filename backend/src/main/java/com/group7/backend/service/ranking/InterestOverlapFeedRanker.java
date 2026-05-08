@@ -40,6 +40,11 @@ import java.util.stream.Collectors;
 @Component
 public class InterestOverlapFeedRanker implements FeedRanker {
 
+    /** Cached natural log of 2 — the time-decay formula uses it once per
+     *  post per request and recomputing it is wasteful when the candidate
+     *  window is hundreds of posts. */
+    private static final double LN_2 = Math.log(2);
+
     private final double interestWeight;
     private final double timeDecayWeight;
     private final double followBoostWeight;
@@ -88,7 +93,7 @@ public class InterestOverlapFeedRanker implements FeedRanker {
             return deltaSeconds == 0 ? 1.0 : 0.0;
         }
         // exp(-Δt * ln(2) / halfLife) — at Δt = halfLife, score is 0.5.
-        return Math.exp(-deltaSeconds * Math.log(2) / halfLifeSeconds);
+        return Math.exp(-deltaSeconds * LN_2 / halfLifeSeconds);
     }
 
     private static double followBoost(FeedPost post, Set<Long> followedAuthorIds) {

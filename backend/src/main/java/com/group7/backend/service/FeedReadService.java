@@ -141,6 +141,15 @@ public class FeedReadService {
             // for a richer message.
             return Page.empty(pageable);
         }
+        // Reject empty-filter search: returning the full visible feed via the
+        // search endpoint is bug-magnet behaviour (clients fall back to /search
+        // for "show me everything," which masks pagination cost growth as the
+        // post count scales). The For-You and Following endpoints are the
+        // correct surfaces for "no specific filter" reads.
+        if (normalisedKeyword == null && normalisedHashtag == null) {
+            throw new IllegalArgumentException(
+                    "Search requires at least one of 'q' or 'hashtag' — use /api/feed/for-you or /api/feed/following for the full feed");
+        }
         Page<FeedPost> page = feedPostRepository.searchPosts(normalisedKeyword, normalisedHashtag, pageable);
         return mapPage(page);
     }
