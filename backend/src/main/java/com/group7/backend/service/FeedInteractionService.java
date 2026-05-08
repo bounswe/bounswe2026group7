@@ -4,11 +4,8 @@ import com.group7.backend.dto.response.FeedCommentResponse;
 import com.group7.backend.dto.response.FeedPostInteractionState;
 import com.group7.backend.dto.response.FeedPostListItem;
 import com.group7.backend.entity.FeedPost;
-import com.group7.backend.entity.FeedPostBookmark;
 import com.group7.backend.entity.FeedPostBookmarkId;
 import com.group7.backend.entity.FeedPostComment;
-import com.group7.backend.entity.FeedPostHashtag;
-import com.group7.backend.entity.FeedPostLike;
 import com.group7.backend.entity.FeedPostLikeId;
 import com.group7.backend.entity.FeedPostShare;
 import com.group7.backend.entity.User;
@@ -65,19 +62,22 @@ public class FeedInteractionService {
     private final FeedPostShareRepository shareRepository;
     private final FeedPostCommentRepository commentRepository;
     private final UserRepository userRepository;
+    private final FeedPostMapper feedPostMapper;
 
     public FeedInteractionService(FeedPostRepository feedPostRepository,
                                    FeedPostLikeRepository likeRepository,
                                    FeedPostBookmarkRepository bookmarkRepository,
                                    FeedPostShareRepository shareRepository,
                                    FeedPostCommentRepository commentRepository,
-                                   UserRepository userRepository) {
+                                   UserRepository userRepository,
+                                   FeedPostMapper feedPostMapper) {
         this.feedPostRepository = feedPostRepository;
         this.likeRepository = likeRepository;
         this.bookmarkRepository = bookmarkRepository;
         this.shareRepository = shareRepository;
         this.commentRepository = commentRepository;
         this.userRepository = userRepository;
+        this.feedPostMapper = feedPostMapper;
     }
 
     // ── Likes ──────────────────────────────────────────────────────────────
@@ -147,18 +147,17 @@ public class FeedInteractionService {
         if (postIds.isEmpty()) {
             return Page.empty(pageable);
         }
-        // Preserve bookmark-recency order from the repo query.
+        // Preserve bookmark-recency order from the repo query — findAllById
+        // returns rows in indeterminate order, so re-sort via id-keyed map.
         List<Long> orderedIds = postIds.getContent();
-        List<FeedPost> posts = feedPostRepository.findAllById(orderedIds);
-        Map<Long, FeedPost> byId = posts.stream()
+        Map<Long, FeedPost> byId = feedPostRepository.findAllById(orderedIds).stream()
                 .collect(Collectors.toMap(FeedPost::getId, p -> p));
-        Map<Long, String> authorNames = resolveAuthorNames(posts);
-        List<FeedPostListItem> items = orderedIds.stream()
+        List<FeedPost> ordered = orderedIds.stream()
                 .map(byId::get)
                 .filter(p -> p != null && p.getDeletedAt() == null)
-                .map(p -> toListItem(p, authorNames))
                 .toList();
-        return new PageImpl<>(items, pageable, postIds.getTotalElements());
+        return new PageImpl<>(feedPostMapper.toListItems(ordered),
+                pageable, postIds.getTotalElements());
     }
 
     // ── Shares ─────────────────────────────────────────────────────────────
@@ -308,28 +307,5 @@ public class FeedInteractionService {
         Map<Long, String> names = new HashMap<>();
         userRepository.findAllById(authorIds).forEach(u -> names.put(u.getId(), u.getFirstName()));
         return names;
-    }
-
-    private Map<Long, String> resolveAuthorNames(List<FeedPost> posts) {
-        Set<Long> ids = posts.stream().map(FeedPost::getAuthorId).collect(Collectors.toSet());
-        return resolveAuthorNamesByIds(ids);
-    }
-
-    private static FeedPostListItem toListItem(FeedPost post, Map<Long, String> authorNames) {
-        List<String> tags = post.getHashtags().stream()
-                .map(FeedPostHashtag::getId)
-                .map(id -> id.getTag())
-                .sorted()
-                .toList();
-        return new FeedPostListItem(
-                post.getId(),
-                post.getAuthorId(),
-                authorNames.getOrDefault(post.getAuthorId(), null),
-                post.getBody(),
-                tags,
-                post.getCreatedAt(),
-                0L,
-                0L
-        );
     }
 }

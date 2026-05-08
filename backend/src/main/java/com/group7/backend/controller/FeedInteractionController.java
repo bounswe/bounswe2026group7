@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
  * bookmark.
  */
 @RestController
+@RequestMapping("/api/feed")
 @Tag(name = "Feed Interactions",
         description = "Like / comment / share / bookmark endpoints over the social feed (#347).")
 public class FeedInteractionController {
@@ -44,7 +46,7 @@ public class FeedInteractionController {
 
     // ── Aggregate state ────────────────────────────────────────────────────
 
-    @GetMapping("/api/feed/posts/{id:\\d+}/interactions")
+    @GetMapping("/posts/{id:\\d+}/interactions")
     @Operation(summary = "Read interaction state for a feed post",
             description = "Returns counts (likes, comments, shares, bookmarks) plus "
                     + "the viewer-relative toggle state (viewerHasLiked / viewerHasBookmarked). "
@@ -64,7 +66,7 @@ public class FeedInteractionController {
 
     // ── Likes ──────────────────────────────────────────────────────────────
 
-    @PostMapping("/api/feed/posts/{id:\\d+}/like")
+    @PostMapping("/posts/{id:\\d+}/like")
     @Operation(summary = "Toggle like on a feed post",
             description = "Idempotent toggle. Returns the updated interaction state.")
     @ApiResponses({
@@ -81,7 +83,7 @@ public class FeedInteractionController {
 
     // ── Bookmarks ──────────────────────────────────────────────────────────
 
-    @PostMapping("/api/feed/posts/{id:\\d+}/bookmark")
+    @PostMapping("/posts/{id:\\d+}/bookmark")
     @Operation(summary = "Toggle bookmark on a feed post")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Toggle applied"),
@@ -95,7 +97,7 @@ public class FeedInteractionController {
         return ResponseEntity.ok(interactionService.toggleBookmark(id, userId));
     }
 
-    @GetMapping("/api/feed/me/bookmarks")
+    @GetMapping("/me/bookmarks")
     @Operation(summary = "Current user's bookmarked posts")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paged bookmarked posts"),
@@ -112,7 +114,7 @@ public class FeedInteractionController {
 
     // ── Shares ─────────────────────────────────────────────────────────────
 
-    @PostMapping("/api/feed/posts/{id:\\d+}/share")
+    @PostMapping("/posts/{id:\\d+}/share")
     @Operation(summary = "Record a share event",
             description = "Append-only — every call records a new share event row. No fanout in #347.")
     @ApiResponses({
@@ -129,7 +131,7 @@ public class FeedInteractionController {
 
     // ── Comments ───────────────────────────────────────────────────────────
 
-    @PostMapping("/api/feed/posts/{id:\\d+}/comments")
+    @PostMapping("/posts/{id:\\d+}/comments")
     @Operation(summary = "Add a comment to a feed post")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Comment created"),
@@ -146,7 +148,7 @@ public class FeedInteractionController {
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
-    @GetMapping("/api/feed/posts/{id:\\d+}/comments")
+    @GetMapping("/posts/{id:\\d+}/comments")
     @Operation(summary = "List comments on a feed post (chronological)")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paged comments"),
@@ -163,7 +165,7 @@ public class FeedInteractionController {
         return ResponseEntity.ok(interactionService.listComments(id, viewerId, pageable));
     }
 
-    @PatchMapping("/api/feed/comments/{id:\\d+}")
+    @PatchMapping("/comments/{id:\\d+}")
     @Operation(summary = "Edit a comment (author-only)")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Updated comment"),
@@ -180,7 +182,7 @@ public class FeedInteractionController {
         return ResponseEntity.ok(interactionService.editComment(id, requesterId, request.body()));
     }
 
-    @DeleteMapping("/api/feed/comments/{id:\\d+}")
+    @DeleteMapping("/comments/{id:\\d+}")
     @Operation(summary = "Soft-delete a comment (author-only)")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Deleted (or already deleted)"),
