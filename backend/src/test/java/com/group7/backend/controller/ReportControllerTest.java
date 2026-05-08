@@ -10,6 +10,7 @@ import com.group7.backend.entity.ReportStatus;
 import com.group7.backend.entity.ReportTargetType;
 import com.group7.backend.exception.DuplicateReportException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.exception.SelfReportException;
 import com.group7.backend.service.JwtService;
 import com.group7.backend.service.ReportService;
 import org.junit.jupiter.api.Test;
@@ -82,7 +83,7 @@ class ReportControllerTest {
     void submit_returns400_onSelfReport() throws Exception {
         mockMenteeJwt("alice-token", 1L);
         when(reportService.createReport(eq(1L), any(CreateReportRequest.class)))
-                .thenThrow(new IllegalArgumentException("Users cannot report themselves"));
+                .thenThrow(new SelfReportException("Users cannot report themselves"));
 
         CreateReportRequest body = new CreateReportRequest(
                 ReportTargetType.USER, 1L, ProblemType.OTHER, "self");

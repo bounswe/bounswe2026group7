@@ -104,6 +104,30 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
     }
 
+    @ExceptionHandler(SelfReportException.class)
+    public ResponseEntity<Map<String, String>> handleSelfReport(SelfReportException ex,
+                                                                HttpServletRequest request) {
+        log.warn("Self-report rejected: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidReportTransitionException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidReportTransition(
+            InvalidReportTransitionException ex, HttpServletRequest request) {
+        log.warn("Invalid report transition rejected: method={}, path={}, from={}, to={}",
+                request.getMethod(), request.getRequestURI(), ex.getFrom(), ex.getTo());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    @ExceptionHandler(ReportNotPermittedException.class)
+    public ResponseEntity<Map<String, String>> handleReportNotPermitted(
+            ReportNotPermittedException ex, HttpServletRequest request) {
+        log.warn("Report rejected (not permitted): method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<Map<String, String>> handleRateLimit(RateLimitExceededException ex,
                                                                HttpServletRequest request) {
