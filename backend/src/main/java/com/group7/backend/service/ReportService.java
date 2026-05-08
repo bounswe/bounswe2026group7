@@ -7,6 +7,7 @@ import com.group7.backend.entity.Report;
 import com.group7.backend.entity.ReportStatus;
 import com.group7.backend.entity.ReportStatusMachine;
 import com.group7.backend.entity.ReportTargetType;
+import com.group7.backend.entity.User;
 import com.group7.backend.exception.DuplicateReportException;
 import com.group7.backend.exception.InvalidReportTransitionException;
 import com.group7.backend.exception.ReportNotPermittedException;
@@ -143,8 +144,15 @@ public class ReportService {
                 saved.getId(), reporterId, saved.getTargetType(), saved.getTargetId(),
                 saved.getProblemType());
 
+        // Carry reporterFirstName with the event so the AFTER_COMMIT
+        // listener doesn't need to re-fetch the reporter on its async
+        // thread — saves one DB round-trip per fan-out. Null is fine; the
+        // listener falls back to a generic placeholder.
+        String reporterFirstName = userRepository.findById(reporterId)
+                .map(User::getFirstName)
+                .orElse(null);
         applicationEventPublisher.publishEvent(new ReportSubmittedEvent(
-                saved.getId(), reporterId, saved.getTargetType()));
+                saved.getId(), reporterId, reporterFirstName, saved.getTargetType()));
         return reportMapper.toResponse(saved, false);
     }
 

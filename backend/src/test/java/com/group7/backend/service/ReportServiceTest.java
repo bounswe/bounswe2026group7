@@ -101,6 +101,8 @@ class ReportServiceTest {
             r.setId(500L);
             return r;
         });
+        when(userRepository.findById(REPORTER_ID))
+                .thenReturn(Optional.of(menteeWithFirstName(REPORTER_ID, "Ada")));
         when(reportMapper.toResponse(any(Report.class), anyBoolean()))
                 .thenReturn(stubResponse(500L));
 
@@ -113,7 +115,31 @@ class ReportServiceTest {
         ReportSubmittedEvent ev = eventCaptor.getValue();
         assertThat(ev.reportId()).isEqualTo(500L);
         assertThat(ev.reporterId()).isEqualTo(REPORTER_ID);
+        assertThat(ev.reporterFirstName()).isEqualTo("Ada");
         assertThat(ev.targetType()).isEqualTo(ReportTargetType.USER);
+    }
+
+    @Test
+    void createReport_carriesNullReporterName_whenReporterRowAlreadyGone() {
+        // Edge case: reporter passed JWT validation but the row is gone
+        // (e.g., admin force-deletion mid-request). Service still publishes
+        // the event with null name; listener falls back to "Someone".
+        when(userRepository.existsById(TARGET_USER_ID)).thenReturn(true);
+        when(reportRepository.save(any(Report.class))).thenAnswer(inv -> {
+            Report r = inv.getArgument(0);
+            r.setId(501L);
+            return r;
+        });
+        when(userRepository.findById(REPORTER_ID)).thenReturn(Optional.empty());
+        when(reportMapper.toResponse(any(Report.class), anyBoolean()))
+                .thenReturn(stubResponse(501L));
+
+        reportService.createReport(REPORTER_ID, request(ReportTargetType.USER, TARGET_USER_ID));
+
+        ArgumentCaptor<ReportSubmittedEvent> eventCaptor =
+                ArgumentCaptor.forClass(ReportSubmittedEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().reporterFirstName()).isNull();
     }
 
     // ── createReport: validation paths ──────────────────────────────────────
