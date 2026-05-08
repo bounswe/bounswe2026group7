@@ -34,8 +34,10 @@ function ProfileField({ label, value, chips = false }) {
 export default function UserProfilePage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { role } = useAuth()
+  const { role, userId } = useAuth()
   const isMentee = role === 'MENTEE'
+  const isMentor = role === 'MENTOR'
+  const isOwnProfile = String(id) === String(userId)
 
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -193,6 +195,20 @@ export default function UserProfilePage() {
                 style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
               >
                 {requestSent ? '✓ Request Sent' : 'Send Request'}
+              </button>
+            </div>
+          )}
+
+          {/* Mentor-to-mentor messaging entry point — only when viewer and target are
+              both mentors AND the viewer isn't looking at their own profile. */}
+          {isMentor && isMentorProfile && !isOwnProfile && (
+            <div style={{ textAlign: 'center' }}>
+              <button
+                className="send-request-btn"
+                onClick={() => navigate(`/messages?peerId=${id}`)}
+                style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
+              >
+                Send Message
               </button>
             </div>
           )}
