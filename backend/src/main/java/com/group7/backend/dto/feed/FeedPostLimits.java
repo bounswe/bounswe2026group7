@@ -9,7 +9,7 @@ package com.group7.backend.dto.feed;
  *       {@code UpdateFeedPostRequest};</li>
  *   <li>service-side defensive caps in {@code FeedPostService} and
  *       {@code HashtagNormalizer};</li>
- *   <li>the {@code V23__create_feed_posts.sql} migration's {@code CHECK}
+ *   <li>the {@code V24__create_feed_posts.sql} migration's {@code CHECK}
  *       constraint comments — the literal numeric values must stay in
  *       sync with the constants here, otherwise startup-time
  *       {@code ddl-auto = validate} will surface the mismatch

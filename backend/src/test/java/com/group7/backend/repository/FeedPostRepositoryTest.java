@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Real-Postgres coverage for {@link FeedPost} + {@link FeedPostHashtag},
- * the {@link FeedPostRepository} finders, and the V23 migration's schema
+ * the {@link FeedPostRepository} finders, and the V24 migration's schema
  * invariants:
  * <ul>
  *   <li>composite PK on {@code (post_id, tag)} dedupes hashtags within a post;</li>
