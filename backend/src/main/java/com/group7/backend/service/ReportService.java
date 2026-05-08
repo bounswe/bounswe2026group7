@@ -72,6 +72,13 @@ public class ReportService {
 
     private static final Logger log = LoggerFactory.getLogger(ReportService.class);
 
+    /**
+     * Postgres index name from V27. Used to discriminate the duplicate-
+     * report case from any other {@link DataIntegrityViolationException}
+     * (notably foreign-key violations on a deleted reporter).
+     */
+    private static final String ACTIVE_REPORT_INDEX_NAME = "idx_reports_active_unique";
+
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
     private final MentorshipRepository mentorshipRepository;
@@ -113,14 +120,21 @@ public class ReportService {
         try {
             saved = reportRepository.save(report);
         } catch (DataIntegrityViolationException ex) {
-            // Caught from the partial-unique index. Constraint-name detail
-            // logged for ops triage; user-facing message is fixed and
-            // schema-agnostic.
-            log.warn("Duplicate report rejected: reporterId={}, targetType={}, targetId={}, cause={}",
-                    reporterId, request.targetType(), request.targetId(),
-                    ex.getMostSpecificCause().getMessage());
-            throw new DuplicateReportException(
-                    "An active report already exists for this target");
+            // Translate ONLY the partial-unique-index violation to 409.
+            // Other DataIntegrityViolations (e.g. foreign-key violation
+            // when the reporter row was deleted between JWT issuance and
+            // submit) bubble up to the generic 500 — misclassifying them
+            // as duplicates would mislead clients into infinite retries.
+            String causeMsg = ex.getMostSpecificCause().getMessage();
+            if (causeMsg != null && causeMsg.contains(ACTIVE_REPORT_INDEX_NAME)) {
+                log.warn("Duplicate report rejected: reporterId={}, targetType={}, targetId={}",
+                        reporterId, request.targetType(), request.targetId());
+                throw new DuplicateReportException(
+                        "An active report already exists for this target");
+            }
+            log.error("Report persist failed (non-duplicate integrity violation): reporterId={}, targetType={}, targetId={}, cause={}",
+                    reporterId, request.targetType(), request.targetId(), causeMsg);
+            throw ex;
         }
 
         // OWASP A09 audit log. Description is intentionally NOT logged

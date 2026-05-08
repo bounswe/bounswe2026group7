@@ -217,6 +217,25 @@ class ReportServiceTest {
         verify(applicationEventPublisher, never()).publishEvent(any(ReportSubmittedEvent.class));
     }
 
+    @Test
+    void createReport_rethrowsNonIndexIntegrityViolation_unchanged() {
+        // Foreign-key violation on a deleted reporter (or any DIV that is
+        // NOT the partial-unique-index hit) must not be misclassified as
+        // "duplicate report" — clients would otherwise loop on a 409.
+        when(userRepository.existsById(TARGET_USER_ID)).thenReturn(true);
+        DataIntegrityViolationException fkViolation = new DataIntegrityViolationException(
+                "insert or update on table \"reports\" violates foreign key constraint \"reports_reporter_id_fkey\"");
+        when(reportRepository.save(any(Report.class))).thenThrow(fkViolation);
+
+        assertThatThrownBy(() ->
+                reportService.createReport(REPORTER_ID,
+                        request(ReportTargetType.USER, TARGET_USER_ID)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .isNotInstanceOf(DuplicateReportException.class);
+
+        verify(applicationEventPublisher, never()).publishEvent(any(ReportSubmittedEvent.class));
+    }
+
     // ── State machine: every allowed transition + every rejected one ────────
 
     @Test
