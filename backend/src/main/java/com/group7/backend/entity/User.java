@@ -31,8 +31,6 @@ public abstract class User {
     @Column(nullable = false)
     private String passwordHash;
 
-    private String deviceToken;
-
     private String profilePhoto;
 
     @Column(nullable = false)

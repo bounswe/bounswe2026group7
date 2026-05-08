@@ -72,6 +72,7 @@ public class MentorshipRequestService {
         try {
             MentorshipRequest saved = mentorshipRequestRepository.save(request);
             notificationEventPublisher.publishRequestReceived(mentor.getId(), mentee.getFirstName());
+            notificationEventPublisher.publishRequestSubmitted(mentee.getId(), mentor.getFirstName());
             log.info("Mentorship request created: requestId={}, menteeId={}, mentorId={}",
                     saved.getId(), menteeId, dto.getMentorId());
             return MentorshipRequestResponse.from(saved);

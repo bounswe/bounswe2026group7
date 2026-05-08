@@ -117,9 +117,23 @@
             <artifactId>ical4j</artifactId>
             <version>4.0.6</version>
         </dependency>
+        <!-- FCM transport for push notifications (#136). Initialised lazily by
+             FcmConfig only when app.fcm.credentials-path resolves to a real
+             service-account JSON file; absent that, NoOpPushDeliveryService is
+             wired so dev/CI environments still boot. -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.4.1</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

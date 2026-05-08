@@ -5,6 +5,9 @@ public enum NotificationType {
     REQUEST_RECEIVED,
     REQUEST_ACCEPTED,
     REQUEST_REJECTED,
+    // Sent to the mentee after a successful POST /api/mentorship-requests
+    // (req 1.2.1.6). Pairs with REQUEST_RECEIVED, which targets the mentor.
+    REQUEST_SUBMITTED,
     TASK_ASSIGNED,
     TASK_SUBMITTED,
     TASK_REVIEWED,
