@@ -6,7 +6,6 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.group7.backend.dto.request.CreateReportRequest;
 import com.group7.backend.dto.response.ReportResponse;
-import com.group7.backend.entity.FeedPost;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.Mentorship;
@@ -15,7 +14,7 @@ import com.group7.backend.entity.ProblemType;
 import com.group7.backend.entity.Report;
 import com.group7.backend.entity.ReportStatus;
 import com.group7.backend.entity.ReportTargetType;
-import com.group7.backend.entity.User;
+import com.group7.backend.event.ReportSubmittedEvent;
 import com.group7.backend.exception.DuplicateReportException;
 import com.group7.backend.exception.InvalidReportTransitionException;
 import com.group7.backend.exception.ReportNotPermittedException;
@@ -34,10 +33,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,13 +65,12 @@ class ReportServiceTest {
     @Mock private MentorshipRepository mentorshipRepository;
     @Mock private FeedPostRepository feedPostRepository;
     @Mock private ReportMapper reportMapper;
-    @Mock private NotificationEventPublisher notificationEventPublisher;
+    @Mock private ApplicationEventPublisher applicationEventPublisher;
     @InjectMocks private ReportService reportService;
 
     private static final long REPORTER_ID = 1L;
     private static final long TARGET_USER_ID = 2L;
     private static final long ADMIN_A_ID = 100L;
-    private static final long ADMIN_B_ID = 101L;
     private static final String SECRET_DESCRIPTION =
             "PII content: phone +1-555-0100, email victim@example.com";
 
@@ -96,26 +94,26 @@ class ReportServiceTest {
     // ── createReport: happy path ────────────────────────────────────────────
 
     @Test
-    void createReport_persistsReport_andFansOutToAllAdmins() {
+    void createReport_persistsReport_andPublishesSingleSubmittedEvent() {
         when(userRepository.existsById(TARGET_USER_ID)).thenReturn(true);
         when(reportRepository.save(any(Report.class))).thenAnswer(inv -> {
             Report r = inv.getArgument(0);
             r.setId(500L);
             return r;
         });
-        when(userRepository.findById(REPORTER_ID))
-                .thenReturn(Optional.of(menteeWithFirstName(REPORTER_ID, "Ada")));
-        when(userRepository.findAllAdminIds()).thenReturn(List.of(ADMIN_A_ID, ADMIN_B_ID));
         when(reportMapper.toResponse(any(Report.class), anyBoolean()))
                 .thenReturn(stubResponse(500L));
 
         reportService.createReport(REPORTER_ID, request(ReportTargetType.USER, TARGET_USER_ID));
 
         verify(reportRepository).save(any(Report.class));
-        verify(notificationEventPublisher)
-                .publishReportReceived(ADMIN_A_ID, "Ada", ReportTargetType.USER);
-        verify(notificationEventPublisher)
-                .publishReportReceived(ADMIN_B_ID, "Ada", ReportTargetType.USER);
+        ArgumentCaptor<ReportSubmittedEvent> eventCaptor =
+                ArgumentCaptor.forClass(ReportSubmittedEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        ReportSubmittedEvent ev = eventCaptor.getValue();
+        assertThat(ev.reportId()).isEqualTo(500L);
+        assertThat(ev.reporterId()).isEqualTo(REPORTER_ID);
+        assertThat(ev.targetType()).isEqualTo(ReportTargetType.USER);
     }
 
     // ── createReport: validation paths ──────────────────────────────────────
@@ -129,8 +127,7 @@ class ReportServiceTest {
                 .hasMessageContaining("themselves");
 
         verify(reportRepository, never()).save(any(Report.class));
-        verify(notificationEventPublisher, never())
-                .publishReportReceived(any(), any(), any());
+        verify(applicationEventPublisher, never()).publishEvent(any(ReportSubmittedEvent.class));
     }
 
     @Test
@@ -181,9 +178,6 @@ class ReportServiceTest {
             r.setId(700L);
             return r;
         });
-        when(userRepository.findById(REPORTER_ID))
-                .thenReturn(Optional.of(mentor));
-        when(userRepository.findAllAdminIds()).thenReturn(List.of());
         when(reportMapper.toResponse(any(Report.class), anyBoolean()))
                 .thenReturn(stubResponse(700L));
 
@@ -220,8 +214,7 @@ class ReportServiceTest {
                 .isInstanceOf(DuplicateReportException.class)
                 .hasMessageContaining("already exists");
 
-        verify(notificationEventPublisher, never())
-                .publishReportReceived(any(), any(), any());
+        verify(applicationEventPublisher, never()).publishEvent(any(ReportSubmittedEvent.class));
     }
 
     // ── State machine: every allowed transition + every rejected one ────────
@@ -298,9 +291,6 @@ class ReportServiceTest {
             r.setId(900L);
             return r;
         });
-        when(userRepository.findById(REPORTER_ID))
-                .thenReturn(Optional.of(menteeWithFirstName(REPORTER_ID, "Ada")));
-        when(userRepository.findAllAdminIds()).thenReturn(List.of());
         when(reportMapper.toResponse(any(Report.class), anyBoolean())).thenReturn(stubResponse(900L));
 
         reportService.createReport(REPORTER_ID,

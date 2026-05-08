@@ -11,6 +11,7 @@ import com.group7.backend.exception.DuplicateReportException;
 import com.group7.backend.exception.InvalidReportTransitionException;
 import com.group7.backend.exception.ReportNotPermittedException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.event.ReportSubmittedEvent;
 import com.group7.backend.exception.SelfReportException;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.MentorshipRepository;
@@ -18,6 +19,7 @@ import com.group7.backend.repository.ReportRepository;
 import com.group7.backend.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,7 +27,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 
 /**
  * Service layer for the user-reporting + admin-moderation surface (#135).
@@ -33,8 +34,10 @@ import java.util.List;
  * <p>Concerns:
  * <ul>
  *   <li><b>Submit</b> ({@link #createReport}) — validates target +
- *       self-report rule, persists, fan-outs a {@code REPORT_RECEIVED}
- *       notification per admin, returns the slim DTO (no target summary).</li>
+ *       self-report rule, persists, publishes a single
+ *       {@link ReportSubmittedEvent} for {@code ReportFanoutListener} to
+ *       fan out to admins after commit, returns the slim DTO (no target
+ *       summary).</li>
  *   <li><b>User-own list</b> ({@link #listMyReports}) — strictly filtered
  *       by the authenticated reporter id; structurally BOLA-safe.</li>
  *   <li><b>Admin queue</b> ({@link #listForAdmin} + {@link #getForAdmin}) —
@@ -74,20 +77,20 @@ public class ReportService {
     private final MentorshipRepository mentorshipRepository;
     private final FeedPostRepository feedPostRepository;
     private final ReportMapper reportMapper;
-    private final NotificationEventPublisher notificationEventPublisher;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public ReportService(ReportRepository reportRepository,
                          UserRepository userRepository,
                          MentorshipRepository mentorshipRepository,
                          FeedPostRepository feedPostRepository,
                          ReportMapper reportMapper,
-                         NotificationEventPublisher notificationEventPublisher) {
+                         ApplicationEventPublisher applicationEventPublisher) {
         this.reportRepository = reportRepository;
         this.userRepository = userRepository;
         this.mentorshipRepository = mentorshipRepository;
         this.feedPostRepository = feedPostRepository;
         this.reportMapper = reportMapper;
-        this.notificationEventPublisher = notificationEventPublisher;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     // ── Submit ──────────────────────────────────────────────────────────────
@@ -126,7 +129,8 @@ public class ReportService {
                 saved.getId(), reporterId, saved.getTargetType(), saved.getTargetId(),
                 saved.getProblemType());
 
-        fanOutToAdmins(saved);
+        applicationEventPublisher.publishEvent(new ReportSubmittedEvent(
+                saved.getId(), reporterId, saved.getTargetType()));
         return reportMapper.toResponse(saved, false);
     }
 
@@ -213,29 +217,6 @@ public class ReportService {
     private static void validateTransition(ReportStatus from, ReportStatus to) {
         if (!ReportStatusMachine.canTransition(from, to)) {
             throw new InvalidReportTransitionException(from, to);
-        }
-    }
-
-    /**
-     * Publishes one {@code REPORT_RECEIVED} notification per admin via
-     * the existing {@code NotificationEventPublisher}. The downstream
-     * {@code NotificationEventListener} is {@code @Async}, so the
-     * actual notification-row insert + push delivery is parallelised
-     * on the global executor pool.
-     *
-     * <p>If admin count grows past dozens, refactor to a single
-     * broadcast event that fans out internally inside a dedicated
-     * listener — this avoids N publishEvent calls in the publisher's
-     * transaction.
-     */
-    private void fanOutToAdmins(Report report) {
-        String reporterFirstName = userRepository.findById(report.getReporterId())
-                .map(u -> u.getFirstName())
-                .orElse("Someone");
-        List<Long> adminIds = userRepository.findAllAdminIds();
-        for (Long adminId : adminIds) {
-            notificationEventPublisher.publishReportReceived(
-                    adminId, reporterFirstName, report.getTargetType());
         }
     }
 }
