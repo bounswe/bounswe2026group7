@@ -10,6 +10,7 @@ import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,12 +64,14 @@ public class BanService {
     /** Hot path: invoked by every ban-gated action. */
     @Transactional(readOnly = true)
     public boolean isBanned(Long userId) {
-        return banRepository.findActive(userId, OffsetDateTime.now(clock)).isPresent();
+        return getActiveBan(userId).isPresent();
     }
 
     @Transactional(readOnly = true)
     public Optional<Ban> getActiveBan(Long userId) {
-        return banRepository.findActive(userId, OffsetDateTime.now(clock));
+        return banRepository.findActive(userId, OffsetDateTime.now(clock), PageRequest.of(0, 1))
+                .stream()
+                .findFirst();
     }
 
     @Transactional(readOnly = true)
@@ -97,7 +100,9 @@ public class BanService {
             return Optional.empty();
         }
 
-        long banOrdinal = banRepository.countByUser_Id(menteeId) + 1;
+        // Counts non-lifted bans only: an admin override should not escalate
+        // the next legitimate ban's duration.
+        long banOrdinal = banRepository.countNonLiftedByUserId(menteeId) + 1;
         long hours = computeBanHours(banOrdinal);
         OffsetDateTime now = OffsetDateTime.now(clock);
 

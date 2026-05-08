@@ -15,11 +15,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,16 +67,16 @@ class BanServiceTest {
 
     @Test
     void isBannedReturnsTrueWhenActiveBanExists() {
-        when(banRepository.findActive(eq(7L), any(OffsetDateTime.class)))
-                .thenReturn(Optional.of(new Ban()));
+        when(banRepository.findActive(eq(7L), any(OffsetDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of(new Ban()));
 
         assertThat(service.isBanned(7L)).isTrue();
     }
 
     @Test
     void isBannedReturnsFalseWhenNoActiveBan() {
-        when(banRepository.findActive(eq(7L), any(OffsetDateTime.class)))
-                .thenReturn(Optional.empty());
+        when(banRepository.findActive(eq(7L), any(OffsetDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of());
 
         assertThat(service.isBanned(7L)).isFalse();
     }
@@ -102,7 +104,7 @@ class BanServiceTest {
         mentee.setCancelCount(2); // about to be 3, threshold met
         when(menteeRepository.findById(7L)).thenReturn(Optional.of(mentee));
         when(menteeRepository.save(any(Mentee.class))).thenAnswer(i -> i.getArgument(0));
-        when(banRepository.countByUser_Id(7L)).thenReturn(0L);
+        when(banRepository.countNonLiftedByUserId(7L)).thenReturn(0L);
         when(banRepository.save(any(Ban.class))).thenAnswer(i -> i.getArgument(0));
 
         Optional<Ban> result = service.recordCancellation(7L, "Frequent cancellations");
@@ -126,7 +128,7 @@ class BanServiceTest {
         mentee.setCancelCount(3); // 4th cancellation
         when(menteeRepository.findById(7L)).thenReturn(Optional.of(mentee));
         when(menteeRepository.save(any(Mentee.class))).thenAnswer(i -> i.getArgument(0));
-        when(banRepository.countByUser_Id(7L)).thenReturn(1L); // already banned once
+        when(banRepository.countNonLiftedByUserId(7L)).thenReturn(1L); // already banned once
         when(banRepository.save(any(Ban.class))).thenAnswer(i -> i.getArgument(0));
 
         service.recordCancellation(7L, "again");
@@ -148,7 +150,7 @@ class BanServiceTest {
         when(menteeRepository.findById(7L)).thenReturn(Optional.of(mentee));
         when(menteeRepository.save(any(Mentee.class))).thenAnswer(i -> i.getArgument(0));
         // ordinal 8: 24 * 2^7 = 3072h → capped at 720h
-        when(banRepository.countByUser_Id(7L)).thenReturn(7L);
+        when(banRepository.countNonLiftedByUserId(7L)).thenReturn(7L);
         when(banRepository.save(any(Ban.class))).thenAnswer(i -> i.getArgument(0));
 
         service.recordCancellation(7L, "many");
