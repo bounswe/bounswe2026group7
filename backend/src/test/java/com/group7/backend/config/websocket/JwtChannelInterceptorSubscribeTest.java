@@ -36,6 +36,7 @@ import static org.mockito.Mockito.when;
 class JwtChannelInterceptorSubscribeTest {
 
     private static final String TOPIC_PREFIX = "/topic/conversation/";
+    private static final String FEED_PREFIX = "/topic/feed.";
 
     private JwtService jwtService;
     private ConversationParticipantRepository participantRepository;
@@ -134,6 +135,40 @@ class JwtChannelInterceptorSubscribeTest {
                 .isInstanceOf(MessagingException.class)
                 .hasMessageContaining("Authentication required");
         verify(participantRepository, never()).existsByConversationIdAndUserId(anyLong(), anyLong());
+    }
+
+    // ── Feed-topic SUBSCRIBE ACL (#349) ────────────────────────────────────────
+
+    @Test
+    void subscribeFeedPassesWhenUserSubscribesToOwnTopic() {
+        Long userId = 7L;
+        Message<?> message = subscribeMessage(FEED_PREFIX + userId, authToken(userId));
+
+        Message<?> result = interceptor.preSend(message, channel);
+
+        assertThat(result).isSameAs(message);
+        // Feed ACL never touches the conversation participant repo.
+        verify(participantRepository, never()).existsByConversationIdAndUserId(anyLong(), anyLong());
+    }
+
+    @Test
+    void subscribeFeedRejectedWhenUserSubscribesToOthersTopic() {
+        Long callerId = 7L;
+        Long otherUserId = 99L;
+        Message<?> message = subscribeMessage(FEED_PREFIX + otherUserId, authToken(callerId));
+
+        assertThatThrownBy(() -> interceptor.preSend(message, channel))
+                .isInstanceOf(MessagingException.class)
+                .hasMessageContaining("Cannot subscribe to another user's feed topic");
+    }
+
+    @Test
+    void subscribeFeedRejectedWhenDestinationIdIsMalformed() {
+        Message<?> message = subscribeMessage(FEED_PREFIX + "notanumber", authToken(7L));
+
+        assertThatThrownBy(() -> interceptor.preSend(message, channel))
+                .isInstanceOf(MessagingException.class)
+                .hasMessageContaining("Malformed");
     }
 
     @Test
