@@ -84,4 +84,15 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId> {
      * the repo runs whatever it's handed.
      */
     List<Follow> findByIdFollowerIdIn(Collection<Long> followerIds);
+
+    /**
+     * Returns the unbounded set of {@code followeeId}s that {@code followerId}
+     * follows (#350). Used by the For-You ranker to apply the follow-boost
+     * signal — no pagination, no ordering, no DTO construction. The previous
+     * approach reused {@link #findByIdFollowerIdOrderByCreatedAtDescIdFolloweeIdDesc}
+     * with a hard-coded {@code PageRequest.of(0, 1000)}, silently truncating
+     * the boost for power users who follow more than 1000 people.
+     */
+    @Query("SELECT f.id.followeeId FROM Follow f WHERE f.id.followerId = :followerId")
+    java.util.Set<Long> findFolloweeIdsByFollowerId(@Param("followerId") Long followerId);
 }

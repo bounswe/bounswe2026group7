@@ -24,6 +24,7 @@ import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -133,7 +134,7 @@ public class FeedReadService {
     public Page<FeedPostListItem> search(String keyword, String hashtag, Pageable pageable) {
         String normalisedKeyword = (keyword == null || keyword.isBlank())
                 ? null
-                : keyword.trim().toLowerCase(java.util.Locale.ROOT);
+                : escapeLikePattern(keyword.trim().toLowerCase(Locale.ROOT));
         String normalisedHashtag = normaliseSingleHashtag(hashtag);
         if (hashtag != null && !hashtag.isBlank() && normalisedHashtag == null) {
             // The user supplied a hashtag that fails normalisation — return
@@ -154,6 +155,25 @@ public class FeedReadService {
         return mapPage(page);
     }
 
+    /**
+     * Escapes the three LIKE metacharacters ({@code %}, {@code _},
+     * {@code \}) so a user-supplied keyword can never act as a wildcard.
+     * Without this, {@code q=%} would match every post and {@code q=_X}
+     * would match every two-character body ending in X. Pattern injection
+     * is not SQL injection (the parameter is still bound), but it does
+     * give callers a way to read more than they should — escape at the
+     * service boundary, paired with {@code ESCAPE '\\'} on the LIKE.
+     *
+     * <p>Order matters: {@code \\} must be replaced first so the
+     * subsequent {@code %} → {@code \%} and {@code _} → {@code \_}
+     * substitutions don't double-escape their own backslashes.
+     */
+    private static String escapeLikePattern(String s) {
+        return s.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+    }
+
     /** Single-hashtag normalisation that reuses the list normaliser. */
     private String normaliseSingleHashtag(String raw) {
         if (raw == null || raw.isBlank()) {
@@ -169,15 +189,11 @@ public class FeedReadService {
 
         Set<String> interestHashtags = extractInterestHashtags(viewer);
 
-        // Followed-author ids: small page across the user's follow graph.
-        // The mapper's findAllById in mapPage will reuse a similar lookup
-        // for author names; both are bounded by the candidate window size.
-        Set<Long> followedAuthorIds = followRepository
-                .findByIdFollowerIdOrderByCreatedAtDescIdFolloweeIdDesc(
-                        viewerId, org.springframework.data.domain.PageRequest.of(0, 1000))
-                .getContent().stream()
-                .map(f -> f.getId().getFolloweeId())
-                .collect(Collectors.toSet());
+        // Unbounded followee-id fetch — one query, no pagination, no
+        // ordering, no DTO. Earlier this used a paged Follow lookup with
+        // PageRequest.of(0, 1000), which silently dropped the boost
+        // signal for users following more than 1000 people.
+        Set<Long> followedAuthorIds = followRepository.findFolloweeIdsByFollowerId(viewerId);
 
         return new FeedRanker.FeedRankingContext(
                 viewerId, interestHashtags, followedAuthorIds, OffsetDateTime.now());

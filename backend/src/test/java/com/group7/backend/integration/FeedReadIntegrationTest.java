@@ -203,6 +203,43 @@ class FeedReadIntegrationTest {
     }
 
     @Test
+    void search_keywordWithLikeMetacharacters_doesNotActAsWildcard() throws Exception {
+        // Pre-fix bug: a user searching for `q=%` would match every post
+        // because `%` is a LIKE wildcard. Service-side escape + ESCAPE '\'
+        // on the LIKE clause turns user `%` into a literal-percent match.
+        String token = registerAndLogin("search_inj@test.com", true);
+        long matchPid = createPost(token, "100% completion", List.of());      // contains literal %
+        long otherPid1 = createPost(token, "no special chars here", List.of()); // no %
+        long otherPid2 = createPost(token, "underscore_in_body", List.of());    // contains _
+
+        // q=% must match ONLY the post with literal %, not all posts.
+        MvcResult result = mockMvc.perform(get("/api/feed/search")
+                        .param("q", "%")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        java.util.List<Long> ids = java.util.stream.StreamSupport
+                .stream(objectMapper.readTree(result.getResponse().getContentAsString())
+                        .get("content").spliterator(), false)
+                .map(n -> n.get("id").asLong())
+                .toList();
+        assertThat(ids).containsExactly(matchPid);
+
+        // q=_ similarly matches only the post with literal underscore.
+        MvcResult result2 = mockMvc.perform(get("/api/feed/search")
+                        .param("q", "_")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        java.util.List<Long> ids2 = java.util.stream.StreamSupport
+                .stream(objectMapper.readTree(result2.getResponse().getContentAsString())
+                        .get("content").spliterator(), false)
+                .map(n -> n.get("id").asLong())
+                .toList();
+        assertThat(ids2).containsExactly(otherPid2);
+    }
+
+    @Test
     void search_emptyFilters_returns400() throws Exception {
         // /search is a filtered surface — empty filters would return the
         // whole feed and mask pagination cost as the system grows. Clients

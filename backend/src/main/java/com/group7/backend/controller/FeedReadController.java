@@ -53,7 +53,11 @@ public class FeedReadController {
     @Operation(summary = "Algorithmic For-You feed",
             description = "Returns posts ranked by interest overlap, time decay, and "
                     + "follow-graph proximity. Excludes the viewer's own posts and "
-                    + "soft-deleted posts. Pages beyond the candidate window return empty.")
+                    + "soft-deleted posts. Pages beyond the candidate window return empty. "
+                    + "Note: the response's totalElements reflects the candidate-window "
+                    + "size (configured by app.feed.forYou.candidate-window, default 200), "
+                    + "not the global post count — the For-You feed deliberately ranks a "
+                    + "rolling window of recent candidates and caps at that size.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paged ranked posts"),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
