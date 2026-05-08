@@ -1,5 +1,7 @@
 -- Meeting scheduling support (#246)
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone varchar(64) not null default 'UTC';
+
 create table meetings (
   id                    bigserial primary key,
   mentorship_id         bigint not null references mentorships(id) on delete cascade,
@@ -62,3 +64,5 @@ create table meeting_reminder_states (
   sent_at                 timestamptz not null default now(),
   unique (meeting_id, reminder_offset_minutes)
 );
+
+

@@ -61,8 +61,8 @@ public class MeetingService {
         this.userRepository = userRepository;
         this.notificationEventPublisher = notificationEventPublisher;
         this.clock = clock;
-        this.confirmationWindowHours = properties.confirmationWindowHours();
-        this.confirmationMinHoursBeforeStart = properties.confirmationMinHoursBeforeStart();
+        this.confirmationWindowHours = properties.getConfirmationWindowHours();
+        this.confirmationMinHoursBeforeStart = properties.getConfirmationMinHoursBeforeStart();
     }
 
     @Transactional
@@ -81,15 +81,19 @@ public class MeetingService {
 
         OffsetDateTime start = request.getStartTime();
         OffsetDateTime end = request.getEndTime();
+        OffsetDateTime mentorshipStart = mentorship.getStartDate();
         OffsetDateTime mentorshipEnd = mentorship.getEndDate();
 
-        if (start.isAfter(mentorshipEnd)) {
+        if (start.isBefore(mentorshipStart) || start.isAfter(mentorshipEnd)) {
             throw new MeetingConflictException("Meeting start time must be within the mentorship duration");
         }
 
+        mentorshipRepository.acquireAdvisoryLock(mentorship.getId());
+        long durationMinutes = java.time.Duration.between(start, end).toMinutes();
+
         do {
             ensureNoConflicts(mentorship, start, end, null);
-            warnIfOutsideAvailability(mentorship.getMentor().getId(), start, end, warnings);
+            warnIfOutsideAvailability(mentorship.getMentor(), start, end, warnings);
 
             Meeting meeting = new Meeting();
             meeting.setMentorship(mentorship);
@@ -111,7 +115,7 @@ public class MeetingService {
             }
             start = start.plusWeeks(intervalWeeks);
             end = end.plusWeeks(intervalWeeks);
-        } while (start.isBefore(mentorshipEnd));
+        } while (!start.plusMinutes(durationMinutes).isAfter(mentorshipEnd));
 
         List<Meeting> saved = meetingRepository.saveAll(meetings);
 
@@ -192,6 +196,7 @@ public class MeetingService {
             throw new MeetingConflictException("A pending reschedule request already exists for this meeting");
         }
 
+        mentorshipRepository.acquireAdvisoryLock(meeting.getMentorship().getId());
         ensureNoConflicts(meeting.getMentorship(), request.getProposedStart(), request.getProposedEnd(), meeting.getId());
 
         MeetingRescheduleRequest entity = new MeetingRescheduleRequest();
@@ -225,6 +230,7 @@ public class MeetingService {
             throw new MeetingConflictException("Meeting cannot be rescheduled in its current state");
         }
 
+        mentorshipRepository.acquireAdvisoryLock(meeting.getMentorship().getId());
         ensureNoConflicts(meeting.getMentorship(), req.getProposedStart(), req.getProposedEnd(), meeting.getId());
 
         meeting.setStartTime(req.getProposedStart());
@@ -430,7 +436,14 @@ public class MeetingService {
         if (rule == null || rule.isBlank()) {
             return "FREQ=WEEKLY;INTERVAL=1";
         }
-        return rule.trim().toUpperCase(Locale.ROOT);
+        String normalized = rule.trim().toUpperCase(Locale.ROOT);
+        String[] parts = normalized.split(";");
+        for (String part : parts) {
+            if (!part.startsWith("FREQ=WEEKLY") && !part.startsWith("INTERVAL=")) {
+                throw new IllegalArgumentException("Only FREQ=WEEKLY and INTERVAL are supported in recurrence rule");
+            }
+        }
+        return normalized;
     }
 
     private int parseWeeklyInterval(String rule) {
@@ -442,7 +455,11 @@ public class MeetingService {
         String[] parts = normalized.split(";");
         for (String part : parts) {
             if (part.startsWith("INTERVAL=")) {
-                interval = Integer.parseInt(part.substring("INTERVAL=".length()));
+                try {
+                    interval = Integer.parseInt(part.substring("INTERVAL=".length()));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid recurrence interval");
+                }
             }
         }
         if (interval < 1) {
@@ -493,21 +510,22 @@ public class MeetingService {
         }
     }
 
-    private void warnIfOutsideAvailability(Long mentorId,
+    private void warnIfOutsideAvailability(User mentor,
                                            OffsetDateTime start,
                                            OffsetDateTime end,
                                            List<String> warnings) {
-        if (!isWithinAvailability(mentorId, start, end)) {
+        if (!isWithinAvailability(mentor, start, end)) {
             warnings.add("Meeting time is outside the mentor's availability window: " + start + " - " + end);
         }
     }
 
-    private boolean isWithinAvailability(Long mentorId, OffsetDateTime start, OffsetDateTime end) {
-        DayOfWeek day = start.getDayOfWeek();
-        LocalTime startLocal = start.toLocalTime();
-        LocalTime endLocal = end.toLocalTime();
+    private boolean isWithinAvailability(User mentor, OffsetDateTime start, OffsetDateTime end) {
+        java.time.ZoneId zone = java.time.ZoneId.of(mentor.getTimezone());
+        DayOfWeek day = start.atZoneSameInstant(zone).getDayOfWeek();
+        LocalTime startLocal = start.atZoneSameInstant(zone).toLocalTime();
+        LocalTime endLocal = end.atZoneSameInstant(zone).toLocalTime();
 
-        return availabilitySlotRepository.findByMentorId(mentorId).stream()
+        return availabilitySlotRepository.findByMentorId(mentor.getId()).stream()
                 .filter(slot -> slot.getDayOfWeek() == day)
                 .anyMatch(slot -> startLocal.compareTo(slot.getStartTime()) >= 0
                         && endLocal.compareTo(slot.getEndTime()) <= 0);

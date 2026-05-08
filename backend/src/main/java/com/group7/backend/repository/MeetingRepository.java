@@ -4,6 +4,7 @@ import com.group7.backend.entity.Meeting;
 import com.group7.backend.entity.MeetingStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 
 import java.time.OffsetDateTime;
@@ -58,4 +59,13 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             @Param("status") MeetingStatus status,
             @Param("windowStart") OffsetDateTime windowStart,
             @Param("windowEnd") OffsetDateTime windowEnd);
+
+    @Modifying
+    @Query("UPDATE Meeting m SET m.status = 'EXPIRED' WHERE m.id = :meetingId AND m.status = 'PENDING_CONFIRMATION'")
+    int expireMeeting(@Param("meetingId") Long meetingId);
+
+    @Modifying
+    @Query("UPDATE Meeting m SET m.status = 'COMPLETED' WHERE m.id = :meetingId AND m.status = 'CONFIRMED'")
+    int completeMeeting(@Param("meetingId") Long meetingId);
 }
+

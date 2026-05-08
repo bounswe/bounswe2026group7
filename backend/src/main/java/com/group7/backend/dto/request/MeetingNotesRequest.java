@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import jakarta.validation.constraints.Size;
 
 @Getter
 @Setter
@@ -14,5 +15,7 @@ public class MeetingNotesRequest {
 
     @NotNull(message = "Notes are required")
     @Schema(description = "Notes or discussion summary", example = "Agreed on next steps...")
+    @Size(max = 2000, message = "Notes cannot exceed 2000 characters")
     private String notes;
 }
+

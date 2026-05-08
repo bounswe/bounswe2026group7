@@ -38,6 +38,9 @@ public abstract class User {
     @Column(nullable = false)
     private Boolean isEmailVerified = false;
 
+    @Column(nullable = false, length = 64)
+    private String timezone = "UTC";
+
     @Version
     @Column(nullable = false)
     private Long version;
@@ -50,3 +53,4 @@ public abstract class User {
         this.createdAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 }
+

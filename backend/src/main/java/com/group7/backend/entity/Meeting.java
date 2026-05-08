@@ -65,6 +65,13 @@ public class Meeting {
     @Column
     private String notes;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "notes_updated_by_id")
+    private User notesUpdatedBy;
+
+    @Column(name = "notes_updated_at")
+    private OffsetDateTime notesUpdatedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -73,3 +80,4 @@ public class Meeting {
         this.createdAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 }
+

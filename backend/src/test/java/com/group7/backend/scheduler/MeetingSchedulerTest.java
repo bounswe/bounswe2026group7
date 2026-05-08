@@ -51,14 +51,9 @@ class MeetingSchedulerTest {
 
     @BeforeEach
     void setUp() {
-        MeetingProperties properties = new MeetingProperties(24, 1, "24", 5, "0 */5 * * * *", "UTC");
-        scheduler = new MeetingScheduler(
-                meetingRepository,
-                reminderStateRepository,
-                notificationEventPublisher,
-                clock,
-                properties
-        );
+        MeetingProperties properties = new MeetingProperties();
+        MeetingSchedulerProcessor processor = new MeetingSchedulerProcessor(meetingRepository, reminderStateRepository, notificationEventPublisher, properties);
+        scheduler = new MeetingScheduler(meetingRepository, processor, clock);
 
         mentor = new Mentor();
         mentor.setId(1L);
@@ -130,10 +125,11 @@ class MeetingSchedulerTest {
         when(meetingRepository.findByStatusAndEndTimeBefore(eq(MeetingStatus.CONFIRMED), any()))
                 .thenReturn(List.of());
 
+        when(meetingRepository.expireMeeting(77L)).thenReturn(1);
+
         scheduler.run();
 
-        assertThat(pending.getStatus()).isEqualTo(MeetingStatus.EXPIRED);
-        verify(meetingRepository).save(pending);
+        verify(meetingRepository).expireMeeting(77L);
         verify(notificationEventPublisher).publishMeetingAutoDeclined(1L, "Mia");
     }
 
@@ -148,10 +144,11 @@ class MeetingSchedulerTest {
         when(meetingRepository.findByStatusAndEndTimeBefore(eq(MeetingStatus.CONFIRMED), any()))
                 .thenReturn(List.of(meeting));
 
+        when(meetingRepository.completeMeeting(55L)).thenReturn(1);
+
         scheduler.run();
 
-        assertThat(meeting.getStatus()).isEqualTo(MeetingStatus.COMPLETED);
-        verify(meetingRepository).save(meeting);
+        verify(meetingRepository).completeMeeting(55L);
     }
 
     private Meeting confirmedMeeting() {
@@ -175,3 +172,5 @@ class MeetingSchedulerTest {
         return meeting;
     }
 }
+
+

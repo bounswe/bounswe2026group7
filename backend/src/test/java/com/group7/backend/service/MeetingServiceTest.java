@@ -60,6 +60,7 @@ class MeetingServiceTest {
         mentor = new Mentor();
         mentor.setId(1L);
         mentor.setFirstName("Ada");
+        mentor.setTimezone("UTC");
 
         mentee = new Mentee();
         mentee.setId(2L);
@@ -74,7 +75,7 @@ class MeetingServiceTest {
         mentorship.setEndDate(OffsetDateTime.of(2026, 5, 25, 10, 0, 0, 0, ZoneOffset.UTC));
         mentorship.setDuration(3);
 
-        properties = new MeetingProperties(24, 1, "24,1", 5, "0 */5 * * * *", "UTC");
+        properties = new MeetingProperties();
 
         meetingService = new MeetingService(
                 meetingRepository,
@@ -294,3 +295,4 @@ class MeetingServiceTest {
         return meeting;
     }
 }
+

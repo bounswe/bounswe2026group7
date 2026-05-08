@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import jakarta.validation.constraints.Size;
 
 @Getter
 @Setter
@@ -14,8 +15,10 @@ public class MeetingActionItemCreateRequest {
 
     @NotBlank(message = "Text is required")
     @Schema(description = "Action item text", example = "Prepare project outline")
+    @Size(max = 2000, message = "Action item cannot exceed 2000 characters")
     private String text;
 
     @Schema(description = "Optional order index", example = "1")
     private Integer orderIndex;
 }
+

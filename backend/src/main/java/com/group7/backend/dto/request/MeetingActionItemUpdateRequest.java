@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import jakarta.validation.constraints.Size;
 
 @Getter
 @Setter
@@ -12,8 +13,10 @@ import lombok.Setter;
 public class MeetingActionItemUpdateRequest {
 
     @Schema(description = "Updated action item text", example = "Revise project outline")
+    @Size(max = 2000, message = "Action item cannot exceed 2000 characters")
     private String text;
 
     @Schema(description = "Toggle completion", example = "true")
     private Boolean completed;
 }
+
