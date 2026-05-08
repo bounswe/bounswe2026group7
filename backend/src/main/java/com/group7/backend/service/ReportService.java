@@ -137,8 +137,9 @@ public class ReportService {
     // ── User-own list ───────────────────────────────────────────────────────
 
     public Page<ReportResponse> listMyReports(Long reporterId, Pageable pageable) {
-        return reportRepository.findByReporterIdOrderByCreatedAtDesc(reporterId, pageable)
-                .map(r -> reportMapper.toResponse(r, false));
+        return reportMapper.toResponses(
+                reportRepository.findByReporterIdOrderByCreatedAtDesc(reporterId, pageable),
+                false);
     }
 
     // ── Admin queue ─────────────────────────────────────────────────────────
@@ -146,8 +147,9 @@ public class ReportService {
     public Page<ReportResponse> listForAdmin(ReportStatus status,
                                               ReportTargetType targetType,
                                               Pageable pageable) {
-        return reportRepository.findForAdminQueue(status, targetType, pageable)
-                .map(r -> reportMapper.toResponse(r, true));
+        return reportMapper.toResponses(
+                reportRepository.findForAdminQueue(status, targetType, pageable),
+                true);
     }
 
     public ReportResponse getForAdmin(Long reportId) {
