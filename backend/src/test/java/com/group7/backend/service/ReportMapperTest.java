@@ -172,6 +172,40 @@ class ReportMapperTest {
         assertThat(out.targetSummary()).isEqualTo("TargetA X");
     }
 
+    @Test
+    void toResponseSingle_includesTargetSummary_forMentorshipTarget() {
+        Report r = buildReport(1L, 10L, ReportTargetType.MENTORSHIP, 200L, null, null);
+        Mentor mentor = mentorWithFirstName(500L, "MentorMike");
+        Mentee mentee = menteeWithFirstName(501L, "MenteeMia");
+        when(userRepository.findById(10L))
+                .thenReturn(Optional.of(user(10L, "Alice", "A")));
+        when(mentorshipRepository.findById(200L))
+                .thenReturn(Optional.of(mentorship(200L, mentor, mentee)));
+
+        ReportResponse out = mapper.toResponse(r, true);
+
+        assertThat(out.targetSummary()).isEqualTo("Mentor: MentorMike / Mentee: MenteeMia");
+    }
+
+    @Test
+    void toResponseSingle_includesTargetSummary_forPostTarget_truncatesOverLimitBody() {
+        // 150-char body exceeds the 120-char excerpt limit; mapper must
+        // truncate and append the ellipsis. Closes the truncation branch
+        // in ReportMapper.excerpt.
+        Report r = buildReport(1L, 10L, ReportTargetType.POST, 300L, null, null);
+        String longBody = "x".repeat(150);
+        when(userRepository.findById(10L))
+                .thenReturn(Optional.of(user(10L, "Alice", "A")));
+        when(feedPostRepository.findByIdAndDeletedAtIsNull(300L))
+                .thenReturn(Optional.of(feedPost(300L, longBody)));
+
+        ReportResponse out = mapper.toResponse(r, true);
+
+        assertThat(out.targetSummary())
+                .hasSize(121)   // 120 chars + the U+2026 ellipsis
+                .endsWith("…");
+    }
+
     // ── fixtures ────────────────────────────────────────────────────────────
 
     private static Report buildReport(Long id, Long reporterId,
