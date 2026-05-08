@@ -122,9 +122,9 @@ class FeedFanoutListenerTest {
 
     @Test
     void onFeedPostCreated_doesNotPropagate_whenFollowerLookupThrows() {
-        // Top-level try/catch is load-bearing because the codebase has no
-        // AsyncUncaughtExceptionHandler — without it this throw would be
-        // silently swallowed by SimpleAsyncTaskExecutor.
+        // Local try/catch logs with postId/authorId context. The global
+        // AsyncConfig.AsyncUncaughtExceptionHandler is the last-resort
+        // net; either way the throw doesn't propagate to the executor.
         when(followRepository.findFollowerIdsByFolloweeId(17L))
                 .thenThrow(new RuntimeException("DB down"));
 
