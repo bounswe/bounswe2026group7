@@ -65,7 +65,12 @@ export default function ForgotPasswordScreen() {
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Text style={styles.backButtonText}>‹ Back</Text>
         </TouchableOpacity>
 
@@ -94,6 +99,8 @@ export default function ForgotPasswordScreen() {
                   setEmailError('');
                   setServerError('');
                 }}
+                accessibilityLabel="Email address"
+                accessibilityHint="Enter the email address that should receive the reset link"
               />
               {!!emailError && <Text style={styles.errorText}>{emailError}</Text>}
 
@@ -101,6 +108,10 @@ export default function ForgotPasswordScreen() {
                 style={[styles.primaryButton, !isFormValid && styles.primaryButtonDisabled]}
                 disabled={!isFormValid || isLoading}
                 onPress={handleSubmit}
+                accessibilityRole="button"
+                accessibilityLabel="Send reset link"
+                accessibilityHint="Requests a password reset email"
+                accessibilityState={{ disabled: !isFormValid || isLoading, busy: isLoading }}
               >
                 {isLoading ? (
                   <ActivityIndicator color="#2F563C" />
@@ -115,12 +126,18 @@ export default function ForgotPasswordScreen() {
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={() => router.push('/reset-password' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="I have a reset token"
             >
               <Text style={styles.primaryButtonText}>I Have a Reset Token</Text>
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity onPress={() => router.replace('/login')}>
+          <TouchableOpacity
+            onPress={() => router.replace('/login')}
+            accessibilityRole="button"
+            accessibilityLabel="Back to sign in"
+          >
             <Text style={styles.footerLink}>Back to Sign In</Text>
           </TouchableOpacity>
         </View>
