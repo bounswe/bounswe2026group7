@@ -37,12 +37,14 @@ public final class ReportStatusMachine {
 
     static {
         EnumMap<ReportStatus, Set<ReportStatus>> map = new EnumMap<>(ReportStatus.class);
-        map.put(ReportStatus.OPEN,
-                EnumSet.of(ReportStatus.UNDER_REVIEW, ReportStatus.RESOLVED, ReportStatus.DISMISSED));
-        map.put(ReportStatus.UNDER_REVIEW,
-                EnumSet.of(ReportStatus.RESOLVED, ReportStatus.DISMISSED));
-        map.put(ReportStatus.RESOLVED, EnumSet.noneOf(ReportStatus.class));
-        map.put(ReportStatus.DISMISSED, EnumSet.noneOf(ReportStatus.class));
+        map.put(ReportStatus.OPEN, Collections.unmodifiableSet(
+                EnumSet.of(ReportStatus.UNDER_REVIEW, ReportStatus.RESOLVED, ReportStatus.DISMISSED)));
+        map.put(ReportStatus.UNDER_REVIEW, Collections.unmodifiableSet(
+                EnumSet.of(ReportStatus.RESOLVED, ReportStatus.DISMISSED)));
+        map.put(ReportStatus.RESOLVED, Collections.unmodifiableSet(
+                EnumSet.noneOf(ReportStatus.class)));
+        map.put(ReportStatus.DISMISSED, Collections.unmodifiableSet(
+                EnumSet.noneOf(ReportStatus.class)));
         NEXT_STATES = Collections.unmodifiableMap(map);
     }
 
@@ -67,9 +69,11 @@ public final class ReportStatusMachine {
 
     /**
      * Read-only set of states reachable from {@code from} in one step.
-     * Empty for terminal states.
+     * Empty for terminal states. The returned set is the same
+     * unmodifiable view shared across calls — wrapping happens once at
+     * static-init time.
      */
     public static Set<ReportStatus> legalNextStates(ReportStatus from) {
-        return Collections.unmodifiableSet(NEXT_STATES.get(from));
+        return NEXT_STATES.get(from);
     }
 }
