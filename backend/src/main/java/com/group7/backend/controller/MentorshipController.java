@@ -42,6 +42,26 @@ public class MentorshipController {
         return ResponseEntity.ok(mentorshipService.getActiveMentorships(userId));
     }
 
+    @GetMapping("/{id}")
+    @Operation(
+            summary = "Get a mentorship",
+            description = "Returns the mentorship by id, including the goalDefined flag. " +
+                    "Only the mentor and mentee may read; non-participants get 404 to avoid leaking ids."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Mentorship found",
+                    content = @Content(schema = @Schema(implementation = MentorshipResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentorship not found or caller is not a participant",
+                    content = @Content)
+    })
+    public ResponseEntity<MentorshipResponse> getMentorship(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(mentorshipService.getMentorship(userId, id));
+    }
+
     @PutMapping("/{id}/goal")
     @Operation(
             summary = "Set shared goal",

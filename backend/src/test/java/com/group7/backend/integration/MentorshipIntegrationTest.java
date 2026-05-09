@@ -302,4 +302,187 @@ class MentorshipIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Duration must be 1, 3, or 6 months"));
     }
+
+    // ── Shared-goal precondition (issue #335) ───────────────────────────────
+
+    /** Establishes mentor + mentee + ACTIVE mentorship; returns a Long[] {mentorshipId}. */
+    private MentorshipFixture acceptAndReturnMentorshipId(String mentorEmail, String menteeEmail) throws Exception {
+        String mentorToken = registerAndLogin(mentorEmail, true);
+        Mentor mentor = mentorRepository.findAll().stream()
+                .filter(m -> m.getEmail().equals(mentorEmail)).findFirst().orElseThrow();
+        mentor.setMaxMenteeCapacity(3);
+        mentorRepository.save(mentor);
+
+        String menteeToken = registerAndLogin(menteeEmail, false);
+        Long requestId = createRequest(menteeToken, mentor.getId());
+
+        MvcResult acceptResult = mockMvc.perform(put("/api/mentorship-requests/" + requestId + "/accept")
+                        .header("Authorization", "Bearer " + mentorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("duration", 3))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        Long mentorshipId = objectMapper.readTree(acceptResult.getResponse().getContentAsString())
+                .get("id").asLong();
+        return new MentorshipFixture(mentorshipId, mentorToken, menteeToken);
+    }
+
+    private record MentorshipFixture(Long mentorshipId, String mentorToken, String menteeToken) {}
+
+    @Test
+    void getMentorship_returnsGoalDefinedFalseInitially() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m1@test.com", "gd_e1@test.com");
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId())
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(f.mentorshipId()))
+                .andExpect(jsonPath("$.goalDefined").value(false));
+    }
+
+    @Test
+    void getMentorship_returnsGoalDefinedTrueAfterPut() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m2@test.com", "gd_e2@test.com");
+
+        mockMvc.perform(put("/api/mentorships/" + f.mentorshipId() + "/goal")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("sharedGoal", "Ship the MVP"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalDefined").value(true));
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId())
+                        .header("Authorization", "Bearer " + f.menteeToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalDefined").value(true))
+                .andExpect(jsonPath("$.sharedGoal").value("Ship the MVP"));
+    }
+
+    @Test
+    void getMentorship_returns404ForNonParticipant() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m3@test.com", "gd_e3@test.com");
+        String intruderToken = registerAndLogin("gd_intruder@test.com", false);
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId())
+                        .header("Authorization", "Bearer " + intruderToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getMentorship_returns404ForUnknownId() throws Exception {
+        String mentorToken = registerAndLogin("gd_m4@test.com", true);
+
+        mockMvc.perform(get("/api/mentorships/999999")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void putGoal_rejectsWhitespaceOnly() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m5@test.com", "gd_e5@test.com");
+
+        mockMvc.perform(put("/api/mentorships/" + f.mentorshipId() + "/goal")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sharedGoal\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void putGoal_rejectsOver500Chars() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m6@test.com", "gd_e6@test.com");
+
+        mockMvc.perform(put("/api/mentorships/" + f.mentorshipId() + "/goal")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("sharedGoal", "a".repeat(501)))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void postTask_returns409GoalRequiredWhenGoalNotSet() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m7@test.com", "gd_e7@test.com");
+
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/tasks")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "First task"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.code").value("GOAL_REQUIRED"))
+                .andExpect(jsonPath("$.mentorshipId").value(f.mentorshipId()))
+                .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void postMeeting_returns409GoalRequiredWhenGoalNotSet() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m8@test.com", "gd_e8@test.com");
+
+        Map<String, Object> body = Map.of(
+                "title", "Sync",
+                "startTime", java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).plusDays(7).toString(),
+                "endTime", java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).plusDays(7).plusHours(1).toString(),
+                "meetingType", "ONLINE",
+                "meetingLink", "https://meet.example.com/abc",
+                "recurring", false
+        );
+
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/meetings")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("GOAL_REQUIRED"))
+                .andExpect(jsonPath("$.mentorshipId").value(f.mentorshipId()));
+    }
+
+    @Test
+    void postMilestone_returns409GoalRequiredWhenGoalNotSet() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m9@test.com", "gd_e9@test.com");
+
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/milestones")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "Milestone 1"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("GOAL_REQUIRED"))
+                .andExpect(jsonPath("$.mentorshipId").value(f.mentorshipId()));
+    }
+
+    @Test
+    void postTask_succeedsAfterGoalSet() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m10@test.com", "gd_e10@test.com");
+
+        mockMvc.perform(put("/api/mentorships/" + f.mentorshipId() + "/goal")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("sharedGoal", "Ship MVP"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/tasks")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "First task"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.title").value("First task"));
+    }
+
+    @Test
+    void postMilestone_succeedsAfterGoalSet() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("gd_m11@test.com", "gd_e11@test.com");
+
+        mockMvc.perform(put("/api/mentorships/" + f.mentorshipId() + "/goal")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("sharedGoal", "Ship MVP"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/milestones")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "Milestone 1"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.title").value("Milestone 1"));
+    }
 }

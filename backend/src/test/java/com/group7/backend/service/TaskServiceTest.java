@@ -4,6 +4,7 @@ import com.group7.backend.dto.request.TaskCreateRequest;
 import com.group7.backend.dto.request.TaskReviewRequest;
 import com.group7.backend.dto.request.TaskSubmissionRequest;
 import com.group7.backend.entity.*;
+import com.group7.backend.exception.GoalRequiredException;
 import com.group7.backend.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,12 +53,14 @@ class TaskServiceTest {
         activeMentorship.setMentor(mentor);
         activeMentorship.setMentee(mentee);
         activeMentorship.setStatus(MentorshipStatus.ACTIVE);
+        activeMentorship.setSharedGoal("Build a portfolio");
 
         endedMentorship = new Mentorship();
         endedMentorship.setId(20L);
         endedMentorship.setMentor(mentor);
         endedMentorship.setMentee(mentee);
         endedMentorship.setStatus(MentorshipStatus.COMPLETED);
+        endedMentorship.setSharedGoal("Build a portfolio");
 
         pendingTask = new Task();
         pendingTask.setId(100L);
@@ -118,6 +121,54 @@ class TaskServiceTest {
         assertThatThrownBy(() -> taskService.createTask(10L, 1L, req))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Due date must be in the future");
+    }
+
+    @Test
+    void createTask_NullGoal_GoalRequired() {
+        activeMentorship.setSharedGoal(null);
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+        TaskCreateRequest req = new TaskCreateRequest();
+        req.setTitle("Anything");
+
+        assertThatThrownBy(() -> taskService.createTask(10L, 1L, req))
+                .isInstanceOf(GoalRequiredException.class);
+    }
+
+    @Test
+    void createTask_BlankGoal_GoalRequired() {
+        activeMentorship.setSharedGoal("   ");
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+        TaskCreateRequest req = new TaskCreateRequest();
+        req.setTitle("Anything");
+
+        assertThatThrownBy(() -> taskService.createTask(10L, 1L, req))
+                .isInstanceOf(GoalRequiredException.class)
+                .extracting(ex -> ((GoalRequiredException) ex).getMentorshipId())
+                .isEqualTo(10L);
+    }
+
+    /** Status-inactive must surface before goal-required so the deeper invariant wins. */
+    @Test
+    void createTask_InactiveAndNullGoal_StatusErrorWins() {
+        endedMentorship.setSharedGoal(null);
+        when(mentorshipRepository.findById(20L)).thenReturn(Optional.of(endedMentorship));
+        TaskCreateRequest req = new TaskCreateRequest();
+
+        assertThatThrownBy(() -> taskService.createTask(20L, 1L, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Mentorship is not active");
+    }
+
+    /** Auth (FORBIDDEN) must surface before goal-required. */
+    @Test
+    void createTask_NonMentorAndNullGoal_ForbiddenWins() {
+        activeMentorship.setSharedGoal(null);
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+        TaskCreateRequest req = new TaskCreateRequest();
+
+        assertThatThrownBy(() -> taskService.createTask(10L, 2L, req))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Only the mentor can assign");
     }
 
     @Test

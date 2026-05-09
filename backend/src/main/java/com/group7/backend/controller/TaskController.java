@@ -7,6 +7,9 @@ import com.group7.backend.dto.response.TaskDetailResponse;
 import com.group7.backend.dto.response.TaskSummaryResponse;
 import com.group7.backend.service.TaskService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -31,6 +34,16 @@ public class TaskController {
 
     @PostMapping("/mentorships/{id}/tasks")
     @Operation(summary = "Assign a task", description = "Mentor assigns a new task to their mentee.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Task created"),
+            @ApiResponse(responseCode = "400", description = "Invalid request (e.g. due date in the past)",
+                    content = @Content),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Caller is not the mentor", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentorship not found", content = @Content),
+            @ApiResponse(responseCode = "409", description = "Mentorship not active, or shared goal not defined " +
+                    "(body carries code=\"GOAL_REQUIRED\")", content = @Content)
+    })
     public ResponseEntity<TaskDetailResponse> createTask(
             @PathVariable Long id,
             @Valid @RequestBody TaskCreateRequest request,
