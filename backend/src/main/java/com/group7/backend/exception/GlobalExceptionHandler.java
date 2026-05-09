@@ -74,6 +74,14 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
+    @ExceptionHandler(InvalidTimelineWindowException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidTimelineWindow(InvalidTimelineWindowException ex,
+                                                                           HttpServletRequest request) {
+        log.warn("Invalid timeline window: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
     @ExceptionHandler(GoalRequiredException.class)
     public ResponseEntity<Map<String, Object>> handleGoalRequired(GoalRequiredException ex,
                                                                   HttpServletRequest request) {
