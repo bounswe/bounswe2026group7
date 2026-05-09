@@ -485,4 +485,111 @@ class MentorshipIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.title").value("Milestone 1"));
     }
+
+    // ── Mentorship progress aggregation (issue #334) ────────────────────────
+
+    private void setGoal(MentorshipFixture f) throws Exception {
+        mockMvc.perform(put("/api/mentorships/" + f.mentorshipId() + "/goal")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("sharedGoal", "Ship MVP"))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void getProgress_emptyMentorshipReturnsZeros() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("pg_m1@test.com", "pg_e1@test.com");
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/progress")
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentorshipId").value(f.mentorshipId()))
+                .andExpect(jsonPath("$.taskTotal").value(0))
+                .andExpect(jsonPath("$.taskCompleted").value(0))
+                .andExpect(jsonPath("$.taskSubmitted").value(0))
+                .andExpect(jsonPath("$.milestoneTotal").value(0))
+                .andExpect(jsonPath("$.milestoneCompleted").value(0))
+                .andExpect(jsonPath("$.progressPercentage").value(0.0))
+                .andExpect(jsonPath("$.lastActivityAt").doesNotExist());
+    }
+
+    @Test
+    void getProgress_reflectsTaskAndMilestoneCounts() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("pg_m2@test.com", "pg_e2@test.com");
+        setGoal(f);
+
+        // Create 2 tasks and 2 milestones (all PENDING).
+        for (int i = 1; i <= 2; i++) {
+            mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/tasks")
+                            .header("Authorization", "Bearer " + f.mentorToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("title", "Task " + i))))
+                    .andExpect(status().isCreated());
+            mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/milestones")
+                            .header("Authorization", "Bearer " + f.mentorToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("title", "Milestone " + i))))
+                    .andExpect(status().isCreated());
+        }
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/progress")
+                        .header("Authorization", "Bearer " + f.menteeToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskTotal").value(2))
+                .andExpect(jsonPath("$.taskCompleted").value(0))
+                .andExpect(jsonPath("$.taskSubmitted").value(0))
+                .andExpect(jsonPath("$.milestoneTotal").value(2))
+                .andExpect(jsonPath("$.milestoneCompleted").value(0))
+                .andExpect(jsonPath("$.progressPercentage").value(0.0))
+                .andExpect(jsonPath("$.lastActivityAt").doesNotExist());
+    }
+
+    @Test
+    void getProgress_lastActivityReflectsSubmission() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("pg_m3@test.com", "pg_e3@test.com");
+        setGoal(f);
+
+        // Create one task and submit it from the mentee.
+        MvcResult taskResult = mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/tasks")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "T"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        Long taskId = objectMapper.readTree(taskResult.getResponse().getContentAsString())
+                .get("id").asLong();
+
+        mockMvc.perform(post("/api/tasks/" + taskId + "/submission")
+                        .header("Authorization", "Bearer " + f.menteeToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("submissionText", "done"))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/progress")
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.taskTotal").value(1))
+                .andExpect(jsonPath("$.taskSubmitted").value(1))
+                .andExpect(jsonPath("$.taskCompleted").value(0))
+                .andExpect(jsonPath("$.lastActivityAt").exists());
+    }
+
+    @Test
+    void getProgress_returns404ForNonParticipant() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("pg_m4@test.com", "pg_e4@test.com");
+        String intruderToken = registerAndLogin("pg_intruder@test.com", false);
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/progress")
+                        .header("Authorization", "Bearer " + intruderToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getProgress_returns404ForUnknownId() throws Exception {
+        String mentorToken = registerAndLogin("pg_m5@test.com", true);
+
+        mockMvc.perform(get("/api/mentorships/999999/progress")
+                        .header("Authorization", "Bearer " + mentorToken))
+                .andExpect(status().isNotFound());
+    }
 }
