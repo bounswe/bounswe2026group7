@@ -7,12 +7,16 @@ import com.group7.backend.dto.request.AcceptRequestRequest;
 import com.group7.backend.dto.request.SharedGoalRequest;
 import com.group7.backend.dto.response.MentorshipProgressResponse;
 import com.group7.backend.dto.response.MentorshipResponse;
+import com.group7.backend.dto.response.TimelineItem;
+import com.group7.backend.dto.response.TimelineItemType;
+import com.group7.backend.dto.response.TimelineResponse;
 import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.service.JwtService;
 import com.group7.backend.service.MentorshipProgressService;
 import com.group7.backend.service.MentorshipRequestService;
 import com.group7.backend.service.MentorshipService;
+import com.group7.backend.service.MentorshipTimelineService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -52,6 +56,9 @@ class MentorshipControllerTest {
 
     @MockitoBean
     private MentorshipProgressService mentorshipProgressService;
+
+    @MockitoBean
+    private MentorshipTimelineService mentorshipTimelineService;
 
     @MockitoBean
     private JwtService jwtService;
@@ -404,5 +411,117 @@ class MentorshipControllerTest {
         mockMvc.perform(get("/api/mentorships/404/progress")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isNotFound());
+    }
+
+    // ── Get mentorship timeline (#332) ──────────────────────────────────────
+
+    private TimelineResponse sampleTimeline() {
+        OffsetDateTime t = OffsetDateTime.of(2026, 5, 5, 0, 0, 0, 0, ZoneOffset.UTC);
+        TimelineItem milestoneItem = new TimelineItem(
+                TimelineItemType.MILESTONE, 7L, "M1", t, "PENDING", "/api/milestones/7", 0L, 0L, null);
+        TimelineItem meetingItem = new TimelineItem(
+                TimelineItemType.MEETING, 8L, "Sync", t.plusHours(1), "CONFIRMED",
+                "/api/meetings/8", 1L, 0L, false);
+        return new TimelineResponse(
+                100L,
+                OffsetDateTime.of(2026, 5, 1, 0, 0, 0, 0, ZoneOffset.UTC),
+                OffsetDateTime.of(2026, 8, 1, 0, 0, 0, 0, ZoneOffset.UTC),
+                OffsetDateTime.of(2026, 6, 1, 12, 0, 0, 0, ZoneOffset.UTC),
+                List.of(milestoneItem, meetingItem));
+    }
+
+    @Test
+    void getTimelineReturns200ForMentor() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        when(mentorshipTimelineService.getTimeline(eq(1L), eq(100L), any(), any()))
+                .thenReturn(sampleTimeline());
+
+        mockMvc.perform(get("/api/mentorships/100/timeline")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentorshipId").value(100))
+                .andExpect(jsonPath("$.startDate").exists())
+                .andExpect(jsonPath("$.endDate").exists())
+                .andExpect(jsonPath("$.currentDate").exists())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].type").value("MILESTONE"))
+                .andExpect(jsonPath("$.items[1].type").value("MEETING"));
+    }
+
+    @Test
+    void getTimelineReturns200ForMentee() throws Exception {
+        mockMenteeJwt("mentee-token", 2L);
+        when(mentorshipTimelineService.getTimeline(eq(2L), eq(100L), any(), any()))
+                .thenReturn(sampleTimeline());
+
+        mockMvc.perform(get("/api/mentorships/100/timeline")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentorshipId").value(100));
+    }
+
+    @Test
+    void getTimelineReturns404ForNonParticipant() throws Exception {
+        mockMenteeJwt("intruder-token", 999L);
+        when(mentorshipTimelineService.getTimeline(eq(999L), eq(100L), any(), any()))
+                .thenThrow(new ResourceNotFoundException("Mentorship not found"));
+
+        mockMvc.perform(get("/api/mentorships/100/timeline")
+                        .header("Authorization", "Bearer intruder-token"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getTimelineReturns404ForUnknownId() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        when(mentorshipTimelineService.getTimeline(eq(1L), eq(404L), any(), any()))
+                .thenThrow(new ResourceNotFoundException("Mentorship not found"));
+
+        mockMvc.perform(get("/api/mentorships/404/timeline")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getTimelineReturns400WhenFromAfterTo() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        when(mentorshipTimelineService.getTimeline(eq(1L), eq(100L), any(), any()))
+                .thenThrow(new com.group7.backend.exception.InvalidTimelineWindowException(
+                        "'from' must be before or equal to 'to'"));
+
+        mockMvc.perform(get("/api/mentorships/100/timeline")
+                        .param("from", "2026-08-01T00:00:00Z")
+                        .param("to", "2026-05-01T00:00:00Z")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getTimelineParsesIsoDateTimeWithZAndOffset() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        when(mentorshipTimelineService.getTimeline(eq(1L), eq(100L), any(), any()))
+                .thenReturn(sampleTimeline());
+
+        // Z offset
+        mockMvc.perform(get("/api/mentorships/100/timeline")
+                        .param("from", "2026-05-01T00:00:00Z")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk());
+
+        // +03:00 offset
+        mockMvc.perform(get("/api/mentorships/100/timeline")
+                        .param("from", "2026-05-01T03:00:00+03:00")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void getTimelineRejectsMalformedFrom() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+
+        mockMvc.perform(get("/api/mentorships/100/timeline")
+                        .param("from", "banana")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isBadRequest());
     }
 }

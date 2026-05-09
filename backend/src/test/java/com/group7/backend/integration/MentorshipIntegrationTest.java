@@ -17,6 +17,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.OffsetDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -591,5 +592,318 @@ class MentorshipIntegrationTest {
         mockMvc.perform(get("/api/mentorships/999999/progress")
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isNotFound());
+    }
+
+    // ── Mentorship timeline aggregation (issue #332) ────────────────────────
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private jakarta.persistence.EntityManager entityManager;
+
+    @Test
+    void getTimeline_emptyMentorshipReturnsEmptyItems() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("tl_m1@test.com", "tl_e1@test.com");
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentorshipId").value(f.mentorshipId()))
+                .andExpect(jsonPath("$.startDate").exists())
+                .andExpect(jsonPath("$.endDate").exists())
+                .andExpect(jsonPath("$.currentDate").exists())
+                .andExpect(jsonPath("$.items.length()").value(0));
+    }
+
+    @Test
+    void getTimeline_returnsAllThreeDomainsInChronologicalOrder() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("tl_m2@test.com", "tl_e2@test.com");
+        setGoal(f);
+
+        // Read mentorship startDate to schedule items inside the program window.
+        MvcResult getResult = mockMvc.perform(get("/api/mentorships/" + f.mentorshipId())
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isOk())
+                .andReturn();
+        OffsetDateTime startDate = OffsetDateTime.parse(
+                objectMapper.readTree(getResult.getResponse().getContentAsString())
+                        .get("startDate").asText());
+
+        // Create one of each, in time order: meeting (+1d), task (+2d), milestone (+3d).
+        OffsetDateTime t1 = startDate.plusDays(1);
+        OffsetDateTime t2 = startDate.plusDays(2);
+        OffsetDateTime t3 = startDate.plusDays(3);
+
+        Map<String, Object> meetingBody = Map.of(
+                "title", "Sync",
+                "startTime", t1.toString(),
+                "endTime", t1.plusHours(1).toString(),
+                "meetingType", "ONLINE",
+                "meetingLink", "https://meet.example.com/abc",
+                "recurring", false);
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/meetings")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(meetingBody)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/tasks")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "T1", "dueDate", t2.toString()))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/milestones")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("title", "M1", "targetDate", t3.toString()))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
+                        .header("Authorization", "Bearer " + f.menteeToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items[0].type").value("MEETING"))
+                .andExpect(jsonPath("$.items[0].hasNotes").value(false))
+                .andExpect(jsonPath("$.items[0].actionItemTotal").value(0))
+                .andExpect(jsonPath("$.items[0].actionItemCompleted").value(0))
+                .andExpect(jsonPath("$.items[0].detailUrl").value(org.hamcrest.Matchers.startsWith("/api/meetings/")))
+                .andExpect(jsonPath("$.items[1].type").value("TASK"))
+                .andExpect(jsonPath("$.items[1].actionItemTotal").doesNotExist())
+                .andExpect(jsonPath("$.items[1].hasNotes").doesNotExist())
+                .andExpect(jsonPath("$.items[1].detailUrl").value(org.hamcrest.Matchers.startsWith("/api/tasks/")))
+                .andExpect(jsonPath("$.items[2].type").value("MILESTONE"))
+                .andExpect(jsonPath("$.items[2].actionItemTotal").value(0))
+                .andExpect(jsonPath("$.items[2].actionItemCompleted").value(0))
+                .andExpect(jsonPath("$.items[2].hasNotes").doesNotExist())
+                .andExpect(jsonPath("$.items[2].detailUrl").value(org.hamcrest.Matchers.startsWith("/api/milestones/")));
+    }
+
+    @Test
+    void getTimeline_windowOutsideProgramReturnsEmptyItemsButPopulatedMetadata() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("tl_m3@test.com", "tl_e3@test.com");
+
+        // Window deliberately set to an instant 3 years in the future — far outside the mentorship.
+        // Use a same-instant from/to so we don't trip the 24-month window cap.
+        String far = "2999-01-01T00:00:00Z";
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
+                        .param("from", far)
+                        .param("to", far)
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.startDate").exists())
+                .andExpect(jsonPath("$.currentDate").exists());
+    }
+
+    @Test
+    void getTimeline_returns400ForFromAfterTo() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("tl_m4@test.com", "tl_e4@test.com");
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
+                        .param("from", "2026-08-01T00:00:00Z")
+                        .param("to", "2026-05-01T00:00:00Z")
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getTimeline_returns400ForWindowOver24Months() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("tl_m5@test.com", "tl_e5@test.com");
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
+                        .param("from", "2024-01-01T00:00:00Z")
+                        .param("to", "2027-01-02T00:00:00Z")
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getTimeline_returns404ForNonParticipant() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("tl_m6@test.com", "tl_e6@test.com");
+        String intruderToken = registerAndLogin("tl_intruder@test.com", false);
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
+                        .header("Authorization", "Bearer " + intruderToken))
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * Records the prepared-statement count for one timeline GET against a mentorship
+     * seeded with N items per domain. The whole point is that the returned count is
+     * {@code O(1)} in {@code N} — see {@link #getTimeline_n1SafeIsConstantBetweenN1AndN3}.
+     */
+    private long timelineQueryCountForSeededMentorship(int itemsPerDomain,
+                                                       String mentorEmail,
+                                                       String menteeEmail) throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId(mentorEmail, menteeEmail);
+        setGoal(f);
+
+        MvcResult getResult = mockMvc.perform(get("/api/mentorships/" + f.mentorshipId())
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andReturn();
+        OffsetDateTime startDate = OffsetDateTime.parse(
+                objectMapper.readTree(getResult.getResponse().getContentAsString())
+                        .get("startDate").asText());
+
+        for (int i = 1; i <= itemsPerDomain; i++) {
+            OffsetDateTime t = startDate.plusDays(i);
+            Map<String, Object> meetingBody = Map.of(
+                    "title", "Sync " + i,
+                    "startTime", t.toString(),
+                    "endTime", t.plusHours(1).toString(),
+                    "meetingType", "ONLINE",
+                    "meetingLink", "https://meet.example.com/abc",
+                    "recurring", false);
+            mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/meetings")
+                            .header("Authorization", "Bearer " + f.mentorToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(meetingBody)))
+                    .andExpect(status().isCreated());
+            mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/tasks")
+                            .header("Authorization", "Bearer " + f.mentorToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("title", "T" + i, "dueDate", t.plusHours(2).toString()))))
+                    .andExpect(status().isCreated());
+            mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/milestones")
+                            .header("Authorization", "Bearer " + f.mentorToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("title", "M" + i, "targetDate", t.plusHours(4).toString()))))
+                    .andExpect(status().isCreated());
+        }
+
+        org.hibernate.stat.Statistics stats = entityManager.getEntityManagerFactory()
+                .unwrap(org.hibernate.SessionFactory.class).getStatistics();
+        stats.setStatisticsEnabled(true);
+        stats.clear();
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(itemsPerDomain * 3));
+
+        return stats.getPrepareStatementCount();
+    }
+
+    @Test
+    void getTimeline_n1SafeIsConstantBetweenN1AndN3() throws Exception {
+        long n1 = timelineQueryCountForSeededMentorship(1, "tl_m7a@test.com", "tl_e7a@test.com");
+        long n3 = timelineQueryCountForSeededMentorship(3, "tl_m7b@test.com", "tl_e7b@test.com");
+
+        // The actual N+1 invariant: the query count must NOT scale with N.
+        // Floor measured at N=1 is 8 (1 mentorship + 3 windows + 2 group counts + 2 from
+        // the JWT auth filter / Spring auto-flushes). A single accidental N+1 would jump
+        // the N=3 count to 8 + 3 = 11, which the equality assertion below catches.
+        assertThat(n1)
+                .as("Timeline query count for N=1 should be at most 8")
+                .isLessThanOrEqualTo(8);
+        assertThat(n3)
+                .as("Timeline query count for N=3 should equal the N=1 count (no scaling with N)")
+                .isEqualTo(n1);
+    }
+
+    @Test
+    void getTimeline_actionItemCountersReflectCompletion() throws Exception {
+        // Exercises the JPQL constructor-expression path for non-empty action items.
+        // If the bulk-count query's CAST(SUM(...) AS Long) drifts on a future Hibernate
+        // upgrade, this test catches it before any client does.
+        MentorshipFixture f = acceptAndReturnMentorshipId("tl_ai_m@test.com", "tl_ai_e@test.com");
+        setGoal(f);
+
+        MvcResult getResult = mockMvc.perform(get("/api/mentorships/" + f.mentorshipId())
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andReturn();
+        OffsetDateTime startDate = OffsetDateTime.parse(
+                objectMapper.readTree(getResult.getResponse().getContentAsString())
+                        .get("startDate").asText());
+        OffsetDateTime when = startDate.plusDays(1);
+
+        // Create one milestone, capture id.
+        MvcResult msResult = mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/milestones")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("title", "MS", "targetDate", when.toString()))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        Long msId = objectMapper.readTree(msResult.getResponse().getContentAsString())
+                .get("id").asLong();
+
+        // Add 3 action items, mark one complete.
+        Long firstAiId = null;
+        for (int i = 1; i <= 3; i++) {
+            MvcResult aiResult = mockMvc.perform(post("/api/milestones/" + msId + "/action-items")
+                            .header("Authorization", "Bearer " + f.mentorToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("text", "AI " + i))))
+                    .andExpect(status().isCreated())
+                    .andReturn();
+            if (i == 1) {
+                firstAiId = objectMapper.readTree(aiResult.getResponse().getContentAsString())
+                        .get("id").asLong();
+            }
+        }
+        mockMvc.perform(patch("/api/milestone-action-items/" + firstAiId)
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"completed\":true}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].type").value("MILESTONE"))
+                .andExpect(jsonPath("$.items[0].actionItemTotal").value(3))
+                .andExpect(jsonPath("$.items[0].actionItemCompleted").value(1));
+    }
+
+    @Test
+    void getTimeline_tiebreakerMilestoneBeforeMeetingBeforeTask() throws Exception {
+        MentorshipFixture f = acceptAndReturnMentorshipId("tl_tie_m@test.com", "tl_tie_e@test.com");
+        setGoal(f);
+
+        MvcResult getResult = mockMvc.perform(get("/api/mentorships/" + f.mentorshipId())
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andReturn();
+        OffsetDateTime startDate = OffsetDateTime.parse(
+                objectMapper.readTree(getResult.getResponse().getContentAsString())
+                        .get("startDate").asText());
+        OffsetDateTime sameInstant = startDate.plusDays(5);
+
+        // Create one of each at the SAME instant.
+        Map<String, Object> meetingBody = Map.of(
+                "title", "Sync",
+                "startTime", sameInstant.toString(),
+                "endTime", sameInstant.plusHours(1).toString(),
+                "meetingType", "ONLINE",
+                "meetingLink", "https://meet.example.com/abc",
+                "recurring", false);
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/meetings")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(meetingBody)))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/tasks")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("title", "T", "dueDate", sameInstant.toString()))))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/milestones")
+                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("title", "M", "targetDate", sameInstant.toString()))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
+                        .header("Authorization", "Bearer " + f.mentorToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items[0].type").value("MILESTONE"))
+                .andExpect(jsonPath("$.items[1].type").value("MEETING"))
+                .andExpect(jsonPath("$.items[2].type").value("TASK"));
     }
 }
