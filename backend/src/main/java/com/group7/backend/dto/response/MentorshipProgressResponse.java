@@ -25,11 +25,11 @@ public record MentorshipProgressResponse(
         @Schema(description = "Milestones in COMPLETED status", example = "1")
         long milestoneCompleted,
 
-        @Schema(description = "Combined progress in [0.0, 1.0]. Equal-weighted across the two " +
-                "surfaces when both have entries; falls back to a single-surface ratio when only " +
-                "one surface has entries; 0.0 when both are empty.",
-                example = "0.55")
-        float progressPercentage,
+        @Schema(description = "Combined progress as a ratio in [0.0, 1.0]. Equal-weighted across " +
+                "the two surfaces when both have entries; falls back to a single-surface ratio " +
+                "when only one surface has entries; 0.0 when both are empty.",
+                example = "0.325")
+        float progressRatio,
 
         @Schema(description = "Latest activity timestamp across task submissions / reviews and " +
                 "milestone completions; null when neither domain has any activity.")

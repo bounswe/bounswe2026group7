@@ -8,19 +8,18 @@ import com.group7.backend.entity.MentorshipStatus;
 import com.group7.backend.entity.MilestoneStatus;
 import com.group7.backend.entity.TaskStatus;
 import com.group7.backend.exception.ResourceNotFoundException;
-import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.MilestoneRepository;
 import com.group7.backend.repository.TaskRepository;
 import com.group7.backend.repository.TaskSubmissionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,15 +30,14 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MentorshipProgressServiceTest {
 
-    @Mock private MentorshipRepository mentorshipRepository;
+    @Mock private MentorshipService mentorshipService;
     @Mock private TaskRepository taskRepository;
     @Mock private TaskSubmissionRepository taskSubmissionRepository;
     @Mock private MilestoneRepository milestoneRepository;
 
+    @InjectMocks
     private MentorshipProgressService progressService;
 
-    private Mentor mentor;
-    private Mentee mentee;
     private Mentorship mentorship;
 
     private static final long MID = 100L;
@@ -48,15 +46,13 @@ class MentorshipProgressServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Real MentorshipService so we exercise the real findForParticipant + ResourceNotFoundException path.
-        MentorshipService mentorshipService = new MentorshipService(
-                mentorshipRepository, /* mentorshipRequestRepository */ null,
-                /* notificationEventPublisher */ null, /* clock */ null);
-        progressService = new MentorshipProgressService(
-                mentorshipService, taskRepository, taskSubmissionRepository, milestoneRepository);
+        Mentor mentor = new Mentor();
+        mentor.setId(MENTOR_ID);
+        mentor.setFirstName("Mentor");
 
-        mentor = new Mentor(); mentor.setId(MENTOR_ID); mentor.setFirstName("Mentor");
-        mentee = new Mentee(); mentee.setId(MENTEE_ID); mentee.setFirstName("Mentee");
+        Mentee mentee = new Mentee();
+        mentee.setId(MENTEE_ID);
+        mentee.setFirstName("Mentee");
 
         mentorship = new Mentorship();
         mentorship.setId(MID);
@@ -65,11 +61,12 @@ class MentorshipProgressServiceTest {
         mentorship.setStatus(MentorshipStatus.ACTIVE);
     }
 
-    private void mockFound() {
-        when(mentorshipRepository.findById(MID)).thenReturn(Optional.of(mentorship));
+    /** Stub MentorshipService.findForParticipant to return our prebuilt mentorship. */
+    private void stubFound(long callerId) {
+        when(mentorshipService.findForParticipant(callerId, MID)).thenReturn(mentorship);
     }
 
-    private void mockCounts(long taskTotal, long taskCompleted, long taskSubmitted,
+    private void stubCounts(long taskTotal, long taskCompleted, long taskSubmitted,
                             long milestoneTotal, long milestoneCompleted) {
         lenient().when(taskRepository.countByMentorshipId(MID)).thenReturn(taskTotal);
         lenient().when(taskRepository.countByMentorshipIdAndStatus(MID, TaskStatus.COMPLETED))
@@ -81,19 +78,19 @@ class MentorshipProgressServiceTest {
                 .thenReturn(milestoneCompleted);
     }
 
-    private void mockTimestamps(OffsetDateTime sub, OffsetDateTime rev, OffsetDateTime mile) {
+    private void stubTimestamps(OffsetDateTime sub, OffsetDateTime rev, OffsetDateTime mile) {
         lenient().when(taskSubmissionRepository.findMaxSubmittedAtForMentorship(MID)).thenReturn(sub);
         lenient().when(taskSubmissionRepository.findMaxReviewedAtForMentorship(MID)).thenReturn(rev);
         lenient().when(milestoneRepository.findMaxCompletedAtForMentorship(MID)).thenReturn(mile);
     }
 
-    // ── Authorization ───────────────────────────────────────────────────────
+    // ── Authorization (delegated to MentorshipService.findForParticipant) ──
 
     @Test
     void getProgress_returnsForMentor() {
-        mockFound();
-        mockCounts(0, 0, 0, 0, 0);
-        mockTimestamps(null, null, null);
+        stubFound(MENTOR_ID);
+        stubCounts(0, 0, 0, 0, 0);
+        stubTimestamps(null, null, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
@@ -102,9 +99,9 @@ class MentorshipProgressServiceTest {
 
     @Test
     void getProgress_returnsForMentee() {
-        mockFound();
-        mockCounts(0, 0, 0, 0, 0);
-        mockTimestamps(null, null, null);
+        stubFound(MENTEE_ID);
+        stubCounts(0, 0, 0, 0, 0);
+        stubTimestamps(null, null, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTEE_ID, MID);
 
@@ -112,85 +109,78 @@ class MentorshipProgressServiceTest {
     }
 
     @Test
-    void getProgress_404ForNonParticipant() {
-        mockFound();
+    void getProgress_propagatesResourceNotFoundFromFinder() {
+        when(mentorshipService.findForParticipant(999L, MID))
+                .thenThrow(new ResourceNotFoundException("Mentorship not found"));
 
         assertThatThrownBy(() -> progressService.getProgress(999L, MID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    @Test
-    void getProgress_404ForUnknownId() {
-        when(mentorshipRepository.findById(404L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> progressService.getProgress(MENTOR_ID, 404L))
-                .isInstanceOf(ResourceNotFoundException.class);
-    }
-
-    // ── Percentage formula branches ─────────────────────────────────────────
+    // ── Ratio formula branches ──────────────────────────────────────────────
 
     @Test
-    void percentage_isZeroWhenNoTasksAndNoMilestones() {
-        mockFound();
-        mockCounts(0, 0, 0, 0, 0);
-        mockTimestamps(null, null, null);
+    void ratio_isZeroWhenNoTasksAndNoMilestones() {
+        stubFound(MENTOR_ID);
+        stubCounts(0, 0, 0, 0, 0);
+        stubTimestamps(null, null, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
-        assertThat(r.progressPercentage()).isEqualTo(0.0f);
+        assertThat(r.progressRatio()).isEqualTo(0.0f);
         assertThat(r.lastActivityAt()).isNull();
     }
 
     @Test
-    void percentage_tasksOnlyUsesTaskRatio() {
-        mockFound();
-        mockCounts(10, 4, 2, 0, 0);
-        mockTimestamps(null, null, null);
+    void ratio_tasksOnlyUsesTaskRatio() {
+        stubFound(MENTOR_ID);
+        stubCounts(10, 4, 2, 0, 0);
+        stubTimestamps(null, null, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
-        assertThat(r.progressPercentage()).isEqualTo(0.4f);
+        assertThat(r.progressRatio()).isEqualTo(0.4f);
         assertThat(r.taskTotal()).isEqualTo(10);
         assertThat(r.taskCompleted()).isEqualTo(4);
         assertThat(r.taskSubmitted()).isEqualTo(2);
     }
 
     @Test
-    void percentage_milestonesOnlyUsesMilestoneRatio() {
-        mockFound();
-        mockCounts(0, 0, 0, 4, 1);
-        mockTimestamps(null, null, null);
+    void ratio_milestonesOnlyUsesMilestoneRatio() {
+        stubFound(MENTOR_ID);
+        stubCounts(0, 0, 0, 4, 1);
+        stubTimestamps(null, null, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
-        assertThat(r.progressPercentage()).isEqualTo(0.25f);
+        assertThat(r.progressRatio()).isEqualTo(0.25f);
         assertThat(r.milestoneTotal()).isEqualTo(4);
         assertThat(r.milestoneCompleted()).isEqualTo(1);
     }
 
     @Test
-    void percentage_bothPresentUsesEqualWeight() {
-        mockFound();
+    void ratio_bothPresentUsesEqualWeight() {
+        stubFound(MENTOR_ID);
         // task ratio 4/10 = 0.4 ; milestone ratio 1/4 = 0.25 ; weighted = 0.5*0.4 + 0.5*0.25 = 0.325
-        mockCounts(10, 4, 2, 4, 1);
-        mockTimestamps(null, null, null);
+        stubCounts(10, 4, 2, 4, 1);
+        stubTimestamps(null, null, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
-        assertThat(r.progressPercentage()).isCloseTo(0.325f, within(0.0001f));
+        assertThat(r.progressRatio()).isCloseTo(0.325f, within(0.0001f));
     }
 
     @Test
-    void percentage_neverNaNOrInfinityForLargeCounts() {
-        mockFound();
-        mockCounts(Integer.MAX_VALUE, Integer.MAX_VALUE / 2, 0, Integer.MAX_VALUE, Integer.MAX_VALUE);
-        mockTimestamps(null, null, null);
+    void ratio_neverNaNOrInfinityForLargeCounts() {
+        stubFound(MENTOR_ID);
+        stubCounts(Integer.MAX_VALUE, Integer.MAX_VALUE / 2, 0, Integer.MAX_VALUE, Integer.MAX_VALUE);
+        stubTimestamps(null, null, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
-        assertThat(Float.isNaN(r.progressPercentage())).isFalse();
-        assertThat(Float.isInfinite(r.progressPercentage())).isFalse();
-        assertThat(r.progressPercentage()).isBetween(0.0f, 1.0f);
+        assertThat(Float.isNaN(r.progressRatio())).isFalse();
+        assertThat(Float.isInfinite(r.progressRatio())).isFalse();
+        assertThat(r.progressRatio()).isBetween(0.0f, 1.0f);
     }
 
     // ── lastActivityAt precedence ───────────────────────────────────────────
@@ -198,9 +188,9 @@ class MentorshipProgressServiceTest {
     @Test
     void lastActivity_takesSubmittedWhenOnlyOne() {
         OffsetDateTime ts = OffsetDateTime.of(2026, 5, 1, 0, 0, 0, 0, ZoneOffset.UTC);
-        mockFound();
-        mockCounts(1, 0, 1, 0, 0);
-        mockTimestamps(ts, null, null);
+        stubFound(MENTOR_ID);
+        stubCounts(1, 0, 1, 0, 0);
+        stubTimestamps(ts, null, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
@@ -210,9 +200,9 @@ class MentorshipProgressServiceTest {
     @Test
     void lastActivity_takesReviewedWhenOnlyOne() {
         OffsetDateTime ts = OffsetDateTime.of(2026, 5, 2, 0, 0, 0, 0, ZoneOffset.UTC);
-        mockFound();
-        mockCounts(1, 1, 0, 0, 0);
-        mockTimestamps(null, ts, null);
+        stubFound(MENTOR_ID);
+        stubCounts(1, 1, 0, 0, 0);
+        stubTimestamps(null, ts, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
@@ -222,9 +212,9 @@ class MentorshipProgressServiceTest {
     @Test
     void lastActivity_takesMilestoneWhenOnlyOne() {
         OffsetDateTime ts = OffsetDateTime.of(2026, 5, 3, 0, 0, 0, 0, ZoneOffset.UTC);
-        mockFound();
-        mockCounts(0, 0, 0, 1, 1);
-        mockTimestamps(null, null, ts);
+        stubFound(MENTOR_ID);
+        stubCounts(0, 0, 0, 1, 1);
+        stubTimestamps(null, null, ts);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
@@ -236,9 +226,9 @@ class MentorshipProgressServiceTest {
         OffsetDateTime sub = OffsetDateTime.of(2026, 5, 1, 0, 0, 0, 0, ZoneOffset.UTC);
         OffsetDateTime rev = OffsetDateTime.of(2026, 5, 5, 0, 0, 0, 0, ZoneOffset.UTC); // latest
         OffsetDateTime mil = OffsetDateTime.of(2026, 5, 3, 0, 0, 0, 0, ZoneOffset.UTC);
-        mockFound();
-        mockCounts(1, 1, 0, 1, 1);
-        mockTimestamps(sub, rev, mil);
+        stubFound(MENTOR_ID);
+        stubCounts(1, 1, 0, 1, 1);
+        stubTimestamps(sub, rev, mil);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
@@ -250,9 +240,9 @@ class MentorshipProgressServiceTest {
         OffsetDateTime sub = OffsetDateTime.of(2026, 5, 1, 0, 0, 0, 0, ZoneOffset.UTC);
         OffsetDateTime rev = OffsetDateTime.of(2026, 5, 2, 0, 0, 0, 0, ZoneOffset.UTC);
         OffsetDateTime mil = OffsetDateTime.of(2026, 5, 9, 0, 0, 0, 0, ZoneOffset.UTC); // latest
-        mockFound();
-        mockCounts(1, 1, 0, 1, 1);
-        mockTimestamps(sub, rev, mil);
+        stubFound(MENTOR_ID);
+        stubCounts(1, 1, 0, 1, 1);
+        stubTimestamps(sub, rev, mil);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
@@ -262,21 +252,21 @@ class MentorshipProgressServiceTest {
     @Test
     void lastActivity_handlesEqualTimestamps() {
         OffsetDateTime ts = OffsetDateTime.of(2026, 5, 5, 0, 0, 0, 0, ZoneOffset.UTC);
-        mockFound();
-        mockCounts(1, 1, 0, 1, 1);
-        mockTimestamps(ts, ts, ts);
+        stubFound(MENTOR_ID);
+        stubCounts(1, 1, 0, 1, 1);
+        stubTimestamps(ts, ts, ts);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
-        // Equal timestamps: laterOf returns the earlier one (a) when not after; but result is same instant.
+        // All three sources tied — any branch returns the same instant.
         assertThat(r.lastActivityAt()).isEqualTo(ts);
     }
 
     @Test
     void lastActivity_isNullWhenAllNull() {
-        mockFound();
-        mockCounts(0, 0, 0, 0, 0);
-        mockTimestamps(null, null, null);
+        stubFound(MENTOR_ID);
+        stubCounts(0, 0, 0, 0, 0);
+        stubTimestamps(null, null, null);
 
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
