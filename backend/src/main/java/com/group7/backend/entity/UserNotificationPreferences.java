@@ -75,7 +75,9 @@ public class UserNotificationPreferences {
                  MEETING_DECLINED, MEETING_AUTO_DECLINED, MEETING_RESCHEDULE_REQUESTED,
                  MEETING_RESCHEDULE_APPROVED, MEETING_RESCHEDULE_REJECTED,
                  MEETING_CANCELLED -> meetingsEnabled;
-            case TASK_ASSIGNED, TASK_SUBMITTED, TASK_REVIEWED -> tasksEnabled;
+            case TASK_ASSIGNED, TASK_SUBMITTED, TASK_REVIEWED,
+                 MILESTONE_CREATED, MILESTONE_COMPLETED,
+                 ACTION_ITEM_COMPLETED -> tasksEnabled;
             case REQUEST_RECEIVED, REQUEST_ACCEPTED, REQUEST_REJECTED,
                  REQUEST_SUBMITTED -> requestsEnabled;
         };
