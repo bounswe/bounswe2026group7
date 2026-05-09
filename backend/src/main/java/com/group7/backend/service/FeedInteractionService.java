@@ -156,8 +156,21 @@ public class FeedInteractionService {
                 .map(byId::get)
                 .filter(p -> p != null && p.getDeletedAt() == null)
                 .toList();
-        return new PageImpl<>(feedPostMapper.toListItems(ordered),
-                pageable, postIds.getTotalElements());
+        Map<Long, String> authorNames = new java.util.HashMap<>();
+        userRepository.findAllById(ordered.stream().map(FeedPost::getAuthorId)
+                .collect(java.util.stream.Collectors.toSet()))
+                .forEach(u -> authorNames.put(u.getId(), u.getFirstName()));
+        List<FeedPostListItem> items = ordered.stream().map(p -> new FeedPostListItem(
+                p.getId(),
+                p.getAuthorId(),
+                authorNames.getOrDefault(p.getAuthorId(), null),
+                p.getBody(),
+                p.getHashtags().stream().map(h -> h.getId().getTag()).sorted().toList(),
+                p.getCreatedAt(),
+                0L,
+                0L
+        )).toList();
+        return new PageImpl<>(items, pageable, postIds.getTotalElements());
     }
 
     // ── Shares ─────────────────────────────────────────────────────────────
