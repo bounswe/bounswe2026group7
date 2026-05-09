@@ -43,10 +43,27 @@ test('AT-01 full auth + profile + reset flow', async ({ page, request }) => {
   // 4. Profile completion: edit a couple of fields and confirm save.
   const profilePage = new ProfilePage(page);
   await profilePage.goto();
+  // Wait for the form to render — getOwnProfile is async and ProfilePage
+  // shows a "Loading profile..." pane until the response lands.
+  await page.getByTestId('profile-name').waitFor({ state: 'visible' });
+
+  // Capture the save API response so we can surface a useful diagnostic
+  // when the backend rejects the payload — the on-screen success banner
+  // alone gives no signal about why save didn't succeed.
+  const savePromise = page.waitForResponse(
+    res => /\/api\/users\/me\/(mentor|mentee)\b/.test(res.url())
+      && res.request().method() === 'PATCH',
+    { timeout: 15_000 },
+  );
   await profilePage.editAndSave({
     name: `${user.firstName} ${user.lastName}`,
     interests: 'Mobile Development, AI/ML',
   });
+  const saveResponse = await savePromise;
+  if (!saveResponse.ok()) {
+    const body = await saveResponse.text().catch(() => '');
+    throw new Error(`Profile save returned ${saveResponse.status()}: ${body}`);
+  }
   await expect(profilePage.successBanner()).toBeVisible();
 
   // 5. Logout via clearing the auth token (no dedicated logout button on the
