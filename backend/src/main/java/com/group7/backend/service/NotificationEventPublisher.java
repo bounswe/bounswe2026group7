@@ -5,6 +5,8 @@ import com.group7.backend.event.NotificationCreatedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import java.util.Locale;
+
 @Service
 public class NotificationEventPublisher {
 
@@ -164,6 +166,25 @@ public class NotificationEventPublisher {
                 NotificationType.MEETING_CANCELLED,
                 "Meeting cancelled",
                 mentorName + " cancelled the meeting."
+        );
+    }
+
+    /**
+     * Notify an admin that a new report has been submitted (#135).
+     * Title and body are deliberately generic — the admin clicks
+     * through to the queue at {@code /api/admin/reports} for the full
+     * report context. The notification body never contains the
+     * reporter's free-text {@code description} (potential PII).
+     */
+    public void publishReportReceived(Long adminId,
+                                       String reporterFirstName,
+                                       com.group7.backend.entity.ReportTargetType targetType) {
+        publish(
+                adminId,
+                NotificationType.REPORT_RECEIVED,
+                "New report received",
+                reporterFirstName + " submitted a report against a "
+                        + targetType.name().toLowerCase(Locale.ROOT) + "."
         );
     }
 
