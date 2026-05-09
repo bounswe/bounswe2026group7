@@ -79,18 +79,36 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Wait for backend to be ready
+        run: |
+          set +e
+          npx --yes wait-on -t 240000 -i 2000 http://localhost:8080/actuator/health
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Backend never became healthy. Dumping backend.log:"
+            sed 's/^/[backend] /' backend/backend.log || true
+            exit "$rc"
+          fi
+
       - name: Build and start frontend preview
         working-directory: frontend
         env:
           VITE_BACKEND_URL: http://localhost:8080
         run: |
           npm run build
-          nohup npx vite preview --port 8000 --host 0.0.0.0 > frontend.log 2>&1 &
+          nohup npx vite preview --port 8000 --host 0.0.0.0 --strictPort > frontend.log 2>&1 &
           echo $! > frontend.pid
 
-      - name: Wait for backend and frontend to be ready
+      - name: Wait for frontend to be ready
         run: |
-          npx --yes wait-on -t 120000 http://localhost:8080/actuator/health http://localhost:8000
+          set +e
+          npx --yes wait-on -t 120000 -i 2000 http://localhost:8000
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Frontend preview never came up. Dumping frontend.log:"
+            sed 's/^/[frontend] /' frontend/frontend.log || true
+            exit "$rc"
+          fi
 
       - name: Install Playwright browsers
         working-directory: frontend
