@@ -169,6 +169,15 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.12</version>
+                <configuration>
+                    <excludes>
+                        <exclude>*$HibernateProxy*</exclude>
+                        <exclude>*$HibernateInstantiator*</exclude>
+                        <exclude>*$MockitoMock*</exclude>
+                        <exclude>*$$EnhancerByCGLIB$$*</exclude>
+                        <exclude>*$$FastClassByCGLIB$$*</exclude>
+                    </excludes>
+                </configuration>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>

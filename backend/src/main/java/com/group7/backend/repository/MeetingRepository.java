@@ -60,6 +60,24 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
             @Param("windowStart") OffsetDateTime windowStart,
             @Param("windowEnd") OffsetDateTime windowEnd);
 
+    /**
+     * Meetings of a mentorship whose {@code startTime} falls inside the inclusive
+     * {@code [from, to]} window. Used by the mentorship timeline aggregation (#332).
+     *
+     * <p>The window predicate anchors on {@code startTime} only — a meeting that began
+     * before {@code from} and ended inside the window is excluded. This matches the
+     * timeline's "chronological position = startTime" model. If the product wants
+     * straddling meetings to surface in their endpoint window, change the predicate to
+     * {@code m.startTime <= :to AND m.endTime >= :from}.
+     */
+    @Query("SELECT m FROM Meeting m "
+            + "WHERE m.mentorship.id = :mentorshipId "
+            + "AND m.startTime BETWEEN :from AND :to")
+    List<Meeting> findInWindow(
+            @Param("mentorshipId") Long mentorshipId,
+            @Param("from") OffsetDateTime from,
+            @Param("to") OffsetDateTime to);
+
     @Modifying
     @Query("UPDATE Meeting m SET m.status = 'EXPIRED' WHERE m.id = :meetingId AND m.status = 'PENDING_CONFIRMATION'")
     int expireMeeting(@Param("meetingId") Long meetingId);

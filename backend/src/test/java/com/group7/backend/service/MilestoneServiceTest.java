@@ -5,6 +5,7 @@ import com.group7.backend.dto.request.MilestoneActionItemUpdateRequest;
 import com.group7.backend.dto.request.MilestoneCreateRequest;
 import com.group7.backend.dto.request.MilestoneUpdateRequest;
 import com.group7.backend.entity.*;
+import com.group7.backend.exception.GoalRequiredException;
 import com.group7.backend.exception.MilestoneConflictException;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
@@ -58,6 +59,7 @@ class MilestoneServiceTest {
         activeMentorship.setStatus(MentorshipStatus.ACTIVE);
         activeMentorship.setStartDate(OffsetDateTime.of(2026, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC));
         activeMentorship.setEndDate(OffsetDateTime.of(2026, 12, 31, 23, 59, 59, 0, ZoneOffset.UTC));
+        activeMentorship.setSharedGoal("Build a portfolio");
 
         pendingMilestone = new Milestone();
         pendingMilestone.setId(100L);
@@ -204,5 +206,57 @@ class MilestoneServiceTest {
         assertThatThrownBy(() -> milestoneService.updateActionItem(500L, 1L, req))
                 .isInstanceOf(MilestoneConflictException.class)
                 .hasMessageContaining("not active");
+    }
+
+    // ── Shared-goal gate ───────────────────────────────────────────────────
+
+    @Test
+    void createMilestone_NullGoal_GoalRequired() {
+        activeMentorship.setSharedGoal(null);
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+        MilestoneCreateRequest req = new MilestoneCreateRequest();
+        req.setTitle("Anything");
+
+        assertThatThrownBy(() -> milestoneService.createMilestone(10L, 1L, req))
+                .isInstanceOf(GoalRequiredException.class)
+                .extracting(ex -> ((GoalRequiredException) ex).getMentorshipId())
+                .isEqualTo(10L);
+    }
+
+    @Test
+    void createMilestone_BlankGoal_GoalRequired() {
+        activeMentorship.setSharedGoal("   ");
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+        MilestoneCreateRequest req = new MilestoneCreateRequest();
+        req.setTitle("Anything");
+
+        assertThatThrownBy(() -> milestoneService.createMilestone(10L, 1L, req))
+                .isInstanceOf(GoalRequiredException.class);
+    }
+
+    /** Inactive status surfaces before goal-required (deeper invariant wins). */
+    @Test
+    void createMilestone_InactiveAndNullGoal_StatusErrorWins() {
+        activeMentorship.setStatus(MentorshipStatus.COMPLETED);
+        activeMentorship.setSharedGoal(null);
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+        MilestoneCreateRequest req = new MilestoneCreateRequest();
+        req.setTitle("Should Fail");
+
+        assertThatThrownBy(() -> milestoneService.createMilestone(10L, 1L, req))
+                .isInstanceOf(MilestoneConflictException.class)
+                .hasMessageContaining("not active");
+    }
+
+    /** Mentor-auth check surfaces before goal-required. */
+    @Test
+    void createMilestone_NonMentorAndNullGoal_ForbiddenWins() {
+        activeMentorship.setSharedGoal(null);
+        when(mentorshipRepository.findById(10L)).thenReturn(Optional.of(activeMentorship));
+        MilestoneCreateRequest req = new MilestoneCreateRequest();
+
+        assertThatThrownBy(() -> milestoneService.createMilestone(10L, 2L, req))
+                .isInstanceOf(ProfileNotVisibleException.class)
+                .hasMessageContaining("Only mentors can create");
     }
 }
