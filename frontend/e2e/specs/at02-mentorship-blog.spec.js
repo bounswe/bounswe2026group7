@@ -141,7 +141,7 @@ test('AT-02 mentorship lifecycle + blog publish', async ({ browser, request }) =
     expect(task.status).toBe('PENDING');
 
     const submitted = await submitTask(request, menteeAuth.sessionToken, task.id, {
-      content: 'Done. Three questions noted in the comment thread.',
+      submissionText: 'Done. Three questions noted in the comment thread.',
     });
     expect(submitted.status).toBe('SUBMITTED');
 

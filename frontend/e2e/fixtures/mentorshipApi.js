@@ -21,13 +21,49 @@ async function expectOk(res, label) {
   return res.json();
 }
 
-/** POST /api/mentorships/{id}/meetings — mentor only. */
+/**
+ * POST /api/mentorships/{id}/meetings — mentor only.
+ *
+ * Accepts the test-ergonomic shape `{ title, description?, date,
+ * durationMin?, meetingType?, meetingLink? }` and translates to the
+ * backend's `MeetingCreateRequest` (`title`, `startTime`, `endTime`,
+ * `meetingType`, `meetingLink`). `startTime`/`endTime` may also be passed
+ * directly. ONLINE meetings (the default) require a meetingLink, so we
+ * default to a placeholder URL — tests don't actually open the link.
+ *
+ * Backend returns `MeetingCreateResponse { meetings: [...], warnings: [...] }`;
+ * callers want a single meeting, so we unwrap `meetings[0]`.
+ */
 export async function createMeeting(request, token, mentorshipId, body) {
+  const {
+    title,
+    description,
+    date,
+    startTime,
+    endTime,
+    durationMin = 30,
+    meetingType = 'ONLINE',
+    meetingLink = 'https://meet.example.com/e2e',
+    ...rest
+  } = body;
+  const start = startTime ?? date;
+  const computedEnd =
+    endTime ?? new Date(new Date(start).getTime() + durationMin * 60_000).toISOString();
+  const payload = {
+    title,
+    description,
+    startTime: start,
+    endTime: computedEnd,
+    meetingType,
+    ...(meetingType === 'ONLINE' ? { meetingLink } : {}),
+    ...rest,
+  };
   const res = await request.post(`${apiBase()}/api/mentorships/${mentorshipId}/meetings`, {
     headers: authHeaders(token),
-    data: body,
+    data: payload,
   });
-  return expectOk(res, `POST /api/mentorships/${mentorshipId}/meetings`);
+  const responseBody = await expectOk(res, `POST /api/mentorships/${mentorshipId}/meetings`);
+  return responseBody?.meetings?.[0] ?? responseBody;
 }
 
 /** POST /api/meetings/{id}/confirm — mentee accepts the proposed slot. */
