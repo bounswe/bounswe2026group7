@@ -175,8 +175,11 @@ test('AT-07 meeting-reminder notification is delivered within the SLA budget @nf
   expect(finalList.filter((n) => n.type === 'MEETING_REMINDER')).not.toHaveLength(0);
 
   // Use login to ensure the API surface is reachable end-to-end with the
-  // active rate limit — if AT-07's rate-limit test left us saturated, this
-  // would 429.
+  // active rate limit. The bucket is per-IP and shared with parallel
+  // workers (the `@nfr` rate-limit test in another browser project can
+  // saturate it); scrub before this final probe so the assertion isn't
+  // sensitive to cross-worker timing.
+  await resetRateLimits(request);
   const auth = await login(request, mentee.email, mentee.password);
-  expect(auth.sessionToken, 'login should still succeed; bucket not saturated').toBeTruthy();
+  expect(auth.sessionToken, 'login should still succeed').toBeTruthy();
 });

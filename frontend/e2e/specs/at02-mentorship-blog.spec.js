@@ -16,6 +16,7 @@ import {
   listIncomingRequests,
   listActiveMentorships,
   setSharedGoal,
+  resetRateLimits,
 } from '../fixtures/mentorshipApi.js';
 import { LoginPage } from '../pages/LoginPage.js';
 import { ExplorePage } from '../pages/ExplorePage.js';
@@ -65,6 +66,11 @@ async function loginViaUi(page, { email, password }) {
 
 test('AT-02 mentorship lifecycle + blog publish', async ({ browser, request }) => {
   await resetDb(request);
+  // The auth-login bucket is per-IP and shared with parallel workers (AT-07's
+  // 11-login probe in particular). Scrub before the UI login leg so a
+  // saturating concurrent test doesn't 429 our login mid-flight and leave the
+  // page stuck on /login waiting for a response that already came back as 429.
+  await resetRateLimits(request);
 
   const mentor = await seedMentor(request);
   const mentee = await seedMentee(request);
