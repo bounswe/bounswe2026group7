@@ -135,7 +135,7 @@ public class MentorshipService {
         return MentorshipResponse.from(saved);
     }
 
-    private Mentorship findForParticipant(Long userId, Long mentorshipId) {
+    Mentorship findForParticipant(Long userId, Long mentorshipId) {
         return mentorshipRepository.findById(mentorshipId)
                 .filter(m -> m.getMentor().getId().equals(userId) || m.getMentee().getId().equals(userId))
                 .orElseThrow(() -> new ResourceNotFoundException("Mentorship not found"));
