@@ -21,6 +21,9 @@ public enum NotificationType {
     MEETING_RESCHEDULE_APPROVED,
     MEETING_RESCHEDULE_REJECTED,
     MEETING_CANCELLED,
+    MILESTONE_CREATED,
+    MILESTONE_COMPLETED,
+    ACTION_ITEM_COMPLETED,
     // Auto-ban system (#134). USER_BANNED fires when a temporary ban is imposed
     // (carries reason + expiresAt in body); BAN_LIFTED fires when an admin
     // overrides; BAN_EXPIRED fires once when the timer runs out.

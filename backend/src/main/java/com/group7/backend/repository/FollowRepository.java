@@ -10,6 +10,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
+
 /**
  * Repository for the {@link Follow} graph (#343).
  *
@@ -67,4 +70,18 @@ public interface FollowRepository extends JpaRepository<Follow, FollowId> {
     long countByIdFolloweeId(Long followeeId);
 
     long countByIdFollowerId(Long followerId);
+
+    /**
+     * Bulk fetch of edges keyed by a set of followers — used by the
+     * second-hop step in {@code FollowRecommendationService} (#344) where the
+     * input is the viewer's followee set and the output is "everyone those
+     * followees follow." Returned as a flat list because the service groups
+     * by {@code followeeId} in Java to build a {@code Map<Long,Integer>} of
+     * incoming-edge counts; pushing the GROUP BY into SQL would force a
+     * projection DTO with no precedent in this repository.
+     *
+     * <p>Service-layer caps the input set at 200 to keep the IN-list short;
+     * the repo runs whatever it's handed.
+     */
+    List<Follow> findByIdFollowerIdIn(Collection<Long> followerIds);
 }
