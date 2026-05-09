@@ -91,7 +91,15 @@ public class SecurityConfig {
             .headers(headers -> headers
                 .httpStrictTransportSecurity(hsts -> hsts
                     .includeSubDomains(true)
-                    .maxAgeInSeconds(31_536_000))
+                    .maxAgeInSeconds(31_536_000)
+                    // Spring's default HSTS request-matcher only emits the
+                    // header on secure (HTTPS) requests; CI runs the e2e
+                    // backend over plain HTTP, which would silently drop
+                    // the header and break the AT-07 NFR assertion. Always
+                    // emit — RFC 6797 §8.1 says browsers MUST ignore HSTS
+                    // over HTTP, so this is harmless in production behind
+                    // an HTTPS terminator and visible in tests.
+                    .requestMatcher(request -> true))
                 .contentSecurityPolicy(csp -> csp.policyDirectives(
                     "default-src 'self'; "
                     + "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "

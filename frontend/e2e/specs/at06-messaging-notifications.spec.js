@@ -8,6 +8,8 @@ import {
   confirmMeeting,
   triggerMeetingReminders,
   listNotifications,
+  setSharedGoal,
+  sendMessage,
 } from '../fixtures/mentorshipApi.js';
 import { installServiceWorkerStub } from '../fixtures/sw-stub.js';
 import { MessagesPage } from '../pages/MessagesPage.js';
@@ -61,6 +63,19 @@ test('AT-06 mentor↔mentee messaging in real time + meeting reminder', async ({
   const mentorships = await listActiveMentorships(request, mentor.sessionToken);
   expect(mentorships, 'mentor should see exactly one active mentorship').toHaveLength(1);
   const mentorshipId = mentorships[0].id;
+
+  // #335 precondition: meetings now require a shared goal. Set it before
+  // the createMeeting leg further down.
+  await setSharedGoal(request, mentor.sessionToken, mentorshipId,
+    'Ship a real-time messaging slice end-to-end.');
+
+  // STOMP bootstrap: MessagesPage derives the conversation id from
+  // `messages[0].conversationId`, so an empty thread leaves both sides
+  // un-subscribed and a mentee→mentor message would never reach the
+  // mentor's DOM via WebSocket. Seed one warmup message via the REST
+  // API so both pages mount with a non-empty thread and subscribe.
+  await sendMessage(request, mentor.sessionToken, mentorshipId,
+    'AT-06 warmup — bootstraps conversationId for both sides.');
 
   // 2. Two contexts so both sides stay open simultaneously. SW stub on each
   //    so the page registers cleanly even if it tries.

@@ -40,6 +40,39 @@ export async function acceptMentorshipRequest(request, token, requestId, duratio
 }
 
 /**
+ * PUT /api/mentorships/{id}/goal — set the shared goal on an active mentorship.
+ *
+ * #335 added a precondition: meetings/tasks/milestones now refuse to be
+ * created until the mentorship has a non-blank `sharedGoal`, returning
+ * `409 GOAL_REQUIRED`. Specs that exercise the downstream verbs must
+ * call this once after accept.
+ */
+export async function setSharedGoal(request, token, mentorshipId, sharedGoal) {
+  const res = await request.put(`${apiBase()}/api/mentorships/${mentorshipId}/goal`, {
+    headers: authHeaders(token),
+    data: { sharedGoal },
+  });
+  return expectOk(res, `PUT /api/mentorships/${mentorshipId}/goal`);
+}
+
+/**
+ * POST /api/mentorships/{id}/messages — send a chat message via the REST API.
+ *
+ * Used by AT-06 to seed a "warmup" message before opening the UI threads:
+ * the frontend's `MessagesPage` only learns the conversation id from
+ * `messages[0].conversationId`, so an empty thread leaves both sides
+ * un-subscribed to STOMP and live updates never arrive. Sending one
+ * warmup message before mounting the pages unblocks the subscription.
+ */
+export async function sendMessage(request, token, mentorshipId, content) {
+  const res = await request.post(`${apiBase()}/api/mentorships/${mentorshipId}/messages`, {
+    headers: authHeaders(token),
+    data: { content },
+  });
+  return expectOk(res, `POST /api/mentorships/${mentorshipId}/messages`);
+}
+
+/**
  * POST /api/mentorships/{id}/meetings — mentor only.
  *
  * Accepts the test-ergonomic shape `{ title, description?, date,

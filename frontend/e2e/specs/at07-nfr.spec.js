@@ -13,6 +13,7 @@ import {
   createMeeting,
   confirmMeeting,
   listNotifications,
+  setSharedGoal,
 } from '../fixtures/mentorshipApi.js';
 
 /**
@@ -130,6 +131,11 @@ test('AT-07 meeting-reminder notification is delivered within the SLA budget @nf
   );
   await acceptMentorshipRequest(request, mentor.sessionToken, requestRow.id, 3);
   const [{ id: mentorshipId }] = await listActiveMentorships(request, mentor.sessionToken);
+
+  // #335 precondition: meetings now require a shared goal set on the
+  // mentorship; otherwise the backend returns 409 GOAL_REQUIRED.
+  await setSharedGoal(request, mentor.sessionToken, mentorshipId,
+    'AT-07 SLA probe shared goal.');
 
   const startTime = new Date(Date.now() + 60 * 60 * 1000 + 2 * 60 * 1000).toISOString();
   const meeting = await createMeeting(request, mentor.sessionToken, mentorshipId, {
