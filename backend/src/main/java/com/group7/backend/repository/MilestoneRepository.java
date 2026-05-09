@@ -25,4 +25,18 @@ public interface MilestoneRepository extends JpaRepository<Milestone, Long> {
 
     @Query("SELECT MAX(m.completedAt) FROM Milestone m WHERE m.mentorship.id = :mentorshipId")
     OffsetDateTime findMaxCompletedAtForMentorship(@Param("mentorshipId") Long mentorshipId);
+
+    /**
+     * Milestones of a mentorship whose {@code targetDate} falls inside the inclusive
+     * {@code [from, to]} window. Milestones with a null {@code targetDate} are
+     * excluded naturally by the {@code BETWEEN} predicate — they have no place on a
+     * chronological timeline. Used by the mentorship timeline aggregation (#332).
+     */
+    @Query("SELECT m FROM Milestone m "
+            + "WHERE m.mentorship.id = :mentorshipId "
+            + "AND m.targetDate BETWEEN :from AND :to")
+    List<Milestone> findInWindow(
+            @Param("mentorshipId") Long mentorshipId,
+            @Param("from") OffsetDateTime from,
+            @Param("to") OffsetDateTime to);
 }
