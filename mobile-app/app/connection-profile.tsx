@@ -13,15 +13,6 @@ import {
 import { useRole } from '../components/RoleContext';
 import apiClient from '../api/client';
 
-type MeetingItem = {
-  id: string;
-  day: string;
-  date: string;
-  time: string;
-  title: string;
-  status: 'confirmed' | 'pending';
-};
-
 type AvailabilitySlot = {
   dayOfWeek: string;
   startTime: string;
@@ -51,15 +42,6 @@ function parseJsonList(value: string | string[] | undefined): string[] {
   }
 }
 
-function parseMeetings(value: string | string[] | undefined): MeetingItem[] {
-  try {
-    const raw = parseString(value);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
 export default function ConnectionProfileScreen() {
   const { role } = useRole();
   const isMentorViewer = role === 'mentor';
@@ -73,7 +55,6 @@ export default function ConnectionProfileScreen() {
   const avatarBg = parseString(params.avatarBg) || '#D7E8DA';
   const avatarText = parseString(params.avatarText) || '#2F563C';
   const subtitle = parseString(params.subtitle);
-  const meetings = parseMeetings(params.meetings);
 
   const [about, setAbout] = useState(parseString(params.about));
   const [department, setDepartment] = useState(parseString(params.department));
