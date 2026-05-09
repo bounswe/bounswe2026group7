@@ -61,7 +61,7 @@ export default function SchedulePage() {
             const date = new Date(m.date)
             const mentLabel = !scopedId ? labelFor(m.mentorship, role) : null
             return (
-              <div key={m.id} className="md-meeting-card">
+              <div key={m.id} className="md-meeting-card" data-testid={`schedule-meeting-${m.id}`}>
                 <div className="md-meeting-day">
                   <div className="md-meeting-day-num">{date.getDate()}</div>
                   <div className="md-meeting-day-mo">{date.toLocaleDateString('en-GB', { month: 'short' })}</div>
@@ -112,12 +112,12 @@ export default function SchedulePage() {
       {loading ? (
         <div className="md-loading">Loading meetings…</div>
       ) : sorted.length === 0 ? (
-        <div className="empty-state">No meetings scheduled.</div>
+        <div className="empty-state" data-testid="schedule-empty">No meetings scheduled.</div>
       ) : (
-        <>
+        <div data-testid="schedule-list">
           <Section title="Upcoming" items={upcoming} />
           <Section title="Past" items={past} />
-        </>
+        </div>
       )}
     </MainLayout>
   )

@@ -2,12 +2,15 @@ package com.group7.backend.controller;
 
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.dto.response.UserResponse;
+import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.PasswordResetToken;
 import com.group7.backend.entity.User;
 import com.group7.backend.entity.VerificationToken;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.VerificationTokenRepository;
 import com.group7.backend.service.AuthService;
+import com.group7.backend.service.JwtService;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.util.Comparator;
@@ -47,6 +50,8 @@ public class TestSupportController {
     private final UserRepository userRepository;
     private final VerificationTokenRepository verificationTokenRepository;
     private final AuthService authService;
+    private final JwtService jwtService;
+    private final PasswordEncoder passwordEncoder;
     private final Faker faker = new Faker(Locale.of("tr"));
 
     @PersistenceContext
@@ -54,10 +59,14 @@ public class TestSupportController {
 
     public TestSupportController(UserRepository userRepository,
                                  VerificationTokenRepository verificationTokenRepository,
-                                 AuthService authService) {
+                                 AuthService authService,
+                                 JwtService jwtService,
+                                 PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.verificationTokenRepository = verificationTokenRepository;
         this.authService = authService;
+        this.jwtService = jwtService;
+        this.passwordEncoder = passwordEncoder;
         log.warn("TestSupportController is ENABLED — this MUST NOT happen in production");
     }
 
@@ -136,13 +145,55 @@ public class TestSupportController {
             userRepository.save(saved);
         }
 
+        // Pre-mint a session token so specs can skip the UI login when they
+        // just need an authenticated request context (used by AT-02 for the
+        // schedule/task/blog API legs).
+        String sessionToken = jwtService.generateToken(created.getId(), email, created.getRole());
+
         return ResponseEntity.ok(Map.of(
                 "id", created.getId(),
                 "email", email,
                 "password", password,
                 "role", created.getRole(),
                 "firstName", firstName,
-                "lastName", lastName
+                "lastName", lastName,
+                "sessionToken", sessionToken
+        ));
+    }
+
+    /**
+     * Seeds an Admin user (the production AuthService.register flow only
+     * builds Mentor/Mentee), bypasses verification, and returns a JWT so
+     * Playwright specs can persist it as a {@code storageState} fixture for
+     * AT-05 admin-review flows. Bean is still gated by
+     * {@code app.test-endpoints.enabled=true}.
+     */
+    @PostMapping("/admin")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> seedAdmin() {
+        String firstName = faker.name().firstName();
+        String lastName = faker.name().lastName();
+        String email = "e2e-admin-" + faker.regexify("[a-z0-9]{8}") + "@example.com";
+        String password = "Admin!" + faker.number().digits(6);
+
+        Admin admin = new Admin();
+        admin.setFirstName(firstName);
+        admin.setLastName(lastName);
+        admin.setEmail(email);
+        admin.setPasswordHash(passwordEncoder.encode(password));
+        admin.setIsEmailVerified(true);
+        Admin saved = userRepository.save(admin);
+
+        String sessionToken = jwtService.generateToken(saved.getId(), email, "ADMIN");
+
+        return ResponseEntity.ok(Map.of(
+                "id", saved.getId(),
+                "email", email,
+                "password", password,
+                "role", "ADMIN",
+                "firstName", firstName,
+                "lastName", lastName,
+                "sessionToken", sessionToken
         ));
     }
 

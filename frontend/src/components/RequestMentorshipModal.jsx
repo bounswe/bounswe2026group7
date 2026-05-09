@@ -47,7 +47,7 @@ export default function RequestMentorshipModal({ visible, onClose, onSubmit, loa
   const charCount = message.trim().length
 
   return (
-    <div className="modal-overlay" ref={overlayRef} onMouseDown={handleOverlayClick}>
+    <div className="modal-overlay" ref={overlayRef} onMouseDown={handleOverlayClick} data-testid="mentorship-request-modal">
       <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="requestMentorshipTitle">
         <div className="modal-header">
           <div>
@@ -68,6 +68,7 @@ export default function RequestMentorshipModal({ visible, onClose, onSubmit, loa
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Tell the mentor why you'd like to work with them..."
             rows={8}
+            data-testid="mentorship-request-message"
           />
           <div className="modal-footer-row">
             <span className="char-count" style={{ color: charCount > maxChars ? '#b91c1c' : '#64748b' }}>
@@ -75,11 +76,11 @@ export default function RequestMentorshipModal({ visible, onClose, onSubmit, loa
             </span>
           </div>
 
-          {error && <div className="modal-api-error">{error}</div>}
+          {error && <div className="modal-api-error" data-testid="mentorship-request-error">{error}</div>}
 
           <div className="modal-actions">
             <button type="button" className="modal-btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="modal-btn-primary" disabled={loading || !isValid}>
+            <button type="submit" className="modal-btn-primary" disabled={loading || !isValid} data-testid="mentorship-request-submit">
               {loading ? 'Sending...' : 'Send Request'}
             </button>
           </div>

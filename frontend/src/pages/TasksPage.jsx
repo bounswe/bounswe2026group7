@@ -84,14 +84,14 @@ export default function TasksPage() {
       {loading ? (
         <div className="md-loading">Loading tasks…</div>
       ) : tasks.length === 0 ? (
-        <div className="empty-state">No tasks yet.</div>
+        <div className="empty-state" data-testid="tasks-empty">No tasks yet.</div>
       ) : (
-        <div className="md-task-list">
+        <div className="md-task-list" data-testid="tasks-list">
           {tasks.map(t => {
             const done = t.status === 'DONE'
             const mentLabel = !scopedId ? labelFor(t.mentorship, role) : null
             return (
-              <label key={t.id} className={`md-task-item${done ? ' md-task-done' : ''}`}>
+              <label key={t.id} className={`md-task-item${done ? ' md-task-done' : ''}`} data-testid={`tasks-item-${t.id}`}>
                 <input
                   type="checkbox"
                   checked={done}
