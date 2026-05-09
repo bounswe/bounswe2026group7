@@ -71,9 +71,30 @@ jobs:
           APP_CORS_ALLOWED_ORIGINS: http://localhost:8000,http://localhost:5173
           JWT_SECRET: bXlTdXBlclNlY3JldEtleUZvckdyb3VwN0JhY2tlbmRBcHBsaWNhdGlvbjIwMjY=
           RESEND_API_KEY: re_noop_disabled
+          # Default upload paths point at /app/uploads/{photos,attachments} —
+          # those don't exist on a bare GitHub runner. Redirect to /tmp like
+          # application-test.properties does, so any startup-time directory
+          # check passes.
+          UPLOAD_DIR: /tmp/group7-e2e/photos
+          UPLOAD_ATTACHMENTS_DIR: /tmp/group7-e2e/attachments
         run: |
-          nohup java -jar target/*.jar > backend.log 2>&1 &
+          mkdir -p /tmp/group7-e2e/photos /tmp/group7-e2e/attachments
+          ls -la target/*.jar
+          # Pin to the executable Spring Boot fat jar; the .original sibling
+          # (un-repackaged) shouldn't be matched but be explicit anyway.
+          JAR=$(ls target/*.jar | grep -v '\.original$' | head -1)
+          echo "Launching: $JAR"
+          nohup java -jar "$JAR" > backend.log 2>&1 &
           echo $! > backend.pid
+          # Give the JVM a chance to exit immediately on a fatal config error
+          # so we surface it here instead of after a 4-minute wait-on timeout.
+          sleep 5
+          if ! kill -0 "$(cat backend.pid)" 2>/dev/null; then
+            echo "::error::Backend process died within 5s of launch. backend.log:"
+            sed 's/^/[backend] /' backend.log || true
+            exit 1
+          fi
+          echo "Backend PID $(cat backend.pid) is alive after 5s; proceeding."
 
       - name: Install frontend deps
         working-directory: frontend
@@ -82,10 +103,21 @@ jobs:
       - name: Wait for backend to be ready
         run: |
           set +e
+          # Tail backend.log to stdout in the background so progress is
+          # visible during startup instead of only on failure.
+          ( tail -F -n +1 backend/backend.log 2>/dev/null | sed 's/^/[backend] /' ) &
+          TAIL_PID=$!
           npx --yes wait-on -t 240000 -i 2000 http://localhost:8080/actuator/health
           rc=$?
+          # Stop the tailer regardless of outcome.
+          kill "$TAIL_PID" 2>/dev/null || true
           if [ "$rc" -ne 0 ]; then
-            echo "::error::Backend never became healthy. Dumping backend.log:"
+            echo "::error::Backend never became healthy. Diagnostic context follows."
+            echo "---- ps (java) ----"
+            ps -ef | grep -E '[j]ava' || echo "no java process found"
+            echo "---- listening ports ----"
+            ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || true
+            echo "---- backend.log (full) ----"
             sed 's/^/[backend] /' backend/backend.log || true
             exit "$rc"
           fi
