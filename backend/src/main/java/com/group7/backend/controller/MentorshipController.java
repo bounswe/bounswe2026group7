@@ -1,7 +1,9 @@
 package com.group7.backend.controller;
 
 import com.group7.backend.dto.request.SharedGoalRequest;
+import com.group7.backend.dto.response.MentorshipProgressResponse;
 import com.group7.backend.dto.response.MentorshipResponse;
+import com.group7.backend.service.MentorshipProgressService;
 import com.group7.backend.service.MentorshipService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -23,9 +25,12 @@ import java.util.List;
 public class MentorshipController {
 
     private final MentorshipService mentorshipService;
+    private final MentorshipProgressService mentorshipProgressService;
 
-    public MentorshipController(MentorshipService mentorshipService) {
+    public MentorshipController(MentorshipService mentorshipService,
+                                MentorshipProgressService mentorshipProgressService) {
         this.mentorshipService = mentorshipService;
+        this.mentorshipProgressService = mentorshipProgressService;
     }
 
     @GetMapping
@@ -60,6 +65,26 @@ public class MentorshipController {
             Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(mentorshipService.getMentorship(userId, id));
+    }
+
+    @GetMapping("/{id}/progress")
+    @Operation(
+            summary = "Get mentorship progress",
+            description = "Returns aggregated task + milestone progress for the mentorship. " +
+                    "Only the mentor and mentee may read; non-participants get 404."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Progress payload",
+                    content = @Content(schema = @Schema(implementation = MentorshipProgressResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentorship not found or caller is not a participant",
+                    content = @Content)
+    })
+    public ResponseEntity<MentorshipProgressResponse> getMentorshipProgress(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(mentorshipProgressService.getProgress(userId, id));
     }
 
     @PutMapping("/{id}/goal")
