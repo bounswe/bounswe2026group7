@@ -34,6 +34,21 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
     }
 
+    @ExceptionHandler(UserBannedException.class)
+    public ResponseEntity<Map<String, Object>> handleUserBanned(UserBannedException ex,
+                                                                HttpServletRequest request) {
+        com.group7.backend.entity.Ban ban = ex.getBan();
+        log.warn("Banned user attempted gated action: method={}, path={}, userId={}, expiresAt={}",
+                request.getMethod(), request.getRequestURI(), ban.getUser().getId(), ban.getExpiresAt());
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "Forbidden");
+        body.put("message", ex.getMessage());
+        body.put("reason", ban.getReason());
+        body.put("expiresAt", ban.getExpiresAt().toString());
+        body.put("banCount", ban.getBanCount());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
     @ExceptionHandler(MentorshipRequestException.class)
     public ResponseEntity<Map<String, String>> handleMentorshipRequest(MentorshipRequestException ex,
                                                                        HttpServletRequest request) {

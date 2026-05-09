@@ -8,6 +8,7 @@ import com.group7.backend.entity.MentorshipRequest;
 import com.group7.backend.entity.MentorshipRequestStatus;
 import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.exception.UserBannedException;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.repository.MentorshipRequestRepository;
@@ -28,19 +29,31 @@ public class MentorshipRequestService {
     private final MenteeRepository menteeRepository;
     private final MentorRepository mentorRepository;
     private final NotificationEventPublisher notificationEventPublisher;
+    private final BanService banService;
 
     public MentorshipRequestService(MentorshipRequestRepository mentorshipRequestRepository,
                                     MenteeRepository menteeRepository,
                                     MentorRepository mentorRepository,
-                                    NotificationEventPublisher notificationEventPublisher) {
+                                    NotificationEventPublisher notificationEventPublisher,
+                                    BanService banService) {
         this.mentorshipRequestRepository = mentorshipRequestRepository;
         this.menteeRepository = menteeRepository;
         this.mentorRepository = mentorRepository;
         this.notificationEventPublisher = notificationEventPublisher;
+        this.banService = banService;
     }
 
     @Transactional
     public MentorshipRequestResponse createRequest(Long menteeId, MentorshipRequestCreateRequest dto) {
+        // Ban gate (#134, req 2.2.4): banned mentees cannot submit new requests.
+        // Runs first so the 403 response carries expiresAt + reason without
+        // touching mentor / capacity / dedup state. Read paths remain open.
+        banService.getActiveBan(menteeId).ifPresent(ban -> {
+            log.warn("Mentorship request rejected: menteeId={} is banned until {}",
+                    menteeId, ban.getExpiresAt());
+            throw new UserBannedException(ban);
+        });
+
         Mentee mentee = menteeRepository.findById(menteeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Mentee not found"));
 
@@ -99,5 +112,36 @@ public class MentorshipRequestService {
 
         return mentorshipRequestRepository.findByMentorIdWithUsers(mentorId, pageable)
                 .map(MentorshipRequestResponse::from);
+    }
+
+    /**
+     * Mentee cancels their own pending request (#134). Flips the request to
+     * {@code CANCELLED} and records the violation via {@link BanService},
+     * which may auto-impose a ban once the cancellation threshold is crossed.
+     *
+     * @throws ResourceNotFoundException if the request does not exist
+     * @throws MentorshipRequestException if the caller does not own the request
+     *         or the request is no longer in {@code PENDING} state
+     */
+    @Transactional
+    public void cancelOwnPendingRequest(Long menteeId, Long requestId) {
+        MentorshipRequest request = mentorshipRequestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentorship request not found"));
+
+        if (!request.getMentee().getId().equals(menteeId)) {
+            log.warn("Cancel rejected: menteeId={} does not own requestId={}", menteeId, requestId);
+            throw new MentorshipRequestException("You do not own this mentorship request");
+        }
+
+        if (request.getStatus() != MentorshipRequestStatus.PENDING) {
+            log.warn("Cancel rejected: requestId={} is in status {}", requestId, request.getStatus());
+            throw new MentorshipRequestException("Only pending requests can be cancelled");
+        }
+
+        request.setStatus(MentorshipRequestStatus.CANCELLED);
+        mentorshipRequestRepository.save(request);
+
+        banService.recordCancellation(menteeId, "Frequent mentorship request cancellations");
+        log.info("Mentorship request cancelled by mentee: requestId={}, menteeId={}", requestId, menteeId);
     }
 }
