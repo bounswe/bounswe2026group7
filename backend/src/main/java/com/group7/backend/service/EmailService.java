@@ -5,13 +5,18 @@ import com.group7.backend.exception.EmailSendException;
 import com.resend.Resend;
 import com.resend.core.exception.ResendException;
 import com.resend.services.emails.model.CreateEmailOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class EmailService {
 
+    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+
     private final Resend resend;
+    private final boolean enabled;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -22,12 +27,22 @@ public class EmailService {
     @Value("${app.mail.from}")
     private String fromAddress;
 
-    public EmailService(@Value("${resend.api-key}") String apiKey) {
+    public EmailService(@Value("${resend.api-key}") String apiKey,
+                        @Value("${app.email.enabled:true}") boolean enabled) {
         this.resend = new Resend(apiKey);
+        this.enabled = enabled;
     }
 
     public void sendVerificationEmail(User user, String token) {
         String verifyLink = baseUrl + "/api/auth/verify-email?token=" + token;
+        if (!enabled) {
+            // Dev/manual-smoke escape hatch: log the link instead of calling
+            // Resend, so a fresh user can verify by curl-ing the link from
+            // the log output. Default is enabled=true, so prod is unchanged.
+            log.warn("[email disabled] verify link for {} ({}): {}",
+                    user.getEmail(), user.getId(), verifyLink);
+            return;
+        }
         String html = buildVerificationEmailHtml(user.getFirstName(), verifyLink);
 
         CreateEmailOptions request = CreateEmailOptions.builder()
@@ -46,6 +61,11 @@ public class EmailService {
 
     public void sendPasswordResetEmail(User user, String token) {
         String resetLink = frontendUrl + "/reset-password?token=" + token;
+        if (!enabled) {
+            log.warn("[email disabled] password-reset link for {} ({}): {}",
+                    user.getEmail(), user.getId(), resetLink);
+            return;
+        }
         String html = buildPasswordResetEmailHtml(user.getFirstName(), resetLink);
 
         CreateEmailOptions request = CreateEmailOptions.builder()

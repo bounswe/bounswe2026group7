@@ -14,6 +14,7 @@ import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.OffsetDateTime;
 import java.util.LinkedHashSet;
@@ -151,6 +152,12 @@ public class FeedPost {
      * shape remains stable while building a fresh post (before save +
      * reload), even though the on-read order is overridden by
      * {@code @OrderBy}.
+     *
+     * <p>{@code @BatchSize(100)} collapses the otherwise-N-queries lazy
+     * fetch when an iteration accesses {@code post.getHashtags()} across
+     * a list of posts (the For-You ranker loop in {@code #350} is the
+     * primary call site). Without it, ranking 200 candidate posts would
+     * fire 200 extra hashtag-collection queries.
      */
     @OneToMany(
             mappedBy = "post",
@@ -158,6 +165,7 @@ public class FeedPost {
             orphanRemoval = true,
             fetch = FetchType.LAZY)
     @OrderBy("id.tag ASC")
+    @BatchSize(size = 100)
     private Set<FeedPostHashtag> hashtags = new LinkedHashSet<>();
 
     /**
