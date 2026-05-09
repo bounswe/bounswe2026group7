@@ -137,4 +137,35 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
     Page<FeedPost> searchPosts(@Param("keyword") String keyword,
                                 @Param("hashtag") String hashtag,
                                 Pageable pageable);
+
+    /**
+     * Capped unread-post count (#349). Counts visible posts authored by
+     * users {@code viewerId} follows, created after {@code since}.
+     *
+     * <p>Wraps the inner scan in a {@code LIMIT :capPlusOne} subquery so
+     * Postgres stops scanning once the cap is reached — full
+     * {@code COUNT(*)} would scan every matching row even when the
+     * answer is "≥ cap." The outer {@code COUNT(*)} returns 0..(cap+1);
+     * the service uses {@code Math.min(raw, cap)} for the displayed
+     * count and {@code raw > cap} for the {@code cappedAtMax} flag.
+     *
+     * <p>Service is responsible for substituting a Unix-epoch sentinel
+     * for never-marked-read viewers, so the query has no nullable-filter
+     * branching and can lean on the partial index
+     * {@code idx_feed_posts_created_at_active}.
+     */
+    @Query(value = """
+            SELECT COUNT(*) FROM (
+                SELECT 1 FROM feed_posts p
+                WHERE p.deleted_at IS NULL
+                  AND p.author_id IN (
+                      SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
+                  )
+                  AND p.created_at > :since
+                LIMIT :capPlusOne
+            ) capped
+            """, nativeQuery = true)
+    long countUnreadFollowingPostsCapped(@Param("viewerId") Long viewerId,
+                                          @Param("since") java.time.OffsetDateTime since,
+                                          @Param("capPlusOne") int capPlusOne);
 }

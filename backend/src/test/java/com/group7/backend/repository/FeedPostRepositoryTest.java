@@ -44,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class FeedPostRepositoryTest {
 
     @Autowired private FeedPostRepository feedPostRepository;
+    @Autowired private FollowRepository followRepository;
     @Autowired private MenteeRepository menteeRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private EntityManager entityManager;
@@ -53,6 +54,7 @@ class FeedPostRepositoryTest {
     void cleanDb() {
         // Children first by FK, then parents. Cascade would handle this,
         // but explicit ordering is more debuggable when something goes wrong.
+        jdbcTemplate.update("DELETE FROM follows");
         jdbcTemplate.update("DELETE FROM feed_post_hashtags");
         jdbcTemplate.update("DELETE FROM feed_posts");
         userRepository.deleteAll();
@@ -284,6 +286,93 @@ class FeedPostRepositoryTest {
     void findByIdAndDeletedAtIsNull_returnsEmpty_forNonexistentId() {
         Optional<FeedPost> result = feedPostRepository.findByIdAndDeletedAtIsNull(9_999_999L);
         assertThat(result).isEmpty();
+    }
+
+    // ── Unread-count short-circuit query (#349) ─────────────────────────────
+
+    @Test
+    void countUnreadFollowingPostsCapped_returnsZero_whenViewerHasNoFollows() {
+        Mentee viewer = saveMentee("nf_viewer@test.com");
+
+        long count = feedPostRepository.countUnreadFollowingPostsCapped(
+                viewer.getId(), OffsetDateTime.parse("1970-01-01T00:00:00Z"), 100);
+
+        assertThat(count).isZero();
+    }
+
+    @Test
+    void countUnreadFollowingPostsCapped_countsOnlyPostsByFolloweesNewerThanSince() {
+        Mentee viewer = saveMentee("nf_v2@test.com");
+        Mentee followed = saveMentee("nf_followed@test.com");
+        Mentee unrelated = saveMentee("nf_unrelated@test.com");
+        followRepository.upsertFollow(viewer.getId(), followed.getId());
+
+        OffsetDateTime cursor = OffsetDateTime.now().minusMinutes(5);
+        // 1 followee post BEFORE cursor — backdated via JdbcTemplate because
+        // FeedPost.createdAt is mapped updatable=false so an entity-level
+        // setter + save would silently no-op on the column.
+        FeedPost old = saveFreshPost(followed.getId(), "old", List.of());
+        jdbcTemplate.update("UPDATE feed_posts SET created_at = ? WHERE id = ?",
+                cursor.minusMinutes(1), old.getId());
+        // 2 followee posts AFTER cursor — counted
+        saveFreshPost(followed.getId(), "fresh1", List.of());
+        saveFreshPost(followed.getId(), "fresh2", List.of());
+        // 1 post by an unrelated author — excluded
+        saveFreshPost(unrelated.getId(), "noise", List.of());
+
+        long count = feedPostRepository.countUnreadFollowingPostsCapped(
+                viewer.getId(), cursor, 100);
+
+        assertThat(count).isEqualTo(2L);
+    }
+
+    @Test
+    void countUnreadFollowingPostsCapped_excludesSoftDeletedPosts() {
+        Mentee viewer = saveMentee("nf_sd_v@test.com");
+        Mentee followed = saveMentee("nf_sd_f@test.com");
+        followRepository.upsertFollow(viewer.getId(), followed.getId());
+
+        FeedPost alive = saveFreshPost(followed.getId(), "alive", List.of());
+        FeedPost deleted = saveFreshPost(followed.getId(), "deleted", List.of());
+        deleted.setDeletedAt(OffsetDateTime.now());
+        feedPostRepository.save(deleted);
+
+        long count = feedPostRepository.countUnreadFollowingPostsCapped(
+                viewer.getId(), OffsetDateTime.parse("1970-01-01T00:00:00Z"), 100);
+
+        assertThat(count).isEqualTo(1L);
+        assertThat(alive.getId()).isNotEqualTo(deleted.getId()); // sanity
+    }
+
+    @Test
+    void countUnreadFollowingPostsCapped_capsAtCapPlusOne_shortCircuitingTheScan() {
+        Mentee viewer = saveMentee("nf_cap_v@test.com");
+        Mentee followed = saveMentee("nf_cap_f@test.com");
+        followRepository.upsertFollow(viewer.getId(), followed.getId());
+
+        // 5 posts in the followee's stream, cap+1 = 3 → query stops at 3.
+        for (int i = 0; i < 5; i++) {
+            saveFreshPost(followed.getId(), "p" + i, List.of());
+        }
+
+        long count = feedPostRepository.countUnreadFollowingPostsCapped(
+                viewer.getId(), OffsetDateTime.parse("1970-01-01T00:00:00Z"), 3);
+
+        assertThat(count).isEqualTo(3L);
+    }
+
+    @Test
+    void countUnreadFollowingPostsCapped_excludesViewersOwnPosts_byJoiningThroughFollows() {
+        // The query joins through `follows`, and the follow graph blocks
+        // self-follow at the DB level (#343). So the viewer's own posts
+        // simply don't appear in any followee's stream.
+        Mentee viewer = saveMentee("nf_self_v@test.com");
+        saveFreshPost(viewer.getId(), "myown", List.of());
+
+        long count = feedPostRepository.countUnreadFollowingPostsCapped(
+                viewer.getId(), OffsetDateTime.parse("1970-01-01T00:00:00Z"), 100);
+
+        assertThat(count).isZero();
     }
 
     // ── Fixtures ────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 package com.group7.backend.config.websocket;
 
+import com.group7.backend.dto.feed.FeedTopics;
 import com.group7.backend.repository.ConversationParticipantRepository;
 import com.group7.backend.service.JwtService;
 import org.slf4j.Logger;
@@ -19,8 +20,15 @@ import java.util.List;
 
 /**
  * Authenticates STOMP {@code CONNECT} frames against the project JWT and
- * authorises {@code SUBSCRIBE} frames against {@link com.group7.backend.entity.Conversation}
- * participation.
+ * authorises {@code SUBSCRIBE} frames against two managed prefixes:
+ * <ul>
+ *   <li>{@code /topic/conversation/{id}} — caller must be a
+ *       {@link com.group7.backend.entity.Conversation} participant
+ *       (#245 messaging).</li>
+ *   <li>{@code /topic/feed.{userId}} — caller's user id must equal the
+ *       topic's user id (#349 social-feed real-time push). Hard
+ *       separation: a session can only subscribe to its own feed topic.</li>
+ * </ul>
  *
  * <p>The auth token is read from the {@code Authorization} STOMP native header
  * — never from URL query parameters — matching the Spring Framework reference's
@@ -31,7 +39,7 @@ import java.util.List;
 public class JwtChannelInterceptor implements ChannelInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(JwtChannelInterceptor.class);
-    private static final String TOPIC_PREFIX = "/topic/conversation/";
+    private static final String CONVERSATION_PREFIX = "/topic/conversation/";
 
     private final JwtService jwtService;
     private final ConversationParticipantRepository participantRepository;
@@ -83,18 +91,44 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             throw new MessagingException("Subscribe requires an authenticated session");
         }
         String destination = accessor.getDestination();
-        if (destination == null || !destination.startsWith(TOPIC_PREFIX)) {
-            // Subscriptions outside our managed prefix carry no ACL here.
+        if (destination == null) {
             return;
         }
-        Long conversationId = parseConversationId(destination);
+        Long userId = (Long) auth.getCredentials();
+
+        if (destination.startsWith(CONVERSATION_PREFIX)) {
+            authorizeConversationSubscribe(destination, userId);
+            return;
+        }
+        if (destination.startsWith(FeedTopics.FEED_PREFIX)) {
+            authorizeFeedSubscribe(destination, userId);
+            return;
+        }
+        // Subscriptions outside our managed prefixes carry no ACL here.
+        // Spring Security's WebSocketAuthorizationManager still enforces
+        // authenticated() for any frame that needs it.
+    }
+
+    private void authorizeConversationSubscribe(String destination, Long userId) {
+        Long conversationId = parseSuffixAsLong(destination, CONVERSATION_PREFIX);
         if (conversationId == null) {
             throw new MessagingException("Malformed subscription destination: " + destination);
         }
-        Long userId = (Long) auth.getCredentials();
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
             log.warn("STOMP SUBSCRIBE rejected: userId={}, destination={}", userId, destination);
             throw new MessagingException("You are not a participant of this conversation");
+        }
+    }
+
+    private void authorizeFeedSubscribe(String destination, Long userId) {
+        Long topicUserId = parseSuffixAsLong(destination, FeedTopics.FEED_PREFIX);
+        if (topicUserId == null) {
+            throw new MessagingException("Malformed subscription destination: " + destination);
+        }
+        if (!topicUserId.equals(userId)) {
+            log.warn("STOMP SUBSCRIBE rejected: userId={} cannot subscribe to {}",
+                    userId, destination);
+            throw new MessagingException("Cannot subscribe to another user's feed topic");
         }
     }
 
@@ -105,9 +139,9 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         return header.substring(7).trim();
     }
 
-    private static Long parseConversationId(String destination) {
+    private static Long parseSuffixAsLong(String destination, String prefix) {
         try {
-            return Long.parseLong(destination.substring(TOPIC_PREFIX.length()));
+            return Long.parseLong(destination.substring(prefix.length()));
         } catch (NumberFormatException e) {
             return null;
         }

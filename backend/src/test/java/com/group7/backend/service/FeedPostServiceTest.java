@@ -22,6 +22,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,6 +39,7 @@ class FeedPostServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private HashtagNormalizer hashtagNormalizer;
     @Mock private FeedPostMapper feedPostMapper;
+    @Mock private FeedPostEventPublisher feedPostEventPublisher;
     @InjectMocks private FeedPostService feedPostService;
 
     // ── create ─────────────────────────────────────────────────────────────
@@ -102,6 +104,43 @@ class FeedPostServiceTest {
 
         assertThat(result).isSameAs(expected);
         verify(feedPostRepository).save(any(FeedPost.class));
+    }
+
+    @Test
+    void create_publishesFeedPostCreatedEvent_afterSave_via_publisherFacade() {
+        Mentor author = mentor(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(author));
+        when(hashtagNormalizer.normalize(any())).thenReturn(java.util.Set.of());
+        when(feedPostRepository.save(any(FeedPost.class))).thenAnswer(inv -> {
+            FeedPost p = inv.getArgument(0);
+            p.setId(42L);
+            return p;
+        });
+        when(feedPostMapper.toResponse(any(FeedPost.class), any())).thenReturn(stubResponse(42L, 1L));
+
+        feedPostService.create(1L, "Hello", List.of());
+
+        // Verify the facade is invoked with the saved post + author. The
+        // FeedPostEventPublisherTest pins the event-shape contract; here
+        // we pin the FeedPostService → facade contract.
+        org.mockito.ArgumentCaptor<FeedPost> postCaptor =
+                org.mockito.ArgumentCaptor.forClass(FeedPost.class);
+        verify(feedPostEventPublisher).publishCreated(postCaptor.capture(), eq(author));
+        assertThat(postCaptor.getValue().getId()).isEqualTo(42L);
+    }
+
+    @Test
+    void create_doesNotPublish_whenSaveFails() {
+        Mentor author = mentor(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(author));
+        when(hashtagNormalizer.normalize(any())).thenReturn(java.util.Set.of());
+        when(feedPostRepository.save(any(FeedPost.class)))
+                .thenThrow(new RuntimeException("DB down"));
+
+        assertThatThrownBy(() -> feedPostService.create(1L, "Hello", List.of()))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(feedPostEventPublisher, never()).publishCreated(any(), any());
     }
 
     // ── getById ────────────────────────────────────────────────────────────
