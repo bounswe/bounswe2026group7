@@ -74,6 +74,20 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
+    @ExceptionHandler(GoalRequiredException.class)
+    public ResponseEntity<Map<String, Object>> handleGoalRequired(GoalRequiredException ex,
+                                                                  HttpServletRequest request) {
+        log.warn("Goal-required precondition rejected: method={}, path={}, mentorshipId={}",
+                request.getMethod(), request.getRequestURI(), ex.getMentorshipId());
+        Map<String, Object> body = Map.of(
+                "error", "Conflict",
+                "code", "GOAL_REQUIRED",
+                "message", ex.getMessage(),
+                "mentorshipId", ex.getMentorshipId()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     @ExceptionHandler(AuthenticationFailedException.class)
     public ResponseEntity<Map<String, String>> handleAuthenticationFailed(AuthenticationFailedException ex,
                                                                          HttpServletRequest request) {

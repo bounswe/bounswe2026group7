@@ -44,6 +44,10 @@ public class MentorshipResponse {
     @Schema(description = "Shared goal defined by both parties")
     private String sharedGoal;
 
+    @Schema(description = "True if a non-blank shared goal has been defined for this mentorship",
+            example = "true")
+    private boolean goalDefined;
+
     public static MentorshipResponse from(Mentorship mentorship) {
         MentorshipResponse r = new MentorshipResponse();
         r.setId(mentorship.getId());
@@ -56,6 +60,7 @@ public class MentorshipResponse {
         r.setDuration(mentorship.getDuration());
         r.setStatus(mentorship.getStatus().name());
         r.setSharedGoal(mentorship.getSharedGoal());
+        r.setGoalDefined(mentorship.hasSharedGoal());
         return r;
     }
 }

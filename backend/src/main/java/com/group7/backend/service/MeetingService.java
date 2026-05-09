@@ -69,6 +69,7 @@ public class MeetingService {
     public MeetingCreateResponse createMeetings(Long mentorshipId, Long userId, MeetingCreateRequest request) {
         Mentorship mentorship = getActiveMentorshipForUser(mentorshipId, userId);
         requireMentor(mentorship, userId);
+        MentorshipPreconditions.requireSharedGoal(mentorship);
 
         validateTimeRange(request.getStartTime(), request.getEndTime());
         validateMeetingLink(request.getMeetingType(), request.getMeetingLink());

@@ -114,11 +114,15 @@ public class MentorshipService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public MentorshipResponse getMentorship(Long userId, Long mentorshipId) {
+        Mentorship mentorship = findForParticipant(userId, mentorshipId);
+        return MentorshipResponse.from(mentorship);
+    }
+
     @Transactional
     public MentorshipResponse setSharedGoal(Long userId, Long mentorshipId, SharedGoalRequest dto) {
-        Mentorship mentorship = mentorshipRepository.findById(mentorshipId)
-                .filter(m -> m.getMentor().getId().equals(userId) || m.getMentee().getId().equals(userId))
-                .orElseThrow(() -> new ResourceNotFoundException("Mentorship not found"));
+        Mentorship mentorship = findForParticipant(userId, mentorshipId);
 
         if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
             log.warn("Shared goal update rejected: mentorshipId={} not active", mentorshipId);
@@ -129,5 +133,11 @@ public class MentorshipService {
         Mentorship saved = mentorshipRepository.save(mentorship);
         log.info("Shared goal updated: mentorshipId={}, updatedByUserId={}", mentorshipId, userId);
         return MentorshipResponse.from(saved);
+    }
+
+    private Mentorship findForParticipant(Long userId, Long mentorshipId) {
+        return mentorshipRepository.findById(mentorshipId)
+                .filter(m -> m.getMentor().getId().equals(userId) || m.getMentee().getId().equals(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("Mentorship not found"));
     }
 }

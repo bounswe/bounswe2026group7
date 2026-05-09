@@ -42,7 +42,8 @@ public class MilestoneController {
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
             @ApiResponse(responseCode = "403", description = "Not a mentor of this mentorship", content = @Content),
             @ApiResponse(responseCode = "404", description = "Mentorship not found", content = @Content),
-            @ApiResponse(responseCode = "409", description = "Mentorship is not active", content = @Content)
+            @ApiResponse(responseCode = "409", description = "Mentorship is not active, or shared goal not defined " +
+                    "(body carries code=\"GOAL_REQUIRED\")", content = @Content)
     })
     public ResponseEntity<MilestoneDetailResponse> createMilestone(
             @PathVariable Long id,

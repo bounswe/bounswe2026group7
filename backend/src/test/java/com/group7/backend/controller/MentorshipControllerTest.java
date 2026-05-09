@@ -230,4 +230,115 @@ class MentorshipControllerTest {
                         .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void setSharedGoalReturns400ForWhitespaceOnly() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+
+        mockMvc.perform(put("/api/mentorships/100/goal")
+                        .header("Authorization", "Bearer mentor-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sharedGoal\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void setSharedGoalReturns400ForNullField() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+
+        mockMvc.perform(put("/api/mentorships/100/goal")
+                        .header("Authorization", "Bearer mentor-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sharedGoal\":null}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void setSharedGoalReturns400ForOver500Chars() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        String longGoal = "a".repeat(501);
+
+        SharedGoalRequest body = new SharedGoalRequest();
+        body.setSharedGoal(longGoal);
+
+        mockMvc.perform(put("/api/mentorships/100/goal")
+                        .header("Authorization", "Bearer mentor-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void setSharedGoalAcceptsExactly500Chars() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        String boundaryGoal = "a".repeat(500);
+
+        MentorshipResponse resp = sampleMentorship();
+        resp.setSharedGoal(boundaryGoal);
+        resp.setGoalDefined(true);
+        when(mentorshipService.setSharedGoal(eq(1L), eq(100L), any())).thenReturn(resp);
+
+        SharedGoalRequest body = new SharedGoalRequest();
+        body.setSharedGoal(boundaryGoal);
+
+        mockMvc.perform(put("/api/mentorships/100/goal")
+                        .header("Authorization", "Bearer mentor-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalDefined").value(true));
+    }
+
+    // ── Get mentorship by id ────────────────────────────────────────────────
+
+    @Test
+    void getMentorshipReturns200ForMentor() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        MentorshipResponse resp = sampleMentorship();
+        resp.setSharedGoal("Build a portfolio");
+        resp.setGoalDefined(true);
+        when(mentorshipService.getMentorship(1L, 100L)).thenReturn(resp);
+
+        mockMvc.perform(get("/api/mentorships/100")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(100))
+                .andExpect(jsonPath("$.goalDefined").value(true))
+                .andExpect(jsonPath("$.sharedGoal").value("Build a portfolio"));
+    }
+
+    @Test
+    void getMentorshipReturns200ForMentee() throws Exception {
+        mockMenteeJwt("mentee-token", 2L);
+        MentorshipResponse resp = sampleMentorship();
+        resp.setGoalDefined(false);
+        when(mentorshipService.getMentorship(2L, 100L)).thenReturn(resp);
+
+        mockMvc.perform(get("/api/mentorships/100")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.goalDefined").value(false));
+    }
+
+    @Test
+    void getMentorshipReturns404ForNonParticipant() throws Exception {
+        mockMenteeJwt("intruder-token", 999L);
+        when(mentorshipService.getMentorship(999L, 100L))
+                .thenThrow(new ResourceNotFoundException("Mentorship not found"));
+
+        mockMvc.perform(get("/api/mentorships/100")
+                        .header("Authorization", "Bearer intruder-token"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getMentorshipReturns404ForUnknownId() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        when(mentorshipService.getMentorship(1L, 404L))
+                .thenThrow(new ResourceNotFoundException("Mentorship not found"));
+
+        mockMvc.perform(get("/api/mentorships/404")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isNotFound());
+    }
 }

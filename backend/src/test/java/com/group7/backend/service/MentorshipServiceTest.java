@@ -280,6 +280,27 @@ class MentorshipServiceTest {
         MentorshipResponse response = mentorshipService.setSharedGoal(1L, 100L, goalDto);
 
         assertThat(response.getSharedGoal()).isEqualTo("Build a portfolio project");
+        assertThat(response.isGoalDefined()).isTrue();
+    }
+
+    @Test
+    void setSharedGoalSuccessAsMentee() {
+        Mentorship mentorship = new Mentorship();
+        mentorship.setId(100L);
+        mentorship.setMentor(mentor);
+        mentorship.setMentee(mentee);
+        mentorship.setStatus(MentorshipStatus.ACTIVE);
+
+        when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
+        when(mentorshipRepository.save(any())).thenReturn(mentorship);
+
+        SharedGoalRequest goalDto = new SharedGoalRequest();
+        goalDto.setSharedGoal("Mentee-led goal");
+
+        MentorshipResponse response = mentorshipService.setSharedGoal(2L, 100L, goalDto);
+
+        assertThat(response.getSharedGoal()).isEqualTo("Mentee-led goal");
+        assertThat(response.isGoalDefined()).isTrue();
     }
 
     @Test
@@ -315,5 +336,86 @@ class MentorshipServiceTest {
         assertThatThrownBy(() -> mentorshipService.setSharedGoal(1L, 100L, goalDto))
                 .isInstanceOf(MentorshipRequestException.class)
                 .hasMessageContaining("not active");
+    }
+
+    // ── Get mentorship ──────────────────────────────────────────────────────
+
+    @Test
+    void getMentorshipReturnsResponseForMentor() {
+        Mentorship mentorship = new Mentorship();
+        mentorship.setId(100L);
+        mentorship.setMentor(mentor);
+        mentorship.setMentee(mentee);
+        mentorship.setStatus(MentorshipStatus.ACTIVE);
+        mentorship.setStartDate(OffsetDateTime.now(ZoneOffset.UTC));
+        mentorship.setEndDate(OffsetDateTime.now(ZoneOffset.UTC).plusMonths(3));
+        mentorship.setDuration(3);
+        mentorship.setSharedGoal("Build a portfolio");
+
+        when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
+
+        MentorshipResponse response = mentorshipService.getMentorship(1L, 100L);
+
+        assertThat(response.getId()).isEqualTo(100L);
+        assertThat(response.getMentorFirstName()).isEqualTo("Ahmet");
+        assertThat(response.isGoalDefined()).isTrue();
+    }
+
+    @Test
+    void getMentorshipReturnsResponseForMentee() {
+        Mentorship mentorship = new Mentorship();
+        mentorship.setId(100L);
+        mentorship.setMentor(mentor);
+        mentorship.setMentee(mentee);
+        mentorship.setStatus(MentorshipStatus.ACTIVE);
+        mentorship.setStartDate(OffsetDateTime.now(ZoneOffset.UTC));
+        mentorship.setEndDate(OffsetDateTime.now(ZoneOffset.UTC).plusMonths(3));
+        mentorship.setDuration(3);
+
+        when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
+
+        MentorshipResponse response = mentorshipService.getMentorship(2L, 100L);
+
+        assertThat(response.getId()).isEqualTo(100L);
+        assertThat(response.isGoalDefined()).isFalse();
+    }
+
+    @Test
+    void getMentorshipReturns404ForNonParticipant() {
+        Mentorship mentorship = new Mentorship();
+        mentorship.setId(100L);
+        mentorship.setMentor(mentor);
+        mentorship.setMentee(mentee);
+        mentorship.setStatus(MentorshipStatus.ACTIVE);
+
+        when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> mentorshipService.getMentorship(999L, 100L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getMentorshipReturns404ForUnknownId() {
+        when(mentorshipRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mentorshipService.getMentorship(1L, 404L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getMentorshipExposesGoalDefinedFalseForBlankGoal() {
+        Mentorship mentorship = new Mentorship();
+        mentorship.setId(100L);
+        mentorship.setMentor(mentor);
+        mentorship.setMentee(mentee);
+        mentorship.setStatus(MentorshipStatus.ACTIVE);
+        mentorship.setSharedGoal("   ");
+
+        when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(mentorship));
+
+        MentorshipResponse response = mentorshipService.getMentorship(1L, 100L);
+
+        assertThat(response.isGoalDefined()).isFalse();
+        assertThat(response.getSharedGoal()).isEqualTo("   ");
     }
 }
