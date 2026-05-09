@@ -31,10 +31,18 @@ export class MessagesPage {
     return this.page.getByTestId(`messages-bubble-${id}`);
   }
 
-  /** Locate a bubble by its rendered text. Useful for cross-context assertions. */
+  /**
+   * Locate a bubble by its rendered text. Useful for cross-context assertions.
+   *
+   * The thread also contains an inner `messages-bubble-text` div per bubble,
+   * which would match a naive `[data-testid^="messages-bubble-"]` and trigger
+   * a strict-mode violation when there are visible bubbles. Excluding that
+   * specific testid keeps the matcher pinned to the outer bubble container
+   * (`messages-bubble-{id}`).
+   */
   bubbleByText(text) {
     return this.thread()
-      .locator('[data-testid^="messages-bubble-"]')
+      .locator('[data-testid^="messages-bubble-"]:not([data-testid="messages-bubble-text"])')
       .filter({ hasText: text });
   }
 
