@@ -5,10 +5,12 @@ import com.group7.backend.config.JwtAuthenticationFilter;
 import com.group7.backend.config.SecurityConfig;
 import com.group7.backend.dto.request.AcceptRequestRequest;
 import com.group7.backend.dto.request.SharedGoalRequest;
+import com.group7.backend.dto.response.MentorshipProgressResponse;
 import com.group7.backend.dto.response.MentorshipResponse;
 import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.service.JwtService;
+import com.group7.backend.service.MentorshipProgressService;
 import com.group7.backend.service.MentorshipRequestService;
 import com.group7.backend.service.MentorshipService;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,9 @@ class MentorshipControllerTest {
 
     @MockitoBean
     private MentorshipRequestService mentorshipRequestService;
+
+    @MockitoBean
+    private MentorshipProgressService mentorshipProgressService;
 
     @MockitoBean
     private JwtService jwtService;
@@ -338,6 +343,65 @@ class MentorshipControllerTest {
                 .thenThrow(new ResourceNotFoundException("Mentorship not found"));
 
         mockMvc.perform(get("/api/mentorships/404")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isNotFound());
+    }
+
+    // ── Get mentorship progress (#334) ──────────────────────────────────────
+
+    private MentorshipProgressResponse sampleProgress() {
+        return new MentorshipProgressResponse(
+                100L, 10L, 4L, 2L, 4L, 1L, 0.325f,
+                java.time.OffsetDateTime.of(2026, 5, 5, 0, 0, 0, 0, java.time.ZoneOffset.UTC));
+    }
+
+    @Test
+    void getProgressReturns200ForMentor() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        when(mentorshipProgressService.getProgress(1L, 100L)).thenReturn(sampleProgress());
+
+        mockMvc.perform(get("/api/mentorships/100/progress")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentorshipId").value(100))
+                .andExpect(jsonPath("$.taskTotal").value(10))
+                .andExpect(jsonPath("$.taskCompleted").value(4))
+                .andExpect(jsonPath("$.taskSubmitted").value(2))
+                .andExpect(jsonPath("$.milestoneTotal").value(4))
+                .andExpect(jsonPath("$.milestoneCompleted").value(1))
+                .andExpect(jsonPath("$.progressPercentage").value(0.325))
+                .andExpect(jsonPath("$.lastActivityAt").exists());
+    }
+
+    @Test
+    void getProgressReturns200ForMentee() throws Exception {
+        mockMenteeJwt("mentee-token", 2L);
+        when(mentorshipProgressService.getProgress(2L, 100L)).thenReturn(sampleProgress());
+
+        mockMvc.perform(get("/api/mentorships/100/progress")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mentorshipId").value(100));
+    }
+
+    @Test
+    void getProgressReturns404ForNonParticipant() throws Exception {
+        mockMenteeJwt("intruder-token", 999L);
+        when(mentorshipProgressService.getProgress(999L, 100L))
+                .thenThrow(new ResourceNotFoundException("Mentorship not found"));
+
+        mockMvc.perform(get("/api/mentorships/100/progress")
+                        .header("Authorization", "Bearer intruder-token"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getProgressReturns404ForUnknownId() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        when(mentorshipProgressService.getProgress(1L, 404L))
+                .thenThrow(new ResourceNotFoundException("Mentorship not found"));
+
+        mockMvc.perform(get("/api/mentorships/404/progress")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isNotFound());
     }
