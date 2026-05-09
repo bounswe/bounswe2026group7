@@ -49,7 +49,7 @@ public class MentorshipProgressService {
         long milestoneCompleted =
                 milestoneRepository.countByMentorshipIdAndStatus(mid, MilestoneStatus.COMPLETED);
 
-        float progressPercentage = computePercentage(
+        float progressRatio = computeRatio(
                 taskTotal, taskCompleted, milestoneTotal, milestoneCompleted);
 
         OffsetDateTime lastActivityAt = computeLastActivity(mid);
@@ -61,7 +61,7 @@ public class MentorshipProgressService {
                 taskSubmitted,
                 milestoneTotal,
                 milestoneCompleted,
-                progressPercentage,
+                progressRatio,
                 lastActivityAt
         );
     }
@@ -70,8 +70,8 @@ public class MentorshipProgressService {
      * Equal-weight when both surfaces have entries; single-surface ratio when only one does;
      * {@code 0.0} when both are empty. Result is in [0.0, 1.0]; never NaN.
      */
-    private static float computePercentage(long taskTotal, long taskCompleted,
-                                           long milestoneTotal, long milestoneCompleted) {
+    private static float computeRatio(long taskTotal, long taskCompleted,
+                                      long milestoneTotal, long milestoneCompleted) {
         boolean hasTasks = taskTotal > 0;
         boolean hasMilestones = milestoneTotal > 0;
 

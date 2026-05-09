@@ -509,7 +509,7 @@ class MentorshipIntegrationTest {
                 .andExpect(jsonPath("$.taskSubmitted").value(0))
                 .andExpect(jsonPath("$.milestoneTotal").value(0))
                 .andExpect(jsonPath("$.milestoneCompleted").value(0))
-                .andExpect(jsonPath("$.progressPercentage").value(0.0))
+                .andExpect(jsonPath("$.progressRatio").value(0.0))
                 .andExpect(jsonPath("$.lastActivityAt").doesNotExist());
     }
 
@@ -540,7 +540,7 @@ class MentorshipIntegrationTest {
                 .andExpect(jsonPath("$.taskSubmitted").value(0))
                 .andExpect(jsonPath("$.milestoneTotal").value(2))
                 .andExpect(jsonPath("$.milestoneCompleted").value(0))
-                .andExpect(jsonPath("$.progressPercentage").value(0.0))
+                .andExpect(jsonPath("$.progressRatio").value(0.0))
                 .andExpect(jsonPath("$.lastActivityAt").doesNotExist());
     }
 

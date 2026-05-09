@@ -369,7 +369,7 @@ class MentorshipControllerTest {
                 .andExpect(jsonPath("$.taskSubmitted").value(2))
                 .andExpect(jsonPath("$.milestoneTotal").value(4))
                 .andExpect(jsonPath("$.milestoneCompleted").value(1))
-                .andExpect(jsonPath("$.progressPercentage").value(0.325))
+                .andExpect(jsonPath("$.progressRatio").value(0.325))
                 .andExpect(jsonPath("$.lastActivityAt").exists());
     }
 
