@@ -776,6 +776,7 @@ class MentorshipIntegrationTest {
         org.hibernate.stat.Statistics stats = entityManager.getEntityManagerFactory()
                 .unwrap(org.hibernate.SessionFactory.class).getStatistics();
         stats.setStatisticsEnabled(true);
+        Thread.sleep(1000); // Wait for @Async event listeners (like push notifications) to finish queries
         stats.clear();
 
         mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/timeline")
