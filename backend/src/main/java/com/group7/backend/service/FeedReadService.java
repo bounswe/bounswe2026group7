@@ -2,6 +2,7 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.response.FeedPostListItem;
 import com.group7.backend.entity.FeedPost;
+import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.User;
@@ -21,9 +22,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Read service for the social-feed surfaces in #350 — For-You,
@@ -64,7 +68,6 @@ public class FeedReadService {
     private final UserRepository userRepository;
     private final FollowRepository followRepository;
     private final HashtagNormalizer hashtagNormalizer;
-    private final FeedPostMapper feedPostMapper;
     private final FeedRanker feedRanker;
     private final int candidateWindow;
 
@@ -72,14 +75,12 @@ public class FeedReadService {
                            UserRepository userRepository,
                            FollowRepository followRepository,
                            HashtagNormalizer hashtagNormalizer,
-                           FeedPostMapper feedPostMapper,
                            FeedRanker feedRanker,
                            @Value("${app.feed.forYou.candidate-window:200}") int candidateWindow) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.hashtagNormalizer = hashtagNormalizer;
-        this.feedPostMapper = feedPostMapper;
         this.feedRanker = feedRanker;
         this.candidateWindow = candidateWindow;
     }
@@ -99,11 +100,18 @@ public class FeedReadService {
         }
 
         FeedRanker.FeedRankingContext context = buildRankingContext(viewerId);
-        // Score once, sort once, slice once. Cheap enough for our scale; if
-        // the candidate window grows past a few thousand posts a partial
-        // selection algorithm (k-largest) would be the next move.
+        // Score once, sort once, slice once. Comparator.comparingDouble re-runs
+        // its key extractor on every compare(a, b), so a naive
+        // .sorted(comparingDouble(p -> ranker.score(p, ctx))) calls the ranker
+        // O(N log N) times instead of N. Schwartzian transform fixes that:
+        // materialise (score, post) tuples once, sort by the cached score, then
+        // unwrap. Cheap enough for our 200-candidate window; if the window
+        // grows past a few thousand a partial-selection (k-largest) is the
+        // next move.
         List<FeedPost> ranked = candidates.stream()
-                .sorted(Comparator.comparingDouble((FeedPost p) -> feedRanker.score(p, context)).reversed())
+                .map(p -> new Scored(feedRanker.score(p, context), p))
+                .sorted(Comparator.comparingDouble(Scored::score).reversed())
+                .map(Scored::post)
                 .toList();
         return slicePage(ranked, pageable);
     }
@@ -225,8 +233,8 @@ public class FeedReadService {
         if (page.isEmpty()) {
             return Page.empty(page.getPageable());
         }
-        List<FeedPostListItem> items = feedPostMapper.toListItems(page.getContent());
-        return new PageImpl<>(items, page.getPageable(), page.getTotalElements());
+        Map<Long, String> authorNames = resolveAuthorNames(page.getContent());
+        return page.map(p -> toListItem(p, authorNames));
     }
 
     private Page<FeedPostListItem> slicePage(List<FeedPost> ranked, Pageable pageable) {
@@ -234,6 +242,44 @@ public class FeedReadService {
         int from = Math.min((int) pageable.getOffset(), total);
         int to = Math.min(from + pageable.getPageSize(), total);
         List<FeedPost> slice = ranked.subList(from, to);
-        return new PageImpl<>(feedPostMapper.toListItems(slice), pageable, total);
+        if (slice.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, total);
+        }
+        Map<Long, String> authorNames = resolveAuthorNames(slice);
+        List<FeedPostListItem> items = slice.stream()
+                .map(p -> toListItem(p, authorNames))
+                .toList();
+        return new PageImpl<>(items, pageable, total);
     }
+
+    private Map<Long, String> resolveAuthorNames(List<FeedPost> posts) {
+        Set<Long> ids = posts.stream().map(FeedPost::getAuthorId).collect(Collectors.toSet());
+        Map<Long, String> names = new HashMap<>();
+        userRepository.findAllById(ids).forEach(u -> names.put(u.getId(), u.getFirstName()));
+        return names;
+    }
+
+    private static FeedPostListItem toListItem(FeedPost post, Map<Long, String> authorNames) {
+        List<String> tags = post.getHashtags().stream()
+                .map(FeedPostHashtag::getId)
+                .map(id -> id.getTag())
+                .sorted()
+                .toList();
+        // likeCount / commentCount placeholders — #347 will populate
+        // these via a counts join on FeedPostLike / FeedPostComment.
+        return new FeedPostListItem(
+                post.getId(),
+                post.getAuthorId(),
+                authorNames.getOrDefault(post.getAuthorId(), null),
+                post.getBody(),
+                tags,
+                post.getCreatedAt(),
+                0L,
+                0L
+        );
+    }
+
+    /** Holds a feed post alongside its computed ranker score so the sort
+     *  key is materialised exactly once per post (Schwartzian transform). */
+    private record Scored(double score, FeedPost post) {}
 }
