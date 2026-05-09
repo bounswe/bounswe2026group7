@@ -78,6 +78,31 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
+            // Spring Security ships sensible defaults (X-Frame-Options=DENY,
+            // X-Content-Type-Options=nosniff, X-XSS-Protection); we keep
+            // those and additionally set Strict-Transport-Security and a
+            // baseline Content-Security-Policy so the AT-07 NFR assertions
+            // have something concrete to verify (#317).
+            //
+            // CSP is intentionally permissive on inline script/style and
+            // connect-src to keep the SPA functional out of the box; tighten
+            // once the frontend stops needing inline runtime CSS-in-JS and
+            // we're confident WebSocket origins are exhaustively listed.
+            .headers(headers -> headers
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31_536_000))
+                .contentSecurityPolicy(csp -> csp.policyDirectives(
+                    "default-src 'self'; "
+                    + "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                    + "style-src 'self' 'unsafe-inline'; "
+                    + "img-src 'self' data: blob: https:; "
+                    + "font-src 'self' data:; "
+                    + "connect-src 'self' ws: wss: https: http://localhost:8080; "
+                    + "frame-ancestors 'none'; "
+                    + "base-uri 'self'; "
+                    + "form-action 'self'"))
+            )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> {
                 if (testEndpointsEnabled) {

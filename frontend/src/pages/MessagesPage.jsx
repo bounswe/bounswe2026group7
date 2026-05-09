@@ -312,9 +312,9 @@ export default function MessagesPage() {
         </div>
       ) : (
         <>
-          <div className="md-message-thread">
+          <div className="md-message-thread" data-testid="messages-thread">
             {messages.length === 0 ? (
-              <div className="empty-state">No messages yet. Start the conversation below.</div>
+              <div className="empty-state" data-testid="messages-empty">No messages yet. Start the conversation below.</div>
             ) : messages.map(m => {
               // userId from auth context is stringified; senderId from API is a number
               const mine = String(m.senderId) === String(userId)
@@ -322,8 +322,10 @@ export default function MessagesPage() {
                 <div
                   key={m.id}
                   className={`md-message-bubble${mine ? ' md-message-mine' : ''}`}
+                  data-testid={`messages-bubble-${m.id}`}
+                  data-message-mine={mine ? 'true' : 'false'}
                 >
-                  <div className="md-message-text">{renderMessageText(m.content)}</div>
+                  <div className="md-message-text" data-testid="messages-bubble-text">{renderMessageText(m.content)}</div>
                   {m.attachment && (
                     <MessageAttachment attachment={m.attachment} mine={mine} />
                   )}

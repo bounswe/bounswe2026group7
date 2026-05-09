@@ -21,6 +21,24 @@ async function expectOk(res, label) {
   return res.json();
 }
 
+/** POST /api/mentorship-requests — mentee creates pending request. */
+export async function createMentorshipRequest(request, token, body) {
+  const res = await request.post(`${apiBase()}/api/mentorship-requests`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+  return expectOk(res, 'POST /api/mentorship-requests');
+}
+
+/** PUT /api/mentorship-requests/{id}/accept — mentor accepts with duration. */
+export async function acceptMentorshipRequest(request, token, requestId, durationMonths) {
+  const res = await request.put(
+    `${apiBase()}/api/mentorship-requests/${requestId}/accept`,
+    { headers: authHeaders(token), data: { duration: durationMonths } },
+  );
+  return expectOk(res, `PUT /api/mentorship-requests/${requestId}/accept`);
+}
+
 /**
  * POST /api/mentorships/{id}/meetings — mentor only.
  *
@@ -164,4 +182,34 @@ export async function listActiveMentorships(request, token) {
     headers: authHeaders(token),
   });
   return expectOk(res, 'GET /api/mentorships');
+}
+
+/** GET /api/notifications — Spring returns a List, not a Page wrapper. */
+export async function listNotifications(request, token) {
+  const res = await request.get(`${apiBase()}/api/notifications`, {
+    headers: authHeaders(token),
+  });
+  return expectOk(res, 'GET /api/notifications');
+}
+
+/**
+ * Fires the meeting-reminder scheduler manually so AT-06 (#317) doesn't have
+ * to wait for the production cron (every 5 min). Backend route is
+ * registered only when app.test-endpoints.enabled=true.
+ */
+export async function triggerMeetingReminders(request) {
+  const res = await request.post(`${apiBase()}/api/test/trigger-meeting-reminders`);
+  return expectOk(res, 'POST /api/test/trigger-meeting-reminders');
+}
+
+/**
+ * Wipes the in-memory rate-limit bucket cache so AT-07's 11-login probe
+ * doesn't bleed into other specs that also hit /api/auth/login.
+ */
+export async function resetRateLimits(request) {
+  const res = await request.post(`${apiBase()}/api/test/reset-ratelimits`);
+  if (!res.ok()) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`POST /api/test/reset-ratelimits -> ${res.status()} ${body}`);
+  }
 }

@@ -6,17 +6,21 @@ import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.PasswordResetToken;
 import com.group7.backend.entity.User;
 import com.group7.backend.entity.VerificationToken;
+import com.group7.backend.config.ratelimit.BucketCache;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.VerificationTokenRepository;
+import com.group7.backend.scheduler.MeetingSchedulerProcessor;
 import com.group7.backend.service.AuthService;
 import com.group7.backend.service.JwtService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import net.datafaker.Faker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +56,8 @@ public class TestSupportController {
     private final AuthService authService;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
+    private final Optional<BucketCache> bucketCache;
+    private final Optional<MeetingSchedulerProcessor> meetingSchedulerProcessor;
     private final Faker faker = new Faker(Locale.of("tr"));
 
     @PersistenceContext
@@ -61,12 +67,16 @@ public class TestSupportController {
                                  VerificationTokenRepository verificationTokenRepository,
                                  AuthService authService,
                                  JwtService jwtService,
-                                 PasswordEncoder passwordEncoder) {
+                                 PasswordEncoder passwordEncoder,
+                                 Optional<BucketCache> bucketCache,
+                                 Optional<MeetingSchedulerProcessor> meetingSchedulerProcessor) {
         this.userRepository = userRepository;
         this.verificationTokenRepository = verificationTokenRepository;
         this.authService = authService;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
+        this.bucketCache = bucketCache;
+        this.meetingSchedulerProcessor = meetingSchedulerProcessor;
         log.warn("TestSupportController is ENABLED — this MUST NOT happen in production");
     }
 
@@ -195,6 +205,38 @@ public class TestSupportController {
                 "lastName", lastName,
                 "sessionToken", sessionToken
         ));
+    }
+
+    /**
+     * Wipes the in-memory rate-limit bucket cache so a single CI run can
+     * exhaust a bucket (AT-07's 11-login probe) without leaking state into
+     * subsequent tests. No-op when the rate-limit autoconfig isn't on the
+     * classpath; returns 204 either way so callers don't need to branch.
+     */
+    @PostMapping("/reset-ratelimits")
+    public ResponseEntity<Void> resetRateLimits() {
+        bucketCache.ifPresent(BucketCache::clear);
+        log.info("TestSupportController.resetRateLimits cleared bucket cache "
+                + "(present={})", bucketCache.isPresent());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Manually fires {@link MeetingSchedulerProcessor#sendReminders} so AT-06
+     * can verify the meeting-reminder leg without waiting up to 5 minutes for
+     * the production cron tick. The "now" parameter the production scheduler
+     * uses is mirrored here so a spec can position a meeting and then trigger
+     * the same window evaluation.
+     */
+    @PostMapping("/trigger-meeting-reminders")
+    public ResponseEntity<Map<String, Object>> triggerMeetingReminders() {
+        if (meetingSchedulerProcessor.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "MeetingSchedulerProcessor not available — scheduler likely disabled");
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        meetingSchedulerProcessor.get().sendReminders(now);
+        return ResponseEntity.ok(Map.of("triggeredAt", now.toString()));
     }
 
     public record SeedUserRequest(Boolean isMentor, Boolean preVerified) {}

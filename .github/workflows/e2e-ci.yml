@@ -65,7 +65,11 @@ jobs:
           SPRING_DATASOURCE_PASSWORD: group7pass
           APP_TEST_ENDPOINTS_ENABLED: "true"
           APP_EMAIL_ENABLED: "false"
-          APP_RATELIMIT_ENABLED: "false"
+          # Keep rate limiting on so AT-07 (#317) can exercise the real
+          # middleware. AT-01/02 are well under the per-IP login budget
+          # (10/min); AT-07 calls /api/test/reset-ratelimits before its
+          # 11-login probe so it doesn't leak state into other specs.
+          APP_RATELIMIT_ENABLED: "true"
           APP_BASE_URL: http://localhost:8080
           APP_FRONTEND_URL: http://localhost:8000
           APP_CORS_ALLOWED_ORIGINS: http://localhost:8000,http://localhost:5173
