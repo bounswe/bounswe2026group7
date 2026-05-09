@@ -1,6 +1,7 @@
 package com.group7.backend.repository;
 
 import com.group7.backend.entity.Task;
+import com.group7.backend.entity.TaskStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,4 +17,8 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     @Query("SELECT t FROM Task t JOIN FETCH t.mentorship m JOIN FETCH m.mentor JOIN FETCH m.mentee WHERE t.id = :id")
     Optional<Task> findByIdWithMentorship(@Param("id") Long id);
+
+    long countByMentorshipId(Long mentorshipId);
+
+    long countByMentorshipIdAndStatus(Long mentorshipId, TaskStatus status);
 }
