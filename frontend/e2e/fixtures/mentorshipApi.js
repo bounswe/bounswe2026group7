@@ -91,12 +91,18 @@ export async function getBlogPost(request, token, postId) {
  * GET /api/mentorship-requests received by the authenticated mentor. AT-02
  * uses this to look up the request id created by the mentee's UI submit, so
  * the spec can later assert state transitions on it.
+ *
+ * The endpoint returns a Spring Data Page wrapper (`{ content: [...],
+ * totalElements, ... }`), so unwrap `.content` here. Treat a missing
+ * `content` field defensively as an empty list.
  */
 export async function listIncomingRequests(request, token) {
-  const res = await request.get(`${apiBase()}/api/mentorship-requests/received`, {
-    headers: authHeaders(token),
-  });
-  return expectOk(res, 'GET /api/mentorship-requests/received');
+  const res = await request.get(
+    `${apiBase()}/api/mentorship-requests/received?page=0&size=50`,
+    { headers: authHeaders(token) },
+  );
+  const body = await expectOk(res, 'GET /api/mentorship-requests/received');
+  return Array.isArray(body) ? body : (body?.content ?? []);
 }
 
 /**

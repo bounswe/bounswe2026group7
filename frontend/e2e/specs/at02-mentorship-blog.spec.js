@@ -46,7 +46,19 @@ import { TasksPage } from '../pages/TasksPage.js';
 async function loginViaUi(page, { email, password }) {
   const loginPage = new LoginPage(page);
   await loginPage.goto();
+  // Surface the underlying /api/auth/login outcome — without this, a 401
+  // from the backend just leaves us stuck on /login and the test only
+  // reports "URL didn't change" with no signal as to why.
+  const loginResponsePromise = page.waitForResponse(
+    res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',
+    { timeout: 10_000 },
+  );
   await loginPage.signIn({ email, password });
+  const loginResponse = await loginResponsePromise;
+  if (!loginResponse.ok()) {
+    const body = await loginResponse.text().catch(() => '');
+    throw new Error(`UI login for ${email} returned ${loginResponse.status()}: ${body}`);
+  }
   await expect(page).toHaveURL(/\/home$/);
 }
 
