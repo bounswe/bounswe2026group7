@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
+import MentorshipMilestones from '../components/MentorshipMilestones'
 import { getMentorshipById, getUserById, updateSharedGoal, cancelMentorship, endMentorship } from '../services/api'
 import { getNextUpcomingMeeting } from '../services/mentorshipMocks'
 import { useAuth } from '../context/AuthContext'
@@ -490,6 +491,13 @@ export default function MentorshipDetailPage() {
           </div>
         )}
       </section>
+
+      {/* Milestones (#288) */}
+      <MentorshipMilestones
+        mentorshipId={mentorship.id}
+        isMentor={viewerIsMentor}
+        isActive={isActive}
+      />
 
       {/* Profile */}
       <section className="card md-profile">
