@@ -17,6 +17,7 @@ import TasksPage from './pages/TasksPage'
 import SchedulePage from './pages/SchedulePage'
 import NotificationsPage from './pages/NotificationsPage'
 import FeedPage from './pages/FeedPage'
+import FeedPostDetailPage from './pages/FeedPostDetailPage'
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/feed" element={<FeedPage />} />
+          <Route path="/feed/:id" element={<FeedPostDetailPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
