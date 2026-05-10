@@ -6,6 +6,7 @@ import com.group7.backend.dto.request.MeetingRescheduleCreateRequest;
 import com.group7.backend.dto.response.MeetingCreateResponse;
 import com.group7.backend.dto.response.MeetingSummaryResponse;
 import com.group7.backend.entity.*;
+import com.group7.backend.exception.GoalRequiredException;
 import com.group7.backend.exception.MeetingConflictException;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.repository.*;
@@ -74,6 +75,7 @@ class MeetingServiceTest {
         mentorship.setStartDate(OffsetDateTime.ofInstant(FIXED_NOW, ZoneOffset.UTC));
         mentorship.setEndDate(OffsetDateTime.of(2026, 5, 25, 10, 0, 0, 0, ZoneOffset.UTC));
         mentorship.setDuration(3);
+        mentorship.setSharedGoal("Build a portfolio");
 
         properties = new MeetingProperties();
 
@@ -320,6 +322,63 @@ class MeetingServiceTest {
         meeting.setMeetingLink("https://meet.example.com/abc");
         meeting.setStatus(status);
         return meeting;
+    }
+
+    // ── Shared-goal gate ───────────────────────────────────────────────────
+
+    @Test
+    void createMeetings_NullGoal_GoalRequired() {
+        mentorship.setSharedGoal(null);
+        OffsetDateTime start = OffsetDateTime.of(2026, 5, 8, 10, 0, 0, 0, ZoneOffset.UTC);
+        OffsetDateTime end = start.plusHours(1);
+        MeetingCreateRequest request = baseCreateRequest(start, end);
+
+        when(mentorshipRepository.findById(11L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> meetingService.createMeetings(11L, 1L, request))
+                .isInstanceOf(GoalRequiredException.class)
+                .extracting(ex -> ((GoalRequiredException) ex).getMentorshipId())
+                .isEqualTo(11L);
+    }
+
+    @Test
+    void createMeetings_BlankGoal_GoalRequired() {
+        mentorship.setSharedGoal("   ");
+        OffsetDateTime start = OffsetDateTime.of(2026, 5, 8, 10, 0, 0, 0, ZoneOffset.UTC);
+        MeetingCreateRequest request = baseCreateRequest(start, start.plusHours(1));
+
+        when(mentorshipRepository.findById(11L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> meetingService.createMeetings(11L, 1L, request))
+                .isInstanceOf(GoalRequiredException.class);
+    }
+
+    /** Inactive status surfaces before goal-required (deeper invariant wins). */
+    @Test
+    void createMeetings_InactiveAndNullGoal_StatusErrorWins() {
+        mentorship.setStatus(MentorshipStatus.COMPLETED);
+        mentorship.setSharedGoal(null);
+        OffsetDateTime start = OffsetDateTime.of(2026, 5, 8, 10, 0, 0, 0, ZoneOffset.UTC);
+        MeetingCreateRequest request = baseCreateRequest(start, start.plusHours(1));
+
+        when(mentorshipRepository.findById(11L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> meetingService.createMeetings(11L, 1L, request))
+                .isInstanceOf(MeetingConflictException.class)
+                .hasMessageContaining("not active");
+    }
+
+    /** Mentor-auth check surfaces before goal-required. */
+    @Test
+    void createMeetings_NonMentorAndNullGoal_ForbiddenWins() {
+        mentorship.setSharedGoal(null);
+        OffsetDateTime start = OffsetDateTime.of(2026, 5, 8, 10, 0, 0, 0, ZoneOffset.UTC);
+        MeetingCreateRequest request = baseCreateRequest(start, start.plusHours(1));
+
+        when(mentorshipRepository.findById(11L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> meetingService.createMeetings(11L, 2L, request))
+                .isInstanceOf(ProfileNotVisibleException.class);
     }
 }
 

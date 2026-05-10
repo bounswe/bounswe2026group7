@@ -8,6 +8,11 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.js',
+    // Vitest's default include matches `**/*.spec.{js,ts,jsx,tsx}`, which would
+    // pick up the Playwright suite under `e2e/` and crash with
+    // "test.describe.configure() not expected here" because those specs use
+    // the @playwright/test runner. Keep the two test stacks separate.
+    exclude: ['node_modules', 'dist', 'e2e/**'],
   },
   server: {
     port: 8000,
