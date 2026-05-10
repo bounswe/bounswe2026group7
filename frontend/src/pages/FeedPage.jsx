@@ -173,12 +173,21 @@ export default function FeedPage() {
             <div className="page-title">Feed</div>
             <div className="page-sub">Posts from people you follow and recommendations</div>
           </div>
-          <button
-            className="action-btn"
-            onClick={() => setComposeOpen(v => !v)}
-          >
-            {composeOpen ? 'Close' : 'New post'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="action-btn"
+              onClick={() => navigate('/feed/bookmarks')}
+              title="View bookmarked posts"
+            >
+              Bookmarks
+            </button>
+            <button
+              className="action-btn"
+              onClick={() => setComposeOpen(v => !v)}
+            >
+              {composeOpen ? 'Close' : 'New post'}
+            </button>
+          </div>
         </div>
 
         {composeOpen && (
