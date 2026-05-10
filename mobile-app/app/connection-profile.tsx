@@ -76,23 +76,6 @@ function parseJsonList(value: string | string[] | undefined): string[] {
   }
 }
 
-function formatDateLabel(value: string | null | undefined) {
-  if (!value) return 'No target date';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'No target date';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function formatStatusLabel(status: MilestoneStatus) {
-  return status.replace('_', ' ');
-}
-
-function toIsoDateOrNull(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return `${trimmed}T00:00:00Z`;
-}
-
 export default function ConnectionProfileScreen() {
   const { role } = useRole();
   const isMentorViewer = role === 'mentor';
@@ -106,6 +89,7 @@ export default function ConnectionProfileScreen() {
   const avatarBg = parseString(params.avatarBg) || '#D7E8DA';
   const avatarText = parseString(params.avatarText) || '#2F563C';
   const subtitle = parseString(params.subtitle);
+
   const [about, setAbout] = useState(parseString(params.about));
   const [department, setDepartment] = useState(parseString(params.department));
   const [title, setTitle] = useState(parseString(params.title));
@@ -287,7 +271,11 @@ export default function ConnectionProfileScreen() {
   const openTasks = () => {
     router.push({
       pathname: '/task-tracker',
-      params: { connectedUserName: name, connectedUserType: type, mentorshipId },
+      params: {
+        connectedUserName: name,
+        connectedUserType: type,
+        mentorshipId,
+      },
     });
   };
 

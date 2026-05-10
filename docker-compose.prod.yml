@@ -22,6 +22,11 @@ services:
       VERIFICATION_RESEND_MAX_PER_HOUR: ${VERIFICATION_RESEND_MAX_PER_HOUR:-3}
       PASSWORD_RESET_TOKEN_EXPIRY_HOURS: ${PASSWORD_RESET_TOKEN_EXPIRY_HOURS:-1}
       PASSWORD_RESET_MAX_REQUESTS_PER_HOUR: ${PASSWORD_RESET_MAX_REQUESTS_PER_HOUR:-5}
+      # Hard-pin to false in prod regardless of host env: the conditional
+      # bean and SecurityConfig guard for /api/test/** (#315) must never
+      # activate against a production database.
+      APP_TEST_ENDPOINTS_ENABLED: "false"
+      APP_EMAIL_ENABLED: "true"
     volumes:
       - uploads_data:/app/uploads
     healthcheck:

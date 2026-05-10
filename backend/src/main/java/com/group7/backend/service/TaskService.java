@@ -57,6 +57,7 @@ public class TaskService {
         if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Mentorship is not active");
         }
+        MentorshipPreconditions.requireSharedGoal(mentorship);
 
         if (request.getDueDate() != null && request.getDueDate().isBefore(OffsetDateTime.now(ZoneOffset.UTC))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Due date must be in the future");

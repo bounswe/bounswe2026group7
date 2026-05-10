@@ -55,7 +55,8 @@
         {
           "photosPermission": "The app accesses your photos to let you set a profile picture."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

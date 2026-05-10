@@ -34,6 +34,21 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
     }
 
+    @ExceptionHandler(UserBannedException.class)
+    public ResponseEntity<Map<String, Object>> handleUserBanned(UserBannedException ex,
+                                                                HttpServletRequest request) {
+        com.group7.backend.entity.Ban ban = ex.getBan();
+        log.warn("Banned user attempted gated action: method={}, path={}, userId={}, expiresAt={}",
+                request.getMethod(), request.getRequestURI(), ban.getUser().getId(), ban.getExpiresAt());
+        Map<String, Object> body = new HashMap<>();
+        body.put("error", "Forbidden");
+        body.put("message", ex.getMessage());
+        body.put("reason", ban.getReason());
+        body.put("expiresAt", ban.getExpiresAt().toString());
+        body.put("banCount", ban.getBanCount());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
+    }
+
     @ExceptionHandler(MentorshipRequestException.class)
     public ResponseEntity<Map<String, String>> handleMentorshipRequest(MentorshipRequestException ex,
                                                                        HttpServletRequest request) {
@@ -72,6 +87,28 @@ public class GlobalExceptionHandler {
                                                                      HttpServletRequest request) {
         log.warn("Milestone conflict: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidTimelineWindowException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidTimelineWindow(InvalidTimelineWindowException ex,
+                                                                           HttpServletRequest request) {
+        log.warn("Invalid timeline window: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    @ExceptionHandler(GoalRequiredException.class)
+    public ResponseEntity<Map<String, Object>> handleGoalRequired(GoalRequiredException ex,
+                                                                  HttpServletRequest request) {
+        log.warn("Goal-required precondition rejected: method={}, path={}, mentorshipId={}",
+                request.getMethod(), request.getRequestURI(), ex.getMentorshipId());
+        Map<String, Object> body = Map.of(
+                "error", "Conflict",
+                "code", "GOAL_REQUIRED",
+                "message", ex.getMessage(),
+                "mentorshipId", ex.getMentorshipId()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
     }
 
     @ExceptionHandler(AuthenticationFailedException.class)

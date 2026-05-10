@@ -31,6 +31,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🏠</Text>,
+          tabBarAccessibilityLabel: 'Home tab',
         }}
       />
 
@@ -39,6 +40,7 @@ export default function TabLayout() {
         options={{
           title: isMentor ? 'Requests' : 'Explore',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>{isMentor ? '📋' : '🔍'}</Text>,
+          tabBarAccessibilityLabel: isMentor ? 'Requests tab' : 'Explore tab',
         }}
       />
 
@@ -47,6 +49,7 @@ export default function TabLayout() {
         options={{
           title: 'Messages',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>💬</Text>,
+          tabBarAccessibilityLabel: 'Messages tab',
         }}
       />
 
@@ -55,6 +58,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>👤</Text>,
+          tabBarAccessibilityLabel: 'Profile tab',
         }}
       />
     </Tabs>
