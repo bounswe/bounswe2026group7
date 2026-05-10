@@ -76,6 +76,33 @@ function parseJsonList(value: string | string[] | undefined): string[] {
   }
 }
 
+function toIsoDateOrNull(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+
+  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+function formatStatusLabel(status: MilestoneStatus) {
+  if (status === 'IN_PROGRESS') return 'In Progress';
+  if (status === 'COMPLETED') return 'Completed';
+  return 'Pending';
+}
+
+function formatDateLabel(value: string | null) {
+  if (!value) return 'No target date';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 export default function ConnectionProfileScreen() {
   const { role } = useRole();
   const isMentorViewer = role === 'mentor';
