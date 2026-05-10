@@ -380,14 +380,14 @@ export default function ExplorePage() {
           {isMentee ? 'No mentors found. Try a different search or filter.' : 'No candidate mentees found.'}
         </div>
       ) : isMentee ? (
-        <div className="mentors-grid">
+        <div className="mentors-grid" data-testid="explore-mentor-grid">
           {filtered.map(m => {
             const tags = (m.interests || []).slice(0, 3)
             const alreadySent = requestSentIds.has(m.id)
             const full = m.maxMenteeCapacity != null && m.currentMenteeCount >= m.maxMenteeCapacity
             const btnDisabled = alreadySent || hasActiveMentor || full
             return (
-              <div className="mentor-card" key={m.id}>
+              <div className="mentor-card" key={m.id} data-testid={`explore-mentor-card-${m.id}`}>
                 <div className="mc-header">
                   <div className="mc-info">
                     <Avatar src={m.profilePhoto} initials={m.firstName?.[0]?.toUpperCase() ?? '?'} size="md" />
@@ -411,6 +411,7 @@ export default function ExplorePage() {
                       disabled={btnDisabled}
                       onClick={() => !btnDisabled && openRequestModal(m)}
                       title={hasActiveMentor && !alreadySent ? 'You already have an active mentor' : undefined}
+                      data-testid={`explore-send-request-${m.id}`}
                     >
                       {alreadySent ? 'Request Sent' : full ? 'At Capacity' : hasActiveMentor ? 'Already Mentored' : 'Send Request'}
                     </button>
