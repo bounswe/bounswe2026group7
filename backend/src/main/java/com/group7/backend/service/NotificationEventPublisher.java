@@ -5,6 +5,8 @@ import com.group7.backend.event.NotificationCreatedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
+
 @Service
 public class NotificationEventPublisher {
 
@@ -176,7 +178,70 @@ public class NotificationEventPublisher {
         );
     }
 
+    public void publishMilestoneCreated(Long menteeId, String milestoneTitle) {
+        publish(
+                menteeId,
+                NotificationType.MILESTONE_CREATED,
+                "New Milestone Created",
+                "Your mentor has created a new milestone: " + milestoneTitle + "."
+        );
+    }
+
+    public void publishMilestoneCompleted(Long userId, String milestoneTitle, boolean isMentor) {
+        String message = isMentor
+                ? "Your mentee's milestone is completed: " + milestoneTitle + "."
+                : "Your mentor marked a milestone as completed: " + milestoneTitle + ".";
+        publish(
+                userId,
+                NotificationType.MILESTONE_COMPLETED,
+                "Milestone Completed!",
+                message
+        );
+    }
+
+    public void publishActionItemCompleted(Long mentorId, String menteeName, String itemText) {
+        String truncated = itemText.length() > 80 ? itemText.substring(0, 80) + "…" : itemText;
+        publish(
+                mentorId,
+                NotificationType.ACTION_ITEM_COMPLETED,
+                "Action Item Completed",
+                menteeName + " completed the action item: " + truncated + "."
+        );
+    }
+
+    public void publishUserBanned(Long recipientId, OffsetDateTime expiresAt, String reason, int banCount) {
+        publish(
+                recipientId,
+                NotificationType.USER_BANNED,
+                "Account temporarily restricted",
+                "Your account has been restricted (ban #" + banCount + ") until " + expiresAt
+                        + ". Reason: " + reason
+        );
+    }
+
+    public void publishBanLifted(Long recipientId) {
+        publish(
+                recipientId,
+                NotificationType.BAN_LIFTED,
+                "Ban lifted",
+                "Your account restriction has been lifted by an administrator."
+        );
+    }
+
+    public void publishBanExpired(Long recipientId) {
+        publish(
+                recipientId,
+                NotificationType.BAN_EXPIRED,
+                "Ban expired",
+                "Your account restriction has expired. You can resume normal use."
+        );
+    }
+
     public void publish(Long recipientId, NotificationType type, String title, String body) {
         applicationEventPublisher.publishEvent(new NotificationCreatedEvent(recipientId, type, title, body));
+    }
+
+    public void publish(NotificationCreatedEvent event) {
+        applicationEventPublisher.publishEvent(event);
     }
 }

@@ -1,0 +1,200 @@
+package com.group7.backend.controller;
+
+import com.group7.backend.controller.support.PageableSupport;
+import com.group7.backend.dto.request.FeedCommentRequest;
+import com.group7.backend.dto.response.FeedCommentResponse;
+import com.group7.backend.dto.response.FeedPostInteractionState;
+import com.group7.backend.dto.response.FeedPostListItem;
+import com.group7.backend.service.FeedInteractionService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * REST surface for feed-post interactions (#347): like, comment, share,
+ * bookmark.
+ */
+@RestController
+@RequestMapping("/api/feed")
+@Tag(name = "Feed Interactions",
+        description = "Like / comment / share / bookmark endpoints over the social feed (#347).")
+public class FeedInteractionController {
+
+    private final FeedInteractionService interactionService;
+
+    public FeedInteractionController(FeedInteractionService interactionService) {
+        this.interactionService = interactionService;
+    }
+
+    // ── Aggregate state ────────────────────────────────────────────────────
+
+    @GetMapping("/posts/{id:\\d+}/interactions")
+    @Operation(summary = "Read interaction state for a feed post",
+            description = "Returns counts (likes, comments, shares, bookmarks) plus "
+                    + "the viewer-relative toggle state (viewerHasLiked / viewerHasBookmarked). "
+                    + "Lets the UI render the post detail without a follow-up call after "
+                    + "every interaction. Companion to GET /api/feed/posts/{id}.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Current interaction state"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post not found or soft-deleted", content = @Content)
+    })
+    public ResponseEntity<FeedPostInteractionState> getInteractions(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            Authentication authentication) {
+        Long viewerId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(interactionService.getInteractionState(id, viewerId));
+    }
+
+    // ── Likes ──────────────────────────────────────────────────────────────
+
+    @PostMapping("/posts/{id:\\d+}/like")
+    @Operation(summary = "Toggle like on a feed post",
+            description = "Idempotent toggle. Returns the updated interaction state.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Toggle applied; current state returned"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post not found or soft-deleted", content = @Content)
+    })
+    public ResponseEntity<FeedPostInteractionState> toggleLike(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(interactionService.toggleLike(id, userId));
+    }
+
+    // ── Bookmarks ──────────────────────────────────────────────────────────
+
+    @PostMapping("/posts/{id:\\d+}/bookmark")
+    @Operation(summary = "Toggle bookmark on a feed post")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Toggle applied"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post not found", content = @Content)
+    })
+    public ResponseEntity<FeedPostInteractionState> toggleBookmark(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(interactionService.toggleBookmark(id, userId));
+    }
+
+    @GetMapping("/me/bookmarks")
+    @Operation(summary = "Current user's bookmarked posts")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paged bookmarked posts"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
+    })
+    public ResponseEntity<Page<FeedPostListItem>> myBookmarks(
+            @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        Pageable pageable = PageableSupport.clampPageable(page, size);
+        return ResponseEntity.ok(interactionService.listBookmarks(userId, pageable));
+    }
+
+    // ── Shares ─────────────────────────────────────────────────────────────
+
+    @PostMapping("/posts/{id:\\d+}/share")
+    @Operation(summary = "Record a share event",
+            description = "Append-only — every call records a new share event row. No fanout in #347.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Share recorded"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post not found", content = @Content)
+    })
+    public ResponseEntity<FeedPostInteractionState> recordShare(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            Authentication authentication) {
+        Long sharerId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(interactionService.recordShare(id, sharerId));
+    }
+
+    // ── Comments ───────────────────────────────────────────────────────────
+
+    @PostMapping("/posts/{id:\\d+}/comments")
+    @Operation(summary = "Add a comment to a feed post")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Comment created"),
+            @ApiResponse(responseCode = "400", description = "Validation failure", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post not found", content = @Content)
+    })
+    public ResponseEntity<FeedCommentResponse> addComment(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            @Valid @RequestBody FeedCommentRequest request,
+            Authentication authentication) {
+        Long authorId = (Long) authentication.getCredentials();
+        FeedCommentResponse body = interactionService.addComment(id, authorId, request.body());
+        return ResponseEntity.status(HttpStatus.CREATED).body(body);
+    }
+
+    @GetMapping("/posts/{id:\\d+}/comments")
+    @Operation(summary = "List comments on a feed post (chronological)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paged comments"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post not found", content = @Content)
+    })
+    public ResponseEntity<Page<FeedCommentResponse>> listComments(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            @Parameter(description = "Page number") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long viewerId = (Long) authentication.getCredentials();
+        Pageable pageable = PageableSupport.clampPageable(page, size);
+        return ResponseEntity.ok(interactionService.listComments(id, viewerId, pageable));
+    }
+
+    @PatchMapping("/comments/{id:\\d+}")
+    @Operation(summary = "Edit a comment (author-only)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Updated comment"),
+            @ApiResponse(responseCode = "400", description = "Validation failure", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Non-author cannot edit", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Comment not found or soft-deleted", content = @Content)
+    })
+    public ResponseEntity<FeedCommentResponse> editComment(
+            @Parameter(description = "Comment id") @PathVariable Long id,
+            @Valid @RequestBody FeedCommentRequest request,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(interactionService.editComment(id, requesterId, request.body()));
+    }
+
+    @DeleteMapping("/comments/{id:\\d+}")
+    @Operation(summary = "Soft-delete a comment (author-only)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Deleted (or already deleted)"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Non-author cannot delete", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Comment not found", content = @Content)
+    })
+    public ResponseEntity<Void> deleteComment(
+            @Parameter(description = "Comment id") @PathVariable Long id,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        interactionService.deleteComment(id, requesterId);
+        return ResponseEntity.noContent().build();
+    }
+}

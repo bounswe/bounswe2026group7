@@ -21,6 +21,7 @@ export default function RootLayout() {
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
 
           <Stack.Screen name="notifications" options={{ headerShown: false }} />
+          <Stack.Screen name="social-feed" options={{ headerShown: false }} />
           <Stack.Screen name="availability-scheduling" options={{ headerShown: false }} />
           <Stack.Screen name="meetings-sessions" options={{ headerShown: false }} />
           <Stack.Screen name="mentorship-requests" options={{ headerShown: false }} />
@@ -29,6 +30,7 @@ export default function RootLayout() {
           <Stack.Screen name="mentor-public-profile" options={{ headerShown: false }} />
           <Stack.Screen name="request-candidate-profile" options={{ headerShown: false }} />
           <Stack.Screen name="connection-request" options={{ headerShown: false }} />
+          <Stack.Screen name="social-feed" options={{ headerShown: false }} />
           <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
           <Stack.Screen name="reset-password" options={{ headerShown: false }} />
           <Stack.Screen name="verify-email" options={{ headerShown: false }} />

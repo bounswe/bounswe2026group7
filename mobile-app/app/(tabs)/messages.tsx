@@ -171,12 +171,27 @@ function mapMessages(rawMessages: any[], currentUserId: number): ChatMessage[] {
   return messages;
 }
 
+function buildMentorshipThreadSummary(rawMessages: any[], currentUserId: number) {
+  const latest = rawMessages[0];
+  const preview = latest
+    ? latest.attachment
+      ? `${latest.content || 'Attachment'} · ${latest.attachment.filename}`
+      : latest.content
+    : 'No messages yet';
+  const time = latest ? formatRelativeTime(latest.sentAt) : '';
+  const unread = rawMessages.filter(
+    (message) => message.senderId !== currentUserId && !message.readAt
+  ).length;
+
+  return { preview, time, unread };
+}
+
 export default function MessagesScreen() {
   const { role } = useRole();
   const isMentor = role === 'mentor';
   const params = useLocalSearchParams();
 
-const [search, setSearch] = useState('');
+  const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
   const [activeListTab, setActiveListTab] = useState<ConversationListTab>('mentorships');
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
@@ -214,15 +229,14 @@ const [search, setSearch] = useState('');
 
             let preview = 'No messages yet';
             let time = '';
+            let unread = 0;
             try {
-              const threadRes = await apiClient.get(`/mentorships/${mentorship.id}/messages?page=0&size=1`);
-              const latest = threadRes.data?.content?.[0];
-              if (latest) {
-                preview = latest.attachment
-                  ? `${latest.content || 'Attachment'} · ${latest.attachment.filename}`
-                  : latest.content;
-                time = formatRelativeTime(latest.sentAt);
-              }
+              const threadRes = await apiClient.get(`/mentorships/${mentorship.id}/messages?page=0&size=100`);
+              const threadMessages = threadRes.data?.content ?? [];
+              const summary = buildMentorshipThreadSummary(threadMessages, parsedUserId ?? -1);
+              preview = summary.preview;
+              time = summary.time;
+              unread = summary.unread;
             } catch {
               // Keep list usable even if preview fetch fails for one mentorship.
             }
@@ -236,7 +250,7 @@ const [search, setSearch] = useState('');
               subtitle: isMentor ? 'Your Mentee' : 'Your Mentor',
               preview,
               time,
-              unread: 0,
+              unread,
               online: false,
               initials: getInitials(counterpartName || 'Unknown User'),
               avatarBg: colors.bg,
@@ -348,6 +362,19 @@ const [search, setSearch] = useState('');
         const rawMessages = res.data?.content ?? [];
         setMessages(mapMessages(rawMessages, currentUserId));
         await apiClient.patch(readEndpoint).catch(() => undefined);
+
+        const clearUnread = (items: ConversationItem[]) =>
+          items.map((conversation) =>
+            conversation.id === selectedConversation.id
+              ? { ...conversation, unread: 0 }
+              : conversation
+          );
+
+        if (selectedConversation.threadKind === 'mentorship') {
+          setMentorshipConversations((prev) => clearUnread(prev));
+        } else {
+          setPeerMentorConversations((prev) => clearUnread(prev));
+        }
       } catch (error) {
         console.error('Failed to load thread:', error);
         Alert.alert('Error', 'Could not load the message thread.');
@@ -520,7 +547,7 @@ const [search, setSearch] = useState('');
             : conversation
         );
 
-      if (selectedConversation.threadKind === 'mentorship') {
+              if (selectedConversation.threadKind === 'mentorship') {
         setMentorshipConversations((prev) => applyPreviewUpdate(prev));
       } else {
         setPeerMentorConversations((prev) => applyPreviewUpdate(prev));
@@ -586,7 +613,12 @@ const [search, setSearch] = useState('');
           </View>
 
           <View style={styles.chatHeaderRow}>
-            <TouchableOpacity onPress={() => setSelectedConversation(null)}>
+            <TouchableOpacity
+              onPress={() => setSelectedConversation(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Back to conversation list"
+              hitSlop={8}
+            >
               <Text style={styles.backArrow}>‹</Text>
             </TouchableOpacity>
 
@@ -606,7 +638,14 @@ const [search, setSearch] = useState('');
         </View>
 
         <View style={styles.contextBar}>
-          <Text style={styles.badgeSage}>
+          <Text
+            style={styles.badgeSage}
+            accessibilityLabel={
+              selectedConversation.threadKind === 'mentorPair'
+                ? 'Peer mentor chat'
+                : 'Mentorship chat'
+            }
+          >
             {selectedConversation.threadKind === 'mentorPair' ? 'Peer Mentor Chat' : 'Mentorship Chat'}
           </Text>
           <Text style={styles.contextText}>
@@ -664,6 +703,13 @@ const [search, setSearch] = useState('');
                           style={styles.attachmentPill}
                           onPress={() => openAttachment(message.attachment!)}
                           disabled={openingAttachmentId === message.attachment.id}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open attachment ${message.attachment.name}`}
+                          accessibilityHint={
+                            openingAttachmentId === message.attachment.id
+                              ? 'Attachment is opening'
+                              : 'Opens the shared attachment'
+                          }
                         >
                           <Text style={styles.attachmentIcon}>
                             {message.attachment.contentType?.includes('image') ? '🖼️' : '📄'}
@@ -705,14 +751,27 @@ const [search, setSearch] = useState('');
                 {formatAttachmentMeta(pendingAttachment.size, pendingAttachment.type)}
               </Text>
             </View>
-            <TouchableOpacity onPress={() => setPendingAttachment(null)}>
+            <TouchableOpacity
+              onPress={() => setPendingAttachment(null)}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove attachment ${pendingAttachment.name}`}
+              hitSlop={8}
+            >
               <Text style={styles.pendingAttachmentRemove}>✕</Text>
             </TouchableOpacity>
           </View>
         ) : null}
 
         <View style={styles.inputBar}>
-          <TouchableOpacity onPress={chooseAttachment} disabled={sending}>
+          <TouchableOpacity
+            onPress={chooseAttachment}
+            disabled={sending}
+            accessibilityRole="button"
+            accessibilityLabel="Add attachment"
+            accessibilityHint="Choose a photo or document to attach"
+            accessibilityState={{ disabled: sending }}
+            hitSlop={8}
+          >
             <Text style={styles.inputIcon}>📎</Text>
           </TouchableOpacity>
           <TextInput
@@ -722,11 +781,16 @@ const [search, setSearch] = useState('');
             placeholderTextColor="#B7B0A4"
             style={styles.input}
             multiline
+            accessibilityLabel={`Message ${selectedConversation.counterpartName}`}
+            accessibilityHint="Type your message here"
           />
           <TouchableOpacity
             style={[styles.sendButton, sending && styles.sendButtonDisabled]}
             onPress={sendMessage}
             disabled={sending}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+            accessibilityState={{ disabled: sending, busy: sending }}
           >
             <Text style={styles.sendButtonText}>{sending ? '…' : '➤'}</Text>
           </TouchableOpacity>
@@ -758,6 +822,9 @@ const [search, setSearch] = useState('');
                   activeListTab === 'mentorships' && styles.listTabButtonActive,
                 ]}
                 onPress={() => setActiveListTab('mentorships')}
+                accessibilityRole="tab"
+                accessibilityLabel="Mentorship conversations tab"
+                accessibilityState={{ selected: activeListTab === 'mentorships' }}
               >
                 <Text
                   style={[
@@ -774,6 +841,9 @@ const [search, setSearch] = useState('');
                   activeListTab === 'mentorPeers' && styles.listTabButtonActive,
                 ]}
                 onPress={() => setActiveListTab('mentorPeers')}
+                accessibilityRole="tab"
+                accessibilityLabel="Peer mentor conversations tab"
+                accessibilityState={{ selected: activeListTab === 'mentorPeers' }}
               >
                 <Text
                   style={[
@@ -801,6 +871,8 @@ const [search, setSearch] = useState('');
               }
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.searchInput}
+              accessibilityLabel="Search conversations"
+              accessibilityHint="Filters the visible conversation list"
             />
           </View>
         </View>
@@ -887,26 +959,50 @@ function ConversationRow({
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={styles.conversationRow} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.conversationRow, item.unread ? styles.conversationRowUnread : null]}
+      onPress={onPress}
+    >
       <View style={styles.avatarWrap}>
         <View style={[styles.avatar, { backgroundColor: item.avatarBg }]}>
           <Text style={[styles.avatarText, { color: item.avatarText }]}>{item.initials}</Text>
         </View>
+        {item.unread ? <View style={styles.unreadDot} /> : null}
       </View>
 
       <View style={styles.conversationBody}>
         <View style={styles.conversationTop}>
           <View style={styles.conversationTitleWrap}>
-            <Text style={styles.conversationName}>{item.counterpartName}</Text>
+            <Text style={[styles.conversationName, item.unread ? styles.conversationNameUnread : null]}>
+              {item.counterpartName}
+            </Text>
             {item.subtitle ? <Text style={styles.conversationSubtitle}>{item.subtitle}</Text> : null}
           </View>
-          <Text style={styles.conversationTime}>{item.time}</Text>
+          <View style={styles.conversationMetaWrap}>
+            <Text style={[styles.conversationTime, item.unread ? styles.conversationTimeUnread : null]}>
+              {item.time}
+            </Text>
+            {item.unread ? (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{item.unread > 99 ? '99+' : item.unread}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
 
-        <Text numberOfLines={1} style={styles.conversationPreview}>
+        <Text
+          numberOfLines={1}
+          style={[styles.conversationPreview, item.unread ? styles.conversationPreviewUnread : null]}
+        >
           {item.preview}
         </Text>
       </View>
+
+      {item.unread ? (
+        <View style={styles.unreadBadge}>
+          <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -1042,9 +1138,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0EBE3',
   },
+  conversationRowUnread: {
+    backgroundColor: '#F8FBF8',
+  },
   avatarWrap: {
     marginRight: 11,
     position: 'relative',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4A7C5A',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   avatar: {
     width: 44,
@@ -1065,6 +1175,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 3,
   },
+  conversationMetaWrap: {
+    alignItems: 'flex-end',
+  },
   conversationTitleWrap: {
     flex: 1,
     paddingRight: 8,
@@ -1073,6 +1186,9 @@ const styles = StyleSheet.create({
     color: '#1A2E22',
     fontSize: 13,
     fontWeight: '700',
+  },
+  conversationNameUnread: {
+    color: '#13301F',
   },
   conversationSubtitle: {
     color: '#9A9288',
@@ -1083,9 +1199,32 @@ const styles = StyleSheet.create({
     color: '#BBB4A8',
     fontSize: 10,
   },
+  conversationTimeUnread: {
+    color: '#4A7C5A',
+    fontWeight: '700',
+  },
   conversationPreview: {
     color: '#9A9288',
     fontSize: 11,
+  },
+  conversationPreviewUnread: {
+    color: '#4E5F55',
+    fontWeight: '600',
+  },
+  unreadBadge: {
+    backgroundColor: '#4A7C5A',
+    borderRadius: 999,
+    minWidth: 22,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
   centeredState: {
     flex: 1,

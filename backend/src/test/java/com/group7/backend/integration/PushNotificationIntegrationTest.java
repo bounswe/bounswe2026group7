@@ -241,7 +241,7 @@ class PushNotificationIntegrationTest {
                 .pollDelay(Duration.ofMillis(500))
                 .atMost(Duration.ofSeconds(2))
                 .untilAsserted(() -> verify(pushDeliveryService, never())
-                        .send(eq(mentee.getId()), eq(NotificationType.NEW_MESSAGE), anyString(), anyString()));
+                        .send(eq(mentee.getId()), eq(NotificationType.NEW_MESSAGE), anyString(), anyString(), any(), any()));
     }
 
     // ── REQUEST_SUBMITTED dispatch on both sides ─────────────────────────────
@@ -271,9 +271,9 @@ class PushNotificationIntegrationTest {
         // listener path; the real-FCM SLA lives in production monitoring (see
         // class Javadoc).
         verify(pushDeliveryService, timeout(5_000).atLeastOnce())
-                .send(eq(mentor.getId()), eq(NotificationType.REQUEST_RECEIVED), anyString(), anyString());
+                .send(eq(mentor.getId()), eq(NotificationType.REQUEST_RECEIVED), anyString(), anyString(), any(), any());
         verify(pushDeliveryService, timeout(5_000).atLeastOnce())
-                .send(eq(mentee.getId()), eq(NotificationType.REQUEST_SUBMITTED), anyString(), anyString());
+                .send(eq(mentee.getId()), eq(NotificationType.REQUEST_SUBMITTED), anyString(), anyString(), any(), any());
 
         // The in-app rows are still persisted (in-app is the source of truth).
         awaitNotificationFor(mentor.getId(), NotificationType.REQUEST_RECEIVED);
@@ -292,6 +292,6 @@ class PushNotificationIntegrationTest {
         notificationEventPublisher.publishMatchFound(mentee.getId(), "Carol");
 
         verify(pushDeliveryService, timeout(5_000).atLeastOnce())
-                .send(eq(mentee.getId()), eq(NotificationType.MATCH_FOUND), anyString(), anyString());
+                .send(eq(mentee.getId()), eq(NotificationType.MATCH_FOUND), anyString(), anyString(), any(), any());
     }
 }

@@ -2,12 +2,14 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.request.MentorshipRequestCreateRequest;
 import com.group7.backend.dto.response.MentorshipRequestResponse;
+import com.group7.backend.entity.Ban;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.MentorshipRequest;
 import com.group7.backend.entity.MentorshipRequestStatus;
 import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.exception.UserBannedException;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.repository.MentorshipRequestRepository;
@@ -50,6 +52,9 @@ class MentorshipRequestServiceTest {
 
     @Mock
     private NotificationEventPublisher notificationEventPublisher;
+
+    @Mock
+    private BanService banService;
 
     @InjectMocks
     private MentorshipRequestService mentorshipRequestService;
@@ -273,6 +278,88 @@ class MentorshipRequestServiceTest {
         when(mentorRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> mentorshipRequestService.getReceivedRequests(99L, pageable))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ── Ban gate (#134) ─────────────────────────────────────────────────────
+
+    @Test
+    void createRequest_throwsUserBannedException_whenMenteeIsBanned() {
+        Ban activeBan = new Ban();
+        activeBan.setUser(mentee);
+        activeBan.setReason("Frequent mentorship request cancellations");
+        activeBan.setBanCount(1);
+        activeBan.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).plusHours(24));
+        when(banService.getActiveBan(1L)).thenReturn(Optional.of(activeBan));
+
+        assertThatThrownBy(() -> mentorshipRequestService.createRequest(1L, createRequest))
+                .isInstanceOf(UserBannedException.class)
+                .extracting(ex -> ((UserBannedException) ex).getBan().getReason())
+                .isEqualTo("Frequent mentorship request cancellations");
+        verify(mentorshipRequestRepository, org.mockito.Mockito.never())
+                .save(any(MentorshipRequest.class));
+    }
+
+    // ── cancelOwnPendingRequest (#134) ──────────────────────────────────────
+
+    @Test
+    void cancelOwnPendingRequest_happyPath_flipsStatusAndRecordsViolation() {
+        MentorshipRequest request = new MentorshipRequest();
+        request.setId(10L);
+        request.setMentee(mentee);
+        request.setMentor(mentor);
+        request.setStatus(MentorshipRequestStatus.PENDING);
+        when(mentorshipRequestRepository.findById(10L)).thenReturn(Optional.of(request));
+
+        mentorshipRequestService.cancelOwnPendingRequest(1L, 10L);
+
+        assertThat(request.getStatus()).isEqualTo(MentorshipRequestStatus.CANCELLED);
+        verify(mentorshipRequestRepository).save(request);
+        verify(banService).recordCancellation(eq(1L),
+                eq("Frequent mentorship request cancellations"));
+    }
+
+    @Test
+    void cancelOwnPendingRequest_throwsWhenCallerIsNotOwner() {
+        Mentee other = new Mentee();
+        other.setId(99L);
+        MentorshipRequest request = new MentorshipRequest();
+        request.setId(10L);
+        request.setMentee(other);
+        request.setMentor(mentor);
+        request.setStatus(MentorshipRequestStatus.PENDING);
+        when(mentorshipRequestRepository.findById(10L)).thenReturn(Optional.of(request));
+
+        assertThatThrownBy(() -> mentorshipRequestService.cancelOwnPendingRequest(1L, 10L))
+                .isInstanceOf(MentorshipRequestException.class)
+                .hasMessageContaining("do not own");
+        verify(mentorshipRequestRepository, org.mockito.Mockito.never())
+                .save(any(MentorshipRequest.class));
+        verify(banService, org.mockito.Mockito.never())
+                .recordCancellation(any(), any());
+    }
+
+    @Test
+    void cancelOwnPendingRequest_throwsWhenStatusIsNotPending() {
+        MentorshipRequest request = new MentorshipRequest();
+        request.setId(10L);
+        request.setMentee(mentee);
+        request.setMentor(mentor);
+        request.setStatus(MentorshipRequestStatus.ACCEPTED);
+        when(mentorshipRequestRepository.findById(10L)).thenReturn(Optional.of(request));
+
+        assertThatThrownBy(() -> mentorshipRequestService.cancelOwnPendingRequest(1L, 10L))
+                .isInstanceOf(MentorshipRequestException.class)
+                .hasMessageContaining("Only pending");
+        verify(banService, org.mockito.Mockito.never())
+                .recordCancellation(any(), any());
+    }
+
+    @Test
+    void cancelOwnPendingRequest_throwsWhenRequestMissing() {
+        when(mentorshipRequestRepository.findById(10L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mentorshipRequestService.cancelOwnPendingRequest(1L, 10L))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

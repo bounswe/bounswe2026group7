@@ -84,7 +84,7 @@ public class NotificationEventListener {
         // Push fan-out is best-effort: failures must not roll back the in-app
         // save (which is the source of truth) or surface to the publisher.
         try {
-            pushDeliveryService.send(event.recipientId(), event.type(), event.title(), event.body());
+            pushDeliveryService.send(event.recipientId(), event.type(), event.title(), event.body(), event.entityId(), event.mentorshipId());
         } catch (RuntimeException ex) {
             log.warn("Push delivery failed for recipient={}, type={}: {}",
                     event.recipientId(), event.type(), ex.getMessage());

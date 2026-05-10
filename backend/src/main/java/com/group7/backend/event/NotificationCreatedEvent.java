@@ -6,6 +6,11 @@ public record NotificationCreatedEvent(
         Long recipientId,
         NotificationType type,
         String title,
-        String body
+        String body,
+        Long entityId,
+        Long mentorshipId
 ) {
+    public NotificationCreatedEvent(Long recipientId, NotificationType type, String title, String body) {
+        this(recipientId, type, title, body, null, null);
+    }
 }

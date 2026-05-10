@@ -52,6 +52,12 @@ public class UserNotificationPreferences {
     @Column(name = "requests_enabled", nullable = false)
     private boolean requestsEnabled = true;
 
+    @Column(name = "task_deadline_reminders_enabled", nullable = false)
+    private boolean taskDeadlineRemindersEnabled = true;
+
+    @Column(name = "milestone_reminders_enabled", nullable = false)
+    private boolean milestoneRemindersEnabled = true;
+
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
@@ -75,9 +81,16 @@ public class UserNotificationPreferences {
                  MEETING_DECLINED, MEETING_AUTO_DECLINED, MEETING_RESCHEDULE_REQUESTED,
                  MEETING_RESCHEDULE_APPROVED, MEETING_RESCHEDULE_REJECTED,
                  MEETING_CANCELLED -> meetingsEnabled;
-            case TASK_ASSIGNED, TASK_SUBMITTED, TASK_REVIEWED -> tasksEnabled;
+            case TASK_ASSIGNED, TASK_SUBMITTED, TASK_REVIEWED,
+                 MILESTONE_CREATED, MILESTONE_COMPLETED,
+                 ACTION_ITEM_COMPLETED -> tasksEnabled;
             case REQUEST_RECEIVED, REQUEST_ACCEPTED, REQUEST_REJECTED,
                  REQUEST_SUBMITTED -> requestsEnabled;
+            case TASK_DEADLINE_REMINDER -> taskDeadlineRemindersEnabled;
+            case MILESTONE_REMINDER -> milestoneRemindersEnabled;
+            // Auto-ban system (#134) — system-mandated communications, always
+            // enabled. Users cannot opt out of "you have been banned" notices.
+            case USER_BANNED, BAN_LIFTED, BAN_EXPIRED -> true;
         };
     }
 }
