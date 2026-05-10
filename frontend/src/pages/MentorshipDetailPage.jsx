@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
-import { getMentorshipById, getUserById, updateSharedGoal, cancelMentorship } from '../services/api'
-import { endMentorship, getNextUpcomingMeeting } from '../services/mentorshipMocks'
+import { getMentorshipById, getUserById, updateSharedGoal, cancelMentorship, endMentorship } from '../services/api'
+import { getNextUpcomingMeeting } from '../services/mentorshipMocks'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
@@ -43,19 +43,25 @@ function Field({ label, value, chips = false }) {
 
 function EndMentorshipModal({ open, onClose, onConfirm, loading, otherName }) {
   const overlayRef = useRef(null)
+  const [reason, setReason] = useState('')
+
   useEffect(() => {
-    if (!open) return
-    const onKey = e => { if (e.key === 'Escape') onClose() }
+    if (!open) setReason('')
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, onClose, loading])
 
   if (!open) return null
   return (
     <div
       className="modal-overlay"
       ref={overlayRef}
-      onMouseDown={e => { if (e.target === overlayRef.current) onClose() }}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
     >
       <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="endMentorshipTitle">
         <div className="modal-header">
@@ -68,12 +74,30 @@ function EndMentorshipModal({ open, onClose, onConfirm, loading, otherName }) {
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
         </div>
-        <div className="modal-actions">
+
+        <label className="section-label" style={{ marginTop: '12px', display: 'block' }} htmlFor="endReason">
+          Wrap-up note (optional)
+        </label>
+        <textarea
+          id="endReason"
+          className="modal-textarea"
+          rows={3}
+          maxLength={500}
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Optional note shared with the mentee — e.g. 'Goal achieved — congrats!'"
+          disabled={loading}
+        />
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+          {reason.length}/500
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
           <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
           <button
             type="button"
             className="modal-btn-primary md-danger-btn"
-            onClick={onConfirm}
+            onClick={() => onConfirm(reason.trim() || undefined)}
             disabled={loading}
           >
             {loading ? 'Ending…' : 'End Mentorship'}
@@ -200,6 +224,7 @@ export default function MentorshipDetailPage() {
 
   const [endOpen, setEndOpen] = useState(false)
   const [endLoading, setEndLoading] = useState(false)
+  const [endError, setEndError] = useState(null)
 
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
@@ -251,15 +276,21 @@ export default function MentorshipDetailPage() {
     }
   }
 
-  async function handleEndConfirm() {
+  async function handleEndConfirm(reason) {
     setEndLoading(true)
+    setEndError(null)
     try {
-      await endMentorship(mentorship.id)
+      // Real backend now (PATCH /api/mentorships/{id}/end). Replace local
+      // state with the response so the page collapses into the #341
+      // read-only banner (status=COMPLETED, endDate=now). Mirror the
+      // cancel UX rather than bouncing the user to /home.
+      const updated = await endMentorship(mentorship.id, reason)
+      setMentorship(updated)
       setEndOpen(false)
-      // Re-fetch mentorship counts so navbar dropdown / sidebar / dashboard reflect the ended state
       refresh()
-      navigate('/home')
-    } catch {
+    } catch (err) {
+      setEndError(err?.message || 'Failed to end mentorship')
+    } finally {
       setEndLoading(false)
     }
   }
@@ -575,6 +606,13 @@ export default function MentorshipDetailPage() {
         <div className="md-error-card" style={{ marginTop: '12px' }}>
           <div className="md-error-title">Couldn’t cancel mentorship</div>
           <div className="md-error-sub">{cancelError}</div>
+        </div>
+      )}
+
+      {endError && (
+        <div className="md-error-card" style={{ marginTop: '12px' }}>
+          <div className="md-error-title">Couldn’t end mentorship</div>
+          <div className="md-error-sub">{endError}</div>
         </div>
       )}
 
