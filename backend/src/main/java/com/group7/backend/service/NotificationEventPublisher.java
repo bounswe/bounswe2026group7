@@ -240,4 +240,8 @@ public class NotificationEventPublisher {
     public void publish(Long recipientId, NotificationType type, String title, String body) {
         applicationEventPublisher.publishEvent(new NotificationCreatedEvent(recipientId, type, title, body));
     }
+
+    public void publish(NotificationCreatedEvent event) {
+        applicationEventPublisher.publishEvent(event);
+    }
 }

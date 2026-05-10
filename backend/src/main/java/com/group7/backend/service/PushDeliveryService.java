@@ -20,5 +20,5 @@ public interface PushDeliveryService {
      * Dispatch a push to every registered device of {@code recipientId}
      * for whom the per-user category toggle is enabled.
      */
-    void send(Long recipientId, NotificationType type, String title, String body);
+    void send(Long recipientId, NotificationType type, String title, String body, Long entityId, Long mentorshipId);
 }

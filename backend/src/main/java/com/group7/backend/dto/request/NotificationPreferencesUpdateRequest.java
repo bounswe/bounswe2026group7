@@ -22,4 +22,6 @@ public class NotificationPreferencesUpdateRequest {
     private Boolean meetingsEnabled;
     private Boolean tasksEnabled;
     private Boolean requestsEnabled;
+    private Boolean taskDeadlineRemindersEnabled;
+    private Boolean milestoneRemindersEnabled;
 }
