@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import MentorshipMilestones from '../components/MentorshipMilestones'
+import MentorshipProgressTimeline from '../components/MentorshipProgressTimeline'
+import MentorMenteesProgress from '../components/MentorMenteesProgress'
 import { getMentorshipById, getUserById, updateSharedGoal, cancelMentorship, endMentorship } from '../services/api'
 import { getNextUpcomingMeeting } from '../services/mentorshipMocks'
 import { useAuth } from '../context/AuthContext'
@@ -492,12 +494,21 @@ export default function MentorshipDetailPage() {
         )}
       </section>
 
+      {/* Progress + Timeline (#126 + #333) */}
+      <MentorshipProgressTimeline mentorshipId={mentorship.id} />
+
       {/* Milestones (#288) */}
       <MentorshipMilestones
         mentorshipId={mentorship.id}
         isMentor={viewerIsMentor}
         isActive={isActive}
       />
+
+      {/* Mentor cross-mentee comparison (#126). Self-hides when viewer is a
+          mentee or when no other active mentees exist. */}
+      {viewerIsMentor && (
+        <MentorMenteesProgress currentMentorshipId={mentorship.id} />
+      )}
 
       {/* Profile */}
       <section className="card md-profile">
