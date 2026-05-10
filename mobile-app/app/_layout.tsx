@@ -30,6 +30,7 @@ export default function RootLayout() {
           <Stack.Screen name="mentor-public-profile" options={{ headerShown: false }} />
           <Stack.Screen name="request-candidate-profile" options={{ headerShown: false }} />
           <Stack.Screen name="connection-request" options={{ headerShown: false }} />
+          <Stack.Screen name="social-feed" options={{ headerShown: false }} />
           <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
           <Stack.Screen name="reset-password" options={{ headerShown: false }} />
           <Stack.Screen name="verify-email" options={{ headerShown: false }} />

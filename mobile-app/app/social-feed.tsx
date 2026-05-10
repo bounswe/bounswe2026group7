@@ -1,30 +1,17 @@
-import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
 import {
   ActivityIndicator,
-  Alert,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-
 import apiClient from '../api/client';
-import { useRole } from '../components/RoleContext';
 
-type FeedPostResponse = {
-  id: number;
-  authorId: number;
-  authorFirstName: string;
-  body: string;
-  hashtags: string[];
-  createdAt: string;
-  updatedAt: string;
-  isEdited: boolean;
-  isAuthor: boolean;
-};
+type FeedTab = 'forYou' | 'following';
 
 type FeedPostListItem = {
   id: number;
@@ -37,276 +24,92 @@ type FeedPostListItem = {
   commentCount: number;
 };
 
-type FeedPostInteractionState = {
-  likeCount: number;
-  commentCount: number;
-  shareCount: number;
-  bookmarkCount: number;
-  viewerHasLiked: boolean;
-  viewerHasBookmarked: boolean;
+type FeedUnreadCountResponse = {
+  count: number;
+  cappedAtMax: boolean;
 };
 
-type FeedCommentResponse = {
-  id: number;
-  postId: number;
-  authorId?: number | null;
-  authorFirstName?: string | null;
-  body?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  isEdited: boolean;
-  isAuthor: boolean;
-  isDeleted: boolean;
-};
+function formatRelativeLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
 
-type EnrichedFeedPost = FeedPostListItem & {
-  interactionState?: FeedPostInteractionState;
-};
-
-type FeedTab = 'for-you' | 'following';
-
-function splitHashtags(raw: string) {
-  return raw
-    .split(/[,\s]+/)
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .map((token) => (token.startsWith('#') ? token : `#${token}`));
-}
-
-function formatTimestamp(value: string) {
-  return new Date(value).toLocaleString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function buildSearchParams(query: string) {
-  const trimmed = query.trim();
-  if (!trimmed) return null;
-
-  if (trimmed.startsWith('#') && !trimmed.includes(' ')) {
-    return { hashtag: trimmed };
-  }
-
-  return { q: trimmed };
-}
-
-function normalizePostFromCreate(post: FeedPostResponse): EnrichedFeedPost {
-  return {
-    id: post.id,
-    authorId: post.authorId,
-    authorFirstName: post.authorFirstName,
-    body: post.body,
-    hashtags: post.hashtags,
-    createdAt: post.createdAt,
-    likeCount: 0,
-    commentCount: 0,
-    interactionState: {
-      likeCount: 0,
-      commentCount: 0,
-      shareCount: 0,
-      bookmarkCount: 0,
-      viewerHasLiked: false,
-      viewerHasBookmarked: false,
-    },
-  };
+  const diffMinutes = Math.max(1, Math.round((Date.now() - date.getTime()) / 60000));
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.round(diffHours / 24);
+  return `${diffDays}d ago`;
 }
 
 export default function SocialFeedScreen() {
-  const { role } = useRole();
-  const [body, setBody] = useState('');
-  const [hashtagInput, setHashtagInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<FeedTab>('for-you');
-  const [submitting, setSubmitting] = useState(false);
-  const [loadingFeed, setLoadingFeed] = useState(true);
-  const [posts, setPosts] = useState<EnrichedFeedPost[]>([]);
-  const [createdPost, setCreatedPost] = useState<FeedPostResponse | null>(null);
-  const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
-  const [selectedPostState, setSelectedPostState] = useState<FeedPostInteractionState | null>(null);
-  const [comments, setComments] = useState<FeedCommentResponse[]>([]);
-  const [commentsLoading, setCommentsLoading] = useState(false);
-  const [commentDraft, setCommentDraft] = useState('');
-  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<FeedTab>('forYou');
+  const [forYouPosts, setForYouPosts] = useState<FeedPostListItem[]>([]);
+  const [followingPosts, setFollowingPosts] = useState<FeedPostListItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState<FeedUnreadCountResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [markingRead, setMarkingRead] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const hashtagPreview = useMemo(() => splitHashtags(hashtagInput), [hashtagInput]);
-
-  const enrichPostsWithInteractionState = useCallback(async (items: FeedPostListItem[]) => {
-    const stateEntries = await Promise.all(
-      items.map(async (post) => {
-        try {
-          const response = await apiClient.get(`/feed/posts/${post.id}/interactions`);
-          return [post.id, response.data] as const;
-        } catch {
-          return [
-            post.id,
-            {
-              likeCount: post.likeCount,
-              commentCount: post.commentCount,
-              shareCount: 0,
-              bookmarkCount: 0,
-              viewerHasLiked: false,
-              viewerHasBookmarked: false,
-            },
-          ] as const;
-        }
-      })
-    );
-
-    const stateMap = new Map<number, FeedPostInteractionState>(stateEntries);
-    return items.map((post) => ({
-      ...post,
-      interactionState: stateMap.get(post.id),
-    }));
+  const loadUnreadCount = useCallback(async () => {
+    const res = await apiClient.get('/feed/unread-count');
+    setUnreadCount(res.data);
   }, []);
 
-  const fetchPosts = useCallback(async () => {
+  const loadFeeds = useCallback(async () => {
+    setErrorMessage('');
     try {
-      setLoadingFeed(true);
-      const searchParams = buildSearchParams(searchQuery);
-      const endpoint = searchParams
-        ? '/feed/search'
-        : activeTab === 'for-you'
-        ? '/feed/for-you'
-        : '/feed/following';
+      const [forYouRes, followingRes, unreadRes] = await Promise.all([
+        apiClient.get('/feed/for-you?page=0&size=20'),
+        apiClient.get('/feed/following?page=0&size=20'),
+        apiClient.get('/feed/unread-count'),
+      ]);
 
-      const response = await apiClient.get(endpoint, {
-        params: {
-          size: 20,
-          ...(searchParams ?? {}),
-        },
-      });
-
-      const content = response.data?.content ?? [];
-      const enriched = await enrichPostsWithInteractionState(content);
-      setPosts(enriched);
-    } catch (error) {
-      console.error('Failed to load feed posts:', error);
-      Alert.alert('Error', 'Could not load social feed posts.');
+      setForYouPosts(forYouRes.data.content ?? []);
+      setFollowingPosts(followingRes.data.content ?? []);
+      setUnreadCount(unreadRes.data);
+    } catch {
+      setErrorMessage('Could not load the social feed right now.');
     } finally {
-      setLoadingFeed(false);
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [activeTab, enrichPostsWithInteractionState, searchQuery]);
+  }, []);
 
   useEffect(() => {
-    void fetchPosts();
-  }, [fetchPosts]);
+    loadFeeds();
+  }, [loadFeeds]);
 
-  const fetchCommentsForPost = useCallback(async (postId: number) => {
-    try {
-      setCommentsLoading(true);
-      const [commentsRes, stateRes] = await Promise.all([
-        apiClient.get(`/feed/posts/${postId}/comments`, { params: { size: 50 } }),
-        apiClient.get(`/feed/posts/${postId}/interactions`),
-      ]);
-      setComments(commentsRes.data?.content ?? []);
-      setSelectedPostState(stateRes.data);
-    } catch (error) {
-      console.error('Failed to load comments:', error);
-      Alert.alert('Error', 'Could not load post interactions.');
-    } finally {
-      setCommentsLoading(false);
-    }
-  }, []);
+  const activePosts = useMemo(
+    () => (activeTab === 'forYou' ? forYouPosts : followingPosts),
+    [activeTab, forYouPosts, followingPosts]
+  );
 
-  const openPost = async (postId: number) => {
-    setSelectedPostId(postId);
-    setCommentDraft('');
-    await fetchCommentsForPost(postId);
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadFeeds();
   };
 
-  const submitPost = async () => {
-    const trimmedBody = body.trim();
-    if (!trimmedBody) {
-      Alert.alert('Missing content', 'Please write some text before sharing your post.');
-      return;
-    }
-
+  const markFeedRead = async () => {
+    setMarkingRead(true);
     try {
-      setSubmitting(true);
-      const response = await apiClient.post('/feed/posts', {
-        body: trimmedBody,
-        hashtags: hashtagPreview,
-      });
-      const post = response.data as FeedPostResponse;
-      setCreatedPost(post);
-      setBody('');
-      setHashtagInput('');
-      setPosts((prev) => [normalizePostFromCreate(post), ...prev]);
-      Alert.alert('Success', 'Your social feed post has been published.');
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Could not publish your post.';
-      Alert.alert('Error', message);
+      await apiClient.post('/feed/mark-read');
+      await loadUnreadCount();
+    } catch {
+      setErrorMessage('Could not update the feed read state.');
     } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const toggleLike = async (postId: number) => {
-    try {
-      const response = await apiClient.post(`/feed/posts/${postId}/like`);
-      const nextState = response.data as FeedPostInteractionState;
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === postId
-            ? { ...post, likeCount: nextState.likeCount, commentCount: nextState.commentCount, interactionState: nextState }
-            : post
-        )
-      );
-      if (selectedPostId === postId) {
-        setSelectedPostState(nextState);
-      }
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Could not update the like state.';
-      Alert.alert('Error', message);
-    }
-  };
-
-  const addComment = async () => {
-    const trimmed = commentDraft.trim();
-    if (!selectedPostId || !trimmed) {
-      Alert.alert('Missing comment', 'Please write a comment before sending it.');
-      return;
-    }
-
-    try {
-      setCommentSubmitting(true);
-      await apiClient.post(`/feed/posts/${selectedPostId}/comments`, { body: trimmed });
-      setCommentDraft('');
-      await fetchCommentsForPost(selectedPostId);
-      setPosts((prev) =>
-        prev.map((post) =>
-          post.id === selectedPostId
-            ? {
-                ...post,
-                commentCount: (selectedPostState?.commentCount ?? post.commentCount) + 1,
-              }
-            : post
-        )
-      );
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Could not add your comment.';
-      Alert.alert('Error', message);
-    } finally {
-      setCommentSubmitting(false);
+      setMarkingRead(false);
     }
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#456B50" />}
+      >
         <View style={styles.statusRow}>
           <Text style={styles.statusText}>
             {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
@@ -314,237 +117,113 @@ export default function SocialFeedScreen() {
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>‹ Back</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Text style={styles.backText}>‹</Text>
+          </TouchableOpacity>
+          <View style={styles.headerCopy}>
+            <Text style={styles.eyebrow}>SOCIAL FEED</Text>
+            <Text style={styles.title}>Your network, in one place.</Text>
+          </View>
+        </View>
 
-        <Text style={styles.title}>
-          Social{'\n'}
-          <Text style={styles.titleItalic}>Feed.</Text>
-        </Text>
-        <Text style={styles.subtitle}>
-          {role === 'mentor'
-            ? 'Share insights with mentors and mentees.'
-            : 'Share your progress and learning journey.'}
-        </Text>
-      </View>
-
-      <ScrollView style={styles.scrollArea} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.composerCard}>
-          <Text style={styles.sectionLabel}>CREATE A POST</Text>
-          <TextInput
-            style={styles.bodyInput}
-            value={body}
-            onChangeText={setBody}
-            placeholder="What would you like to share with the community?"
-            placeholderTextColor="#A89F93"
-            multiline
-            maxLength={2000}
-            textAlignVertical="top"
-          />
-          <Text style={styles.charCount}>{body.trim().length}/2000</Text>
-
-          <Text style={styles.sectionLabel}>HASHTAGS</Text>
-          <TextInput
-            style={styles.tagInput}
-            value={hashtagInput}
-            onChangeText={setHashtagInput}
-            placeholder="#career #react-native #mentorship"
-            placeholderTextColor="#A89F93"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          {hashtagPreview.length > 0 ? (
-            <View style={styles.tagWrap}>
-              {hashtagPreview.map((tag) => (
-                <View key={tag} style={styles.tagChip}>
-                  <Text style={styles.tagChipText}>{tag.toLowerCase()}</Text>
-                </View>
-              ))}
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryHeader}>
+            <View>
+              <Text style={styles.summaryLabel}>Unread updates</Text>
+              <Text style={styles.summaryCount}>
+                {unreadCount ? (unreadCount.cappedAtMax ? '99+' : unreadCount.count) : '...'}
+              </Text>
             </View>
-          ) : (
-            <Text style={styles.helperText}>
-              Separate hashtags with spaces or commas. The server will normalize them automatically.
-            </Text>
-          )}
+            <TouchableOpacity
+              style={[styles.markReadButton, markingRead && { opacity: 0.6 }]}
+              onPress={markFeedRead}
+              disabled={markingRead}
+            >
+              <Text style={styles.markReadButtonText}>
+                {markingRead ? 'Updating...' : 'Mark Feed Read'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.summaryText}>
+            Switch between `For You` and `Following` to browse the mobile feed.
+          </Text>
+        </View>
 
+        <View style={styles.tabRow}>
           <TouchableOpacity
-            style={[styles.publishButton, submitting && styles.publishButtonDisabled]}
-            onPress={submitPost}
-            disabled={submitting}
+            style={[styles.tabButton, activeTab === 'forYou' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('forYou')}
           >
-            <Text style={styles.publishButtonText}>
-              {submitting ? 'Publishing...' : 'Publish Post'}
+            <Text style={[styles.tabButtonText, activeTab === 'forYou' && styles.tabButtonTextActive]}>
+              For You
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'following' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('following')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'following' && styles.tabButtonTextActive]}>
+              Following
             </Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.feedCard}>
-          <View style={styles.feedTopRow}>
-            <Text style={styles.sectionLabel}>DISCOVER POSTS</Text>
-            <TouchableOpacity onPress={() => fetchPosts()}>
-              <Text style={styles.refreshText}>Refresh</Text>
-            </TouchableOpacity>
+        {loading ? (
+          <ActivityIndicator size="large" color="#456B50" style={styles.loader} />
+        ) : errorMessage ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Feed unavailable</Text>
+            <Text style={styles.emptyText}>{errorMessage}</Text>
           </View>
-
-          <View style={styles.tabRow}>
-            <TouchableOpacity
-              style={[styles.tabButton, activeTab === 'for-you' && styles.tabButtonActive]}
-              onPress={() => setActiveTab('for-you')}
-            >
-              <Text style={[styles.tabButtonText, activeTab === 'for-you' && styles.tabButtonTextActive]}>
-                For You
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tabButton, activeTab === 'following' && styles.tabButtonActive]}
-              onPress={() => setActiveTab('following')}
-            >
-              <Text style={[styles.tabButtonText, activeTab === 'following' && styles.tabButtonTextActive]}>
-                Following
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <TextInput
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search by keyword or #hashtag"
-            placeholderTextColor="#A89F93"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          {loadingFeed ? (
-            <ActivityIndicator size="large" color="#456B50" style={styles.feedLoader} />
-          ) : posts.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateTitle}>No posts found</Text>
-              <Text style={styles.emptyStateText}>
-                Try another keyword or switch tabs to explore more posts.
-              </Text>
-            </View>
-          ) : (
-            posts.map((post) => {
-              const interactionState = post.interactionState;
-              const isSelected = post.id === selectedPostId;
-              return (
-                <View key={post.id} style={[styles.postCard, isSelected && styles.postCardSelected]}>
-                  <View style={styles.previewHeader}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{post.authorFirstName.slice(0, 2).toUpperCase()}</Text>
-                    </View>
-                    <View style={styles.previewMeta}>
-                      <Text style={styles.previewAuthor}>{post.authorFirstName}</Text>
-                      <Text style={styles.previewDate}>{formatTimestamp(post.createdAt)}</Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.previewBody}>{post.body}</Text>
-
-                  {post.hashtags.length > 0 ? (
-                    <View style={styles.tagWrap}>
-                      {post.hashtags.map((tag) => (
-                        <View key={tag} style={styles.previewTagChip}>
-                          <Text style={styles.previewTagText}>#{tag}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  <View style={styles.interactionRow}>
-                    <TouchableOpacity style={styles.interactionButton} onPress={() => toggleLike(post.id)}>
-                      <Text style={styles.interactionButtonText}>
-                        {interactionState?.viewerHasLiked ? '♥' : '♡'} {interactionState?.likeCount ?? post.likeCount}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.interactionButton} onPress={() => openPost(post.id)}>
-                      <Text style={styles.interactionButtonText}>
-                        💬 {interactionState?.commentCount ?? post.commentCount}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {isSelected ? (
-                    <View style={styles.commentPanel}>
-                      <Text style={styles.sectionLabel}>COMMENTS</Text>
-                      {commentsLoading ? (
-                        <ActivityIndicator size="small" color="#456B50" />
-                      ) : comments.length === 0 ? (
-                        <Text style={styles.helperText}>No comments yet. Start the conversation.</Text>
-                      ) : (
-                        comments.map((comment) => (
-                          <View key={comment.id} style={styles.commentCard}>
-                            <Text style={styles.commentAuthor}>
-                              {comment.authorFirstName || 'Unknown User'}
-                            </Text>
-                            <Text style={styles.commentBody}>
-                              {comment.isDeleted ? '[comment removed]' : comment.body}
-                            </Text>
-                            <Text style={styles.commentMeta}>{formatTimestamp(comment.createdAt)}</Text>
-                          </View>
-                        ))
-                      )}
-
-                      <TextInput
-                        style={styles.commentInput}
-                        value={commentDraft}
-                        onChangeText={setCommentDraft}
-                        placeholder="Write a comment"
-                        placeholderTextColor="#A89F93"
-                        multiline
-                      />
-                      <TouchableOpacity
-                        style={[styles.publishButton, commentSubmitting && styles.publishButtonDisabled]}
-                        onPress={addComment}
-                        disabled={commentSubmitting}
-                      >
-                        <Text style={styles.publishButtonText}>
-                          {commentSubmitting ? 'Sending...' : 'Add Comment'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : null}
-                </View>
-              );
-            })
-          )}
-        </View>
-
-        {createdPost ? (
-          <View style={styles.previewCard}>
-            <Text style={styles.sectionLabel}>LATEST CREATED POST</Text>
-            <View style={styles.previewHeader}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {createdPost.authorFirstName.slice(0, 2).toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.previewMeta}>
-                <Text style={styles.previewAuthor}>{createdPost.authorFirstName}</Text>
-                <Text style={styles.previewDate}>{formatTimestamp(createdPost.createdAt)}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.previewBody}>{createdPost.body}</Text>
-
-            {createdPost.hashtags.length > 0 ? (
-              <View style={styles.tagWrap}>
-                {createdPost.hashtags.map((tag) => (
-                  <View key={tag} style={styles.previewTagChip}>
-                    <Text style={styles.previewTagText}>#{tag}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-
-            <Text style={styles.previewFooter}>
-              {createdPost.isAuthor ? 'You are the author of this post.' : 'Post published successfully.'}
+        ) : activePosts.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>
+              {activeTab === 'forYou' ? 'No recommendations yet' : 'No followed posts yet'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {activeTab === 'forYou'
+                ? 'Pull to refresh after more activity is available.'
+                : 'Once you follow people with posts, they will appear here.'}
             </Text>
           </View>
-        ) : null}
+        ) : (
+          activePosts.map((post) => (
+            <View key={post.id} style={styles.postCard}>
+              <View style={styles.postHeader}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{post.authorFirstName.substring(0, 2).toUpperCase()}</Text>
+                </View>
+                <View style={styles.postHeaderCopy}>
+                  <Text style={styles.authorName}>{post.authorFirstName}</Text>
+                  <Text style={styles.postMeta}>{formatRelativeLabel(post.createdAt)}</Text>
+                </View>
+                <View style={styles.feedSourceBadge}>
+                  <Text style={styles.feedSourceBadgeText}>
+                    {activeTab === 'forYou' ? 'For You' : 'Following'}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.postBody}>{post.body}</Text>
+
+              {post.hashtags.length > 0 && (
+                <View style={styles.hashtagRow}>
+                  {post.hashtags.map((hashtag) => (
+                    <View key={`${post.id}-${hashtag}`} style={styles.hashtagChip}>
+                      <Text style={styles.hashtagText}>#{hashtag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <View style={styles.postFooter}>
+                <Text style={styles.footerStat}>{post.likeCount} likes</Text>
+                <Text style={styles.footerStat}>{post.commentCount} comments</Text>
+              </View>
+            </View>
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -555,231 +234,159 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ECE8E1',
   },
-  header: {
-    backgroundColor: '#456B50',
-    paddingTop: 54,
+  scrollArea: {
+    flex: 1,
+  },
+  content: {
     paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingTop: 54,
+    paddingBottom: 40,
   },
   statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 24,
   },
   statusText: {
-    color: '#FFFFFF',
+    color: '#2E2A24',
     fontSize: 16,
     fontWeight: '700',
   },
   statusIcons: {
-    color: '#FFFFFF',
+    color: '#5D554C',
     fontSize: 18,
     fontWeight: '700',
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    marginBottom: 22,
+  },
   backButton: {
-    alignSelf: 'flex-start',
-    marginTop: 18,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingTop: 2,
+    paddingRight: 8,
   },
-  backButtonText: {
-    color: '#F7F4EE',
-    fontSize: 14,
-    fontWeight: '700',
+  backText: {
+    color: '#23372B',
+    fontSize: 32,
+    fontWeight: '500',
   },
-  title: {
-    color: '#F7F4EE',
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: '700',
-    marginTop: 18,
-  },
-  titleItalic: {
-    fontStyle: 'italic',
-  },
-  subtitle: {
-    color: 'rgba(247,244,238,0.84)',
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 10,
-    maxWidth: 280,
-  },
-  scrollArea: {
+  headerCopy: {
     flex: 1,
   },
-  content: {
-    padding: 24,
-    gap: 18,
-  },
-  composerCard: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 28,
-    padding: 20,
-  },
-  feedCard: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 28,
-    padding: 20,
-  },
-  previewCard: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 28,
-    padding: 20,
-  },
-  sectionLabel: {
+  eyebrow: {
     color: '#8B8176',
     fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 1.2,
-    marginBottom: 10,
+    letterSpacing: 1.8,
+    marginBottom: 8,
   },
-  bodyInput: {
-    minHeight: 150,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: '#DDD5CA',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+  title: {
     color: '#23372B',
-    fontSize: 15,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '700',
   },
-  charCount: {
-    color: '#8B8176',
-    fontSize: 12,
-    textAlign: 'right',
-    marginTop: 8,
+  summaryCard: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#DDD5CA',
     marginBottom: 18,
   },
-  tagInput: {
-    height: 54,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#DDD5CA',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    color: '#23372B',
-    fontSize: 15,
-  },
-  helperText: {
-    color: '#8B8176',
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 10,
-  },
-  tagWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  tagChip: {
-    backgroundColor: '#E4EEE6',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  tagChipText: {
-    color: '#2F563C',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  publishButton: {
-    marginTop: 20,
-    backgroundColor: '#4B7B57',
-    borderRadius: 20,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  publishButtonDisabled: {
-    opacity: 0.6,
-  },
-  publishButtonText: {
-    color: '#F8F6F2',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  feedTopRow: {
+  summaryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 12,
   },
-  refreshText: {
-    color: '#456B50',
+  summaryLabel: {
+    color: '#8B8176',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  summaryCount: {
+    color: '#23372B',
+    fontSize: 30,
+    fontWeight: '700',
+  },
+  summaryText: {
+    color: '#6F6459',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 12,
+  },
+  markReadButton: {
+    backgroundColor: '#456B50',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  markReadButtonText: {
+    color: '#F8F6F2',
     fontSize: 13,
     fontWeight: '700',
   },
   tabRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 18,
   },
   tabButton: {
     flex: 1,
-    borderRadius: 16,
-    backgroundColor: '#EFE8DE',
-    paddingVertical: 12,
+    backgroundColor: '#F8F6F2',
+    borderRadius: 18,
+    paddingVertical: 14,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#DDD5CA',
   },
   tabButtonActive: {
-    backgroundColor: '#D7E8DA',
+    backgroundColor: '#456B50',
+    borderColor: '#456B50',
   },
   tabButtonText: {
-    color: '#6A5E52',
-    fontSize: 14,
+    color: '#5F5449',
+    fontSize: 15,
     fontWeight: '700',
   },
   tabButtonTextActive: {
-    color: '#2F563C',
+    color: '#F8F6F2',
   },
-  searchInput: {
-    height: 54,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#DDD5CA',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    color: '#23372B',
-    fontSize: 15,
-    marginBottom: 14,
+  loader: {
+    marginTop: 36,
   },
-  feedLoader: {
-    marginVertical: 24,
-  },
-  emptyState: {
-    backgroundColor: '#FFFFFF',
+  emptyCard: {
+    backgroundColor: '#F8F6F2',
     borderRadius: 22,
-    padding: 18,
-    alignItems: 'center',
+    padding: 22,
+    borderWidth: 1,
+    borderColor: '#DDD5CA',
   },
-  emptyStateTitle: {
+  emptyTitle: {
     color: '#23372B',
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  emptyStateText: {
-    color: '#8B8176',
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
+  emptyText: {
+    color: '#6F6459',
+    fontSize: 14,
+    lineHeight: 21,
   },
   postCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F6F2',
     borderRadius: 24,
     padding: 18,
-    marginTop: 14,
     borderWidth: 1,
-    borderColor: '#EEE4D8',
+    borderColor: '#DDD5CA',
+    marginBottom: 14,
   },
-  postCardSelected: {
-    borderColor: '#C8D8CB',
-  },
-  previewHeader: {
+  postHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 14,
@@ -795,98 +402,64 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     color: '#2F563C',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
-  previewMeta: {
+  postHeaderCopy: {
     flex: 1,
   },
-  previewAuthor: {
+  authorName: {
     color: '#23372B',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
+    marginBottom: 2,
   },
-  previewDate: {
+  postMeta: {
     color: '#8B8176',
     fontSize: 12,
-    marginTop: 2,
+    fontWeight: '500',
   },
-  previewBody: {
-    color: '#2E2A25',
+  feedSourceBadge: {
+    backgroundColor: '#EEF3EE',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  feedSourceBadgeText: {
+    color: '#2F563C',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  postBody: {
+    color: '#3E352C',
     fontSize: 15,
     lineHeight: 22,
   },
-  previewTagChip: {
-    backgroundColor: '#EFE8DE',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  previewTagText: {
-    color: '#6A5E52',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  interactionRow: {
+  hashtagRow: {
     flexDirection: 'row',
-    gap: 10,
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 14,
   },
-  interactionButton: {
-    borderRadius: 16,
-    backgroundColor: '#F5EFE7',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  hashtagChip: {
+    backgroundColor: '#EEF3EE',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  interactionButtonText: {
-    color: '#4D463E',
-    fontSize: 13,
+  hashtagText: {
+    color: '#2F563C',
+    fontSize: 12,
     fontWeight: '700',
   },
-  commentPanel: {
+  postFooter: {
+    flexDirection: 'row',
+    gap: 16,
     marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#EEE4D8',
   },
-  commentCard: {
-    backgroundColor: '#F8F6F2',
-    borderRadius: 18,
-    padding: 14,
-    marginTop: 10,
-  },
-  commentAuthor: {
-    color: '#23372B',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  commentBody: {
-    color: '#4D463E',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  commentMeta: {
+  footerStat: {
     color: '#8B8176',
     fontSize: 12,
-    marginTop: 8,
-  },
-  commentInput: {
-    minHeight: 90,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#DDD5CA',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: '#23372B',
-    fontSize: 15,
-    marginTop: 14,
-    textAlignVertical: 'top',
-  },
-  previewFooter: {
-    color: '#6A5E52',
-    fontSize: 13,
-    marginTop: 16,
+    fontWeight: '600',
   },
 });

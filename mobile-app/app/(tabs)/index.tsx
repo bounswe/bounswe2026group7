@@ -144,6 +144,10 @@ export default function HomeScreen() {
     });
   };
 
+  const openSocialFeed = () => {
+    router.push('/social-feed' as any);
+  };
+
   const sectionTitle = isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS';
   const visibleConnections = isMentor
     ? connections.filter((c) => c.type === 'mentee')
@@ -202,6 +206,24 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <TouchableOpacity style={styles.feedEntryCard} onPress={openSocialFeed}>
+          <View style={styles.feedEntryHeader}>
+            <View style={styles.feedEntryInfo}>
+              <Text style={styles.feedEntryEyebrow}>SOCIAL FEED</Text>
+              <Text style={styles.feedEntryTitle}>Browse updates from your network</Text>
+            </View>
+            <View style={styles.feedEntryBadge}>
+              <Text style={styles.feedEntryBadgeText}>New</Text>
+            </View>
+          </View>
+          <Text style={styles.feedEntryText}>
+            Open the mobile social feed to switch between `For You` and `Following`.
+          </Text>
+          <View style={styles.feedEntryButton}>
+            <Text style={styles.feedEntryButtonText}>Open Feed</Text>
+          </View>
+        </TouchableOpacity>
+
         <Text style={styles.sectionTitle}>{sectionTitle}</Text>
 
         {loading ? (
@@ -359,6 +381,66 @@ const styles = StyleSheet.create({
   titleItalic: { fontStyle: 'italic', fontWeight: '700' },
   scrollArea: { flex: 1, backgroundColor: '#ECE8E1' },
   scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 34 },
+  feedEntryCard: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#DDD5CA',
+  },
+  feedEntryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  feedEntryInfo: {
+    flex: 1,
+  },
+  feedEntryEyebrow: {
+    color: '#8B8176',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  feedEntryTitle: {
+    color: '#23372B',
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+  },
+  feedEntryBadge: {
+    backgroundColor: '#D7E8DA',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  feedEntryBadgeText: {
+    color: '#2F563C',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  feedEntryText: {
+    color: '#6F6459',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  feedEntryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#456B50',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  feedEntryButtonText: {
+    color: '#F8F6F2',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
