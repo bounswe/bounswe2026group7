@@ -1116,6 +1116,48 @@
 
 /* ── AVAILABILITY PAGE ── */
 .avail-layout { display: grid; grid-template-columns: 1fr 280px; gap: 24px; }
+
+/* ── AVAILABILITY HOUR GRID (#336) ── */
+.avail-grid {
+  display: grid;
+  grid-template-columns: 64px repeat(7, 1fr);
+  gap: 2px;
+  user-select: none;
+}
+.avail-grid--disabled { opacity: 0.6; pointer-events: none; }
+.avail-grid-corner { background: transparent; }
+.avail-grid-day-header {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 6px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.avail-grid-hour-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  padding-right: 8px;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+}
+.avail-grid-cell {
+  height: 28px;
+  background: var(--green-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+.avail-grid-cell:hover:not(:disabled) { border-color: var(--green-dark); }
+.avail-grid-cell--on {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+}
+.avail-grid-cell:disabled { cursor: not-allowed; }
 .day-row {
   display: flex; align-items: center; gap: 16px;
   padding: 14px 12px; border-radius: var(--radius-sm);
