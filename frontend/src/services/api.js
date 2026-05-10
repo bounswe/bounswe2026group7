@@ -433,6 +433,57 @@ export async function deleteMilestoneActionItem(itemId) {
   return handleResponse(res)
 }
 
+// ── Meetings (#337 / #338) ────────────────────────────────────────────────
+// Backend: MeetingController. Statuses: PENDING_CONFIRMATION, CONFIRMED,
+// DECLINED, EXPIRED, COMPLETED, CANCELLED. ONLINE meetings require
+// `meetingLink`; recurring meetings carry an RFC 5545 RRULE.
+
+export async function listMentorshipMeetings(mentorshipId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/meetings`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMeetingDetail(meetingId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+// Mentor creates a meeting. Returns MeetingCreateResponse { meetings[], warnings[] }
+// because a recurring meeting expands server-side into multiple Meeting rows.
+export async function createMeeting(mentorshipId, payload) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/meetings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(res)
+}
+
+export async function confirmMeeting(meetingId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}/confirm`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function declineMeeting(meetingId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}/decline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 // ── Mentorship progress + timeline (#126 + #333) ──────────────────────────
 // Backend: MentorshipController.
 //   /progress  → MentorshipProgressResponse (counts + 0..1 ratio + lastActivityAt)
