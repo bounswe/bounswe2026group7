@@ -114,11 +114,15 @@ public class MentorshipService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public MentorshipResponse getMentorship(Long userId, Long mentorshipId) {
+        Mentorship mentorship = findForParticipant(userId, mentorshipId);
+        return MentorshipResponse.from(mentorship);
+    }
+
     @Transactional
     public MentorshipResponse setSharedGoal(Long userId, Long mentorshipId, SharedGoalRequest dto) {
-        Mentorship mentorship = mentorshipRepository.findById(mentorshipId)
-                .filter(m -> m.getMentor().getId().equals(userId) || m.getMentee().getId().equals(userId))
-                .orElseThrow(() -> new ResourceNotFoundException("Mentorship not found"));
+        Mentorship mentorship = findForParticipant(userId, mentorshipId);
 
         if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
             log.warn("Shared goal update rejected: mentorshipId={} not active", mentorshipId);
@@ -129,5 +133,17 @@ public class MentorshipService {
         Mentorship saved = mentorshipRepository.save(mentorship);
         log.info("Shared goal updated: mentorshipId={}, updatedByUserId={}", mentorshipId, userId);
         return MentorshipResponse.from(saved);
+    }
+
+    /**
+     * Package-private so other services in this package (e.g. MentorshipProgressService)
+     * can reuse the participant-filter lookup without duplicating it. Filters on the FK
+     * columns directly via the repository so we don't trigger LAZY loads on
+     * {@code mentor} / {@code mentee} just to compare ids. Do not narrow back to private
+     * without checking other callers.
+     */
+    Mentorship findForParticipant(Long userId, Long mentorshipId) {
+        return mentorshipRepository.findByIdAndParticipant(mentorshipId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Mentorship not found"));
     }
 }

@@ -53,6 +53,7 @@ public class MilestoneService {
             throw new ProfileNotVisibleException("Only mentors can create milestones");
         }
         checkMentorshipActive(mentorship);
+        MentorshipPreconditions.requireSharedGoal(mentorship);
 
         if (request.getTargetDate() != null) {
             ensureWithinMentorship(mentorship, request.getTargetDate());

@@ -5,6 +5,12 @@ import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
 import {
+  getPushPermissionState,
+  getStoredPushToken,
+  registerPushToken,
+  unregisterStoredPushToken,
+} from '../../lib/pushNotifications';
+import {
   View,
   Text,
   TextInput,
@@ -17,6 +23,13 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 
 type AppRole = 'mentor' | 'mentee';
+type NotificationPreferences = {
+  matchesEnabled: boolean;
+  messagesEnabled: boolean;
+  meetingsEnabled: boolean;
+  tasksEnabled: boolean;
+  requestsEnabled: boolean;
+};
 
 // İsme göre baş harfleri hesaplayan yardımcı fonksiyon
 const getInitials = (name: string) => {
@@ -38,6 +51,7 @@ export default function ProfileScreen() {
         SecureStore.getItemAsync('userId'),
         SecureStore.getItemAsync('userRole'),
       ]);
+      await unregisterStoredPushToken().catch(() => undefined);
       if (userId && (savedRole === 'mentor' || savedRole === 'mentee')) {
         await SecureStore.deleteItemAsync(getAvatarStorageKey(savedRole, userId)).catch(() => undefined);
       }
@@ -93,7 +107,12 @@ function TokenEditor({
           onSubmitEditing={onAdd}
           returnKeyType="done"
         />
-        <TouchableOpacity style={styles.addTokenButton} onPress={onAdd}>
+        <TouchableOpacity
+          style={styles.addTokenButton}
+          onPress={onAdd}
+          accessibilityRole="button"
+          accessibilityLabel={`Add ${label}`}
+        >
           <Text style={styles.addTokenButtonText}>Add</Text>
         </TouchableOpacity>
       </View>
@@ -101,7 +120,12 @@ function TokenEditor({
         {values.map((item) => (
           <View key={item} style={styles.tokenChip}>
             <Text style={styles.tokenChipText}>{item}</Text>
-            <TouchableOpacity onPress={() => onRemove(item)}>
+            <TouchableOpacity
+              onPress={() => onRemove(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${item}`}
+              hitSlop={8}
+            >
               <Text style={styles.tokenRemoveText}>×</Text>
             </TouchableOpacity>
           </View>
@@ -219,6 +243,204 @@ function openAvatarActions(
   Alert.alert('Profile Photo', 'Choose an action', options);
 }
 
+function NotificationToggleRow({
+  label,
+  value,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  value: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <View style={styles.notificationRow}>
+      <Text style={styles.notificationLabel}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.toggleButton, value && styles.toggleButtonOn, disabled && styles.toggleButtonDisabled]}
+        onPress={onToggle}
+        disabled={disabled}
+      >
+        <Text style={styles.toggleButtonText}>{value ? 'On' : 'Off'}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function PushSettingsCard() {
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [permissionState, setPermissionState] = useState('Loading...');
+  const [deviceRegistered, setDeviceRegistered] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [registering, setRegistering] = useState(false);
+
+  const loadPushSettings = async () => {
+    try {
+      setLoading(true);
+      const [prefsRes, storedToken, permission] = await Promise.all([
+        apiClient.get('/users/me/notification-preferences'),
+        getStoredPushToken(),
+        getPushPermissionState(),
+      ]);
+
+      setPrefs(prefsRes.data);
+      setDeviceRegistered(Boolean(storedToken));
+      setPermissionState(
+        permission === 'granted'
+          ? 'Granted'
+          : permission === 'denied'
+            ? 'Denied'
+            : permission === 'unsupported'
+              ? 'Physical device required'
+              : 'Not requested'
+      );
+    } catch (error) {
+      console.error('Error loading push settings:', error);
+      setPermissionState('Unavailable');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPushSettings();
+  }, []);
+
+  const updatePreferences = async (patch: Partial<NotificationPreferences>) => {
+    if (!prefs) return;
+
+    const previousPrefs = prefs;
+    const optimisticPrefs = { ...prefs, ...patch };
+    setPrefs(optimisticPrefs);
+
+    try {
+      setSaving(true);
+      const response = await apiClient.patch('/users/me/notification-preferences', patch);
+      setPrefs(response.data);
+    } catch (error: any) {
+      setPrefs(previousPrefs);
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Could not update notification preferences.';
+      Alert.alert('Error', message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const enablePush = async () => {
+    try {
+      setRegistering(true);
+      const result = await registerPushToken();
+
+      if (result.status === 'registered') {
+        setDeviceRegistered(true);
+        setPermissionState('Granted');
+        Alert.alert('Success', 'This device is now registered for push notifications.');
+        return;
+      }
+
+      if (result.status === 'permission_denied') {
+        setPermissionState('Denied');
+        Alert.alert('Permission needed', 'Push notifications were not enabled because permission was denied.');
+        return;
+      }
+
+      if (result.status === 'simulator') {
+        setPermissionState('Physical device required');
+        Alert.alert('Unavailable', 'Push registration requires a physical device.');
+        return;
+      }
+
+      Alert.alert('Error', result.message);
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const disablePush = async () => {
+    try {
+      setRegistering(true);
+      await unregisterStoredPushToken();
+      setDeviceRegistered(false);
+      Alert.alert('Disabled', 'This device has been removed from push notification delivery.');
+    } catch {
+      Alert.alert('Error', 'Could not disable push notifications on this device.');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  return (
+    <View style={styles.formCardMentee}>
+      <Text style={styles.sectionHeaderText}>PUSH NOTIFICATIONS</Text>
+      {loading || !prefs ? (
+        <Text style={styles.pushStatusText}>Loading push settings...</Text>
+      ) : (
+        <>
+          <Text style={styles.pushStatusText}>Permission: {permissionState}</Text>
+          <Text style={styles.pushStatusText}>
+            Device registration: {deviceRegistered ? 'Registered' : 'Not registered'}
+          </Text>
+
+          <View style={styles.pushButtonRow}>
+            <TouchableOpacity
+              style={[styles.pushActionButton, registering && styles.toggleButtonDisabled]}
+              onPress={enablePush}
+              disabled={registering}
+            >
+              <Text style={styles.pushActionButtonText}>
+                {registering ? 'Working...' : deviceRegistered ? 'Refresh Device Token' : 'Enable Push'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.pushDangerButton, (!deviceRegistered || registering) && styles.toggleButtonDisabled]}
+              onPress={disablePush}
+              disabled={!deviceRegistered || registering}
+            >
+              <Text style={styles.pushDangerButtonText}>Disable</Text>
+            </TouchableOpacity>
+          </View>
+
+          <NotificationToggleRow
+            label="Messages"
+            value={prefs.messagesEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ messagesEnabled: !prefs.messagesEnabled })}
+          />
+          <NotificationToggleRow
+            label="Meetings"
+            value={prefs.meetingsEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ meetingsEnabled: !prefs.meetingsEnabled })}
+          />
+          <NotificationToggleRow
+            label="Tasks"
+            value={prefs.tasksEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ tasksEnabled: !prefs.tasksEnabled })}
+          />
+          <NotificationToggleRow
+            label="Requests"
+            value={prefs.requestsEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ requestsEnabled: !prefs.requestsEnabled })}
+          />
+          <NotificationToggleRow
+            label="Matches"
+            value={prefs.matchesEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ matchesEnabled: !prefs.matchesEnabled })}
+          />
+        </>
+      )}
+    </View>
+  );
+}
+
 // --- MENTEE PROFILI ---
 function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   const [fullName, setFullName] = useState('');
@@ -322,6 +544,9 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
               if (!userId) return;
               openAvatarActions('mentee', userId, profilePhoto, setProfilePhoto);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile photo"
+            accessibilityHint="Opens photo actions for your profile picture"
           >
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
@@ -342,6 +567,8 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/mentorship-requests')}
+              accessibilityRole="button"
+              accessibilityLabel="My requests"
             >
               <Text style={styles.quickActionIcon}>📋</Text>
               <Text style={styles.quickActionText}>My Requests</Text>
@@ -349,6 +576,8 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.navigate('/explore')}
+              accessibilityRole="button"
+              accessibilityLabel="Find mentor"
             >
               <Text style={styles.quickActionIcon}>🔍</Text>
               <Text style={styles.quickActionText}>Find Mentor</Text>
@@ -356,6 +585,8 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/availability-scheduling')}
+              accessibilityRole="button"
+              accessibilityLabel="Availability"
             >
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Availability</Text>
@@ -398,12 +629,20 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
               <TouchableOpacity
                 style={[styles.toggleButton, profileVisibility && styles.toggleButtonOn]}
                 onPress={() => setProfileVisibility(!profileVisibility)}
+                accessibilityRole="switch"
+                accessibilityLabel="Profile visibility"
+                accessibilityState={{ checked: profileVisibility }}
               >
                 <Text style={styles.toggleButtonText}>{profileVisibility ? 'Public' : 'Private'}</Text>
               </TouchableOpacity>
             </View>
           </View>
-          <TouchableOpacity style={styles.saveButtonMentee} onPress={handleSave}>
+          <TouchableOpacity
+            style={styles.saveButtonMentee}
+            onPress={handleSave}
+            accessibilityRole="button"
+            accessibilityLabel="Save mentee profile changes"
+          >
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
 
@@ -439,7 +678,12 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             })
           )}
 
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={onLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
+          >
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
         </View>
@@ -545,6 +789,9 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
               if (!userId) return;
               openAvatarActions('mentor', userId, profilePhoto, setProfilePhoto);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile photo"
+            accessibilityHint="Opens photo actions for your profile picture"
           >
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
@@ -565,6 +812,8 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/(tabs)/explore' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Requests"
             >
               <Text style={styles.quickActionIcon}>📋</Text>
               <Text style={styles.quickActionText}>Requests</Text>
@@ -572,6 +821,8 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/availability-scheduling')}
+              accessibilityRole="button"
+              accessibilityLabel="Availability"
             >
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Availability</Text>
@@ -630,10 +881,20 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
               placeholderTextColor="#B5ADA3"
             />
           </View>
-          <TouchableOpacity style={styles.saveButtonMentor} onPress={handleSave}>
+          <TouchableOpacity
+            style={styles.saveButtonMentor}
+            onPress={handleSave}
+            accessibilityRole="button"
+            accessibilityLabel="Save mentor profile changes"
+          >
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={onLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
+          >
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
         </View>
@@ -671,6 +932,34 @@ const styles = StyleSheet.create({
   tokenChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 15, backgroundColor: '#EEF3EE', borderWidth: 1, borderColor: '#D7E8DA' },
   tokenChipText: { color: '#2F563C', fontSize: 13, fontWeight: '600' },
   tokenRemoveText: { color: '#2F563C', fontSize: 18, fontWeight: '700', marginLeft: 8 },
+  pushStatusText: { color: '#7E7368', fontSize: 13, marginBottom: 10, lineHeight: 18 },
+  pushButtonRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  pushActionButton: {
+    flex: 1,
+    backgroundColor: '#4B7B57',
+    borderRadius: 15,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  pushActionButtonText: { color: '#F8F6F2', fontWeight: '700', fontSize: 13 },
+  pushDangerButton: {
+    minWidth: 96,
+    backgroundColor: '#FDF0EF',
+    borderRadius: 15,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FAD4D4',
+  },
+  pushDangerButtonText: { color: '#D9534F', fontWeight: '700', fontSize: 13 },
+  notificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  notificationLabel: { color: '#4A4138', fontSize: 14, fontWeight: '600' },
   logoutButton: { backgroundColor: '#FDF0EF', borderWidth: 1, borderColor: '#FAD4D4', borderRadius: 20, paddingVertical: 15, alignItems: 'center', marginTop: 12 },
   logoutButtonText: { color: '#D9534F', fontSize: 16, fontWeight: '700' },
   quickActionsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
@@ -741,6 +1030,9 @@ const styles = StyleSheet.create({
   },
   toggleButtonOn: {
     backgroundColor: '#D7E8DA',
+  },
+  toggleButtonDisabled: {
+    opacity: 0.5,
   },
   toggleButtonText: {
     color: '#2F563C',

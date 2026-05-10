@@ -54,4 +54,8 @@ public class Mentorship {
     protected void onCreate() {
         this.createdAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
+
+    public boolean hasSharedGoal() {
+        return sharedGoal != null && !sharedGoal.isBlank();
+    }
 }

@@ -8,9 +8,17 @@ import com.resend.services.emails.model.CreateEmailOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+/**
+ * Production EmailService. Bean is registered only when {@code app.email.enabled}
+ * is true (default). When disabled (e.g. in CI E2E runs), {@link NoOpEmailService}
+ * is registered instead so the verification/reset token rows still get persisted
+ * and the test-support controller can hand them to Playwright.
+ */
 @Service
+@ConditionalOnProperty(name = "app.email.enabled", havingValue = "true", matchIfMissing = true)
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);

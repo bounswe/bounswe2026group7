@@ -191,7 +191,7 @@ export default function MessagesScreen() {
   const isMentor = role === 'mentor';
   const params = useLocalSearchParams();
 
-const [search, setSearch] = useState('');
+  const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
   const [activeListTab, setActiveListTab] = useState<ConversationListTab>('mentorships');
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
@@ -613,7 +613,12 @@ const [search, setSearch] = useState('');
           </View>
 
           <View style={styles.chatHeaderRow}>
-            <TouchableOpacity onPress={() => setSelectedConversation(null)}>
+            <TouchableOpacity
+              onPress={() => setSelectedConversation(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Back to conversation list"
+              hitSlop={8}
+            >
               <Text style={styles.backArrow}>‹</Text>
             </TouchableOpacity>
 
@@ -633,7 +638,14 @@ const [search, setSearch] = useState('');
         </View>
 
         <View style={styles.contextBar}>
-          <Text style={styles.badgeSage}>
+          <Text
+            style={styles.badgeSage}
+            accessibilityLabel={
+              selectedConversation.threadKind === 'mentorPair'
+                ? 'Peer mentor chat'
+                : 'Mentorship chat'
+            }
+          >
             {selectedConversation.threadKind === 'mentorPair' ? 'Peer Mentor Chat' : 'Mentorship Chat'}
           </Text>
           <Text style={styles.contextText}>
@@ -691,6 +703,13 @@ const [search, setSearch] = useState('');
                           style={styles.attachmentPill}
                           onPress={() => openAttachment(message.attachment!)}
                           disabled={openingAttachmentId === message.attachment.id}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open attachment ${message.attachment.name}`}
+                          accessibilityHint={
+                            openingAttachmentId === message.attachment.id
+                              ? 'Attachment is opening'
+                              : 'Opens the shared attachment'
+                          }
                         >
                           <Text style={styles.attachmentIcon}>
                             {message.attachment.contentType?.includes('image') ? '🖼️' : '📄'}
@@ -732,14 +751,27 @@ const [search, setSearch] = useState('');
                 {formatAttachmentMeta(pendingAttachment.size, pendingAttachment.type)}
               </Text>
             </View>
-            <TouchableOpacity onPress={() => setPendingAttachment(null)}>
+            <TouchableOpacity
+              onPress={() => setPendingAttachment(null)}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove attachment ${pendingAttachment.name}`}
+              hitSlop={8}
+            >
               <Text style={styles.pendingAttachmentRemove}>✕</Text>
             </TouchableOpacity>
           </View>
         ) : null}
 
         <View style={styles.inputBar}>
-          <TouchableOpacity onPress={chooseAttachment} disabled={sending}>
+          <TouchableOpacity
+            onPress={chooseAttachment}
+            disabled={sending}
+            accessibilityRole="button"
+            accessibilityLabel="Add attachment"
+            accessibilityHint="Choose a photo or document to attach"
+            accessibilityState={{ disabled: sending }}
+            hitSlop={8}
+          >
             <Text style={styles.inputIcon}>📎</Text>
           </TouchableOpacity>
           <TextInput
@@ -749,11 +781,16 @@ const [search, setSearch] = useState('');
             placeholderTextColor="#B7B0A4"
             style={styles.input}
             multiline
+            accessibilityLabel={`Message ${selectedConversation.counterpartName}`}
+            accessibilityHint="Type your message here"
           />
           <TouchableOpacity
             style={[styles.sendButton, sending && styles.sendButtonDisabled]}
             onPress={sendMessage}
             disabled={sending}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+            accessibilityState={{ disabled: sending, busy: sending }}
           >
             <Text style={styles.sendButtonText}>{sending ? '…' : '➤'}</Text>
           </TouchableOpacity>
@@ -785,6 +822,9 @@ const [search, setSearch] = useState('');
                   activeListTab === 'mentorships' && styles.listTabButtonActive,
                 ]}
                 onPress={() => setActiveListTab('mentorships')}
+                accessibilityRole="tab"
+                accessibilityLabel="Mentorship conversations tab"
+                accessibilityState={{ selected: activeListTab === 'mentorships' }}
               >
                 <Text
                   style={[
@@ -801,6 +841,9 @@ const [search, setSearch] = useState('');
                   activeListTab === 'mentorPeers' && styles.listTabButtonActive,
                 ]}
                 onPress={() => setActiveListTab('mentorPeers')}
+                accessibilityRole="tab"
+                accessibilityLabel="Peer mentor conversations tab"
+                accessibilityState={{ selected: activeListTab === 'mentorPeers' }}
               >
                 <Text
                   style={[
@@ -828,6 +871,8 @@ const [search, setSearch] = useState('');
               }
               placeholderTextColor="rgba(255,255,255,0.45)"
               style={styles.searchInput}
+              accessibilityLabel="Search conversations"
+              accessibilityHint="Filters the visible conversation list"
             />
           </View>
         </View>
@@ -952,6 +997,12 @@ function ConversationRow({
           {item.preview}
         </Text>
       </View>
+
+      {item.unread ? (
+        <View style={styles.unreadBadge}>
+          <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
