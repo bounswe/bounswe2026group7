@@ -1,186 +1,111 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import MainLayout from '../components/MainLayout'
+import AvailabilityGrid, { slotsToCellSet, cellSetToSlots } from '../components/AvailabilityGrid'
+import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard'
 import { useAuth } from '../context/AuthContext'
-import {
-  getMentorAvailability,
-  saveMentorAvailability,
-  getMenteeAvailability,
-  saveMenteeAvailability,
-} from '../services/api'
+import { getMentorAvailability, saveMentorAvailability } from '../services/api'
 import '../styles/main.css'
 
-const INITIAL_DAYS = [
-  { key: 'Mon', label: 'Mon', start: '09:00', end: '18:00', on: true },
-  { key: 'Tue', label: 'Tue', start: '09:00', end: '18:00', on: true },
-  { key: 'Wed', label: 'Wed', start: '09:00', end: '18:00', on: true },
-  { key: 'Thu', label: 'Thu', start: '09:00', end: '18:00', on: true },
-  { key: 'Fri', label: 'Fri', start: '09:00', end: '18:00', on: true },
-  { key: 'Sat', label: 'Sat', start: '09:00', end: '18:00', on: false },
-  { key: 'Sun', label: 'Sun', start: '09:00', end: '18:00', on: false },
+const BROWSER_TZ = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }
+  catch { return 'UTC' }
+})()
+
+// Commonly-used IANA zones surfaced first in the picker; "Browser default"
+// shows the browser-resolved value. The backend stores availability as
+// timezone-naive LocalTime — the picker is informational so the mentor knows
+// which zone the hour numbers represent. We do not convert hours when the
+// picker changes; doing so would silently corrupt previously-saved slots.
+const TIMEZONE_OPTIONS = [
+  'Europe/Istanbul',
+  'Europe/London',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Los_Angeles',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'UTC',
 ]
-
-const DAY_TO_BACKEND = {
-  Mon: 'MONDAY', Tue: 'TUESDAY', Wed: 'WEDNESDAY', Thu: 'THURSDAY',
-  Fri: 'FRIDAY', Sat: 'SATURDAY', Sun: 'SUNDAY',
-}
-const DAY_FROM_BACKEND = Object.fromEntries(
-  Object.entries(DAY_TO_BACKEND).map(([k, v]) => [v, k])
-)
-
-// Backend LocalTime arrives as { hour, minute, second, nano } or "HH:mm:ss".
-function timeObjToStr(t) {
-  if (!t) return null
-  if (typeof t === 'string') return t.slice(0, 5)
-  return `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`
-}
-
-const DURATIONS = [
-  { label: '30 min', value: 30 },
-  { label: '45 min', value: 45 },
-  { label: '60 min', value: 60 },
-  { label: '90 min', value: 90 },
-]
-
-const USER_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
-
-function DayRow({ day, onToggle, onTimeChange }) {
-  return (
-    <div className={`day-row${day.on ? '' : ' off'}`}>
-      <div className={`day-chip${day.on ? '' : ' off'}`}>{day.label}</div>
-
-      <div className="time-range">
-        {day.on ? (
-          <>
-            <input
-              type="time"
-              className="time-input"
-              value={day.start}
-              onChange={e => onTimeChange(day.key, 'start', e.target.value)}
-              title="Start time"
-            />
-            <span className="time-sep">–</span>
-            <input
-              type="time"
-              className="time-input"
-              value={day.end}
-              onChange={e => onTimeChange(day.key, 'end', e.target.value)}
-              title="End time"
-            />
-          </>
-        ) : (
-          <span className="time-pill off">Not available</span>
-        )}
-      </div>
-
-      <button
-        className={`toggle${day.on ? '' : ' off'}`}
-        onClick={() => onToggle(day.key)}
-        aria-label={`${day.on ? 'Disable' : 'Enable'} ${day.label}`}
-      />
-    </div>
-  )
-}
 
 export default function AvailabilityPage() {
   const { role, userId } = useAuth()
   const isMentor = role === 'MENTOR'
 
-  const [days, setDays] = useState(INITIAL_DAYS)
-  const [duration, setDuration] = useState(60)
-  const [status, setStatus] = useState(null) // null | 'success' | string (error)
+  const [selected, setSelected] = useState(() => new Set())
+  const [originalKey, setOriginalKey] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState(null) // null | 'success' | string error
+  const [timezone, setTimezone] = useState(BROWSER_TZ)
 
+  // ── Load existing slots and seed the grid ─────────────────────────────
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !isMentor) {
+      setLoading(false)
+      return undefined
+    }
     let cancelled = false
     setLoading(true)
-    const request = isMentor
-      ? getMentorAvailability(userId)
-      : getMenteeAvailability()
-    request
+    getMentorAvailability(userId)
       .then(data => {
         if (cancelled) return
         const slots = Array.isArray(data) ? data : data?.slots ?? []
-        if (slots.length === 0) return
-        const byDay = {}
-        for (const s of slots) {
-          const uiKey = DAY_FROM_BACKEND[s.dayOfWeek] || s.dayOfWeek
-          if (!byDay[uiKey]) byDay[uiKey] = s
-        }
-        setDays(INITIAL_DAYS.map(d => {
-          const s = byDay[d.key]
-          if (!s) return { ...d, on: false }
-          return {
-            ...d,
-            start: timeObjToStr(s.startTime) || d.start,
-            end: timeObjToStr(s.endTime) || d.end,
-            on: true,
-          }
-        }))
+        const cellSet = slotsToCellSet(slots)
+        setSelected(cellSet)
+        setOriginalKey(setToKey(cellSet))
       })
-      .catch(() => {}) // keep defaults on error
+      .catch(() => { /* keep empty grid on error */ })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [isMentor, userId])
+  }, [userId, isMentor])
 
-  function toggleDay(key) {
-    setDays(prev => prev.map(d => d.key === key ? { ...d, on: !d.on } : d))
-    setStatus(null)
-  }
+  const dirty = useMemo(() => setToKey(selected) !== originalKey, [selected, originalKey])
+  useUnsavedChangesGuard(dirty)
 
-  function updateTime(key, field, value) {
-    setDays(prev => prev.map(d => d.key === key ? { ...d, [field]: value } : d))
-    setStatus(null)
-  }
-
-  function validate() {
-    for (const d of days) {
-      if (!d.on) continue
-      if (!d.start || !d.end) return `${d.label}: start and end time are required.`
-      if (d.start >= d.end) return `${d.label}: end time must be after start time.`
-    }
-    if (!days.some(d => d.on)) return 'Please enable at least one day.'
-    return null
-  }
-
+  // ── Save handler ──────────────────────────────────────────────────────
   async function handleSave() {
-    const error = validate()
-    if (error) {
-      setStatus(error)
+    setStatus(null)
+    const slots = cellSetToSlots(selected)
+    if (slots.length === 0) {
+      setStatus('Please select at least one available hour before saving.')
       return
     }
-
-    const payload = {
-      slots: days
-        .filter(d => d.on)
-        .map(({ key, start, end }) => ({
-          dayOfWeek: DAY_TO_BACKEND[key],
-          startTime: start,
-          endTime: end,
-          recurring: true,
-        })),
+    if (slots.length > 50) {
+      setStatus('Too many separate ranges (max 50). Try painting larger contiguous blocks.')
+      return
     }
-
     setSaving(true)
-    setStatus(null)
     try {
-      if (isMentor) {
-        await saveMentorAvailability(payload)
-      } else {
-        await saveMenteeAvailability(payload)
-      }
+      await saveMentorAvailability({ slots })
+      setOriginalKey(setToKey(selected))
       setStatus('success')
     } catch (err) {
-      const msg = err?.message || ''
+      const msg = err?.message || 'Failed to save availability.'
       if (msg.includes('409') || msg.toLowerCase().includes('overlap')) {
         setStatus('Overlapping slots or invalid time range.')
       } else {
-        setStatus(msg || 'Failed to save availability.')
+        setStatus(msg)
       }
     } finally {
       setSaving(false)
     }
+  }
+
+  // ── Mentee gate (1.1.4.1 mentor-only feature) ─────────────────────────
+  if (!isMentor) {
+    return (
+      <MainLayout>
+        <div className="page-header">
+          <div>
+            <div className="page-title">Availability</div>
+          </div>
+        </div>
+        <div className="md-error-card">
+          <div className="md-error-title">Mentors only</div>
+          <div className="md-error-sub">Setting weekly availability is a mentor capability.</div>
+        </div>
+      </MainLayout>
+    )
   }
 
   return (
@@ -188,9 +113,30 @@ export default function AvailabilityPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Edit Availability</div>
-          <div className="page-sub">Timezone: {USER_TIMEZONE}</div>
+          <div className="page-sub" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span>Timezone:</span>
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="avail-tz-select"
+              aria-label="Display timezone"
+            >
+              <option value={BROWSER_TZ}>{BROWSER_TZ} (browser default)</option>
+              {TIMEZONE_OPTIONS.filter(tz => tz !== BROWSER_TZ).map(tz => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              (display label only — hours are saved as-is)
+            </span>
+          </div>
         </div>
-        <button className="action-btn" onClick={handleSave} disabled={saving || loading}>
+        <button
+          className="action-btn"
+          onClick={handleSave}
+          disabled={saving || loading || !dirty}
+          title={!dirty ? 'No unsaved changes' : 'Save availability'}
+        >
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
@@ -214,48 +160,28 @@ export default function AvailabilityPage() {
         </div>
       )}
 
-      {loading && (
+      {loading ? (
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
           Loading availability…
         </div>
-      )}
-
-      {!loading && <div className="avail-layout">
+      ) : (
         <div className="card">
-          <div className="section-label">Weekly Schedule</div>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-            Toggle days on or off, then click the time fields to adjust your hours.
+          <div className="section-label" style={{ marginBottom: '6px' }}>Weekly schedule</div>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+            Click an hour cell to toggle availability. Adjacent cells on the same day are merged into one time range when saved.
           </p>
-          {days.map(d => (
-            <DayRow
-              key={d.key}
-              day={d}
-              onToggle={toggleDay}
-              onTimeChange={updateTime}
-            />
-          ))}
+          <AvailabilityGrid
+            selected={selected}
+            onChange={(next) => { setSelected(next); setStatus(null) }}
+            disabled={saving}
+          />
         </div>
-
-        <div>
-          <div className="card">
-            <div className="section-label">Session Duration</div>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Default length per mentoring session.
-            </p>
-            <div className="duration-grid">
-              {DURATIONS.map(d => (
-                <div
-                  key={d.value}
-                  className={`dur-btn${duration === d.value ? ' active' : ''}`}
-                  onClick={() => { setDuration(d.value); setStatus(null) }}
-                >
-                  {d.label}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>}
+      )}
     </MainLayout>
   )
+}
+
+// Stable string identity for a Set, used to detect dirty state
+function setToKey(set) {
+  return Array.from(set).sort().join('|')
 }
