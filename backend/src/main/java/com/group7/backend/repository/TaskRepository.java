@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,4 +47,20 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             + "WHERE t.status IN ('PENDING', 'REVISION_REQUESTED') "
             + "AND t.dueDate BETWEEN :from AND :to")
     List<Task> findPendingTasksDueWithin(@Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
+
+    // Stats aggregations (#253). Two-hop nested predicate (`t.mentorship.mentor.id`)
+    // requires explicit JPQL; Spring Data derived names get unwieldy at this depth.
+
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.mentorship.mentor.id = :mentorId")
+    long countByMentorId(@Param("mentorId") Long mentorId);
+
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.mentorship.mentor.id = :mentorId AND t.status = :status")
+    long countByMentorIdAndStatus(@Param("mentorId") Long mentorId, @Param("status") TaskStatus status);
+
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.mentorship.mentee.id = :menteeId AND t.status = :status")
+    long countByMenteeIdAndStatus(@Param("menteeId") Long menteeId, @Param("status") TaskStatus status);
+
+    @Query("SELECT COUNT(t) FROM Task t WHERE t.mentorship.mentee.id = :menteeId AND t.status IN :statuses")
+    long countByMenteeIdAndStatusIn(@Param("menteeId") Long menteeId,
+                                    @Param("statuses") Collection<TaskStatus> statuses);
 }
