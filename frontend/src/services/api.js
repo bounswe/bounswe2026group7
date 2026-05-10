@@ -248,6 +248,20 @@ export async function getMentorshipById(id) {
   return match
 }
 
+// ── Mentorship lifecycle (cancel / end / extend / rate) ──────────────────
+// Backend: MentorshipController endpoints landed via #237/#133. Mentee uses
+// /cancel; mentor uses /end + /extend; rating is mentee-only after end.
+
+export async function cancelMentorship(id, reason) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ reason }),
+  })
+  return handleResponse(res)
+}
+
 export async function updateSharedGoal(id, sharedGoal) {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentorships/${id}/goal`, {
