@@ -2072,6 +2072,185 @@
 }
 .md-cancel-warning strong { color: #c53030; }
 
+/* ── TASKS (#125) ── */
+.task-buckets { display: flex; flex-direction: column; gap: 24px; }
+.task-bucket {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+.task-bucket-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.task-bucket-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-dark);
+}
+.task-bucket-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--green-bg);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-weight: 600;
+}
+.task-bucket-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 4px 0;
+}
+.task-list { display: flex; flex-direction: column; gap: 10px; }
+
+.task-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+.task-card--overdue { border-color: #f0c0c0; }
+.task-card-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.task-card-summary:hover { background: var(--green-bg); }
+.task-card-main { flex: 1; min-width: 0; }
+.task-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+.task-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.task-card-overdue { color: #c53030; font-weight: 600; }
+
+.task-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 3px 10px;
+  flex-shrink: 0;
+}
+.task-badge--pending { background: #f0f4f0; color: var(--text-mid); border: 1px solid var(--border); }
+.task-badge--submitted { background: #e8f0ff; color: #1e58b8; border: 1px solid #c8d8f5; }
+.task-badge--revision { background: #fff4e0; color: #a55a00; border: 1px solid #f0d8a8; }
+.task-badge--completed { background: var(--green-bg); color: var(--green-dark); border: 1px solid var(--green-dark); }
+
+.task-card-detail {
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+}
+.task-detail-loading { color: var(--text-muted); font-style: italic; padding: 8px 0; }
+.task-detail-empty { color: var(--text-muted); font-style: italic; }
+.task-detail-row { padding-top: 12px; }
+.task-detail-body { color: var(--text-dark); white-space: pre-wrap; }
+
+.task-attachment-list {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.task-attachment-list li::before { content: '📎 '; }
+
+.task-submission-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.task-submission-item {
+  background: #f9faf9;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.task-submission-meta { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.task-submission-text { color: var(--text-dark); white-space: pre-wrap; font-size: 13px; }
+.task-submission-feedback {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 13px;
+  color: var(--text-dark);
+}
+
+.task-card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 14px 12px;
+  flex-wrap: wrap;
+}
+.task-card-actions:empty { padding: 0; }
+.task-action-primary {
+  background: var(--green-dark);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.task-action-primary:hover { background: #15693a; }
+.task-action-danger {
+  background: transparent;
+  color: #c53030;
+  border: 1px solid #f0d0d0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.task-action-danger:hover { background: #fff5f5; }
+
+.task-review-decision {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.task-review-decision label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .md-stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

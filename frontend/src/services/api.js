@@ -275,6 +275,72 @@ export async function endMentorship(id, reason) {
   return handleResponse(res)
 }
 
+// ── Mentorship tasks (#125) ───────────────────────────────────────────────
+// Backend: TaskController. Status enum: PENDING, SUBMITTED, REVISION_REQUESTED, COMPLETED.
+
+export async function createTask(mentorshipId, { title, description, dueDate, assignmentAttachmentIds } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { title }
+  if (description !== undefined) body.description = description
+  if (dueDate !== undefined) body.dueDate = dueDate
+  if (Array.isArray(assignmentAttachmentIds) && assignmentAttachmentIds.length > 0) {
+    body.assignmentAttachmentIds = assignmentAttachmentIds
+  }
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+export async function listMentorshipTasks(mentorshipId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/tasks`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getTaskDetail(taskId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/tasks/${taskId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function submitTask(taskId, { submissionText, attachmentIds } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { submissionText }
+  if (Array.isArray(attachmentIds) && attachmentIds.length > 0) body.attachmentIds = attachmentIds
+  const res = await fetch(`${BASE_URL}/tasks/${taskId}/submission`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+export async function reviewTask(taskId, { feedback, status }) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/tasks/${taskId}/feedback`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ feedback, status }),
+  })
+  return handleResponse(res)
+}
+
+export async function deleteTask(taskId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/tasks/${taskId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 export async function updateSharedGoal(id, sharedGoal) {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentorships/${id}/goal`, {
