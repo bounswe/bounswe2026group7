@@ -106,7 +106,7 @@ export default function NotificationsPage() {
             <button className="notif-load-more" onClick={fetchNotifications}>Try again</button>
           </div>
         ) : notifications.length === 0 ? (
-          <div className="notif-page-state">
+          <div className="notif-page-state" data-testid="notifications-empty">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="1.5" style={{ opacity: 0.25 }}>
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -116,7 +116,7 @@ export default function NotificationsPage() {
           </div>
         ) : (
           <>
-            <ul className="notif-page-list">
+            <ul className="notif-page-list" data-testid="notifications-list">
               {visible.map(n => (
                 <li
                   key={n.id}
@@ -130,14 +130,17 @@ export default function NotificationsPage() {
                       handleMarkRead(n.id)
                     }
                   }}
+                  data-testid={`notifications-item-${n.id}`}
+                  data-notification-type={n.type}
+                  data-notification-read={n.read ? 'true' : 'false'}
                 >
                   <span className="notif-page-emoji" aria-hidden="true">{iconFor(n.type)}</span>
                   <div className="notif-page-body">
                     <div className="notif-page-item-head">
-                      <p className="notif-page-item-title">{n.title}</p>
+                      <p className="notif-page-item-title" data-testid="notifications-item-title">{n.title}</p>
                       {!n.read && <span className="notif-unread-dot" aria-label="Unread" />}
                     </div>
-                    <p className="notif-page-item-text">{n.body}</p>
+                    <p className="notif-page-item-text" data-testid="notifications-item-body">{n.body}</p>
                     <span className="notif-page-item-time">{timeAgo(n.createdAt)}</span>
                   </div>
                 </li>

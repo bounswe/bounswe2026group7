@@ -16,6 +16,7 @@ import {
   listIncomingRequests,
   listActiveMentorships,
   setSharedGoal,
+  resetRateLimits,
 } from '../fixtures/mentorshipApi.js';
 import { LoginPage } from '../pages/LoginPage.js';
 import { ExplorePage } from '../pages/ExplorePage.js';
@@ -47,24 +48,41 @@ import { TasksPage } from '../pages/TasksPage.js';
 async function loginViaUi(page, { email, password }) {
   const loginPage = new LoginPage(page);
   await loginPage.goto();
-  // Surface the underlying /api/auth/login outcome — without this, a 401
-  // from the backend just leaves us stuck on /login and the test only
-  // reports "URL didn't change" with no signal as to why.
-  const loginResponsePromise = page.waitForResponse(
-    res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',
-    { timeout: 10_000 },
-  );
+  // Capture the /api/auth/login response opportunistically so a 401/429 on
+  // the backend gives us a useful diagnostic. We don't await this directly
+  // (webkit + framer-motion entrance animation can delay the request enough
+  // that a tight 10s wait fires before the POST goes out, even though the
+  // login itself succeeds shortly after); the swallow on the catch keeps
+  // the timeout from masking the real navigation outcome below.
+  const loginResponsePromise = page
+    .waitForResponse(
+      res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',
+      { timeout: 30_000 },
+    )
+    .catch(() => null);
   await loginPage.signIn({ email, password });
-  const loginResponse = await loginResponsePromise;
-  if (!loginResponse.ok()) {
-    const body = await loginResponse.text().catch(() => '');
-    throw new Error(`UI login for ${email} returned ${loginResponse.status()}: ${body}`);
+  // Successful login navigates to /home; on failure we stay on /login. Wait
+  // on the navigation as the source of truth — if it doesn't happen, fall
+  // back to the captured response (if any) for a useful error message.
+  try {
+    await expect(page).toHaveURL(/\/home$/, { timeout: 20_000 });
+  } catch (navErr) {
+    const loginResponse = await loginResponsePromise;
+    if (loginResponse && !loginResponse.ok()) {
+      const body = await loginResponse.text().catch(() => '');
+      throw new Error(`UI login for ${email} returned ${loginResponse.status()}: ${body}`);
+    }
+    throw navErr;
   }
-  await expect(page).toHaveURL(/\/home$/);
 }
 
 test('AT-02 mentorship lifecycle + blog publish', async ({ browser, request }) => {
   await resetDb(request);
+  // The auth-login bucket is per-IP and shared with parallel workers (AT-07's
+  // 11-login probe in particular). Scrub before the UI login leg so a
+  // saturating concurrent test doesn't 429 our login mid-flight and leave the
+  // page stuck on /login waiting for a response that already came back as 429.
+  await resetRateLimits(request);
 
   const mentor = await seedMentor(request);
   const mentee = await seedMentee(request);

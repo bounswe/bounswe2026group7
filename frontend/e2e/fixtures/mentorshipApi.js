@@ -21,6 +21,57 @@ async function expectOk(res, label) {
   return res.json();
 }
 
+/** POST /api/mentorship-requests — mentee creates pending request. */
+export async function createMentorshipRequest(request, token, body) {
+  const res = await request.post(`${apiBase()}/api/mentorship-requests`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+  return expectOk(res, 'POST /api/mentorship-requests');
+}
+
+/** PUT /api/mentorship-requests/{id}/accept — mentor accepts with duration. */
+export async function acceptMentorshipRequest(request, token, requestId, durationMonths) {
+  const res = await request.put(
+    `${apiBase()}/api/mentorship-requests/${requestId}/accept`,
+    { headers: authHeaders(token), data: { duration: durationMonths } },
+  );
+  return expectOk(res, `PUT /api/mentorship-requests/${requestId}/accept`);
+}
+
+/**
+ * PUT /api/mentorships/{id}/goal — set the shared goal on an active mentorship.
+ *
+ * #335 added a precondition: meetings/tasks/milestones now refuse to be
+ * created until the mentorship has a non-blank `sharedGoal`, returning
+ * `409 GOAL_REQUIRED`. Specs that exercise the downstream verbs must
+ * call this once after accept.
+ */
+export async function setSharedGoal(request, token, mentorshipId, sharedGoal) {
+  const res = await request.put(`${apiBase()}/api/mentorships/${mentorshipId}/goal`, {
+    headers: authHeaders(token),
+    data: { sharedGoal },
+  });
+  return expectOk(res, `PUT /api/mentorships/${mentorshipId}/goal`);
+}
+
+/**
+ * POST /api/mentorships/{id}/messages — send a chat message via the REST API.
+ *
+ * Used by AT-06 to seed a "warmup" message before opening the UI threads:
+ * the frontend's `MessagesPage` only learns the conversation id from
+ * `messages[0].conversationId`, so an empty thread leaves both sides
+ * un-subscribed to STOMP and live updates never arrive. Sending one
+ * warmup message before mounting the pages unblocks the subscription.
+ */
+export async function sendMessage(request, token, mentorshipId, content) {
+  const res = await request.post(`${apiBase()}/api/mentorships/${mentorshipId}/messages`, {
+    headers: authHeaders(token),
+    data: { content },
+  });
+  return expectOk(res, `POST /api/mentorships/${mentorshipId}/messages`);
+}
+
 /**
  * POST /api/mentorships/{id}/meetings — mentor only.
  *
@@ -64,19 +115,6 @@ export async function createMeeting(request, token, mentorshipId, body) {
   });
   const responseBody = await expectOk(res, `POST /api/mentorships/${mentorshipId}/meetings`);
   return responseBody?.meetings?.[0] ?? responseBody;
-}
-
-/**
- * PUT /api/mentorships/{id}/goal — set shared goal. Required before any
- * meeting / task / milestone write since #335 added the precondition gate.
- * Either mentor or mentee can set it.
- */
-export async function setSharedGoal(request, token, mentorshipId, sharedGoal) {
-  const res = await request.put(`${apiBase()}/api/mentorships/${mentorshipId}/goal`, {
-    headers: authHeaders(token),
-    data: { sharedGoal },
-  });
-  return expectOk(res, `PUT /api/mentorships/${mentorshipId}/goal`);
 }
 
 /** POST /api/meetings/{id}/confirm — mentee accepts the proposed slot. */
@@ -164,4 +202,34 @@ export async function listActiveMentorships(request, token) {
     headers: authHeaders(token),
   });
   return expectOk(res, 'GET /api/mentorships');
+}
+
+/** GET /api/notifications — Spring returns a List, not a Page wrapper. */
+export async function listNotifications(request, token) {
+  const res = await request.get(`${apiBase()}/api/notifications`, {
+    headers: authHeaders(token),
+  });
+  return expectOk(res, 'GET /api/notifications');
+}
+
+/**
+ * Fires the meeting-reminder scheduler manually so AT-06 (#317) doesn't have
+ * to wait for the production cron (every 5 min). Backend route is
+ * registered only when app.test-endpoints.enabled=true.
+ */
+export async function triggerMeetingReminders(request) {
+  const res = await request.post(`${apiBase()}/api/test/trigger-meeting-reminders`);
+  return expectOk(res, 'POST /api/test/trigger-meeting-reminders');
+}
+
+/**
+ * Wipes the in-memory rate-limit bucket cache so AT-07's 11-login probe
+ * doesn't bleed into other specs that also hit /api/auth/login.
+ */
+export async function resetRateLimits(request) {
+  const res = await request.post(`${apiBase()}/api/test/reset-ratelimits`);
+  if (!res.ok()) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`POST /api/test/reset-ratelimits -> ${res.status()} ${body}`);
+  }
 }

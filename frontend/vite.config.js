@@ -22,6 +22,15 @@ export default defineConfig({
         target: process.env.VITE_BACKEND_URL || 'http://localhost:8080',
         changeOrigin: true,
       },
+      // STOMP-over-WebSocket endpoint. Without `ws: true` Vite would 404 the
+      // upgrade request and `useConversationSubscription` would never reach
+      // the broker — AT-06 mentor↔mentee live-update fails as a result.
+      '/ws/chat': {
+        target: (process.env.VITE_BACKEND_URL || 'http://localhost:8080')
+          .replace(/^http/, 'ws'),
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 })

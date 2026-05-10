@@ -117,6 +117,7 @@ export default function ChatComposer({
         onKeyDown={handleKeyDown}
         disabled={isBlocked}
         aria-label="Message"
+        data-testid="messages-composer-input"
       />
       <button
         type="button"
@@ -124,6 +125,7 @@ export default function ChatComposer({
         onClick={submit}
         disabled={!canSend}
         aria-label="Send message"
+        data-testid="messages-composer-send"
       >
         {submitting ? 'Sending…' : 'Send'}
       </button>

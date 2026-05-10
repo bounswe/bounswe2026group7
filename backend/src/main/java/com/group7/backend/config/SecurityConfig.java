@@ -42,6 +42,22 @@ public class SecurityConfig {
     private boolean testEndpointsEnabled;
 
     /**
+     * CSP {@code script-src} directive. Default keeps {@code 'unsafe-eval'} for
+     * dev tooling (Vite HMR / source maps); the {@code prod} profile drops it
+     * via {@code application-prod.properties}.
+     */
+    @Value("${app.security.csp.script-src:'self' 'unsafe-inline' 'unsafe-eval'}")
+    private String cspScriptSrc;
+
+    /**
+     * CSP {@code connect-src} directive. Default allows the localhost backend
+     * for the dev SPA + WebSocket schemes; the {@code prod} profile drops the
+     * localhost entry.
+     */
+    @Value("${app.security.csp.connect-src:'self' ws: wss: https: http://localhost:8080}")
+    private String cspConnectSrc;
+
+    /**
      * {@code rateLimitFilter} is wrapped in {@link Optional} so {@code @WebMvcTest}
      * controller slices that import {@link SecurityConfig} without the rate-limit
      * beans still wire a filter chain.
@@ -78,6 +94,39 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
+            // Spring Security ships sensible defaults (X-Frame-Options=DENY,
+            // X-Content-Type-Options=nosniff, X-XSS-Protection); we keep
+            // those and additionally set Strict-Transport-Security and a
+            // baseline Content-Security-Policy so the AT-07 NFR assertions
+            // have something concrete to verify (#317).
+            //
+            // CSP is intentionally permissive on inline script/style and
+            // connect-src to keep the SPA functional out of the box; tighten
+            // once the frontend stops needing inline runtime CSS-in-JS and
+            // we're confident WebSocket origins are exhaustively listed.
+            .headers(headers -> headers
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31_536_000)
+                    // Spring's default HSTS request-matcher only emits the
+                    // header on secure (HTTPS) requests; CI runs the e2e
+                    // backend over plain HTTP, which would silently drop
+                    // the header and break the AT-07 NFR assertion. Always
+                    // emit — RFC 6797 §8.1 says browsers MUST ignore HSTS
+                    // over HTTP, so this is harmless in production behind
+                    // an HTTPS terminator and visible in tests.
+                    .requestMatcher(request -> true))
+                .contentSecurityPolicy(csp -> csp.policyDirectives(
+                    "default-src 'self'; "
+                    + "script-src " + cspScriptSrc + "; "
+                    + "style-src 'self' 'unsafe-inline'; "
+                    + "img-src 'self' data: blob: https:; "
+                    + "font-src 'self' data:; "
+                    + "connect-src " + cspConnectSrc + "; "
+                    + "frame-ancestors 'none'; "
+                    + "base-uri 'self'; "
+                    + "form-action 'self'"))
+            )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> {
                 if (testEndpointsEnabled) {
