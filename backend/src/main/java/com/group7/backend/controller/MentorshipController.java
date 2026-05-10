@@ -1,6 +1,8 @@
 package com.group7.backend.controller;
 
+import com.group7.backend.dto.request.CancelMentorshipRequest;
 import com.group7.backend.dto.request.SharedGoalRequest;
+import com.group7.backend.dto.response.MentorshipAuditLogResponse;
 import com.group7.backend.dto.response.MentorshipProgressResponse;
 import com.group7.backend.dto.response.MentorshipResponse;
 import com.group7.backend.dto.response.TimelineResponse;
@@ -139,5 +141,51 @@ public class MentorshipController {
             Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(mentorshipService.setSharedGoal(userId, id, request));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @Operation(
+            summary = "Cancel an active mentorship (#133)",
+            description = "Either participant may cancel an active mentorship by supplying a reason. " +
+                    "Children (meetings, tasks, milestones, conversation/messages) are deleted; " +
+                    "the mentorship row itself is retained with status=CANCELLED for audit and " +
+                    "cool-down lookups. The other participant is notified."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Mentorship cancelled",
+                    content = @Content(schema = @Schema(implementation = MentorshipResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentorship not found or caller is not a participant",
+                    content = @Content),
+            @ApiResponse(responseCode = "409", description = "Mentorship is not active", content = @Content)
+    })
+    public ResponseEntity<MentorshipResponse> cancelMentorship(
+            @PathVariable Long id,
+            @Valid @RequestBody CancelMentorshipRequest request,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(mentorshipService.cancelMentorship(userId, id, request));
+    }
+
+    @GetMapping("/{id}/audit")
+    @Operation(
+            summary = "Get mentorship audit trail (#133)",
+            description = "Returns every recorded state transition for the mentorship in chronological " +
+                    "order. The first row is the implicit creation transition (NULL → ACTIVE); " +
+                    "user-driven transitions include the actor and reason. Only the mentor and " +
+                    "mentee may read."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Audit trail",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = MentorshipAuditLogResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentorship not found or caller is not a participant",
+                    content = @Content)
+    })
+    public ResponseEntity<List<MentorshipAuditLogResponse>> getAuditTrail(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(mentorshipService.getAuditTrail(userId, id));
     }
 }
