@@ -93,7 +93,12 @@ function TokenEditor({
           onSubmitEditing={onAdd}
           returnKeyType="done"
         />
-        <TouchableOpacity style={styles.addTokenButton} onPress={onAdd}>
+        <TouchableOpacity
+          style={styles.addTokenButton}
+          onPress={onAdd}
+          accessibilityRole="button"
+          accessibilityLabel={`Add ${label}`}
+        >
           <Text style={styles.addTokenButtonText}>Add</Text>
         </TouchableOpacity>
       </View>
@@ -101,7 +106,12 @@ function TokenEditor({
         {values.map((item) => (
           <View key={item} style={styles.tokenChip}>
             <Text style={styles.tokenChipText}>{item}</Text>
-            <TouchableOpacity onPress={() => onRemove(item)}>
+            <TouchableOpacity
+              onPress={() => onRemove(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${item}`}
+              hitSlop={8}
+            >
               <Text style={styles.tokenRemoveText}>×</Text>
             </TouchableOpacity>
           </View>
@@ -322,6 +332,9 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
               if (!userId) return;
               openAvatarActions('mentee', userId, profilePhoto, setProfilePhoto);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile photo"
+            accessibilityHint="Opens photo actions for your profile picture"
           >
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
@@ -342,6 +355,8 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/mentorship-requests')}
+              accessibilityRole="button"
+              accessibilityLabel="My requests"
             >
               <Text style={styles.quickActionIcon}>📋</Text>
               <Text style={styles.quickActionText}>My Requests</Text>
@@ -349,6 +364,8 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.navigate('/explore')}
+              accessibilityRole="button"
+              accessibilityLabel="Find mentor"
             >
               <Text style={styles.quickActionIcon}>🔍</Text>
               <Text style={styles.quickActionText}>Find Mentor</Text>
@@ -356,6 +373,8 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/availability-scheduling')}
+              accessibilityRole="button"
+              accessibilityLabel="Availability"
             >
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Availability</Text>
@@ -398,12 +417,20 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
               <TouchableOpacity
                 style={[styles.toggleButton, profileVisibility && styles.toggleButtonOn]}
                 onPress={() => setProfileVisibility(!profileVisibility)}
+                accessibilityRole="switch"
+                accessibilityLabel="Profile visibility"
+                accessibilityState={{ checked: profileVisibility }}
               >
                 <Text style={styles.toggleButtonText}>{profileVisibility ? 'Public' : 'Private'}</Text>
               </TouchableOpacity>
             </View>
           </View>
-          <TouchableOpacity style={styles.saveButtonMentee} onPress={handleSave}>
+          <TouchableOpacity
+            style={styles.saveButtonMentee}
+            onPress={handleSave}
+            accessibilityRole="button"
+            accessibilityLabel="Save mentee profile changes"
+          >
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
 
@@ -439,7 +466,12 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             })
           )}
 
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={onLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
+          >
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
         </View>
@@ -545,6 +577,9 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
               if (!userId) return;
               openAvatarActions('mentor', userId, profilePhoto, setProfilePhoto);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile photo"
+            accessibilityHint="Opens photo actions for your profile picture"
           >
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
@@ -565,6 +600,8 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/(tabs)/explore' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Requests"
             >
               <Text style={styles.quickActionIcon}>📋</Text>
               <Text style={styles.quickActionText}>Requests</Text>
@@ -572,6 +609,8 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/availability-scheduling')}
+              accessibilityRole="button"
+              accessibilityLabel="Availability"
             >
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Availability</Text>
@@ -630,10 +669,20 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
               placeholderTextColor="#B5ADA3"
             />
           </View>
-          <TouchableOpacity style={styles.saveButtonMentor} onPress={handleSave}>
+          <TouchableOpacity
+            style={styles.saveButtonMentor}
+            onPress={handleSave}
+            accessibilityRole="button"
+            accessibilityLabel="Save mentor profile changes"
+          >
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={onLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
+          >
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
         </View>

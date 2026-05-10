@@ -113,7 +113,12 @@ export default function ResetPasswordScreen() {
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
 
-        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/login')}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.replace('/login')}
+          accessibilityRole="button"
+          accessibilityLabel="Go back to sign in"
+        >
           <Text style={styles.backButtonText}>‹ Back</Text>
         </TouchableOpacity>
 
@@ -142,12 +147,17 @@ export default function ResetPasswordScreen() {
                   setServerError('');
                   setTokenValid(null);
                 }}
+                accessibilityLabel="Reset token"
+                accessibilityHint="Paste the password reset token from your email"
               />
 
               <TouchableOpacity
                 style={[styles.primaryButton, !tokenInput.trim() && styles.primaryButtonDisabled]}
                 disabled={!tokenInput.trim() || isValidatingToken}
                 onPress={() => validateToken(tokenInput)}
+                accessibilityRole="button"
+                accessibilityLabel="Validate token"
+                accessibilityState={{ disabled: !tokenInput.trim() || isValidatingToken, busy: isValidatingToken }}
               >
                 {isValidatingToken ? (
                   <ActivityIndicator color="#2F563C" />
@@ -156,7 +166,12 @@ export default function ResetPasswordScreen() {
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => router.replace('/forgot-password' as any)}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => router.replace('/forgot-password' as any)}
+                accessibilityRole="button"
+                accessibilityLabel="Request a new reset link"
+              >
                 <Text style={styles.secondaryButtonText}>Request a New Link</Text>
               </TouchableOpacity>
             </>
@@ -164,7 +179,12 @@ export default function ResetPasswordScreen() {
             <>
               <Text style={styles.title}>Password{'\n'}<Text style={styles.titleItalic}>reset.</Text></Text>
               <Text style={styles.successText}>{successMessage}</Text>
-              <TouchableOpacity style={styles.primaryButton} onPress={() => router.replace('/login')}>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() => router.replace('/login')}
+                accessibilityRole="button"
+                accessibilityLabel="Go to sign in"
+              >
                 <Text style={styles.primaryButtonText}>Go to Sign In</Text>
               </TouchableOpacity>
             </>
@@ -186,6 +206,8 @@ export default function ResetPasswordScreen() {
                   setTokenInput(value);
                   setServerError('');
                 }}
+                accessibilityLabel="Reset token"
+                accessibilityHint="Paste the password reset token from your email"
               />
 
               <Text style={styles.label}>NEW PASSWORD</Text>
@@ -200,6 +222,8 @@ export default function ResetPasswordScreen() {
                   setPasswordError('');
                   setServerError('');
                 }}
+                accessibilityLabel="New password"
+                accessibilityHint="Enter a strong password with uppercase, lowercase, and a number"
               />
               {!!passwordError && <Text style={styles.errorText}>{passwordError}</Text>}
 
@@ -207,6 +231,9 @@ export default function ResetPasswordScreen() {
                 style={[styles.primaryButton, !isFormValid && styles.primaryButtonDisabled]}
                 disabled={!isFormValid || isSubmitting}
                 onPress={handleSubmit}
+                accessibilityRole="button"
+                accessibilityLabel="Reset password"
+                accessibilityState={{ disabled: !isFormValid || isSubmitting, busy: isSubmitting }}
               >
                 {isSubmitting ? (
                   <ActivityIndicator color="#2F563C" />
