@@ -158,7 +158,7 @@ export default function ProfilePage() {
         }),
       }
 
-      const updated = await updateOwnProfile(payload)
+      const updated = await updateOwnProfile(payload, isMentor ? 'MENTOR' : 'MENTEE')
       setProfileData(updated.firstName, updated.lastName, updated.profilePhoto)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
@@ -515,19 +515,31 @@ export default function ProfilePage() {
                 <div className="divider" />
 
                 <div className="section-label">Privacy Settings</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0' }}>
+                <div className="visibility-row">
                   <div>
                     <div style={{ fontSize: '14px', fontWeight: 500 }}>Profile Visibility</div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {form.profileVisible ? 'Your profile is visible to matched users' : 'Your profile is hidden'}
+                      {form.profileVisible ? 'Public — visible to other users' : 'Private — hidden from other users'}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`toggle${form.profileVisible ? '' : ' off'}`}
-                    onClick={() => handleChange('profileVisible', !form.profileVisible)}
-                    aria-label="Toggle profile visibility"
-                  />
+                  <div className="visibility-toggle" role="group" aria-label="Profile visibility">
+                    <button
+                      type="button"
+                      className={`visibility-option${form.profileVisible ? ' active' : ''}`}
+                      onClick={() => handleChange('profileVisible', true)}
+                      aria-pressed={form.profileVisible}
+                    >
+                      Public
+                    </button>
+                    <button
+                      type="button"
+                      className={`visibility-option${form.profileVisible ? '' : ' active'}`}
+                      onClick={() => handleChange('profileVisible', false)}
+                      aria-pressed={!form.profileVisible}
+                    >
+                      Private
+                    </button>
+                  </div>
                 </div>
               </>
             )}

@@ -1186,6 +1186,42 @@
 .toggle.off { background: #d0d5d0; }
 .toggle.off::after { right: auto; left: 3px; }
 
+.visibility-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.visibility-toggle {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f6f8f6;
+  gap: 4px;
+}
+
+.visibility-option {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.visibility-option.active {
+  background: #fff;
+  color: var(--green-dark);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
 .duration-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .dur-btn {
   padding: 14px 12px; border-radius: 10px;

@@ -34,7 +34,7 @@ function ProfileField({ label, value, chips = false }) {
 export default function UserProfilePage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { role } = useAuth()
+  const { role, userId } = useAuth()
   const isMentee = role === 'MENTEE'
 
   const [profile, setProfile] = useState(null)
@@ -127,6 +127,8 @@ export default function UserProfilePage() {
   }
 
   const isMentorProfile = profile.role === 'MENTOR'
+  const isOwner = userId && String(profile.id) === String(userId)
+  const isPrivateMentee = !isMentorProfile && profile.profileVisibility === false && !isOwner
   const initials = [profile.firstName, isMentorProfile ? profile.lastName : null]
     .filter(Boolean).map(w => w[0]).join('').toUpperCase() || '?'
 
@@ -244,10 +246,23 @@ export default function UserProfilePage() {
           ) : (
             <>
               {/* Per req 1.1.2.6: hide lastName and profilePhoto for unmatched mentees */}
-              <ProfileField label="Background" value={profile.backgroundInfo} />
-              <ProfileField label="Goals" value={profile.goals} />
-              <ProfileField label="Interests" value={profile.interests} chips />
-              <ProfileField label="Skills" value={profile.skills} chips />
+              {isPrivateMentee ? (
+                <div style={{ textAlign: 'center', padding: '28px 12px', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>
+                    This profile is private
+                  </div>
+                  <div style={{ fontSize: '13px' }}>
+                    Only the profile owner can view these details.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <ProfileField label="Background" value={profile.backgroundInfo} />
+                  <ProfileField label="Goals" value={profile.goals} />
+                  <ProfileField label="Interests" value={profile.interests} chips />
+                  <ProfileField label="Skills" value={profile.skills} chips />
+                </>
+              )}
             </>
           )}
         </div>

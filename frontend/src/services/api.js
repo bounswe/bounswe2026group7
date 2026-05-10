@@ -141,7 +141,8 @@ export async function deleteProfilePhoto() {
 
 export async function updateOwnProfile(data, role) {
   const token = localStorage.getItem('auth_token')
-  const res = await fetch(`${BASE_URL}/users/me`, {
+  const endpoint = role === 'MENTOR' ? 'mentor' : 'mentee'
+  const res = await fetch(`${BASE_URL}/users/me/${endpoint}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(data),
