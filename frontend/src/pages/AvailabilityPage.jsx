@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import MainLayout from '../components/MainLayout'
 import AvailabilityGrid, { slotsToCellSet, cellSetToSlots } from '../components/AvailabilityGrid'
+import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard'
 import { useAuth } from '../context/AuthContext'
 import { getMentorAvailability, saveMentorAvailability } from '../services/api'
 import '../styles/main.css'
@@ -59,6 +60,7 @@ export default function AvailabilityPage() {
   }, [userId, isMentor])
 
   const dirty = useMemo(() => setToKey(selected) !== originalKey, [selected, originalKey])
+  useUnsavedChangesGuard(dirty)
 
   // ── Save handler ──────────────────────────────────────────────────────
   async function handleSave() {
