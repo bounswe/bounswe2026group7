@@ -42,6 +42,22 @@ public class SecurityConfig {
     private boolean testEndpointsEnabled;
 
     /**
+     * CSP {@code script-src} directive. Default keeps {@code 'unsafe-eval'} for
+     * dev tooling (Vite HMR / source maps); the {@code prod} profile drops it
+     * via {@code application-prod.properties}.
+     */
+    @Value("${app.security.csp.script-src:'self' 'unsafe-inline' 'unsafe-eval'}")
+    private String cspScriptSrc;
+
+    /**
+     * CSP {@code connect-src} directive. Default allows the localhost backend
+     * for the dev SPA + WebSocket schemes; the {@code prod} profile drops the
+     * localhost entry.
+     */
+    @Value("${app.security.csp.connect-src:'self' ws: wss: https: http://localhost:8080}")
+    private String cspConnectSrc;
+
+    /**
      * {@code rateLimitFilter} is wrapped in {@link Optional} so {@code @WebMvcTest}
      * controller slices that import {@link SecurityConfig} without the rate-limit
      * beans still wire a filter chain.
@@ -102,11 +118,11 @@ public class SecurityConfig {
                     .requestMatcher(request -> true))
                 .contentSecurityPolicy(csp -> csp.policyDirectives(
                     "default-src 'self'; "
-                    + "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                    + "script-src " + cspScriptSrc + "; "
                     + "style-src 'self' 'unsafe-inline'; "
                     + "img-src 'self' data: blob: https:; "
                     + "font-src 'self' data:; "
-                    + "connect-src 'self' ws: wss: https: http://localhost:8080; "
+                    + "connect-src " + cspConnectSrc + "; "
                     + "frame-ancestors 'none'; "
                     + "base-uri 'self'; "
                     + "form-action 'self'"))
