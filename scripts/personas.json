@@ -1,0 +1,2222 @@
+[
+  {
+    "id": 1,
+    "first_name": "Elif",
+    "last_name": "Yilmaz",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Data Science",
+      "Machine Learning"
+    ],
+    "bio": "I am transitioning into data science and looking for roadmap advice, project ideas, and a realistic study plan.",
+    "is_banned": false
+  },
+  {
+    "id": 2,
+    "first_name": "Dr. Ahmet",
+    "last_name": "Bulut",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Besiktas, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 3,
+    "interests": [
+      "Data Science",
+      "Academic Career"
+    ],
+    "bio": "I support students who want to build a strong foundation in data science and pursue an academic career. I am actively mentoring Elif.",
+    "is_banned": false
+  },
+  {
+    "id": 3,
+    "first_name": "Mehmet",
+    "last_name": "Yilmaz",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 3,
+    "capacity_max": 3,
+    "interests": [
+      "Finance",
+      "Startups"
+    ],
+    "bio": "I mentor founders on finance basics, startup strategy, and how to communicate early-stage ideas clearly.",
+    "is_banned": false
+  },
+  {
+    "id": 4,
+    "first_name": "Zeynep",
+    "last_name": "Arslan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 2,
+    "interests": [
+      "iOS",
+      "Swift"
+    ],
+    "bio": "I mentor aspiring iOS developers on Swift fundamentals, architecture, testing, and career entry steps.",
+    "is_banned": false
+  },
+  {
+    "id": 5,
+    "first_name": "Eren",
+    "last_name": "Kilic",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Ankara",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Backend",
+      "Interview Prep"
+    ],
+    "bio": "I am preparing for internship interviews and want structured help with backend fundamentals and practice questions.",
+    "is_banned": true
+  },
+  {
+    "id": 6,
+    "first_name": "Ayse",
+    "last_name": "Kaya",
+    "role": "MENTEE",
+    "status": "UNVERIFIED",
+    "location": "Izmir",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Frontend",
+      "Career Switch"
+    ],
+    "bio": "I am exploring a career switch into software and want guidance on where to focus first.",
+    "is_banned": false
+  },
+  {
+    "id": 7,
+    "first_name": "Mert",
+    "last_name": "Aydin",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Frontend",
+      "React",
+      "Portfolio Review"
+    ],
+    "bio": "I am a final-year computer engineering student looking to improve my portfolio and get ready for my first job.",
+    "is_banned": false
+  },
+  {
+    "id": 8,
+    "first_name": "Selin",
+    "last_name": "Ozturk",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Besiktas, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Machine Learning",
+      "Python",
+      "Data Science"
+    ],
+    "bio": "I am preparing for a master's program in artificial intelligence and need project ideas and a better study roadmap.",
+    "is_banned": false
+  },
+  {
+    "id": 9,
+    "first_name": "Bora",
+    "last_name": "Cetin",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Izmir",
+    "capacity_current": 1,
+    "capacity_max": 4,
+    "interests": [
+      "Product Management",
+      "Startups",
+      "Entrepreneurship"
+    ],
+    "bio": "I work on product strategy and early-stage startup growth. I help students clarify their goals and present ideas well.",
+    "is_banned": false
+  },
+  {
+    "id": 10,
+    "first_name": "Hale",
+    "last_name": "Demir",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Ankara",
+    "capacity_current": 2,
+    "capacity_max": 5,
+    "interests": [
+      "Digital Marketing",
+      "Brand Strategy",
+      "Content Marketing"
+    ],
+    "bio": "I have over ten years of experience in digital marketing and brand strategy. I support mentees with practical, measurable growth plans.",
+    "is_banned": false
+  },
+  {
+    "id": 11,
+    "first_name": "Kaan",
+    "last_name": "Yildirim",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Backend",
+      "Node.js",
+      "System Design"
+    ],
+    "bio": "I want to improve my backend design skills and learn how to build more scalable APIs.",
+    "is_banned": false
+  },
+  {
+    "id": 12,
+    "first_name": "Derya",
+    "last_name": "Karaca",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Bursa",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "UI/UX",
+      "Frontend",
+      "Design Systems"
+    ],
+    "bio": "I am moving from graphic design into product design and want feedback on user experience and portfolio quality.",
+    "is_banned": false
+  },
+  {
+    "id": 13,
+    "first_name": "Emre",
+    "last_name": "Aksoy",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Antalya",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "Backend",
+      "Cloud",
+      "DevOps"
+    ],
+    "bio": "I work on backend architecture and cloud infrastructure and help junior developers build practical project habits.",
+    "is_banned": false
+  },
+  {
+    "id": 14,
+    "first_name": "Nil",
+    "last_name": "Gunes",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Interview Prep",
+      "Career Switch",
+      "Business Analysis"
+    ],
+    "bio": "I am preparing to move into a business analyst role and want help with interview questions and a focused study plan.",
+    "is_banned": false
+  },
+  {
+    "id": 15,
+    "first_name": "Oguz",
+    "last_name": "Sahin",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Bursa",
+    "capacity_current": 4,
+    "capacity_max": 6,
+    "interests": [
+      "Java",
+      "Spring Boot",
+      "Backend"
+    ],
+    "bio": "I have years of experience in enterprise software development and I mentor students who want to build production-ready backend skills.",
+    "is_banned": false
+  },
+  {
+    "id": 16,
+    "first_name": "Ipek",
+    "last_name": "Acar",
+    "role": "MENTEE",
+    "status": "UNVERIFIED",
+    "location": "Izmir",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Digital Marketing",
+      "Content Marketing",
+      "SEO"
+    ],
+    "bio": "I am transitioning into marketing and want to learn how to build a practical content and SEO strategy.",
+    "is_banned": false
+  },
+  {
+    "id": 17,
+    "first_name": "Serdar",
+    "last_name": "Koc",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Konya",
+    "capacity_current": 2,
+    "capacity_max": 4,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Pitch Deck"
+    ],
+    "bio": "I mentor founders on startup finance, business models, and how to shape a clear pitch deck for early-stage investors.",
+    "is_banned": false
+  },
+  {
+    "id": 18,
+    "first_name": "Sude",
+    "last_name": "Ergin",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Besiktas, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Python"
+    ],
+    "bio": "I have data analysis coursework but need more hands-on project experience and realistic examples from industry.",
+    "is_banned": false
+  },
+  {
+    "id": 19,
+    "first_name": "Fikret",
+    "last_name": "Ersoy",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Ankara",
+    "capacity_current": 1,
+    "capacity_max": 2,
+    "interests": [
+      "Academic Career",
+      "Research",
+      "Machine Learning"
+    ],
+    "bio": "I help students prepare for graduate study, research planning, and academic career decisions.",
+    "is_banned": false
+  },
+  {
+    "id": 20,
+    "first_name": "Gamze",
+    "last_name": "Ates",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Antalya",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Sales",
+      "Communication Skills",
+      "Career Switch"
+    ],
+    "bio": "I am moving from tourism into technology and want to understand which roles fit my communication strengths best.",
+    "is_banned": false
+  },
+  {
+    "id": 21,
+    "first_name": "Tolga",
+    "last_name": "Ekinci",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 3,
+    "interests": [
+      "Interview Prep",
+      "LeetCode",
+      "Backend"
+    ],
+    "bio": "I mentor students on technical interview preparation, algorithm practice, and confident communication in hiring processes.",
+    "is_banned": false
+  },
+  {
+    "id": 22,
+    "first_name": "Merve",
+    "last_name": "Ural",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Ankara",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Frontend",
+      "Vue",
+      "UI/UX"
+    ],
+    "bio": "I am learning frontend development and want to build a small but realistic product while improving my design sense.",
+    "is_banned": false
+  },
+  {
+    "id": 23,
+    "first_name": "Yusuf",
+    "last_name": "Balci",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 3,
+    "capacity_max": 5,
+    "interests": [
+      "Frontend",
+      "React",
+      "Design Systems"
+    ],
+    "bio": "I work on frontend architecture and design systems and help younger developers focus on maintainable, readable code.",
+    "is_banned": false
+  },
+  {
+    "id": 24,
+    "first_name": "Aylin",
+    "last_name": "Sonmez",
+    "role": "MENTEE",
+    "status": "UNVERIFIED",
+    "location": "Bursa",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Project Management",
+      "Communication Skills",
+      "Career Switch"
+    ],
+    "bio": "I want to move into project coordination and would value guidance from someone with practical corporate experience.",
+    "is_banned": false
+  },
+  {
+    "id": 25,
+    "first_name": "Hakan",
+    "last_name": "Polat",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Izmir",
+    "capacity_current": 2,
+    "capacity_max": 4,
+    "interests": [
+      "Career Development",
+      "Interview Prep",
+      "Leadership"
+    ],
+    "bio": "I have worked in talent management and I support mentees with CV feedback, interview prep, and career planning.",
+    "is_banned": false
+  },
+  {
+    "id": 26,
+    "first_name": "Ece",
+    "last_name": "Tan",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Data Science",
+      "Statistics",
+      "Python"
+    ],
+    "bio": "I recently graduated from statistics and want help choosing the right tools and projects for data science.",
+    "is_banned": false
+  },
+  {
+    "id": 27,
+    "first_name": "Baris",
+    "last_name": "Korkmaz",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Antalya",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "Digital Marketing",
+      "SEO",
+      "Analytics"
+    ],
+    "bio": "I work on performance marketing and measurement, and I help young professionals build a data-driven mindset.",
+    "is_banned": false
+  },
+  {
+    "id": 28,
+    "first_name": "Buse",
+    "last_name": "Kurt",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Besiktas, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Backend",
+      "Database",
+      "Spring Boot"
+    ],
+    "bio": "I am a software engineering student looking for mentorship on database design and backend development.",
+    "is_banned": false
+  },
+  {
+    "id": 29,
+    "first_name": "Cem",
+    "last_name": "Turan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Konya",
+    "capacity_current": 5,
+    "capacity_max": 5,
+    "interests": [
+      "Cloud",
+      "DevOps",
+      "System Design"
+    ],
+    "bio": "I focus on scalable systems, Docker, and cloud services, and I enjoy explaining infrastructure topics in simple terms.",
+    "is_banned": false
+  },
+  {
+    "id": 30,
+    "first_name": "Naz",
+    "last_name": "Kilicoglu",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Product Management",
+      "Entrepreneurship",
+      "User Research"
+    ],
+    "bio": "I have a new digital product idea and want guidance on user research, roadmap planning, and product thinking.",
+    "is_banned": false
+  },
+  {
+    "id": 31,
+    "first_name": "Levent",
+    "last_name": "Sezer",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Bursa",
+    "capacity_current": 2,
+    "capacity_max": 3,
+    "interests": [
+      "Finance",
+      "Accounting",
+      "Startup Operations"
+    ],
+    "bio": "I have worked in finance and operations for many years and help early-stage teams build strong internal structure.",
+    "is_banned": false
+  },
+  {
+    "id": 32,
+    "first_name": "Sule",
+    "last_name": "Dogan",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Ankara",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Academic Career",
+      "Research",
+      "Study Abroad"
+    ],
+    "bio": "I am exploring graduate study and research-oriented career paths and want to understand my options more clearly.",
+    "is_banned": false
+  },
+  {
+    "id": 33,
+    "first_name": "Pelin",
+    "last_name": "Basaran",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Istanbul",
+    "capacity_current": 1,
+    "capacity_max": 4,
+    "interests": [
+      "UI/UX",
+      "Product Design",
+      "Design Systems"
+    ],
+    "bio": "I work in product design and user research, and I help junior designers improve their portfolios and case studies.",
+    "is_banned": false
+  },
+  {
+    "id": 34,
+    "first_name": "Onur",
+    "last_name": "Kilic",
+    "role": "MENTEE",
+    "status": "UNVERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "iOS",
+      "Swift",
+      "Mobile Development"
+    ],
+    "bio": "I am a beginner in mobile development and want a clearer path for learning iOS development step by step.",
+    "is_banned": false
+  },
+  {
+    "id": 35,
+    "first_name": "Seda",
+    "last_name": "Yalcin",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Izmir",
+    "capacity_current": 0,
+    "capacity_max": 2,
+    "interests": [
+      "Career Development",
+      "Leadership",
+      "Communication Skills"
+    ],
+    "bio": "I support personal development, leadership growth, and healthy work habits, especially for recent graduates.",
+    "is_banned": false
+  },
+  {
+    "id": 36,
+    "first_name": "Riza",
+    "last_name": "Uysal",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Antalya",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Pitch Deck"
+    ],
+    "bio": "I want to move from a small tourism business into a more tech-oriented venture and need help with business modelling.",
+    "is_banned": false
+  },
+  {
+    "id": 37,
+    "first_name": "Mina",
+    "last_name": "Eren",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Frontend",
+      "TypeScript",
+      "React"
+    ],
+    "bio": "I am continuing my learning after a bootcamp and want to read real project code and write cleaner frontend applications.",
+    "is_banned": false
+  },
+  {
+    "id": 38,
+    "first_name": "Haluk",
+    "last_name": "Bayer",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Ankara",
+    "capacity_current": 3,
+    "capacity_max": 6,
+    "interests": [
+      "Academic Career",
+      "Research",
+      "Interview Prep"
+    ],
+    "bio": "I am a retired professor who helps students with graduate planning, research discipline, and public speaking.",
+    "is_banned": false
+  },
+  {
+    "id": 39,
+    "first_name": "Asli",
+    "last_name": "Kara",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Bursa",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Digital Marketing",
+      "Content Marketing",
+      "SEO"
+    ],
+    "bio": "I am learning digital marketing for my small brand and want guidance on content planning and visibility growth.",
+    "is_banned": false
+  },
+  {
+    "id": 40,
+    "first_name": "Nihat",
+    "last_name": "Erkmen",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 2,
+    "interests": [
+      "Backend",
+      "Database",
+      "Cloud"
+    ],
+    "bio": "I have spent many years in enterprise software projects and I mentor on API design, data modelling, and code quality.",
+    "is_banned": false
+  },
+  {
+    "id": 41,
+    "first_name": "Gul",
+    "last_name": "Tufekci",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Research"
+    ],
+    "bio": "I am in the thesis stage and want to clarify my experimental plan and find examples that match my topic.",
+    "is_banned": false
+  },
+  {
+    "id": 42,
+    "first_name": "Selcuk",
+    "last_name": "Mert",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "Startups",
+      "Entrepreneurship",
+      "Product Management"
+    ],
+    "bio": "I work on product validation and business model development and enjoy helping people turn ideas into structured plans.",
+    "is_banned": false
+  },
+  {
+    "id": 43,
+    "first_name": "Damla",
+    "last_name": "Ersoy",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Ankara",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Interview Prep",
+      "Communication Skills",
+      "Career Switch"
+    ],
+    "bio": "I am preparing to move into a new sector and want to practice expressing myself more clearly in interviews.",
+    "is_banned": false
+  },
+  {
+    "id": 44,
+    "first_name": "Kerem",
+    "last_name": "Bozkurt",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Antalya",
+    "capacity_current": 4,
+    "capacity_max": 4,
+    "interests": [
+      "Frontend",
+      "Accessibility",
+      "React"
+    ],
+    "bio": "I mentor on user interface development and accessibility, with a strong focus on clean user experience.",
+    "is_banned": false
+  },
+  {
+    "id": 45,
+    "first_name": "Pinar",
+    "last_name": "Gok",
+    "role": "MENTEE",
+    "status": "UNVERIFIED",
+    "location": "Besiktas, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Backend",
+      "API Design",
+      "Spring Boot"
+    ],
+    "bio": "I want to build a backend career and need support with API design and software architecture basics.",
+    "is_banned": false
+  },
+  {
+    "id": 46,
+    "first_name": "Tayfun",
+    "last_name": "Aksu",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Izmir",
+    "capacity_current": 2,
+    "capacity_max": 5,
+    "interests": [
+      "Business Analysis",
+      "Product Management",
+      "Leadership"
+    ],
+    "bio": "I help connect business needs with product teams and support people transitioning into corporate roles.",
+    "is_banned": false
+  },
+  {
+    "id": 47,
+    "first_name": "Ceren",
+    "last_name": "Sari",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Bursa",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "UI/UX",
+      "Figma",
+      "Portfolio Review"
+    ],
+    "bio": "I want to strengthen my design portfolio and learn how to focus on real user problems.",
+    "is_banned": false
+  },
+  {
+    "id": 48,
+    "first_name": "Murat",
+    "last_name": "Tekin",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Ankara",
+    "capacity_current": 1,
+    "capacity_max": 2,
+    "interests": [
+      "Finance",
+      "Accounting",
+      "Career Development"
+    ],
+    "bio": "I have worked in finance teams for years and enjoy helping people understand how numbers shape career decisions.",
+    "is_banned": false
+  },
+  {
+    "id": 49,
+    "first_name": "Neslihan",
+    "last_name": "Colak",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Digital Marketing",
+      "Brand Strategy",
+      "Content Marketing"
+    ],
+    "bio": "I work in social media but want to better understand brand strategy, positioning, and practical feedback from a mentor.",
+    "is_banned": false
+  },
+  {
+    "id": 50,
+    "first_name": "Ali",
+    "last_name": "Bicakci",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Istanbul",
+    "capacity_current": 3,
+    "capacity_max": 7,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Career Development"
+    ],
+    "bio": "I have worked on data products and analytics teams for years, and I help students shape both their technical and career goals.",
+    "is_banned": false
+  },
+  {
+    "id": 51,
+    "first_name": "Ali",
+    "last_name": "Arslan",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Frontend",
+      "React",
+      "Portfolio Review"
+    ],
+    "bio": "I am looking for practical guidance on Frontend and want to build confidence through small projects.",
+    "is_banned": false
+  },
+  {
+    "id": 52,
+    "first_name": "Ayse",
+    "last_name": "Basaran",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 3,
+    "interests": [
+      "Backend",
+      "Java",
+      "Spring Boot"
+    ],
+    "bio": "I have hands-on experience in Backend and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 53,
+    "first_name": "Can",
+    "last_name": "Bayer",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Besiktas, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 4,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Python"
+    ],
+    "bio": "I support mentees who are preparing for careers in Machine Learning and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 54,
+    "first_name": "Ceren",
+    "last_name": "Bozkurt",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Uskudar, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Digital Marketing",
+      "Content Marketing",
+      "SEO"
+    ],
+    "bio": "I am trying to connect my background with Digital Marketing and would value a structured mentorship plan.",
+    "is_banned": false
+  },
+  {
+    "id": 55,
+    "first_name": "Deniz",
+    "last_name": "Colak",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Bakirkoy, Istanbul",
+    "capacity_current": 1,
+    "capacity_max": 2,
+    "interests": [
+      "Career Development",
+      "Interview Prep",
+      "Leadership"
+    ],
+    "bio": "I mentor people who want to grow in Career Development and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 56,
+    "first_name": "Derya",
+    "last_name": "Dogan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Maltepe, Istanbul",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "UI/UX",
+      "Product Design",
+      "Figma"
+    ],
+    "bio": "I have hands-on experience in UI/UX and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 57,
+    "first_name": "Ece",
+    "last_name": "Eren",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Beyoglu, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "iOS",
+      "Swift",
+      "Mobile Development"
+    ],
+    "bio": "I want feedback on my iOS portfolio and help preparing for interviews.",
+    "is_banned": false
+  },
+  {
+    "id": 58,
+    "first_name": "Emre",
+    "last_name": "Ersoy",
+    "role": "MENTOR",
+    "status": "UNVERIFIED",
+    "location": "Ankara",
+    "capacity_current": 4,
+    "capacity_max": 5,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Startup Operations"
+    ],
+    "bio": "I work across Entrepreneurship and Finance, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 59,
+    "first_name": "Eren",
+    "last_name": "Gunes",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Cankaya, Ankara",
+    "capacity_current": 2,
+    "capacity_max": 2,
+    "interests": [
+      "Research",
+      "Academic Career",
+      "Public Speaking"
+    ],
+    "bio": "I mentor people who want to grow in Research and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 60,
+    "first_name": "Ezgi",
+    "last_name": "Kara",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Izmir",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Product Management",
+      "User Research",
+      "Leadership"
+    ],
+    "bio": "I am switching focus toward Product Management and need a realistic learning roadmap with milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 61,
+    "first_name": "Fikret",
+    "last_name": "Kilicoglu",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Karşıyaka, Izmir",
+    "capacity_current": 3,
+    "capacity_max": 4,
+    "interests": [
+      "Frontend",
+      "React",
+      "Accessibility"
+    ],
+    "bio": "I support mentees who are preparing for careers in Frontend and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 62,
+    "first_name": "Gamze",
+    "last_name": "Kurt",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Bursa",
+    "capacity_current": 3,
+    "capacity_max": 5,
+    "interests": [
+      "Backend",
+      "Java",
+      "Spring Boot"
+    ],
+    "bio": "I work across Backend and Java, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 63,
+    "first_name": "Gul",
+    "last_name": "Ozturk",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Antalya",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Python"
+    ],
+    "bio": "I am looking for practical guidance on Machine Learning and want to build confidence through small projects.",
+    "is_banned": false
+  },
+  {
+    "id": 64,
+    "first_name": "Hakan",
+    "last_name": "Sahin",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Konya",
+    "capacity_current": 2,
+    "capacity_max": 3,
+    "interests": [
+      "Digital Marketing",
+      "Brand Strategy",
+      "Analytics"
+    ],
+    "bio": "I have hands-on experience in Digital Marketing and enjoy helping people translate theory into practice.",
+    "is_banned": true
+  },
+  {
+    "id": 65,
+    "first_name": "Hale",
+    "last_name": "Sari",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Eskişehir",
+    "capacity_current": 2,
+    "capacity_max": 4,
+    "interests": [
+      "Career Development",
+      "Interview Prep",
+      "Leadership"
+    ],
+    "bio": "I support mentees who are preparing for careers in Career Development and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 66,
+    "first_name": "Haluk",
+    "last_name": "Tan",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Adana",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "UI/UX",
+      "Figma",
+      "Design Systems"
+    ],
+    "bio": "I am trying to connect my background with UI/UX and would value a structured mentorship plan.",
+    "is_banned": false
+  },
+  {
+    "id": 67,
+    "first_name": "Ipek",
+    "last_name": "Turan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Gaziantep",
+    "capacity_current": 2,
+    "capacity_max": 2,
+    "interests": [
+      "iOS",
+      "Swift",
+      "Mobile Development"
+    ],
+    "bio": "I mentor people who want to grow in iOS and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 68,
+    "first_name": "Kaan",
+    "last_name": "Ural",
+    "role": "MENTOR",
+    "status": "UNVERIFIED",
+    "location": "Kayseri",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Startup Operations"
+    ],
+    "bio": "I have hands-on experience in Entrepreneurship and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 69,
+    "first_name": "Kerem",
+    "last_name": "Yalcin",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Trabzon",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Research",
+      "Academic Career",
+      "Study Abroad"
+    ],
+    "bio": "I want feedback on my Research portfolio and help preparing for interviews.",
+    "is_banned": false
+  },
+  {
+    "id": 70,
+    "first_name": "Levent",
+    "last_name": "Aksu",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Mersin",
+    "capacity_current": 4,
+    "capacity_max": 5,
+    "interests": [
+      "Cloud",
+      "DevOps",
+      "System Design"
+    ],
+    "bio": "I work across Cloud and DevOps, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 71,
+    "first_name": "Merve",
+    "last_name": "Arslan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 2,
+    "interests": [
+      "Frontend",
+      "React",
+      "Accessibility"
+    ],
+    "bio": "I mentor people who want to grow in Frontend and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 72,
+    "first_name": "Mert",
+    "last_name": "Basaran",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Backend",
+      "System Design",
+      "Interview Prep"
+    ],
+    "bio": "I am switching focus toward Backend and need a realistic learning roadmap with milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 73,
+    "first_name": "Mina",
+    "last_name": "Bayer",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Besiktas, Istanbul",
+    "capacity_current": 3,
+    "capacity_max": 4,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Python"
+    ],
+    "bio": "I support mentees who are preparing for careers in Machine Learning and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 74,
+    "first_name": "Murat",
+    "last_name": "Bozkurt",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Uskudar, Istanbul",
+    "capacity_current": 3,
+    "capacity_max": 5,
+    "interests": [
+      "Digital Marketing",
+      "Brand Strategy",
+      "Analytics"
+    ],
+    "bio": "I work across Digital Marketing and Brand Strategy, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 75,
+    "first_name": "Naz",
+    "last_name": "Colak",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Bakirkoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Career Switch",
+      "Communication Skills",
+      "Business Analysis"
+    ],
+    "bio": "I am looking for practical guidance on Career Switch and want to build confidence through small projects.",
+    "is_banned": false
+  },
+  {
+    "id": 76,
+    "first_name": "Neslihan",
+    "last_name": "Dogan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Maltepe, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 3,
+    "interests": [
+      "UI/UX",
+      "Product Design",
+      "Figma"
+    ],
+    "bio": "I have hands-on experience in UI/UX and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 77,
+    "first_name": "Nihat",
+    "last_name": "Eren",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Beyoglu, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 4,
+    "interests": [
+      "iOS",
+      "Swift",
+      "Mobile Development"
+    ],
+    "bio": "I support mentees who are preparing for careers in iOS and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 78,
+    "first_name": "Nil",
+    "last_name": "Ersoy",
+    "role": "MENTEE",
+    "status": "UNVERIFIED",
+    "location": "Ankara",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Pitch Deck"
+    ],
+    "bio": "I am trying to connect my background with Entrepreneurship and would value a structured mentorship plan.",
+    "is_banned": false
+  },
+  {
+    "id": 79,
+    "first_name": "Oguz",
+    "last_name": "Gunes",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Cankaya, Ankara",
+    "capacity_current": 1,
+    "capacity_max": 2,
+    "interests": [
+      "Research",
+      "Academic Career",
+      "Public Speaking"
+    ],
+    "bio": "I mentor people who want to grow in Research and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 80,
+    "first_name": "Onur",
+    "last_name": "Kara",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Izmir",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "Cloud",
+      "DevOps",
+      "System Design"
+    ],
+    "bio": "I have hands-on experience in Cloud and enjoy helping people translate theory into practice.",
+    "is_banned": true
+  },
+  {
+    "id": 81,
+    "first_name": "Pelin",
+    "last_name": "Kilicoglu",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Karşıyaka, Izmir",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Frontend",
+      "React",
+      "Portfolio Review"
+    ],
+    "bio": "I want feedback on my Frontend portfolio and help preparing for interviews.",
+    "is_banned": false
+  },
+  {
+    "id": 82,
+    "first_name": "Pinar",
+    "last_name": "Kurt",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Bursa",
+    "capacity_current": 4,
+    "capacity_max": 5,
+    "interests": [
+      "Backend",
+      "Java",
+      "Spring Boot"
+    ],
+    "bio": "I work across Backend and Java, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 83,
+    "first_name": "Riza",
+    "last_name": "Ozturk",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Antalya",
+    "capacity_current": 2,
+    "capacity_max": 2,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Python"
+    ],
+    "bio": "I mentor people who want to grow in Machine Learning and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 84,
+    "first_name": "Selcuk",
+    "last_name": "Sahin",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Konya",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Digital Marketing",
+      "Content Marketing",
+      "SEO"
+    ],
+    "bio": "I am switching focus toward Digital Marketing and need a realistic learning roadmap with milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 85,
+    "first_name": "Selin",
+    "last_name": "Sari",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Eskişehir",
+    "capacity_current": 3,
+    "capacity_max": 4,
+    "interests": [
+      "Career Development",
+      "Interview Prep",
+      "Leadership"
+    ],
+    "bio": "I support mentees who are preparing for careers in Career Development and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 86,
+    "first_name": "Serdar",
+    "last_name": "Tan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Adana",
+    "capacity_current": 3,
+    "capacity_max": 5,
+    "interests": [
+      "UI/UX",
+      "Product Design",
+      "Figma"
+    ],
+    "bio": "I work across UI/UX and Product Design, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 87,
+    "first_name": "Seda",
+    "last_name": "Turan",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Gaziantep",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "iOS",
+      "Swift",
+      "Mobile Development"
+    ],
+    "bio": "I am looking for practical guidance on iOS and want to build confidence through small projects.",
+    "is_banned": false
+  },
+  {
+    "id": 88,
+    "first_name": "Sule",
+    "last_name": "Ural",
+    "role": "MENTOR",
+    "status": "UNVERIFIED",
+    "location": "Kayseri",
+    "capacity_current": 2,
+    "capacity_max": 3,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Startup Operations"
+    ],
+    "bio": "I have hands-on experience in Entrepreneurship and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 89,
+    "first_name": "Sude",
+    "last_name": "Yalcin",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Trabzon",
+    "capacity_current": 2,
+    "capacity_max": 4,
+    "interests": [
+      "Research",
+      "Academic Career",
+      "Public Speaking"
+    ],
+    "bio": "I support mentees who are preparing for careers in Research and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 90,
+    "first_name": "Tayfun",
+    "last_name": "Aksu",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Mersin",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Product Management",
+      "User Research",
+      "Leadership"
+    ],
+    "bio": "I am trying to connect my background with Product Management and would value a structured mentorship plan.",
+    "is_banned": false
+  },
+  {
+    "id": 91,
+    "first_name": "Tolga",
+    "last_name": "Arslan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 2,
+    "interests": [
+      "Frontend",
+      "React",
+      "Accessibility"
+    ],
+    "bio": "I mentor people who want to grow in Frontend and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 92,
+    "first_name": "Yusuf",
+    "last_name": "Basaran",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "Backend",
+      "Java",
+      "Spring Boot"
+    ],
+    "bio": "I have hands-on experience in Backend and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 93,
+    "first_name": "Zeynep",
+    "last_name": "Bayer",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Besiktas, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Python"
+    ],
+    "bio": "I want feedback on my Machine Learning portfolio and help preparing for interviews.",
+    "is_banned": false
+  },
+  {
+    "id": 94,
+    "first_name": "Bora",
+    "last_name": "Bozkurt",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Uskudar, Istanbul",
+    "capacity_current": 4,
+    "capacity_max": 5,
+    "interests": [
+      "Digital Marketing",
+      "Brand Strategy",
+      "Analytics"
+    ],
+    "bio": "I work across Digital Marketing and Brand Strategy, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 95,
+    "first_name": "Baris",
+    "last_name": "Colak",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Bakirkoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 2,
+    "interests": [
+      "Career Development",
+      "Interview Prep",
+      "Leadership"
+    ],
+    "bio": "I mentor people who want to grow in Career Development and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 96,
+    "first_name": "Buse",
+    "last_name": "Dogan",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Maltepe, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "UI/UX",
+      "Figma",
+      "Design Systems"
+    ],
+    "bio": "I am switching focus toward UI/UX and need a realistic learning roadmap with milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 97,
+    "first_name": "Asli",
+    "last_name": "Eren",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Beyoglu, Istanbul",
+    "capacity_current": 3,
+    "capacity_max": 4,
+    "interests": [
+      "iOS",
+      "Swift",
+      "Mobile Development"
+    ],
+    "bio": "I support mentees who are preparing for careers in iOS and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 98,
+    "first_name": "Damla",
+    "last_name": "Ersoy",
+    "role": "MENTOR",
+    "status": "UNVERIFIED",
+    "location": "Ankara",
+    "capacity_current": 3,
+    "capacity_max": 5,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Startup Operations"
+    ],
+    "bio": "I work across Entrepreneurship and Finance, and I like helping people build confidence through clear milestones.",
+    "is_banned": true
+  },
+  {
+    "id": 99,
+    "first_name": "Burak",
+    "last_name": "Gunes",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Cankaya, Ankara",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Research",
+      "Academic Career",
+      "Study Abroad"
+    ],
+    "bio": "I am looking for practical guidance on Research and want to build confidence through small projects.",
+    "is_banned": false
+  },
+  {
+    "id": 100,
+    "first_name": "Yagmur",
+    "last_name": "Kara",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Izmir",
+    "capacity_current": 2,
+    "capacity_max": 3,
+    "interests": [
+      "Cloud",
+      "DevOps",
+      "System Design"
+    ],
+    "bio": "I have hands-on experience in Cloud and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 101,
+    "first_name": "Ali",
+    "last_name": "Kilicoglu",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Karşıyaka, Izmir",
+    "capacity_current": 2,
+    "capacity_max": 4,
+    "interests": [
+      "Frontend",
+      "React",
+      "Accessibility"
+    ],
+    "bio": "I support mentees who are preparing for careers in Frontend and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 102,
+    "first_name": "Ayse",
+    "last_name": "Kurt",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Bursa",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Backend",
+      "System Design",
+      "Interview Prep"
+    ],
+    "bio": "I am trying to connect my background with Backend and would value a structured mentorship plan.",
+    "is_banned": false
+  },
+  {
+    "id": 103,
+    "first_name": "Can",
+    "last_name": "Ozturk",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Antalya",
+    "capacity_current": 1,
+    "capacity_max": 2,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Python"
+    ],
+    "bio": "I mentor people who want to grow in Machine Learning and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 104,
+    "first_name": "Ceren",
+    "last_name": "Sahin",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Konya",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "Digital Marketing",
+      "Brand Strategy",
+      "Analytics"
+    ],
+    "bio": "I have hands-on experience in Digital Marketing and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 105,
+    "first_name": "Deniz",
+    "last_name": "Sari",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Eskişehir",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Career Switch",
+      "Communication Skills",
+      "Business Analysis"
+    ],
+    "bio": "I want feedback on my Career Switch portfolio and help preparing for interviews.",
+    "is_banned": false
+  },
+  {
+    "id": 106,
+    "first_name": "Derya",
+    "last_name": "Tan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Adana",
+    "capacity_current": 4,
+    "capacity_max": 5,
+    "interests": [
+      "UI/UX",
+      "Product Design",
+      "Figma"
+    ],
+    "bio": "I work across UI/UX and Product Design, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 107,
+    "first_name": "Ece",
+    "last_name": "Turan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Gaziantep",
+    "capacity_current": 2,
+    "capacity_max": 2,
+    "interests": [
+      "iOS",
+      "Swift",
+      "Mobile Development"
+    ],
+    "bio": "I mentor people who want to grow in iOS and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 108,
+    "first_name": "Emre",
+    "last_name": "Ural",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Kayseri",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Pitch Deck"
+    ],
+    "bio": "I am switching focus toward Entrepreneurship and need a realistic learning roadmap with milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 109,
+    "first_name": "Eren",
+    "last_name": "Yalcin",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Trabzon",
+    "capacity_current": 3,
+    "capacity_max": 4,
+    "interests": [
+      "Research",
+      "Academic Career",
+      "Public Speaking"
+    ],
+    "bio": "I support mentees who are preparing for careers in Research and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 110,
+    "first_name": "Ezgi",
+    "last_name": "Aksu",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Mersin",
+    "capacity_current": 3,
+    "capacity_max": 5,
+    "interests": [
+      "Cloud",
+      "DevOps",
+      "System Design"
+    ],
+    "bio": "I work across Cloud and DevOps, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 111,
+    "first_name": "Fikret",
+    "last_name": "Arslan",
+    "role": "MENTEE",
+    "status": "UNVERIFIED",
+    "location": "Kadikoy, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Frontend",
+      "React",
+      "Portfolio Review"
+    ],
+    "bio": "I am looking for practical guidance on Frontend and want to build confidence through small projects.",
+    "is_banned": false
+  },
+  {
+    "id": 112,
+    "first_name": "Gamze",
+    "last_name": "Basaran",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Sisli, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 3,
+    "interests": [
+      "Backend",
+      "Java",
+      "Spring Boot"
+    ],
+    "bio": "I have hands-on experience in Backend and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 113,
+    "first_name": "Gul",
+    "last_name": "Bayer",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Besiktas, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 4,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Python"
+    ],
+    "bio": "I support mentees who are preparing for careers in Machine Learning and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 114,
+    "first_name": "Hakan",
+    "last_name": "Bozkurt",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Uskudar, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Digital Marketing",
+      "Content Marketing",
+      "SEO"
+    ],
+    "bio": "I am trying to connect my background with Digital Marketing and would value a structured mentorship plan.",
+    "is_banned": false
+  },
+  {
+    "id": 115,
+    "first_name": "Hale",
+    "last_name": "Colak",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Bakirkoy, Istanbul",
+    "capacity_current": 2,
+    "capacity_max": 2,
+    "interests": [
+      "Career Development",
+      "Interview Prep",
+      "Leadership"
+    ],
+    "bio": "I mentor people who want to grow in Career Development and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 116,
+    "first_name": "Haluk",
+    "last_name": "Dogan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Maltepe, Istanbul",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "UI/UX",
+      "Product Design",
+      "Figma"
+    ],
+    "bio": "I have hands-on experience in UI/UX and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 117,
+    "first_name": "Ipek",
+    "last_name": "Eren",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Beyoglu, Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "iOS",
+      "Swift",
+      "Mobile Development"
+    ],
+    "bio": "I want feedback on my iOS portfolio and help preparing for interviews.",
+    "is_banned": false
+  },
+  {
+    "id": 118,
+    "first_name": "Kaan",
+    "last_name": "Ersoy",
+    "role": "MENTOR",
+    "status": "UNVERIFIED",
+    "location": "Ankara",
+    "capacity_current": 4,
+    "capacity_max": 5,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Startup Operations"
+    ],
+    "bio": "I work across Entrepreneurship and Finance, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 119,
+    "first_name": "Kerem",
+    "last_name": "Gunes",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Cankaya, Ankara",
+    "capacity_current": 0,
+    "capacity_max": 2,
+    "interests": [
+      "Research",
+      "Academic Career",
+      "Public Speaking"
+    ],
+    "bio": "I mentor people who want to grow in Research and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 120,
+    "first_name": "Levent",
+    "last_name": "Kara",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Izmir",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Product Management",
+      "User Research",
+      "Leadership"
+    ],
+    "bio": "I am switching focus toward Product Management and need a realistic learning roadmap with milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 121,
+    "first_name": "Merve",
+    "last_name": "Kilicoglu",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Karşıyaka, Izmir",
+    "capacity_current": 3,
+    "capacity_max": 4,
+    "interests": [
+      "Frontend",
+      "React",
+      "Accessibility"
+    ],
+    "bio": "I support mentees who are preparing for careers in Frontend and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 122,
+    "first_name": "Mert",
+    "last_name": "Kurt",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Bursa",
+    "capacity_current": 3,
+    "capacity_max": 5,
+    "interests": [
+      "Backend",
+      "Java",
+      "Spring Boot"
+    ],
+    "bio": "I work across Backend and Java, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 123,
+    "first_name": "Mina",
+    "last_name": "Ozturk",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Antalya",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Machine Learning",
+      "Data Science",
+      "Python"
+    ],
+    "bio": "I am looking for practical guidance on Machine Learning and want to build confidence through small projects.",
+    "is_banned": false
+  },
+  {
+    "id": 124,
+    "first_name": "Murat",
+    "last_name": "Sahin",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Konya",
+    "capacity_current": 2,
+    "capacity_max": 3,
+    "interests": [
+      "Digital Marketing",
+      "Brand Strategy",
+      "Analytics"
+    ],
+    "bio": "I have hands-on experience in Digital Marketing and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 125,
+    "first_name": "Naz",
+    "last_name": "Sari",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Eskişehir",
+    "capacity_current": 2,
+    "capacity_max": 4,
+    "interests": [
+      "Career Development",
+      "Interview Prep",
+      "Leadership"
+    ],
+    "bio": "I support mentees who are preparing for careers in Career Development and related interview processes.",
+    "is_banned": false
+  },
+  {
+    "id": 126,
+    "first_name": "Neslihan",
+    "last_name": "Tan",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Adana",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "UI/UX",
+      "Figma",
+      "Design Systems"
+    ],
+    "bio": "I am trying to connect my background with UI/UX and would value a structured mentorship plan.",
+    "is_banned": false
+  },
+  {
+    "id": 127,
+    "first_name": "Nihat",
+    "last_name": "Turan",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Gaziantep",
+    "capacity_current": 1,
+    "capacity_max": 2,
+    "interests": [
+      "iOS",
+      "Swift",
+      "Mobile Development"
+    ],
+    "bio": "I mentor people who want to grow in iOS and I focus on actionable, realistic progress.",
+    "is_banned": false
+  },
+  {
+    "id": 128,
+    "first_name": "Nil",
+    "last_name": "Ural",
+    "role": "MENTOR",
+    "status": "UNVERIFIED",
+    "location": "Kayseri",
+    "capacity_current": 1,
+    "capacity_max": 3,
+    "interests": [
+      "Entrepreneurship",
+      "Finance",
+      "Startup Operations"
+    ],
+    "bio": "I have hands-on experience in Entrepreneurship and enjoy helping people translate theory into practice.",
+    "is_banned": false
+  },
+  {
+    "id": 129,
+    "first_name": "Oguz",
+    "last_name": "Yalcin",
+    "role": "MENTEE",
+    "status": "VERIFIED",
+    "location": "Trabzon",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Research",
+      "Academic Career",
+      "Study Abroad"
+    ],
+    "bio": "I want feedback on my Research portfolio and help preparing for interviews.",
+    "is_banned": false
+  },
+  {
+    "id": 130,
+    "first_name": "Onur",
+    "last_name": "Aksu",
+    "role": "MENTOR",
+    "status": "VERIFIED",
+    "location": "Mersin",
+    "capacity_current": 4,
+    "capacity_max": 5,
+    "interests": [
+      "Cloud",
+      "DevOps",
+      "System Design"
+    ],
+    "bio": "I work across Cloud and DevOps, and I like helping people build confidence through clear milestones.",
+    "is_banned": false
+  },
+  {
+    "id": 131,
+    "first_name": "Deniz",
+    "last_name": "Admin",
+    "role": "ADMIN",
+    "status": "VERIFIED",
+    "location": "Istanbul",
+    "capacity_current": 0,
+    "capacity_max": 0,
+    "interests": [
+      "Platform Governance",
+      "Community Safety"
+    ],
+    "bio": "I manage the platform, review moderation workflows, and support safe community operations.",
+    "is_banned": false
+  }
+]
