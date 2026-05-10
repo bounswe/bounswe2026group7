@@ -10,6 +10,22 @@ const BROWSER_TZ = (() => {
   catch { return 'UTC' }
 })()
 
+// Commonly-used IANA zones surfaced first in the picker; "Browser default"
+// shows the browser-resolved value. The backend stores availability as
+// timezone-naive LocalTime — the picker is informational so the mentor knows
+// which zone the hour numbers represent. We do not convert hours when the
+// picker changes; doing so would silently corrupt previously-saved slots.
+const TIMEZONE_OPTIONS = [
+  'Europe/Istanbul',
+  'Europe/London',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Los_Angeles',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'UTC',
+]
+
 export default function AvailabilityPage() {
   const { role, userId } = useAuth()
   const isMentor = role === 'MENTOR'
@@ -19,6 +35,7 @@ export default function AvailabilityPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState(null) // null | 'success' | string error
+  const [timezone, setTimezone] = useState(BROWSER_TZ)
 
   // ── Load existing slots and seed the grid ─────────────────────────────
   useEffect(() => {
@@ -94,7 +111,23 @@ export default function AvailabilityPage() {
       <div className="page-header">
         <div>
           <div className="page-title">Edit Availability</div>
-          <div className="page-sub">Timezone: {BROWSER_TZ}</div>
+          <div className="page-sub" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span>Timezone:</span>
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="avail-tz-select"
+              aria-label="Display timezone"
+            >
+              <option value={BROWSER_TZ}>{BROWSER_TZ} (browser default)</option>
+              {TIMEZONE_OPTIONS.filter(tz => tz !== BROWSER_TZ).map(tz => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              (display label only — hours are saved as-is)
+            </span>
+          </div>
         </div>
         <button
           className="action-btn"

@@ -1158,6 +1158,17 @@
   border-color: var(--green-dark);
 }
 .avail-grid-cell:disabled { cursor: not-allowed; }
+
+.avail-tz-select {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-family: inherit;
+  cursor: pointer;
+}
+.avail-tz-select:focus { outline: 2px solid var(--green-mid); outline-offset: 1px; }
 .day-row {
   display: flex; align-items: center; gap: 16px;
   padding: 14px 12px; border-radius: var(--radius-sm);
