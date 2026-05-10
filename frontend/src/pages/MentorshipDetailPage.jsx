@@ -209,6 +209,18 @@ export default function MentorshipDetailPage() {
   const status = mentorship.status || 'ACTIVE'
   const isActive = status === 'ACTIVE'
   const daysLeft = daysRemaining(mentorship.endDate)
+  // 1.1.4.10 — auto-termination at duration end. Backend marks the
+  // mentorship as COMPLETED / TERMINATED / CANCELLED depending on the cause;
+  // from the UI perspective they all collapse to "this mentorship has ended".
+  const endedLabel = (() => {
+    if (isActive) return null
+    switch (status) {
+      case 'COMPLETED': return 'Ended'           // duration reached or mentor early-end
+      case 'TERMINATED': return 'Terminated'     // admin / system termination
+      case 'CANCELLED': return 'Cancelled'       // mentee cancellation
+      default: return 'Ended'
+    }
+  })()
 
   return (
     <MainLayout>
@@ -221,9 +233,25 @@ export default function MentorshipDetailPage() {
             ← Back
           </button>
           <div className="page-title">Mentorship</div>
-          <div className="page-sub">Your active mentorship with {otherFirstName}</div>
+          <div className="page-sub">
+            {isActive
+              ? `Your active mentorship with ${otherFirstName}`
+              : `Your past mentorship with ${otherFirstName}`}
+          </div>
         </div>
       </div>
+
+      {!isActive && (
+        <div className="md-ended-banner" role="status">
+          <strong>{endedLabel}</strong>
+          {mentorship.endDate && (
+            <> · {endedLabel === 'Cancelled' ? 'Cancelled on' : 'Ended on'} {formatDate(mentorship.endDate)}</>
+          )}
+          <span className="md-ended-banner-sub">
+            This mentorship is read-only. Messages, tasks, and meetings remain accessible for history.
+          </span>
+        </div>
+      )}
 
       {/* Header hero */}
       <section className="md-hero">
