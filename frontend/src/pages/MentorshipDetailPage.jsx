@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
-import { getMentorshipById, getUserById, updateSharedGoal } from '../services/api'
+import { getMentorshipById, getUserById, updateSharedGoal, cancelMentorship } from '../services/api'
 import { endMentorship, getNextUpcomingMeeting } from '../services/mentorshipMocks'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
@@ -84,6 +84,103 @@ function EndMentorshipModal({ open, onClose, onConfirm, loading, otherName }) {
   )
 }
 
+/**
+ * Mentee-side cancellation modal (#127). Reason is required by the backend
+ * (CancelMentorshipRequest @NotBlank); the warning copy is intentionally
+ * loud because frequent cancellations escalate into a temporary ban via
+ * the auto-ban system (#134) and that fact isn't surfaced in the cancel
+ * response — the user needs to be informed up front.
+ */
+function CancelMentorshipModal({ open, onClose, onConfirm, otherName, loading }) {
+  const overlayRef = useRef(null)
+  const [reason, setReason] = useState('')
+  const [localError, setLocalError] = useState(null)
+
+  useEffect(() => {
+    if (!open) { setReason(''); setLocalError(null) }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose, loading])
+
+  if (!open) return null
+
+  function handleConfirm() {
+    const trimmed = reason.trim()
+    if (!trimmed) {
+      setLocalError('Please provide a reason for cancellation.')
+      return
+    }
+    setLocalError(null)
+    onConfirm(trimmed)
+  }
+
+  return (
+    <div
+      className="modal-overlay"
+      ref={overlayRef}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
+    >
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="cancelMentorshipTitle">
+        <div className="modal-header">
+          <div>
+            <h2 id="cancelMentorshipTitle">Cancel mentorship?</h2>
+            <p className="modal-subtitle">
+              This will end your mentorship with {otherName || 'this user'} immediately. Meetings,
+              tasks, and messages associated with this mentorship will be removed.
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        <div className="md-cancel-warning" role="alert">
+          <strong>Heads up:</strong> the platform tracks mentee cancellations of active mentorships
+          (per requirement 2.2.4). Frequent cancellations can result in a temporary ban from sending
+          new mentorship requests.
+        </div>
+
+        <label className="section-label" style={{ marginTop: '12px', display: 'block' }} htmlFor="cancelReason">
+          Reason (required)
+        </label>
+        <textarea
+          id="cancelReason"
+          className="modal-textarea"
+          rows={4}
+          maxLength={500}
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Tell your mentor why you're ending the mentorship. Visible to the mentor and platform admins."
+          disabled={loading}
+        />
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+          {reason.length}/500
+        </div>
+        {localError && (
+          <div className="md-composer-error" style={{ marginTop: '8px' }}>{localError}</div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>
+            Keep mentorship
+          </button>
+          <button
+            type="button"
+            className="modal-btn-primary md-danger-btn"
+            onClick={handleConfirm}
+            disabled={loading || !reason.trim()}
+          >
+            {loading ? 'Cancelling…' : 'Cancel mentorship'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function MentorshipDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -103,6 +200,10 @@ export default function MentorshipDetailPage() {
 
   const [endOpen, setEndOpen] = useState(false)
   const [endLoading, setEndLoading] = useState(false)
+
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelLoading, setCancelLoading] = useState(false)
+  const [cancelError, setCancelError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -160,6 +261,24 @@ export default function MentorshipDetailPage() {
       navigate('/home')
     } catch {
       setEndLoading(false)
+    }
+  }
+
+  async function handleCancelConfirm(reason) {
+    setCancelLoading(true)
+    setCancelError(null)
+    try {
+      const updated = await cancelMentorship(mentorship.id, reason)
+      // Replace local state with the canonical updated mentorship; the #341
+      // banner picks up the non-ACTIVE status and re-renders read-only.
+      setMentorship(updated)
+      setCancelOpen(false)
+      // Sync sidebar / navbar / dashboard counts with the now-cancelled state.
+      refresh()
+    } catch (err) {
+      setCancelError(err?.message || 'Failed to cancel mentorship')
+    } finally {
+      setCancelLoading(false)
     }
   }
 
@@ -431,20 +550,47 @@ export default function MentorshipDetailPage() {
         >
           My Tasks
         </button>
-        <button
-          className="md-action-btn md-action-danger"
-          onClick={() => setEndOpen(true)}
-          disabled={!isActive}
-        >
-          End Mentorship
-        </button>
+        {viewerIsMentor ? (
+          <button
+            className="md-action-btn md-action-danger"
+            onClick={() => setEndOpen(true)}
+            disabled={!isActive}
+          >
+            End Mentorship
+          </button>
+        ) : (
+          // Mentee uses /cancel (#127); backend rejects POST /end from a mentee.
+          <button
+            className="md-action-btn md-action-danger"
+            onClick={() => setCancelOpen(true)}
+            disabled={!isActive}
+            title={isActive ? 'Cancel this mentorship' : 'This mentorship has already ended'}
+          >
+            Cancel Mentorship
+          </button>
+        )}
       </div>
+
+      {cancelError && (
+        <div className="md-error-card" style={{ marginTop: '12px' }}>
+          <div className="md-error-title">Couldn’t cancel mentorship</div>
+          <div className="md-error-sub">{cancelError}</div>
+        </div>
+      )}
 
       <EndMentorshipModal
         open={endOpen}
         onClose={() => !endLoading && setEndOpen(false)}
         onConfirm={handleEndConfirm}
         loading={endLoading}
+        otherName={displayName || otherFirstName}
+      />
+
+      <CancelMentorshipModal
+        open={cancelOpen}
+        onClose={() => !cancelLoading && setCancelOpen(false)}
+        onConfirm={handleCancelConfirm}
+        loading={cancelLoading}
         otherName={displayName || otherFirstName}
       />
     </MainLayout>
