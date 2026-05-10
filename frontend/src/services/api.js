@@ -341,6 +341,98 @@ export async function deleteTask(taskId) {
   return handleResponse(res)
 }
 
+// ── Mentorship milestones (#288) ─────────────────────────────────────────
+// Backend: MilestoneController. Status enum: PENDING, IN_PROGRESS, COMPLETED.
+// Mentor-only mutations (1.1.5.12); both parties may toggle action-item completion.
+
+export async function listMilestones(mentorshipId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/milestones`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMilestoneDetail(milestoneId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/milestones/${milestoneId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function createMilestone(mentorshipId, { title, description, targetDate, orderIndex } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { title }
+  if (description !== undefined) body.description = description
+  if (targetDate !== undefined) body.targetDate = targetDate
+  if (orderIndex !== undefined) body.orderIndex = orderIndex
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/milestones`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+// status / title / description / targetDate / orderIndex are all optional;
+// pass only the fields the caller wants to change.
+export async function updateMilestone(milestoneId, payload) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/milestones/${milestoneId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload || {}),
+  })
+  return handleResponse(res)
+}
+
+export async function deleteMilestone(milestoneId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/milestones/${milestoneId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function createMilestoneActionItem(milestoneId, { text, orderIndex } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { text }
+  if (orderIndex !== undefined) body.orderIndex = orderIndex
+  const res = await fetch(`${BASE_URL}/milestones/${milestoneId}/action-items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+// Backend expects `completed` (JSON name), not `isCompleted`. text + orderIndex
+// are mentor-only fields; `completed` is mentee-or-mentor.
+export async function updateMilestoneActionItem(itemId, { text, completed, orderIndex } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = {}
+  if (text !== undefined) body.text = text
+  if (completed !== undefined) body.completed = completed
+  if (orderIndex !== undefined) body.orderIndex = orderIndex
+  const res = await fetch(`${BASE_URL}/milestone-action-items/${itemId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+export async function deleteMilestoneActionItem(itemId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/milestone-action-items/${itemId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 export async function updateSharedGoal(id, sharedGoal) {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentorships/${id}/goal`, {
