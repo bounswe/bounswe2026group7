@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   View,
@@ -17,6 +17,40 @@ type AvailabilitySlot = {
   dayOfWeek: string;
   startTime: string;
   endTime: string;
+};
+
+type MilestoneStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+
+type MilestoneSummary = {
+  id: number;
+  title: string;
+  targetDate: string | null;
+  status: MilestoneStatus;
+  orderIndex: number;
+};
+
+type MilestoneActionItem = {
+  id: number;
+  text: string;
+  isCompleted: boolean;
+  orderIndex: number;
+  completedAt: string | null;
+  completedById: number | null;
+  createdById: number | null;
+  createdAt: string | null;
+};
+
+type MilestoneDetail = {
+  id: number;
+  mentorshipId: number;
+  title: string;
+  description: string;
+  targetDate: string | null;
+  status: MilestoneStatus;
+  orderIndex: number;
+  completedAt: string | null;
+  createdAt: string | null;
+  actionItems: MilestoneActionItem[];
 };
 
 const DAY_LIST = [
@@ -71,6 +105,20 @@ export default function ConnectionProfileScreen() {
   const [goalDraft, setGoalDraft] = useState('');
   const [goalEditing, setGoalEditing] = useState(false);
   const [goalSaving, setGoalSaving] = useState(false);
+  const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
+  const [milestoneDetails, setMilestoneDetails] = useState<Record<number, MilestoneDetail>>({});
+  const [milestonesLoading, setMilestonesLoading] = useState(false);
+  const [milestonesRefreshing, setMilestonesRefreshing] = useState(false);
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<number | null>(null);
+  const [selectedMilestoneLoading, setSelectedMilestoneLoading] = useState(false);
+  const [actionItemSavingId, setActionItemSavingId] = useState<number | null>(null);
+  const [milestoneComposerOpen, setMilestoneComposerOpen] = useState(false);
+  const [milestoneTitleDraft, setMilestoneTitleDraft] = useState('');
+  const [milestoneDescriptionDraft, setMilestoneDescriptionDraft] = useState('');
+  const [milestoneDateDraft, setMilestoneDateDraft] = useState('');
+  const [milestoneCreating, setMilestoneCreating] = useState(false);
+  const [actionItemDraft, setActionItemDraft] = useState('');
+  const [actionItemCreating, setActionItemCreating] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -91,6 +139,63 @@ export default function ConnectionProfileScreen() {
       if (res.data.sharedGoal) setSharedGoal(res.data.sharedGoal);
     }).catch(() => {});
   }, [mentorshipId]);
+
+  const fetchMilestoneDetail = async (milestoneId: number) => {
+    const res = await apiClient.get(`/milestones/${milestoneId}`);
+    return res.data as MilestoneDetail;
+  };
+
+  const loadMilestones = useCallback(async (keepSelection = true) => {
+    if (!mentorshipId) return;
+
+    setMilestonesLoading(true);
+    try {
+      const res = await apiClient.get(`/mentorships/${mentorshipId}/milestones`);
+      const summaryItems = ((res.data ?? []) as MilestoneSummary[]).sort(
+        (a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)
+      );
+      setMilestones(summaryItems);
+
+      if (summaryItems.length === 0) {
+        setMilestoneDetails({});
+        setSelectedMilestoneId(null);
+        return;
+      }
+
+      const details = await Promise.all(
+        summaryItems.map(async (item) => [item.id, await fetchMilestoneDetail(item.id)] as const)
+      );
+
+      const detailMap = Object.fromEntries(details);
+      setMilestoneDetails(detailMap);
+      setSelectedMilestoneId((current) => {
+        if (keepSelection && current && detailMap[current]) return current;
+        return summaryItems[0].id;
+      });
+    } catch {
+      Alert.alert('Error', 'Could not load milestones right now.');
+    } finally {
+      setMilestonesLoading(false);
+      setMilestonesRefreshing(false);
+    }
+  }, [mentorshipId]);
+
+  useEffect(() => {
+    if (!mentorshipId) return;
+    loadMilestones(false);
+  }, [mentorshipId, loadMilestones]);
+
+  const refreshSelectedMilestone = async (milestoneId: number) => {
+    setSelectedMilestoneLoading(true);
+    try {
+      const detail = await fetchMilestoneDetail(milestoneId);
+      setMilestoneDetails((prev) => ({ ...prev, [milestoneId]: detail }));
+    } catch {
+      Alert.alert('Error', 'Could not refresh the milestone details.');
+    } finally {
+      setSelectedMilestoneLoading(false);
+    }
+  };
 
   const saveSharedGoal = async () => {
     if (!mentorshipId || !goalDraft.trim()) return;
@@ -114,6 +219,27 @@ export default function ConnectionProfileScreen() {
   const stat3Value = parseString(params.stat3Value);
 
   const isViewingMentor = type === 'mentor';
+  const selectedMilestone = selectedMilestoneId ? milestoneDetails[selectedMilestoneId] : null;
+  const totalActionItems = Object.values(milestoneDetails).reduce(
+    (sum, milestone) => sum + milestone.actionItems.length,
+    0
+  );
+  const completedActionItems = Object.values(milestoneDetails).reduce(
+    (sum, milestone) => sum + milestone.actionItems.filter((item) => item.isCompleted).length,
+    0
+  );
+  const overallProgressPercent = totalActionItems
+    ? Math.round((completedActionItems / totalActionItems) * 100)
+    : 0;
+  const selectedMilestoneCompletedCount = selectedMilestone?.actionItems.filter((item) => item.isCompleted).length ?? 0;
+  const selectedMilestoneProgressPercent = selectedMilestone?.actionItems.length
+    ? Math.round((selectedMilestoneCompletedCount / selectedMilestone.actionItems.length) * 100)
+    : 0;
+  const getStatusChipStyle = (status: MilestoneStatus) => {
+    if (status === 'COMPLETED') return styles.statusCompleted;
+    if (status === 'IN_PROGRESS') return styles.statusInProgress;
+    return styles.statusPending;
+  };
 
   useEffect(() => {
     if (!isViewingMentor || !id) return;
@@ -138,7 +264,7 @@ export default function ConnectionProfileScreen() {
   const openMeetings = () => {
     router.push({
       pathname: '/meetings-sessions',
-      params: { connectedUserName: name, connectedUserType: type },
+      params: { connectedUserName: name, connectedUserType: type, mentorshipId },
     });
   };
 
@@ -151,6 +277,74 @@ export default function ConnectionProfileScreen() {
         mentorshipId,
       },
     });
+  };
+
+  const createMilestone = async () => {
+    if (!mentorshipId || !milestoneTitleDraft.trim()) return;
+    setMilestoneCreating(true);
+    try {
+      await apiClient.post(`/mentorships/${mentorshipId}/milestones`, {
+        title: milestoneTitleDraft.trim(),
+        description: milestoneDescriptionDraft.trim() || null,
+        targetDate: toIsoDateOrNull(milestoneDateDraft),
+      });
+      setMilestoneTitleDraft('');
+      setMilestoneDescriptionDraft('');
+      setMilestoneDateDraft('');
+      setMilestoneComposerOpen(false);
+      await loadMilestones(false);
+    } catch {
+      Alert.alert('Error', 'Could not create the milestone.');
+    } finally {
+      setMilestoneCreating(false);
+    }
+  };
+
+  const addActionItem = async () => {
+    if (!selectedMilestone || !actionItemDraft.trim()) return;
+    setActionItemCreating(true);
+    try {
+      await apiClient.post(`/milestones/${selectedMilestone.id}/action-items`, {
+        text: actionItemDraft.trim(),
+      });
+      setActionItemDraft('');
+      await refreshSelectedMilestone(selectedMilestone.id);
+      await loadMilestones();
+    } catch {
+      Alert.alert('Error', 'Could not add the action item.');
+    } finally {
+      setActionItemCreating(false);
+    }
+  };
+
+  const updateMilestoneStatus = async (status: MilestoneStatus) => {
+    if (!selectedMilestone || selectedMilestone.status === status) return;
+    setSelectedMilestoneLoading(true);
+    try {
+      await apiClient.patch(`/milestones/${selectedMilestone.id}`, { status });
+      await loadMilestones();
+    } catch {
+      Alert.alert('Error', 'Could not update the milestone status.');
+    } finally {
+      setSelectedMilestoneLoading(false);
+    }
+  };
+
+  const toggleActionItem = async (item: MilestoneActionItem) => {
+    setActionItemSavingId(item.id);
+    try {
+      await apiClient.patch(`/milestone-action-items/${item.id}`, {
+        completed: !item.isCompleted,
+      });
+      if (selectedMilestoneId) {
+        await refreshSelectedMilestone(selectedMilestoneId);
+      }
+      await loadMilestones();
+    } catch {
+      Alert.alert('Error', 'Could not update the action item.');
+    } finally {
+      setActionItemSavingId(null);
+    }
   };
 
   return (
@@ -316,6 +510,237 @@ export default function ConnectionProfileScreen() {
                 >
                   <Text style={styles.goalEditText}>Edit Goal</Text>
                 </TouchableOpacity>
+              </>
+            )}
+          </View>
+
+          <Text style={styles.sectionTitle}>MILESTONES</Text>
+
+          <View style={styles.card}>
+            <View style={styles.goalSummaryHeader}>
+              <View>
+                <Text style={styles.cardLabel}>Overall progress</Text>
+                <Text style={styles.progressHeadline}>{overallProgressPercent}% complete</Text>
+                <Text style={styles.progressSubtext}>
+                  {completedActionItems}/{totalActionItems} action items completed
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.goalEditButton}
+                onPress={() => {
+                  setMilestonesRefreshing(true);
+                  loadMilestones();
+                }}
+                disabled={milestonesRefreshing}
+              >
+                <Text style={styles.goalEditText}>{milestonesRefreshing ? 'Refreshing...' : 'Refresh'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${overallProgressPercent}%` }]} />
+            </View>
+
+            {isMentorViewer && (
+              <>
+                <TouchableOpacity
+                  style={styles.actionButtonSecondary}
+                  onPress={() => setMilestoneComposerOpen((current) => !current)}
+                >
+                  <Text style={styles.actionButtonSecondaryText}>
+                    {milestoneComposerOpen ? 'Hide Milestone Form' : '+ Add Milestone'}
+                  </Text>
+                </TouchableOpacity>
+
+                {milestoneComposerOpen && (
+                  <View style={styles.milestoneComposer}>
+                    <TextInput
+                      style={styles.milestoneInput}
+                      value={milestoneTitleDraft}
+                      onChangeText={setMilestoneTitleDraft}
+                      placeholder="Milestone title"
+                      placeholderTextColor="#B0A89E"
+                    />
+                    <TextInput
+                      style={styles.goalInput}
+                      value={milestoneDescriptionDraft}
+                      onChangeText={setMilestoneDescriptionDraft}
+                      placeholder="Description (optional)"
+                      placeholderTextColor="#B0A89E"
+                      multiline
+                    />
+                    <TextInput
+                      style={styles.milestoneInput}
+                      value={milestoneDateDraft}
+                      onChangeText={setMilestoneDateDraft}
+                      placeholder="Target date (YYYY-MM-DD)"
+                      placeholderTextColor="#B0A89E"
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity
+                      style={[styles.goalSaveButton, (!milestoneTitleDraft.trim() || milestoneCreating) && { opacity: 0.5 }]}
+                      onPress={createMilestone}
+                      disabled={!milestoneTitleDraft.trim() || milestoneCreating}
+                    >
+                      {milestoneCreating
+                        ? <ActivityIndicator size="small" color="#F8F6F2" />
+                        : <Text style={styles.goalSaveText}>Create Milestone</Text>}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+
+            {milestonesLoading ? (
+              <ActivityIndicator size="small" color="#456B50" style={styles.inlineLoader} />
+            ) : milestones.length === 0 ? (
+              <Text style={styles.cardText}>No milestones added yet.</Text>
+            ) : (
+              <>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.milestoneList}
+                >
+                  {milestones.map((milestone) => {
+                    const detail = milestoneDetails[milestone.id];
+                    const completedCount = detail?.actionItems.filter((item) => item.isCompleted).length ?? 0;
+                    const progressPercent = detail?.actionItems.length
+                      ? Math.round((completedCount / detail.actionItems.length) * 100)
+                      : 0;
+
+                    return (
+                      <TouchableOpacity
+                        key={milestone.id}
+                        style={[
+                          styles.milestoneCard,
+                          selectedMilestoneId === milestone.id && styles.milestoneCardActive,
+                        ]}
+                        onPress={() => setSelectedMilestoneId(milestone.id)}
+                      >
+                        <View style={styles.milestoneCardHeader}>
+                          <Text style={styles.milestoneCardTitle}>{milestone.title}</Text>
+                          <View style={[styles.statusChip, getStatusChipStyle(milestone.status)]}>
+                            <Text style={styles.statusChipText}>{formatStatusLabel(milestone.status)}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.milestoneMeta}>{formatDateLabel(milestone.targetDate)}</Text>
+                        <Text style={styles.milestoneMeta}>{progressPercent}% complete</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {selectedMilestone ? (
+                  <View style={styles.milestoneDetailCard}>
+                    <View style={styles.milestoneDetailHeader}>
+                      <View style={styles.flexOne}>
+                        <Text style={styles.cardLabel}>Selected objective</Text>
+                        <Text style={styles.milestoneDetailTitle}>{selectedMilestone.title}</Text>
+                        <Text style={styles.milestoneMeta}>{formatDateLabel(selectedMilestone.targetDate)}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.goalEditButton}
+                        onPress={() => refreshSelectedMilestone(selectedMilestone.id)}
+                      >
+                        <Text style={styles.goalEditText}>Refresh</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {!!selectedMilestone.description && (
+                      <Text style={styles.cardText}>{selectedMilestone.description}</Text>
+                    )}
+
+                    <Text style={styles.progressSubtext}>
+                      {selectedMilestoneCompletedCount}/{selectedMilestone.actionItems.length} action items complete
+                    </Text>
+                    <View style={styles.progressTrack}>
+                      <View style={[styles.progressFill, { width: `${selectedMilestoneProgressPercent}%` }]} />
+                    </View>
+
+                    {isMentorViewer && (
+                      <View style={styles.statusFilterRow}>
+                        {(['PENDING', 'IN_PROGRESS', 'COMPLETED'] as MilestoneStatus[]).map((status) => (
+                          <TouchableOpacity
+                            key={status}
+                            style={[
+                              styles.statusFilterChip,
+                              selectedMilestone.status === status && styles.statusFilterChipActive,
+                            ]}
+                            onPress={() => updateMilestoneStatus(status)}
+                          >
+                            <Text
+                              style={[
+                                styles.statusFilterText,
+                                selectedMilestone.status === status && styles.statusFilterTextActive,
+                              ]}
+                            >
+                              {formatStatusLabel(status)}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+
+                    {selectedMilestoneLoading && (
+                      <ActivityIndicator size="small" color="#456B50" style={styles.inlineLoader} />
+                    )}
+
+                    {selectedMilestone.actionItems.length === 0 ? (
+                      <Text style={styles.cardText}>No action items defined for this milestone yet.</Text>
+                    ) : (
+                      selectedMilestone.actionItems
+                        .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+                        .map((item) => (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={styles.actionItemRow}
+                            onPress={() => toggleActionItem(item)}
+                            disabled={actionItemSavingId === item.id}
+                          >
+                            <View style={[styles.actionItemCheckbox, item.isCompleted && styles.actionItemCheckboxActive]}>
+                              {actionItemSavingId === item.id ? (
+                                <ActivityIndicator size="small" color={item.isCompleted ? '#F8F6F2' : '#456B50'} />
+                              ) : item.isCompleted ? (
+                                <Text style={styles.actionItemCheckmark}>✓</Text>
+                              ) : null}
+                            </View>
+                            <View style={styles.actionItemContent}>
+                              <Text style={[styles.actionItemText, item.isCompleted && styles.actionItemTextDone]}>
+                                {item.text}
+                              </Text>
+                              <Text style={styles.actionItemMeta}>
+                                {item.isCompleted
+                                  ? `Completed ${formatDateLabel(item.completedAt)}`
+                                  : 'Tap to mark complete'}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))
+                    )}
+
+                    {isMentorViewer && (
+                      <View style={styles.actionItemComposer}>
+                        <TextInput
+                          style={styles.milestoneInput}
+                          value={actionItemDraft}
+                          onChangeText={setActionItemDraft}
+                          placeholder="Add an action item"
+                          placeholderTextColor="#B0A89E"
+                        />
+                        <TouchableOpacity
+                          style={[styles.goalSaveButton, (!actionItemDraft.trim() || actionItemCreating) && { opacity: 0.5 }]}
+                          onPress={addActionItem}
+                          disabled={!actionItemDraft.trim() || actionItemCreating}
+                        >
+                          {actionItemCreating
+                            ? <ActivityIndicator size="small" color="#F8F6F2" />
+                            : <Text style={styles.goalSaveText}>Add Action Item</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
               </>
             )}
           </View>
@@ -815,5 +1240,194 @@ const styles = StyleSheet.create({
     color: '#2F563C',
     fontSize: 13,
     fontWeight: '700',
+  },
+  goalSummaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  progressHeadline: {
+    color: '#2E2A24',
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  progressSubtext: {
+    color: '#6E655A',
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  progressTrack: {
+    height: 10,
+    backgroundColor: '#E1D9CF',
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginTop: 14,
+    marginBottom: 18,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#456B50',
+    borderRadius: 999,
+  },
+  milestoneComposer: {
+    marginBottom: 18,
+  },
+  milestoneInput: {
+    backgroundColor: '#FCFBF8',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#C8D9CA',
+    padding: 14,
+    fontSize: 15,
+    color: '#23372B',
+    marginBottom: 10,
+  },
+  inlineLoader: {
+    marginVertical: 12,
+  },
+  milestoneList: {
+    paddingBottom: 6,
+    gap: 12,
+  },
+  milestoneCard: {
+    width: 210,
+    backgroundColor: '#F3EEE7',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E3DACE',
+  },
+  milestoneCardActive: {
+    borderColor: '#456B50',
+    backgroundColor: '#EDF4EF',
+  },
+  milestoneCardHeader: {
+    gap: 10,
+  },
+  milestoneCardTitle: {
+    color: '#2E2A24',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  milestoneMeta: {
+    color: '#6E655A',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  statusChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  statusPending: {
+    backgroundColor: '#EEE4D0',
+  },
+  statusInProgress: {
+    backgroundColor: '#DDE7F6',
+  },
+  statusCompleted: {
+    backgroundColor: '#DCEBDF',
+  },
+  statusChipText: {
+    color: '#2E2A24',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  milestoneDetailCard: {
+    marginTop: 18,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: '#E4DBD0',
+  },
+  milestoneDetailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  flexOne: {
+    flex: 1,
+  },
+  milestoneDetailTitle: {
+    color: '#2E2A24',
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  statusFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
+  },
+  statusFilterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D5CABC',
+    backgroundColor: '#F7F3EC',
+  },
+  statusFilterChipActive: {
+    backgroundColor: '#456B50',
+    borderColor: '#456B50',
+  },
+  statusFilterText: {
+    color: '#5E5348',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statusFilterTextActive: {
+    color: '#F8F6F2',
+  },
+  actionItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ECE4DA',
+  },
+  actionItemCheckbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#456B50',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8F6F2',
+  },
+  actionItemCheckboxActive: {
+    backgroundColor: '#456B50',
+  },
+  actionItemCheckmark: {
+    color: '#F8F6F2',
+    fontWeight: '800',
+  },
+  actionItemContent: {
+    flex: 1,
+  },
+  actionItemText: {
+    color: '#2E2A24',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  actionItemTextDone: {
+    textDecorationLine: 'line-through',
+    color: '#6E655A',
+  },
+  actionItemMeta: {
+    color: '#84796C',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  actionItemComposer: {
+    marginTop: 16,
   },
 });
