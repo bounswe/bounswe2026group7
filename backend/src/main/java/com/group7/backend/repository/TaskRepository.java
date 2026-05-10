@@ -37,6 +37,13 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             @Param("from") OffsetDateTime from,
             @Param("to") OffsetDateTime to);
 
-    @Query("SELECT t FROM Task t JOIN FETCH t.mentorship m JOIN FETCH m.mentee WHERE t.status = 'PENDING' AND t.dueDate BETWEEN :from AND :to")
+    /**
+     * Tasks the mentee still owes work on (PENDING or REVISION_REQUESTED) whose
+     * dueDate is in the [from, to] window. REVISION_REQUESTED is included so a
+     * task the mentor bounced back still triggers the 24-hour deadline reminder.
+     */
+    @Query("SELECT t FROM Task t JOIN FETCH t.mentorship m JOIN FETCH m.mentee "
+            + "WHERE t.status IN ('PENDING', 'REVISION_REQUESTED') "
+            + "AND t.dueDate BETWEEN :from AND :to")
     List<Task> findPendingTasksDueWithin(@Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
 }

@@ -150,6 +150,28 @@ public class ReminderNotificationIntegrationTest {
     }
 
     @Test
+    void processReminders_sendsTaskDeadlineReminder_forRevisionRequestedTask() {
+        Mentor mentor = createMentor("mentor3@example.com");
+        Mentee mentee = createMentee("mentee3@example.com");
+        Mentorship mentorship = createMentorship(mentor, mentee);
+
+        Task task = new Task();
+        task.setMentorship(mentorship);
+        task.setTitle("Bounced-back essay");
+        task.setDescription("Needs another pass.");
+        task.setStatus(TaskStatus.REVISION_REQUESTED);
+        task.setDueDate(OffsetDateTime.now(ZoneOffset.UTC).plusHours(12));
+        taskRepository.save(task);
+
+        scheduler.processReminders();
+
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(countNotifications(mentee.getId(), NotificationType.TASK_DEADLINE_REMINDER)).isEqualTo(1));
+        assertThat(sentTaskReminderRepository.existsByUserIdAndTaskId(mentee.getId(), task.getId())).isTrue();
+    }
+
+    @Test
     void processReminders_skipsIfTaskReminderDisabled() {
         Mentor mentor = createMentor("mentor2@example.com");
         Mentee mentee = createMentee("mentee2@example.com");
