@@ -220,13 +220,13 @@ class MentorshipCancellationIntegrationTest {
         CanceledFixture f = acceptMentorship("c_mentor2@test.com", "c_mentee2@test.com");
 
         mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/cancel")
-                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .header("Authorization", "Bearer " + f.menteeToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("reason", "Capacity needed elsewhere"))))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/mentorships/" + f.mentorshipId() + "/audit")
-                        .header("Authorization", "Bearer " + f.menteeToken()))
+                        .header("Authorization", "Bearer " + f.mentorToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].fromStatus").doesNotExist())
@@ -234,7 +234,7 @@ class MentorshipCancellationIntegrationTest {
                 .andExpect(jsonPath("$[1].fromStatus").value("ACTIVE"))
                 .andExpect(jsonPath("$[1].toStatus").value("CANCELLED"))
                 .andExpect(jsonPath("$[1].reason").value("Capacity needed elsewhere"))
-                .andExpect(jsonPath("$[1].actorUserId").value(f.mentorId()));
+                .andExpect(jsonPath("$[1].actorUserId").value(f.menteeId()));
     }
 
     @Test
@@ -254,7 +254,7 @@ class MentorshipCancellationIntegrationTest {
         CanceledFixture f = acceptMentorship("c_mentor4@test.com", "c_mentee4@test.com");
 
         mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/cancel")
-                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .header("Authorization", "Bearer " + f.menteeToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"   \"}"))
                 .andExpect(status().isBadRequest());
@@ -264,13 +264,13 @@ class MentorshipCancellationIntegrationTest {
     void cancelRejectsAlreadyCancelled() throws Exception {
         CanceledFixture f = acceptMentorship("c_mentor5@test.com", "c_mentee5@test.com");
         mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/cancel")
-                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .header("Authorization", "Bearer " + f.menteeToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("reason", "first cancel"))))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/cancel")
-                        .header("Authorization", "Bearer " + f.mentorToken())
+                        .header("Authorization", "Bearer " + f.menteeToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("reason", "second cancel"))))
                 .andExpect(status().isConflict());

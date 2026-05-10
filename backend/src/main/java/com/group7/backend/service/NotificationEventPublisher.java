@@ -246,6 +246,37 @@ public class NotificationEventPublisher {
         );
     }
 
+    public void publishMentorshipEnded(Long recipientId, String mentorFirstName, String reason) {
+        String suffix = (reason == null || reason.isBlank()) ? "." : ". Note: " + reason;
+        publish(
+                recipientId,
+                NotificationType.MENTORSHIP_ENDED,
+                "Mentorship ended",
+                mentorFirstName + " ended your mentorship" + suffix
+        );
+    }
+
+    public void publishMentorshipExtended(Long recipientId, String mentorFirstName,
+                                          int additionalMonths, OffsetDateTime newEndDate) {
+        publish(
+                recipientId,
+                NotificationType.MENTORSHIP_EXTENDED,
+                "Mentorship extended",
+                mentorFirstName + " extended your mentorship by " + additionalMonths
+                        + " month(s); new end date " + newEndDate + "."
+        );
+    }
+
+    public void publishMentorshipAutoCompleted(Long recipientId, String counterpartFirstName) {
+        publish(
+                recipientId,
+                NotificationType.MENTORSHIP_AUTO_COMPLETED,
+                "Mentorship completed",
+                "Your mentorship with " + counterpartFirstName
+                        + " has reached its end date and is now complete."
+        );
+    }
+
     public void publish(Long recipientId, NotificationType type, String title, String body) {
         applicationEventPublisher.publishEvent(new NotificationCreatedEvent(recipientId, type, title, body));
     }

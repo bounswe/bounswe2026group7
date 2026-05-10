@@ -13,6 +13,7 @@ import com.group7.backend.dto.response.TimelineResponse;
 import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.service.JwtService;
+import com.group7.backend.service.MentorRatingService;
 import com.group7.backend.service.MentorshipProgressService;
 import com.group7.backend.service.MentorshipRequestService;
 import com.group7.backend.service.MentorshipService;
@@ -59,6 +60,9 @@ class MentorshipControllerTest {
 
     @MockitoBean
     private MentorshipTimelineService mentorshipTimelineService;
+
+    @MockitoBean
+    private MentorRatingService mentorRatingService;
 
     @MockitoBean
     private JwtService jwtService;
