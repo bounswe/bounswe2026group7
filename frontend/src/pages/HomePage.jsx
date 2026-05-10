@@ -263,15 +263,15 @@ export default function HomePage() {
           ) : (
             <div className="home-grid">
               {/* Incoming Requests */}
-              <div>
+              <div data-testid="mentor-inbox">
                 <div className="section-label">Incoming Requests</div>
                 {pendingRequests.length === 0 ? (
-                  <div className="empty-state" style={{ padding: '24px', fontSize: '14px' }}>
+                  <div className="empty-state" style={{ padding: '24px', fontSize: '14px' }} data-testid="mentor-inbox-empty">
                     No pending requests
                   </div>
                 ) : (
                   pendingRequests.map(req => (
-                    <div className="request-card" key={req.id}>
+                    <div className="request-card" key={req.id} data-testid={`mentor-inbox-request-${req.id}`}>
                       <div className="req-header">
                         <div className="req-avatar">
                           {req.menteeFirstName?.[0] ?? '?'}
@@ -286,7 +286,7 @@ export default function HomePage() {
 
                       {/* Duration picker shown when accepting this request */}
                       {acceptingId === req.id ? (
-                        <div className="duration-picker">
+                        <div className="duration-picker" data-testid={`mentor-inbox-duration-${req.id}`}>
                           <p className="duration-label">Select mentorship duration:</p>
                           <div className="duration-options">
                             {[1, 3, 6].map(d => (
@@ -294,6 +294,7 @@ export default function HomePage() {
                                 key={d}
                                 className={`duration-btn${selectedDuration === d ? ' duration-btn--active' : ''}`}
                                 onClick={() => setSelectedDuration(d)}
+                                data-testid={`mentor-inbox-duration-${d}`}
                               >
                                 {d} {d === 1 ? 'month' : 'months'}
                               </button>
@@ -304,6 +305,7 @@ export default function HomePage() {
                               className="btn-accept"
                               onClick={handleAcceptConfirm}
                               disabled={actionLoading}
+                              data-testid={`mentor-inbox-confirm-${req.id}`}
                             >
                               {actionLoading ? 'Confirming…' : 'Confirm'}
                             </button>
@@ -322,6 +324,7 @@ export default function HomePage() {
                             className="btn-accept"
                             onClick={() => { setAcceptingId(req.id); setSelectedDuration(3) }}
                             disabled={actionLoading}
+                            data-testid={`mentor-inbox-accept-${req.id}`}
                           >
                             Accept
                           </button>
@@ -329,6 +332,7 @@ export default function HomePage() {
                             className="btn-decline"
                             onClick={() => handleReject(req.id)}
                             disabled={actionLoading}
+                            data-testid={`mentor-inbox-decline-${req.id}`}
                           >
                             Decline
                           </button>
