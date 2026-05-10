@@ -2,6 +2,8 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.request.AcceptRequestRequest;
 import com.group7.backend.dto.request.CancelMentorshipRequest;
+import com.group7.backend.dto.request.EndMentorshipRequest;
+import com.group7.backend.dto.request.ExtendMentorshipRequest;
 import com.group7.backend.dto.request.SharedGoalRequest;
 import com.group7.backend.dto.response.MentorshipAuditLogResponse;
 import com.group7.backend.dto.response.MentorshipResponse;
@@ -11,6 +13,7 @@ import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.MentorshipAuditLogRepository;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.MentorshipRequestRepository;
+import org.springframework.security.access.AccessDeniedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +56,9 @@ class MentorshipServiceTest {
 
     @Mock
     private NotificationEventPublisher notificationEventPublisher;
+
+    @Mock
+    private BanService banService;
 
     @Spy
     private Clock clock = Clock.systemUTC();
@@ -442,22 +448,23 @@ class MentorshipServiceTest {
     }
 
     @Test
-    void cancelMentorshipByMentorMarksCancelledAndCleansUp() {
+    void cancelMentorshipByMenteeMarksCancelledAndCleansUp() {
         Mentorship mentorship = activeMentorship();
         mentee.setActiveMentorId(mentor.getId());
-        when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
+        when(mentorshipRepository.findByIdAndParticipant(100L, 2L)).thenReturn(Optional.of(mentorship));
         when(mentorshipRepository.save(any(Mentorship.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        MentorshipResponse response = mentorshipService.cancelMentorship(1L, 100L, cancelDto("Schedule clash"));
+        MentorshipResponse response = mentorshipService.cancelMentorship(2L, 100L, cancelDto("Schedule clash"));
 
         assertThat(response.getStatus()).isEqualTo("CANCELLED");
         assertThat(response.getCancellationReason()).isEqualTo("Schedule clash");
         assertThat(response.getTerminatedAt()).isNotNull();
-        assertThat(mentorship.getTerminatedByUserId()).isEqualTo(1L);
+        assertThat(mentorship.getTerminatedByUserId()).isEqualTo(2L);
         assertThat(mentee.getActiveMentorId()).isNull();
         assertThat(mentor.getCurrentMenteeCount()).isEqualTo(0);
         verify(mentorshipCleanupService).cleanupChildren(100L);
-        verify(notificationEventPublisher).publishMentorshipCancelled(2L, "Ahmet", "Schedule clash");
+        verify(notificationEventPublisher).publishMentorshipCancelled(1L, "Elif", "Schedule clash");
+        verify(banService).recordCancellation(2L, "Cancelled active mentorship: Schedule clash");
 
         ArgumentCaptor<MentorshipAuditLog> captor = ArgumentCaptor.forClass(MentorshipAuditLog.class);
         verify(mentorshipAuditLogRepository).save(captor.capture());
@@ -465,21 +472,21 @@ class MentorshipServiceTest {
         assertThat(logged.getMentorshipId()).isEqualTo(100L);
         assertThat(logged.getFromStatus()).isEqualTo(MentorshipStatus.ACTIVE);
         assertThat(logged.getToStatus()).isEqualTo(MentorshipStatus.CANCELLED);
-        assertThat(logged.getActorUserId()).isEqualTo(1L);
+        assertThat(logged.getActorUserId()).isEqualTo(2L);
         assertThat(logged.getReason()).isEqualTo("Schedule clash");
     }
 
     @Test
-    void cancelMentorshipByMenteeNotifiesMentor() {
+    void cancelMentorshipRejectsMentorActor() {
+        // Mentor must use /end instead; /cancel is mentee-only after #237.
         Mentorship mentorship = activeMentorship();
-        mentee.setActiveMentorId(mentor.getId());
-        when(mentorshipRepository.findByIdAndParticipant(100L, 2L)).thenReturn(Optional.of(mentorship));
-        when(mentorshipRepository.save(any(Mentorship.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
 
-        mentorshipService.cancelMentorship(2L, 100L, cancelDto("Lost interest"));
-
-        verify(notificationEventPublisher).publishMentorshipCancelled(1L, "Elif", "Lost interest");
-        assertThat(mentorship.getTerminatedByUserId()).isEqualTo(2L);
+        assertThatThrownBy(() -> mentorshipService.cancelMentorship(1L, 100L, cancelDto("nope")))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("/end");
+        verify(mentorshipCleanupService, never()).cleanupChildren(any());
+        verify(banService, never()).recordCancellation(any(), any());
     }
 
     @Test
@@ -495,27 +502,144 @@ class MentorshipServiceTest {
     void cancelMentorshipRejectsAlreadyCancelled() {
         Mentorship mentorship = activeMentorship();
         mentorship.setStatus(MentorshipStatus.CANCELLED);
-        when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
+        when(mentorshipRepository.findByIdAndParticipant(100L, 2L)).thenReturn(Optional.of(mentorship));
 
-        assertThatThrownBy(() -> mentorshipService.cancelMentorship(1L, 100L, cancelDto("again")))
+        assertThatThrownBy(() -> mentorshipService.cancelMentorship(2L, 100L, cancelDto("again")))
                 .isInstanceOf(MentorshipRequestException.class)
                 .hasMessageContaining("not active");
         verify(mentorshipCleanupService, never()).cleanupChildren(any());
         verify(mentorshipAuditLogRepository, never()).save(any());
+        verify(banService, never()).recordCancellation(any(), any());
     }
 
     @Test
     void cancelMentorshipPreservesActiveMentorIdWhenItPointsElsewhere() {
-        // A stale activeMentorId pointing at a different mentor should not be cleared,
-        // because that other mentorship is still the active one for the mentee.
+        // A stale activeMentorId pointing at a different mentor should not be cleared.
         Mentorship mentorship = activeMentorship();
         mentee.setActiveMentorId(999L);
+        when(mentorshipRepository.findByIdAndParticipant(100L, 2L)).thenReturn(Optional.of(mentorship));
+        when(mentorshipRepository.save(any(Mentorship.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        mentorshipService.cancelMentorship(2L, 100L, cancelDto("done"));
+
+        assertThat(mentee.getActiveMentorId()).isEqualTo(999L);
+    }
+
+    // ── End mentorship (#237) ───────────────────────────────────────────────
+
+    private EndMentorshipRequest endDto(String reason) {
+        EndMentorshipRequest dto = new EndMentorshipRequest();
+        dto.setReason(reason);
+        return dto;
+    }
+
+    @Test
+    void endMentorshipByMentorSetsCompletedAndCleansUp() {
+        Mentorship mentorship = activeMentorship();
+        mentee.setActiveMentorId(mentor.getId());
         when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
         when(mentorshipRepository.save(any(Mentorship.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        mentorshipService.cancelMentorship(1L, 100L, cancelDto("done"));
+        MentorshipResponse response = mentorshipService.endMentorship(1L, 100L, endDto("Goal achieved"));
 
-        assertThat(mentee.getActiveMentorId()).isEqualTo(999L);
+        assertThat(response.getStatus()).isEqualTo("COMPLETED");
+        assertThat(mentorship.getTerminatedByUserId()).isEqualTo(1L);
+        assertThat(mentorship.getTerminatedAt()).isNotNull();
+        assertThat(mentorship.getEndDate()).isEqualTo(mentorship.getTerminatedAt());
+        assertThat(mentee.getActiveMentorId()).isNull();
+        assertThat(mentor.getCurrentMenteeCount()).isEqualTo(0);
+        verify(mentorshipCleanupService).cleanupChildren(100L);
+        verify(notificationEventPublisher).publishMentorshipEnded(2L, "Ahmet", "Goal achieved");
+        verify(banService, never()).recordCancellation(any(), any());
+
+        ArgumentCaptor<MentorshipAuditLog> captor = ArgumentCaptor.forClass(MentorshipAuditLog.class);
+        verify(mentorshipAuditLogRepository).save(captor.capture());
+        MentorshipAuditLog logged = captor.getValue();
+        assertThat(logged.getFromStatus()).isEqualTo(MentorshipStatus.ACTIVE);
+        assertThat(logged.getToStatus()).isEqualTo(MentorshipStatus.COMPLETED);
+        assertThat(logged.getActorUserId()).isEqualTo(1L);
+    }
+
+    @Test
+    void endMentorshipRejectsMenteeActor() {
+        Mentorship mentorship = activeMentorship();
+        when(mentorshipRepository.findByIdAndParticipant(100L, 2L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> mentorshipService.endMentorship(2L, 100L, endDto(null)))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("/cancel");
+        verify(mentorshipCleanupService, never()).cleanupChildren(any());
+    }
+
+    @Test
+    void endMentorshipRejectsAlreadyTerminated() {
+        Mentorship mentorship = activeMentorship();
+        mentorship.setStatus(MentorshipStatus.COMPLETED);
+        when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> mentorshipService.endMentorship(1L, 100L, endDto(null)))
+                .isInstanceOf(MentorshipRequestException.class)
+                .hasMessageContaining("not active");
+    }
+
+    // ── Extend mentorship (#237) ────────────────────────────────────────────
+
+    private ExtendMentorshipRequest extendDto(int additionalMonths) {
+        ExtendMentorshipRequest dto = new ExtendMentorshipRequest();
+        dto.setAdditionalMonths(additionalMonths);
+        return dto;
+    }
+
+    @Test
+    void extendMentorshipPushesEndDateAndAudits() {
+        Mentorship mentorship = activeMentorship();
+        OffsetDateTime originalEnd = mentorship.getEndDate();
+        when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
+        when(mentorshipRepository.save(any(Mentorship.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        MentorshipResponse response = mentorshipService.extendMentorship(1L, 100L, extendDto(3));
+
+        assertThat(response.getStatus()).isEqualTo("ACTIVE");
+        assertThat(mentorship.getEndDate()).isEqualTo(originalEnd.plusMonths(3));
+        assertThat(mentorship.getDuration()).isEqualTo(6);
+        verify(notificationEventPublisher).publishMentorshipExtended(2L, "Ahmet", 3, mentorship.getEndDate());
+
+        ArgumentCaptor<MentorshipAuditLog> captor = ArgumentCaptor.forClass(MentorshipAuditLog.class);
+        verify(mentorshipAuditLogRepository).save(captor.capture());
+        MentorshipAuditLog logged = captor.getValue();
+        assertThat(logged.getFromStatus()).isEqualTo(MentorshipStatus.ACTIVE);
+        assertThat(logged.getToStatus()).isEqualTo(MentorshipStatus.ACTIVE);
+        assertThat(logged.getReason()).contains("Extended by 3");
+    }
+
+    @Test
+    void extendMentorshipRejectsMenteeActor() {
+        Mentorship mentorship = activeMentorship();
+        when(mentorshipRepository.findByIdAndParticipant(100L, 2L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> mentorshipService.extendMentorship(2L, 100L, extendDto(3)))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void extendMentorshipRejectsInvalidMonths() {
+        Mentorship mentorship = activeMentorship();
+        when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> mentorshipService.extendMentorship(1L, 100L, extendDto(2)))
+                .isInstanceOf(MentorshipRequestException.class)
+                .hasMessageContaining("1, 3, or 6");
+    }
+
+    @Test
+    void extendMentorshipRejectsNotActive() {
+        Mentorship mentorship = activeMentorship();
+        mentorship.setStatus(MentorshipStatus.COMPLETED);
+        when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> mentorshipService.extendMentorship(1L, 100L, extendDto(3)))
+                .isInstanceOf(MentorshipRequestException.class)
+                .hasMessageContaining("not active");
     }
 
     // ── Accept request: cool-down + initial audit row (#133) ────────────────

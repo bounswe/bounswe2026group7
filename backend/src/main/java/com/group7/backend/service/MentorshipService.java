@@ -2,6 +2,8 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.request.AcceptRequestRequest;
 import com.group7.backend.dto.request.CancelMentorshipRequest;
+import com.group7.backend.dto.request.EndMentorshipRequest;
+import com.group7.backend.dto.request.ExtendMentorshipRequest;
 import com.group7.backend.dto.request.SharedGoalRequest;
 import com.group7.backend.dto.response.MentorshipAuditLogResponse;
 import com.group7.backend.dto.response.MentorshipResponse;
@@ -13,6 +15,7 @@ import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.MentorshipRequestRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +37,7 @@ public class MentorshipService {
     private final MentorshipCleanupService mentorshipCleanupService;
     private final MentorshipCooldownPolicy mentorshipCooldownPolicy;
     private final NotificationEventPublisher notificationEventPublisher;
+    private final BanService banService;
     private final Clock clock;
 
     public MentorshipService(MentorshipRepository mentorshipRepository,
@@ -42,6 +46,7 @@ public class MentorshipService {
                              MentorshipCleanupService mentorshipCleanupService,
                              MentorshipCooldownPolicy mentorshipCooldownPolicy,
                              NotificationEventPublisher notificationEventPublisher,
+                             BanService banService,
                              Clock clock) {
         this.mentorshipRepository = mentorshipRepository;
         this.mentorshipRequestRepository = mentorshipRequestRepository;
@@ -49,6 +54,7 @@ public class MentorshipService {
         this.mentorshipCleanupService = mentorshipCleanupService;
         this.mentorshipCooldownPolicy = mentorshipCooldownPolicy;
         this.notificationEventPublisher = notificationEventPublisher;
+        this.banService = banService;
         this.clock = clock;
     }
 
@@ -155,14 +161,18 @@ public class MentorshipService {
     }
 
     /**
-     * Cancels an active mentorship (#133). Either participant may cancel; the
-     * other side gets a notification. Children (meetings, tasks, milestones,
-     * conversation/messages) are deleted by {@link MentorshipCleanupService};
-     * the mentorship row itself is kept with {@code status = CANCELLED} so
-     * cool-down lookups can find the termination.
+     * Mentee cancels an active mentorship (#133, scoped down by #237). Mentor
+     * uses {@link #endMentorship} for graceful termination instead. Children
+     * (meetings, tasks, milestones, conversation/messages) are deleted by
+     * {@link MentorshipCleanupService}; the mentorship row itself is kept
+     * with {@code status = CANCELLED} so cool-down lookups can find the
+     * termination. The cancellation is recorded against {@link BanService}
+     * so the existing auto-ban escalation (#134) ramps up for repeat
+     * offenders.
      *
      * @throws ResourceNotFoundException if the user is not a participant
-     * @throws MentorshipRequestException if the mentorship is not currently ACTIVE
+     * @throws AccessDeniedException     if the user is the mentor (403)
+     * @throws MentorshipRequestException if the mentorship is not currently ACTIVE (409)
      */
     @Transactional
     public MentorshipResponse cancelMentorship(Long actorUserId,
@@ -170,16 +180,18 @@ public class MentorshipService {
                                                CancelMentorshipRequest dto) {
         Mentorship mentorship = findForParticipant(actorUserId, mentorshipId);
 
+        Mentor mentor = mentorship.getMentor();
+        Mentee mentee = mentorship.getMentee();
+        if (!mentee.getId().equals(actorUserId)) {
+            log.warn("Cancel rejected: mentorshipId={} attempted by non-mentee userId={}",
+                    mentorshipId, actorUserId);
+            throw new AccessDeniedException("Only the mentee can cancel a mentorship; mentors should use /end");
+        }
+
         if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
             log.warn("Cancel rejected: mentorshipId={} is in status {}", mentorshipId, mentorship.getStatus());
             throw new MentorshipRequestException("Mentorship is not active");
         }
-
-        Mentor mentor = mentorship.getMentor();
-        Mentee mentee = mentorship.getMentee();
-        boolean actorIsMentor = mentor.getId().equals(actorUserId);
-        Long otherUserId = actorIsMentor ? mentee.getId() : mentor.getId();
-        String actorFirstName = actorIsMentor ? mentor.getFirstName() : mentee.getFirstName();
 
         OffsetDateTime now = OffsetDateTime.now(clock);
         mentorship.setStatus(MentorshipStatus.CANCELLED);
@@ -196,8 +208,6 @@ public class MentorshipService {
             mentor.setCurrentMenteeCount(mentor.getCurrentMenteeCount() - 1);
         }
 
-        // Cleanup children (meetings, tasks, milestones, conversation). Same
-        // transaction — if anything fails, the status flip rolls back too.
         mentorshipCleanupService.cleanupChildren(mentorshipId);
 
         Mentorship saved = mentorshipRepository.save(mentorship);
@@ -206,11 +216,122 @@ public class MentorshipService {
                 saved.getId(), MentorshipStatus.ACTIVE, MentorshipStatus.CANCELLED,
                 actorUserId, dto.getReason()));
 
-        notificationEventPublisher.publishMentorshipCancelled(otherUserId, actorFirstName, dto.getReason());
+        // Hook into the auto-ban system (#134). Mentee-driven cancellation of
+        // an active mentorship counts as a violation, the same as cancelling
+        // a pending request, and feeds the same escalating-ban policy.
+        banService.recordCancellation(actorUserId, "Cancelled active mentorship: " + dto.getReason());
 
-        log.info("Mentorship cancelled: mentorshipId={}, actorUserId={}, otherUserId={}, "
-                        + "actorIsMentor={}",
-                mentorshipId, actorUserId, otherUserId, actorIsMentor);
+        notificationEventPublisher.publishMentorshipCancelled(
+                mentor.getId(), mentee.getFirstName(), dto.getReason());
+
+        log.info("Mentorship cancelled by mentee: mentorshipId={}, menteeId={}, mentorId={}",
+                mentorshipId, actorUserId, mentor.getId());
+        return MentorshipResponse.from(saved);
+    }
+
+    /**
+     * Mentor ends an active mentorship gracefully (#237). Sets
+     * {@code status = COMPLETED}, stamps {@code endDate = now}, cleans up
+     * children, audits the transition, and notifies the mentee. Reason is
+     * optional (mentor wrap-up note, not a violation — the mentor is not
+     * subject to ban escalation).
+     */
+    @Transactional
+    public MentorshipResponse endMentorship(Long mentorUserId,
+                                            Long mentorshipId,
+                                            EndMentorshipRequest dto) {
+        Mentorship mentorship = findForParticipant(mentorUserId, mentorshipId);
+
+        Mentor mentor = mentorship.getMentor();
+        Mentee mentee = mentorship.getMentee();
+        if (!mentor.getId().equals(mentorUserId)) {
+            log.warn("End rejected: mentorshipId={} attempted by non-mentor userId={}",
+                    mentorshipId, mentorUserId);
+            throw new AccessDeniedException("Only the mentor can end a mentorship; mentees should use /cancel");
+        }
+
+        if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
+            log.warn("End rejected: mentorshipId={} is in status {}", mentorshipId, mentorship.getStatus());
+            throw new MentorshipRequestException("Mentorship is not active");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        mentorship.setStatus(MentorshipStatus.COMPLETED);
+        mentorship.setEndDate(now);
+        mentorship.setTerminatedAt(now);
+        mentorship.setTerminatedByUserId(mentorUserId);
+        mentorship.setCancellationReason(dto.getReason());
+
+        if (Objects.equals(mentee.getActiveMentorId(), mentor.getId())) {
+            mentee.setActiveMentorId(null);
+        }
+        if (mentor.getCurrentMenteeCount() > 0) {
+            mentor.setCurrentMenteeCount(mentor.getCurrentMenteeCount() - 1);
+        }
+
+        mentorshipCleanupService.cleanupChildren(mentorshipId);
+
+        Mentorship saved = mentorshipRepository.save(mentorship);
+
+        mentorshipAuditLogRepository.save(MentorshipAuditLog.of(
+                saved.getId(), MentorshipStatus.ACTIVE, MentorshipStatus.COMPLETED,
+                mentorUserId, dto.getReason()));
+
+        notificationEventPublisher.publishMentorshipEnded(
+                mentee.getId(), mentor.getFirstName(), dto.getReason());
+
+        log.info("Mentorship ended by mentor: mentorshipId={}, mentorId={}, menteeId={}",
+                mentorshipId, mentorUserId, mentee.getId());
+        return MentorshipResponse.from(saved);
+    }
+
+    /**
+     * Mentor extends the duration of an active mentorship (#237). Pushes
+     * {@code endDate} forward by 1, 3, or 6 months and increments
+     * {@code duration} accordingly. Records the lifecycle event in the audit
+     * log even though the status doesn't change.
+     */
+    @Transactional
+    public MentorshipResponse extendMentorship(Long mentorUserId,
+                                               Long mentorshipId,
+                                               ExtendMentorshipRequest dto) {
+        Mentorship mentorship = findForParticipant(mentorUserId, mentorshipId);
+
+        Mentor mentor = mentorship.getMentor();
+        Mentee mentee = mentorship.getMentee();
+        if (!mentor.getId().equals(mentorUserId)) {
+            log.warn("Extend rejected: mentorshipId={} attempted by non-mentor userId={}",
+                    mentorshipId, mentorUserId);
+            throw new AccessDeniedException("Only the mentor can extend a mentorship");
+        }
+
+        if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
+            log.warn("Extend rejected: mentorshipId={} is in status {}", mentorshipId, mentorship.getStatus());
+            throw new MentorshipRequestException("Mentorship is not active");
+        }
+
+        int additional = dto.getAdditionalMonths();
+        if (!ALLOWED_DURATIONS.contains(additional)) {
+            // DTO @AssertTrue covers this at the controller boundary, but
+            // service-side defence-in-depth catches non-validated callers.
+            throw new MentorshipRequestException("additionalMonths must be 1, 3, or 6");
+        }
+
+        OffsetDateTime newEndDate = mentorship.getEndDate().plusMonths(additional);
+        mentorship.setEndDate(newEndDate);
+        mentorship.setDuration(mentorship.getDuration() + additional);
+
+        Mentorship saved = mentorshipRepository.save(mentorship);
+
+        mentorshipAuditLogRepository.save(MentorshipAuditLog.of(
+                saved.getId(), MentorshipStatus.ACTIVE, MentorshipStatus.ACTIVE,
+                mentorUserId, "Extended by " + additional + " month(s); new end date " + newEndDate));
+
+        notificationEventPublisher.publishMentorshipExtended(
+                mentee.getId(), mentor.getFirstName(), additional, newEndDate);
+
+        log.info("Mentorship extended: mentorshipId={}, mentorId={}, additionalMonths={}, newEndDate={}",
+                mentorshipId, mentorUserId, additional, newEndDate);
         return MentorshipResponse.from(saved);
     }
 

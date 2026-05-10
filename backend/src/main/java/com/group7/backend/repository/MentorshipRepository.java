@@ -38,6 +38,17 @@ public interface MentorshipRepository extends JpaRepository<Mentorship, Long> {
     Optional<OffsetDateTime> findLastTerminatedAtForPair(@Param("mentorId") Long mentorId,
                                                         @Param("menteeId") Long menteeId);
 
+    /**
+     * Active mentorships whose {@code endDate} has passed (#237). Used by the
+     * auto-termination scheduler to flip them to COMPLETED. JOIN FETCHes mentor
+     * and mentee so the per-row processing can read counters and ids without
+     * triggering LAZY loads.
+     */
+    @Query("SELECT m FROM Mentorship m JOIN FETCH m.mentor JOIN FETCH m.mentee "
+            + "WHERE m.status = :status AND m.endDate < :now")
+    List<Mentorship> findActiveExpiredAt(@Param("status") MentorshipStatus status,
+                                         @Param("now") OffsetDateTime now);
+
     @Query(value = "SELECT pg_advisory_xact_lock(:lockId)", nativeQuery = true)
     void acquireAdvisoryLock(@Param("lockId") Long lockId);
 }

@@ -95,6 +95,10 @@ public class UserNotificationPreferences {
             // consequential lifecycle event that affects ongoing tasks/meetings,
             // so it bypasses category opt-outs the same way ban notices do.
             case MENTORSHIP_CANCELLED -> true;
+            // Mentorship lifecycle (#237) — same reasoning: end / extend /
+            // auto-completion all change the user's relationship status and
+            // their pending tasks/meetings, so always-on.
+            case MENTORSHIP_ENDED, MENTORSHIP_EXTENDED, MENTORSHIP_AUTO_COMPLETED -> true;
         };
     }
 }
