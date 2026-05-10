@@ -42,4 +42,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
             """)
     List<User> findFollowRecommendationCandidates(@Param("viewerId") Long viewerId,
                                                   Pageable pageable);
+
+    /**
+     * Returns every admin user. Used by the admin broadcast flow (#280) to
+     * sync the singleton {@code ADMIN_BROADCAST} conversation's participant
+     * list — every admin who exists at broadcast send time becomes a
+     * participant and therefore sees every subsequent message in their inbox.
+     */
+    @Query("select u from User u where type(u) = com.group7.backend.entity.Admin")
+    List<User> findAllAdmins();
 }

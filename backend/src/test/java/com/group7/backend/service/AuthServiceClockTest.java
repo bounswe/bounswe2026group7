@@ -37,6 +37,7 @@ class AuthServiceClockTest {
     @Mock private VerificationTokenRepository verificationTokenRepository;
     @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock private EmailService emailService;
+    @Mock private com.group7.backend.service.BanService banService;
 
     private static final Instant FIXED = Instant.parse("2026-04-29T00:00:00Z");
     private final Clock fixedClock = Clock.fixed(FIXED, ZoneOffset.UTC);
@@ -52,6 +53,7 @@ class AuthServiceClockTest {
                 verificationTokenRepository,
                 passwordResetTokenRepository,
                 emailService,
+                banService,
                 fixedClock
         );
         ReflectionTestUtils.setField(authService, "tokenExpiryHours", 24);

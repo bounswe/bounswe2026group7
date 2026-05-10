@@ -36,6 +36,7 @@ class ConversationServiceTest {
     @Mock private ConversationRepository conversationRepository;
     @Mock private MentorshipRepository mentorshipRepository;
     @Mock private UserRepository userRepository;
+    @Mock private com.group7.backend.repository.ConversationParticipantRepository participantRepository;
     @Mock private ConversationCreator conversationCreator;
 
     private ConversationService conversationService;
@@ -48,7 +49,8 @@ class ConversationServiceTest {
     @BeforeEach
     void setUp() {
         conversationService = new ConversationService(
-                conversationRepository, mentorshipRepository, userRepository, conversationCreator);
+                conversationRepository, mentorshipRepository, userRepository,
+                participantRepository, conversationCreator);
 
         mentor = new Mentor();
         mentor.setId(1L);
