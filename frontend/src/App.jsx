@@ -16,6 +16,7 @@ import MessagesPage from './pages/MessagesPage'
 import TasksPage from './pages/TasksPage'
 import SchedulePage from './pages/SchedulePage'
 import NotificationsPage from './pages/NotificationsPage'
+import FeedPage from './pages/FeedPage'
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/feed" element={<FeedPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
