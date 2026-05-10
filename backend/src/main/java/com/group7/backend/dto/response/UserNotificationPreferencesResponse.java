@@ -21,6 +21,8 @@ public class UserNotificationPreferencesResponse {
     private boolean meetingsEnabled;
     private boolean tasksEnabled;
     private boolean requestsEnabled;
+    private boolean taskDeadlineRemindersEnabled;
+    private boolean milestoneRemindersEnabled;
     private OffsetDateTime updatedAt;
 
     public static UserNotificationPreferencesResponse from(UserNotificationPreferences prefs) {
@@ -30,6 +32,8 @@ public class UserNotificationPreferencesResponse {
                 prefs.isMeetingsEnabled(),
                 prefs.isTasksEnabled(),
                 prefs.isRequestsEnabled(),
+                prefs.isTaskDeadlineRemindersEnabled(),
+                prefs.isMilestoneRemindersEnabled(),
                 prefs.getUpdatedAt());
     }
 }

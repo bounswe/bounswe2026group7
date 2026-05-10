@@ -18,7 +18,7 @@ public class NoOpPushDeliveryService implements PushDeliveryService {
     private static final Logger log = LoggerFactory.getLogger(NoOpPushDeliveryService.class);
 
     @Override
-    public void send(Long recipientId, NotificationType type, String title, String body) {
-        log.info("[push:no-op] recipient={}, type={}, title='{}'", recipientId, type, title);
+    public void send(Long recipientId, NotificationType type, String title, String body, Long entityId, Long mentorshipId) {
+        log.info("[push:no-op] recipient={}, type={}, title='{}', entityId={}, mentorshipId={}", recipientId, type, title, entityId, mentorshipId);
     }
 }

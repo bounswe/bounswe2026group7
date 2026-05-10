@@ -45,7 +45,7 @@ class FcmPushDeliveryServiceTest {
     void skipsDispatchWhenNoDevices() throws Exception {
         when(userDeviceRepository.findByUser_IdOrderByLastSeenAtDesc(7L)).thenReturn(List.of());
 
-        service.send(7L, NotificationType.NEW_MESSAGE, "title", "body");
+        service.send(7L, NotificationType.NEW_MESSAGE, "title", "body", null, null);
 
         verify(firebaseMessaging, never()).sendEachForMulticast(any());
     }
@@ -60,7 +60,7 @@ class FcmPushDeliveryServiceTest {
                 mockSendResponseSuccess());
         when(firebaseMessaging.sendEachForMulticast(any(MulticastMessage.class))).thenReturn(response);
 
-        service.send(7L, NotificationType.NEW_MESSAGE, "title", "body");
+        service.send(7L, NotificationType.NEW_MESSAGE, "title", "body", null, null);
 
         verify(firebaseMessaging).sendEachForMulticast(any(MulticastMessage.class));
         verify(userDeviceRepository, never()).deleteByToken(any());
@@ -76,7 +76,7 @@ class FcmPushDeliveryServiceTest {
                 mockSendResponseFailure(MessagingErrorCode.UNREGISTERED));
         when(firebaseMessaging.sendEachForMulticast(any(MulticastMessage.class))).thenReturn(response);
 
-        service.send(7L, NotificationType.NEW_MESSAGE, "title", "body");
+        service.send(7L, NotificationType.NEW_MESSAGE, "title", "body", null, null);
 
         verify(userDeviceRepository).deleteByToken("tok-B");
         verify(userDeviceRepository, never()).deleteByToken("tok-A");
@@ -90,7 +90,7 @@ class FcmPushDeliveryServiceTest {
                 .thenThrow(mock(FirebaseMessagingException.class));
 
         // Asserts no throw — best-effort contract.
-        service.send(7L, NotificationType.NEW_MESSAGE, "title", "body");
+        service.send(7L, NotificationType.NEW_MESSAGE, "title", "body", null, null);
     }
 
     private UserDevice device(String token) {

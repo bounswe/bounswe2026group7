@@ -39,4 +39,7 @@ public interface MilestoneRepository extends JpaRepository<Milestone, Long> {
             @Param("mentorshipId") Long mentorshipId,
             @Param("from") OffsetDateTime from,
             @Param("to") OffsetDateTime to);
+
+    @Query("SELECT m FROM Milestone m JOIN FETCH m.mentorship ms JOIN FETCH ms.mentor JOIN FETCH ms.mentee WHERE m.status != 'COMPLETED' AND m.targetDate BETWEEN :from AND :to")
+    List<Milestone> findIncompleteMilestonesDueWithin(@Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
 }

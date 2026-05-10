@@ -51,7 +51,7 @@ public class FcmPushDeliveryService implements PushDeliveryService {
      * project's other network-bound service and is also not transactional.
      */
     @Override
-    public void send(Long recipientId, NotificationType type, String title, String body) {
+    public void send(Long recipientId, NotificationType type, String title, String body, Long entityId, Long mentorshipId) {
         List<UserDevice> devices = userDeviceRepository.findByUser_IdOrderByLastSeenAtDesc(recipientId);
         if (devices.isEmpty()) {
             return;
@@ -59,14 +59,22 @@ public class FcmPushDeliveryService implements PushDeliveryService {
 
         List<String> tokens = devices.stream().map(UserDevice::getToken).toList();
 
-        MulticastMessage message = MulticastMessage.builder()
+        MulticastMessage.Builder builder = MulticastMessage.builder()
                 .setNotification(Notification.builder()
                         .setTitle(title)
                         .setBody(body)
                         .build())
                 .putData("type", type.name())
-                .addAllTokens(tokens)
-                .build();
+                .addAllTokens(tokens);
+
+        if (entityId != null) {
+            builder.putData("entityId", entityId.toString());
+        }
+        if (mentorshipId != null) {
+            builder.putData("mentorshipId", mentorshipId.toString());
+        }
+
+        MulticastMessage message = builder.build();
 
         try {
             BatchResponse response = firebaseMessaging.sendEachForMulticast(message);
