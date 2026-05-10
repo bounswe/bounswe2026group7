@@ -206,6 +206,81 @@ function CancelMentorshipModal({ open, onClose, onConfirm, otherName, loading })
   )
 }
 
+/**
+ * Shared goal definition modal (#277). Either party can edit while ACTIVE.
+ * Validates non-empty input and shares the single text field via backend.
+ */
+function SharedGoalModal({ open, initial, onClose, onSubmit, loading, error }) {
+  const overlayRef = useRef(null)
+  const [text, setText] = useState(initial || '')
+
+  useEffect(() => {
+    if (open) setText(initial || '')
+  }, [open, initial])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose, loading])
+
+  if (!open) return null
+
+  return (
+    <div
+      className="modal-overlay"
+      ref={overlayRef}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
+    >
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="goalModalTitle">
+        <div className="modal-header">
+          <div>
+            <h2 id="goalModalTitle">Shared Goal</h2>
+            <p className="modal-subtitle">
+              Define a single overarching goal for this mentorship. Work together
+              to keep it focused and achievable.
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        <textarea
+          className="modal-textarea"
+          rows={5}
+          maxLength={500}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="E.g. Help the mentee secure a software internship by August."
+          disabled={loading}
+          autoFocus
+          style={{ marginTop: '16px' }}
+        />
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+          {text.length}/500
+        </div>
+        {error && (
+          <div className="md-composer-error" style={{ marginTop: '8px' }}>{error}</div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="modal-btn-primary"
+            onClick={() => onSubmit(text.trim())}
+            disabled={loading || !text.trim()}
+          >
+            {loading ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function MentorshipDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -263,11 +338,11 @@ export default function MentorshipDetailPage() {
     return () => { cancelled = true }
   }, [id, userId])
 
-  async function handleSaveGoal() {
+  async function handleSaveGoal(newText) {
     setGoalSaving(true)
     setGoalError('')
     try {
-      const updated = await updateSharedGoal(mentorship.id, goalDraft.trim())
+      const updated = await updateSharedGoal(mentorship.id, newText)
       setMentorship(updated)
       setEditingGoal(false)
     } catch (err) {
@@ -437,66 +512,57 @@ export default function MentorshipDetailPage() {
         </div>
       </div>
 
-      {/* Shared goal */}
-      <section className="card md-goal">
-        <div className="md-section-header">
-          <div className="section-label" style={{ marginBottom: 0 }}>Shared Goal</div>
-          {isActive && !editingGoal && (
-            <button
-              className="md-link-btn"
-              onClick={() => { setGoalDraft(mentorship.sharedGoal || ''); setEditingGoal(true); setGoalError('') }}
-            >
-              {mentorship.sharedGoal ? 'Edit' : 'Add goal'}
-            </button>
-          )}
-        </div>
-
-        {!editingGoal && (
-          mentorship.sharedGoal
-            ? <div className="md-goal-text">"{mentorship.sharedGoal}"</div>
-            : <div className="md-goal-empty">No shared goal yet. Define a goal together to keep your mentorship focused.</div>
-        )}
-
-        {editingGoal && (
-          <div className="md-goal-edit">
-            <textarea
-              className="md-textarea"
-              maxLength={500}
-              rows={4}
-              value={goalDraft}
-              onChange={e => setGoalDraft(e.target.value)}
-              placeholder="E.g. Help the mentee secure a software internship by August."
-              autoFocus
-            />
-            <div className="md-goal-edit-footer">
-              <span className="md-char-count">{goalDraft.length}/500</span>
-              <div className="md-goal-actions">
-                <button
-                  className="modal-btn-secondary"
-                  onClick={() => { setEditingGoal(false); setGoalError('') }}
-                  disabled={goalSaving}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="modal-btn-primary md-primary-btn"
-                  onClick={handleSaveGoal}
-                  disabled={goalSaving || goalDraft.trim().length === 0}
-                >
-                  {goalSaving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
+      {/* Shared goal CTA for active mentorships without a goal (#277) */}
+      {!mentorship.sharedGoal && isActive && (
+        <section className="card md-goal-cta" style={{ border: '1px solid var(--primary-color)', backgroundColor: 'rgba(59, 130, 246, 0.05)' }}>
+          <div className="md-section-header" style={{ marginBottom: '8px' }}>
+            <div className="section-label" style={{ marginBottom: 0, color: 'var(--primary-color)' }}>
+              Define a shared goal
             </div>
-            {goalError && <div className="modal-api-error" style={{ marginTop: '12px' }}>{goalError}</div>}
           </div>
-        )}
-      </section>
+          <p style={{ margin: '0 0 16px', color: 'var(--text-color)', fontSize: '14px', lineHeight: '1.5' }}>
+            Your mentorship is active! Work together to define a shared goal. Setting a goal
+            unlocks milestones and progress tracking features.
+          </p>
+          <button
+            className="md-action-btn md-action-primary"
+            style={{ width: 'auto', padding: '8px 16px', fontSize: '13px' }}
+            onClick={() => { setGoalDraft(''); setEditingGoal(true); setGoalError('') }}
+          >
+            Add Goal
+          </button>
+        </section>
+      )}
 
-      {/* Milestones (#288) */}
+      {/* Shared goal */}
+      {(mentorship.sharedGoal || !isActive) && (
+        <section className="card md-goal">
+          <div className="md-section-header">
+            <div className="section-label" style={{ marginBottom: 0 }}>Shared Goal</div>
+            {isActive && (
+              <button
+                className="md-link-btn"
+                onClick={() => { setGoalDraft(mentorship.sharedGoal || ''); setEditingGoal(true); setGoalError('') }}
+              >
+                {mentorship.sharedGoal ? 'Edit' : 'Add goal'}
+              </button>
+            )}
+          </div>
+
+          {mentorship.sharedGoal ? (
+            <div className="md-goal-text">"{mentorship.sharedGoal}"</div>
+          ) : (
+            <div className="md-goal-empty">No shared goal was set during this mentorship.</div>
+          )}
+        </section>
+      )}
+
+      {/* Milestones (#288, gated by goal in #277) */}
       <MentorshipMilestones
         mentorshipId={mentorship.id}
         isMentor={viewerIsMentor}
         isActive={isActive}
+        hasSharedGoal={!!mentorship.sharedGoal}
       />
 
       {/* Profile */}
@@ -638,6 +704,15 @@ export default function MentorshipDetailPage() {
         onConfirm={handleCancelConfirm}
         loading={cancelLoading}
         otherName={displayName || otherFirstName}
+      />
+
+      <SharedGoalModal
+        open={editingGoal}
+        initial={goalDraft}
+        onClose={() => !goalSaving && setEditingGoal(false)}
+        onSubmit={handleSaveGoal}
+        loading={goalSaving}
+        error={goalError}
       />
     </MainLayout>
   )

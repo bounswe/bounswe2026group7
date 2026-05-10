@@ -28,7 +28,7 @@ import {
  * a mentee tries the mentor-only paths regardless, but hiding them in the UI
  * keeps the experience clean.
  */
-export default function MentorshipMilestones({ mentorshipId, isMentor, isActive }) {
+export default function MentorshipMilestones({ mentorshipId, isMentor, isActive, hasSharedGoal }) {
   const [list, setList] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -55,7 +55,14 @@ export default function MentorshipMilestones({ mentorshipId, isMentor, isActive 
     }
   }, [mentorshipId])
 
-  useEffect(() => { reload() }, [reload])
+  useEffect(() => {
+    if (hasSharedGoal) {
+      reload()
+    } else {
+      setLoading(false)
+      setList([])
+    }
+  }, [reload, hasSharedGoal])
 
   const overallProgress = useMemo(() => {
     if (list.length === 0) return null
@@ -82,6 +89,19 @@ export default function MentorshipMilestones({ mentorshipId, isMentor, isActive 
     } catch (err) {
       window.alert(err?.message || 'Failed to delete milestone')
     }
+  }
+
+  if (!hasSharedGoal) {
+    return (
+      <section className="card md-milestones">
+        <div className="md-section-header">
+          <div className="section-label" style={{ marginBottom: 0 }}>Milestones</div>
+        </div>
+        <div className="md-goal-empty">
+          Please define a shared goal first to unlock milestones and progress tracking.
+        </div>
+      </section>
+    )
   }
 
   return (
