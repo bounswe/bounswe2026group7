@@ -214,15 +214,21 @@ const [search, setSearch] = useState('');
 
             let preview = 'No messages yet';
             let time = '';
+            let unread = 0;
             try {
-              const threadRes = await apiClient.get(`/mentorships/${mentorship.id}/messages?page=0&size=1`);
-              const latest = threadRes.data?.content?.[0];
+              const threadRes = await apiClient.get(`/mentorships/${mentorship.id}/messages?page=0&size=100`);
+              const threadMessages = threadRes.data?.content ?? [];
+              const latest = threadMessages[0];
               if (latest) {
                 preview = latest.attachment
                   ? `${latest.content || 'Attachment'} · ${latest.attachment.filename}`
                   : latest.content;
                 time = formatRelativeTime(latest.sentAt);
               }
+              unread = threadMessages.filter(
+                (message: any) =>
+                  message.senderId !== parsedUserId && !message.readAt
+              ).length;
             } catch {
               // Keep list usable even if preview fetch fails for one mentorship.
             }
@@ -236,7 +242,7 @@ const [search, setSearch] = useState('');
               subtitle: isMentor ? 'Your Mentee' : 'Your Mentor',
               preview,
               time,
-              unread: 0,
+              unread,
               online: false,
               initials: getInitials(counterpartName || 'Unknown User'),
               avatarBg: colors.bg,
@@ -348,6 +354,20 @@ const [search, setSearch] = useState('');
         const rawMessages = res.data?.content ?? [];
         setMessages(mapMessages(rawMessages, currentUserId));
         await apiClient.patch(readEndpoint).catch(() => undefined);
+        setMentorshipConversations((prev) =>
+          prev.map((conversation) =>
+            conversation.id === selectedConversation.id
+              ? { ...conversation, unread: 0 }
+              : conversation
+          )
+        );
+        setPeerMentorConversations((prev) =>
+          prev.map((conversation) =>
+            conversation.id === selectedConversation.id
+              ? { ...conversation, unread: 0 }
+              : conversation
+          )
+        );
       } catch (error) {
         console.error('Failed to load thread:', error);
         Alert.alert('Error', 'Could not load the message thread.');
@@ -897,16 +917,26 @@ function ConversationRow({
       <View style={styles.conversationBody}>
         <View style={styles.conversationTop}>
           <View style={styles.conversationTitleWrap}>
-            <Text style={styles.conversationName}>{item.counterpartName}</Text>
+            <Text style={[styles.conversationName, item.unread ? styles.conversationNameUnread : null]}>
+              {item.counterpartName}
+            </Text>
             {item.subtitle ? <Text style={styles.conversationSubtitle}>{item.subtitle}</Text> : null}
           </View>
-          <Text style={styles.conversationTime}>{item.time}</Text>
+          <Text style={[styles.conversationTime, item.unread ? styles.conversationTimeUnread : null]}>
+            {item.time}
+          </Text>
         </View>
 
-        <Text numberOfLines={1} style={styles.conversationPreview}>
+        <Text numberOfLines={1} style={[styles.conversationPreview, item.unread ? styles.conversationPreviewUnread : null]}>
           {item.preview}
         </Text>
       </View>
+
+      {item.unread ? (
+        <View style={styles.unreadBadge}>
+          <Text style={styles.unreadBadgeText}>{item.unread > 9 ? '9+' : item.unread}</Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -1074,6 +1104,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  conversationNameUnread: {
+    color: '#214734',
+  },
   conversationSubtitle: {
     color: '#9A9288',
     fontSize: 10,
@@ -1083,9 +1116,32 @@ const styles = StyleSheet.create({
     color: '#BBB4A8',
     fontSize: 10,
   },
+  conversationTimeUnread: {
+    color: '#3D6B52',
+    fontWeight: '700',
+  },
   conversationPreview: {
     color: '#9A9288',
     fontSize: 11,
+  },
+  conversationPreviewUnread: {
+    color: '#5A5248',
+    fontWeight: '600',
+  },
+  unreadBadge: {
+    backgroundColor: '#3D6B52',
+    minWidth: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  unreadBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
   centeredState: {
     flex: 1,
