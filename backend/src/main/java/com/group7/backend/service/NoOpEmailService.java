@@ -19,7 +19,7 @@ public class NoOpEmailService extends EmailService {
     private static final Logger log = LoggerFactory.getLogger(NoOpEmailService.class);
 
     public NoOpEmailService() {
-        super("re_noop_disabled");
+        super("re_noop_disabled", false);
     }
 
     @Override
