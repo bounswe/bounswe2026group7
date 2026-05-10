@@ -25,6 +25,14 @@ export default function LoginScreen() {
 
   const { setRole } = useRole(); // RoleContext'i alıyoruz
 
+  const clearStoredSession = async () => {
+    await Promise.allSettled([
+      SecureStore.deleteItemAsync('userToken'),
+      SecureStore.deleteItemAsync('userId'),
+      SecureStore.deleteItemAsync('userRole'),
+    ]);
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please fill in all fields.");
@@ -41,17 +49,22 @@ export default function LoginScreen() {
 
     // 2. Gelen cevaptan token, rol VE userId'yi çıkarıyoruz
       const { sessionToken, role, userId } = response.data; // userId'yi de alıyoruz
-      await SecureStore.setItemAsync('userToken', sessionToken);
-      await SecureStore.setItemAsync('userId', userId.toString()); // ID'yi kaydediyoruz
+      const normalizedRole = role.toLowerCase();
+
+      await clearStoredSession();
+      await SecureStore.setItemAsync('userId', userId.toString());
+      await SecureStore.setItemAsync('userRole', normalizedRole);
 
       // 4. Backend'den dönen rolü uygulamamıza set ediyoruz 
       // (Backend "MENTOR" veya "MENTEE" dönüyorsa bunu küçük harfe çevirip context'e veriyoruz)
-      setRole(role.toLowerCase());
+      setRole(normalizedRole);
+      await SecureStore.setItemAsync('userToken', sessionToken);
 
       // 5. Başarılı giriş, ana sayfaya yönlendir
       router.replace('/(tabs)');
 
     } catch (error) {
+      await clearStoredSession();
       Alert.alert("Login Failed", "Invalid email or password.");
       console.error(error);
     }
