@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 /**
  * 7-day × hour grid for editing weekly availability.
@@ -13,8 +13,14 @@ import { useCallback } from 'react'
  *   endHour: number                 — last hour shown (exclusive). Default 22
  *   disabled: boolean               — visual + interaction lockout (e.g. while saving)
  *
- * Drag-paint behavior is added in a follow-up commit; this commit only
- * supports single-cell click toggles.
+ * Drag-paint:
+ *   - mouse-down on a cell records the OPPOSITE state of that cell as the
+ *     "paint mode" and applies it to the cell.
+ *   - mouse-enter on subsequent cells (while held) applies the same paint
+ *     mode — so dragging always paints in one direction (turns cells ON if
+ *     started on an off cell, OFF if started on an on cell). This matches
+ *     the de-facto pattern of when2meet, doodle, etc.
+ *   - mouse-up anywhere ends the drag.
  */
 
 export const DAYS = [
@@ -45,14 +51,56 @@ export default function AvailabilityGrid({
   const hours = []
   for (let h = startHour; h < endHour; h += 1) hours.push(h)
 
-  const handleCellClick = useCallback((day, hour) => {
+  // Stable refs so the global mouseup listener and onMouseEnter handlers
+  // see the latest selected/onChange without re-binding listeners every render.
+  const selectedRef = useRef(selected)
+  const onChangeRef = useRef(onChange)
+  useEffect(() => { selectedRef.current = selected }, [selected])
+  useEffect(() => { onChangeRef.current = onChange }, [onChange])
+
+  // null when not painting; 'on' / 'off' while a drag is in progress.
+  const paintModeRef = useRef(null)
+  // Tracks which cells we have already painted in the current drag so we
+  // don't fire onChange repeatedly for the same cell as the cursor jitters.
+  const paintedThisDragRef = useRef(new Set())
+
+  function applyPaint(day, hour) {
+    const mode = paintModeRef.current
+    if (!mode) return
+    const key = cellKey(day, hour)
+    if (paintedThisDragRef.current.has(key)) return
+    paintedThisDragRef.current.add(key)
+    const next = new Set(selectedRef.current)
+    if (mode === 'on') next.add(key)
+    else next.delete(key)
+    onChangeRef.current(next)
+  }
+
+  const handleCellMouseDown = useCallback((day, hour) => {
     if (disabled) return
     const key = cellKey(day, hour)
-    const next = new Set(selected)
-    if (next.has(key)) next.delete(key)
-    else next.add(key)
-    onChange(next)
-  }, [disabled, selected, onChange])
+    const isOn = selectedRef.current.has(key)
+    paintModeRef.current = isOn ? 'off' : 'on'
+    paintedThisDragRef.current = new Set()
+    applyPaint(day, hour)
+  }, [disabled])
+
+  const handleCellMouseEnter = useCallback((day, hour) => {
+    if (disabled) return
+    if (!paintModeRef.current) return
+    applyPaint(day, hour)
+  }, [disabled])
+
+  // Global mouse-up to end the drag — listening on window so a release
+  // outside the grid still terminates the paint.
+  useEffect(() => {
+    function endDrag() {
+      paintModeRef.current = null
+      paintedThisDragRef.current = new Set()
+    }
+    window.addEventListener('mouseup', endDrag)
+    return () => window.removeEventListener('mouseup', endDrag)
+  }, [])
 
   return (
     <div className={`avail-grid${disabled ? ' avail-grid--disabled' : ''}`}>
@@ -69,14 +117,15 @@ export default function AvailabilityGrid({
           hour={h}
           selected={selected}
           disabled={disabled}
-          onCellClick={handleCellClick}
+          onMouseDown={handleCellMouseDown}
+          onMouseEnter={handleCellMouseEnter}
         />
       ))}
     </div>
   )
 }
 
-function FragmentRow({ hour, selected, disabled, onCellClick }) {
+function FragmentRow({ hour, selected, disabled, onMouseDown, onMouseEnter }) {
   return (
     <>
       <div className="avail-grid-hour-label">{formatHour(hour)}</div>
@@ -89,7 +138,8 @@ function FragmentRow({ hour, selected, disabled, onCellClick }) {
             type="button"
             className={`avail-grid-cell${on ? ' avail-grid-cell--on' : ''}`}
             disabled={disabled}
-            onClick={() => onCellClick(d.key, hour)}
+            onMouseDown={(e) => { e.preventDefault(); onMouseDown(d.key, hour) }}
+            onMouseEnter={() => onMouseEnter(d.key, hour)}
             aria-pressed={on}
             aria-label={`${d.key} ${formatHour(hour)} ${on ? 'available' : 'unavailable'}`}
           />
