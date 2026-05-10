@@ -695,49 +695,159 @@ LOCATIONS = [
 ]
 
 MENTEE_INTEREST_SETS = [
-    ["Frontend", "React", "Portfolio Review"],
-    ["Backend", "System Design", "Interview Prep"],
+    ["Frontend Development", "React", "Portfolio Review"],
+    ["Backend Development", "System Design", "Interview Prep"],
     ["Machine Learning", "Data Science", "Python"],
-    ["Digital Marketing", "Content Marketing", "SEO"],
+    ["Digital Marketing", "Content Strategy", "SEO"],
     ["Career Switch", "Communication Skills", "Business Analysis"],
-    ["UI/UX", "Figma", "Design Systems"],
-    ["iOS", "Swift", "Mobile Development"],
+    ["UI/UX Design", "Figma", "Design Systems"],
+    ["iOS Development", "Swift", "Mobile Development"],
     ["Entrepreneurship", "Finance", "Pitch Deck"],
     ["Research", "Academic Career", "Study Abroad"],
     ["Product Management", "User Research", "Leadership"],
+    ["Cyber Security", "Ethical Hacking", "Internship Hunt"],
+    ["Game Development", "Unity", "3D Modeling"],
+    ["Blockchain", "Smart Contracts", "Web3"],
+    ["DevOps", "Docker", "Cloud Fundamentals"],
+    ["QA Automation", "Selenium", "Test Strategy"],
+    ["Data Engineering", "ETL", "SQL"],
+    ["Cloud Engineering", "AWS", "Certification Prep"],
+    ["Mobile App Development", "Flutter", "Startup Ideas"],
+    ["Algorithms", "Competitive Programming", "Problem Solving"],
+    ["Public Speaking", "Leadership", "Confidence"],
+    ["Time Management", "Study Habits", "Focus"],
+    ["English Writing", "Technical Blogging", "Personal Branding"],
+    ["Machine Learning Operations", "Model Deployment", "Cloud"],
+    ["Computer Vision", "OpenCV", "Research Papers"],
+    ["Full Stack Development", "Node.js", "MongoDB"],
+    ["FinTech", "Risk Analysis", "Data Visualization"],
+    ["Game Design", "Level Design", "Storytelling"],
+    ["AI Ethics", "Prompting", "Responsible AI"],
+    ["Digital Product Thinking", "Roadmapping", "Stakeholder Communication"],
+    ["Study Abroad", "GRE Prep", "Campus Networking"],
+    ["Bootcamp Graduate", "First Job", "Portfolio Building"],
 ]
 
 MENTOR_INTEREST_SETS = [
-    ["Frontend", "React", "Accessibility"],
-    ["Backend", "Java", "Spring Boot"],
+    ["Frontend Architecture", "React", "Accessibility"],
+    ["Backend Engineering", "Java", "Spring Boot"],
     ["Machine Learning", "Data Science", "Python"],
     ["Digital Marketing", "Brand Strategy", "Analytics"],
     ["Career Development", "Interview Prep", "Leadership"],
-    ["UI/UX", "Product Design", "Figma"],
-    ["iOS", "Swift", "Mobile Development"],
+    ["UI/UX Strategy", "Product Design", "Figma"],
+    ["iOS Engineering", "Swift", "Mobile Development"],
     ["Entrepreneurship", "Finance", "Startup Operations"],
-    ["Research", "Academic Career", "Public Speaking"],
-    ["Cloud", "DevOps", "System Design"],
+    ["Research Leadership", "Academic Career", "Public Speaking"],
+    ["Cloud Architecture", "DevOps", "System Design"],
+    ["Engineering Management", "Team Growth", "Hiring"],
+    ["Angel Investing", "Startup Strategy", "Mentorship"],
+    ["Career Transition", "Coaching", "Personal Growth"],
+    ["Retirement Planning", "Financial Literacy", "Life Design"],
+    ["Security Architecture", "Threat Modeling", "Zero Trust"],
+    ["Data Platform Design", "Streaming", "Governance"],
+    ["Agile Leadership", "Scrum", "Cross-Functional Collaboration"],
+    ["MLOps", "Model Deployment", "Operational Excellence"],
+    ["Platform Engineering", "Observability", "Reliability"],
+    ["Startup Founding", "Fundraising", "Go-to-Market"],
+    ["Technical Writing", "Documentation", "Developer Experience"],
+    ["Open Source", "Community Building", "Code Review"],
+    ["FinTech", "Payments", "Regulatory Compliance"],
+    ["HealthTech", "Privacy", "Clinical Workflows"],
+    ["EdTech", "Curriculum Design", "Learning Science"],
+    ["Game Industry", "Production", "Live Operations"],
+    ["Embedded Systems", "Firmware", "Hardware Debugging"],
+    ["AI Governance", "Model Risk", "Responsible Innovation"],
+    ["Customer Success", "B2B Growth", "Retention"],
+    ["Sales Engineering", "Discovery Calls", "Solution Design"],
+    ["Mentoring First-Gen Talent", "Inclusive Hiring", "Career Growth"],
 ]
 
 BIO_TEMPLATES = {
     "MENTEE": [
-        "I am looking for practical guidance on {interest1} and want to build confidence through small projects.",
-        "I am switching focus toward {interest1} and need a realistic learning roadmap with milestones.",
-        "I want feedback on my {interest1} portfolio and help preparing for interviews.",
-        "I am trying to connect my background with {interest1} and would value a structured mentorship plan.",
+        "Seeking practical guidance in {interest1} and steady progress through small, well-defined projects.",
+        "Transitioning toward {interest1} and looking for a realistic roadmap with clear milestones.",
+        "Open to feedback on a {interest1} portfolio, with a strong focus on interview preparation and professional polish.",
+        "Working to connect a current background with {interest1} and would value a structured mentorship plan.",
+        "Building confidence in {interest1} while strengthening {interest2} through consistent practice and support.",
+        "Early in a tech journey and focused on learning {interest1} alongside stronger {interest2} habits.",
+        "Preparing for an internship and aiming to grow in {interest1} while becoming more effective at {interest2}.",
+        "Recently completed a bootcamp and now looking to apply {interest1} in real-world projects with stronger {interest2} skills.",
+        "Exploring a career shift into {interest1} and seeking practical advice on {interest2} and next steps.",
+        "Aiming to improve both {interest1} and {interest2} with mentorship that is direct, supportive, and actionable.",
+        "Eager to build a stronger foundation in {interest1} and learn how professionals approach {interest2}.",
+        "Balancing studies and personal projects while developing {interest1} and better {interest2} habits.",
+        "Focused on turning curiosity about {interest1} into a serious path, with extra attention on {interest2}.",
+        "Looking for guidance that can turn practice in {interest1} into measurable progress and stronger {interest2}.",
+        "Preparing for study abroad and building skills in {interest1} while improving {interest2} for collaboration.",
+        "Working toward a first role in tech and aiming to sharpen {interest1} as well as {interest2}.",
+        "Interested in {interest1} and eager to become more disciplined in {interest2} through mentorship.",
+        "Developing a portfolio around {interest1} and hoping to present work more confidently through {interest2}.",
+        "Learning {interest1} from scratch while building the communication and planning habits needed for {interest2}.",
+        "Committed to long-term growth in {interest1} and seeking a mentor who can help refine {interest2}.",
     ],
     "MENTOR": [
-        "I mentor people who want to grow in {interest1} and I focus on actionable, realistic progress.",
-        "I have hands-on experience in {interest1} and enjoy helping people translate theory into practice.",
-        "I support mentees who are preparing for careers in {interest1} and related interview processes.",
-        "I work across {interest1} and {interest2}, and I like helping people build confidence through clear milestones.",
+        "Bringing years of hands-on experience in {interest1} and {interest2}, with a focus on practical, measurable growth.",
+        "Supporting mentees who want to translate theory in {interest1} into real-world results and stronger {interest2} habits.",
+        "Guiding professionals through career growth in {interest1}, with additional emphasis on communication and {interest2}.",
+        "Working across {interest1} and {interest2}, and helping people build confidence through clear milestones.",
+        "Focused on helping ambitious learners develop strong foundations in {interest1} while improving {interest2}.",
+        "Offering mentorship shaped by experience in {interest1}, leadership, and practical decision-making around {interest2}.",
+        "Actively mentoring people who are preparing for their next step in {interest1} and want to become stronger in {interest2}.",
+        "Providing thoughtful feedback to mentees exploring {interest1} and building professional habits around {interest2}.",
+        "Helping people navigate growth in {interest1} with realistic planning, accountability, and better {interest2}.",
+        "Bringing a startup and product perspective to conversations about {interest1} and {interest2}.",
+        "Sharing lessons from senior roles in {interest1}, with an emphasis on clarity, systems thinking, and {interest2}.",
+        "Mentoring with a balance of empathy and structure for people building skills in {interest1} and {interest2}.",
+        "Supporting learners who are moving from early exploration to confident execution in {interest1} and {interest2}.",
+        "Drawing from experience in architecture, delivery, and team growth to mentor around {interest1} and {interest2}.",
+        "Helping mentees connect technical depth in {interest1} with the professional habits needed for {interest2}.",
+        "Offering practical mentorship for those pursuing growth in {interest1}, especially when paired with stronger {interest2}.",
+        "Guiding the next generation of builders in {interest1} with a strong focus on feedback, iteration, and {interest2}.",
+        "Bringing cross-industry experience to mentorship in {interest1} and {interest2}, especially for people navigating change.",
+        "Mentoring people who want to grow beyond the basics of {interest1} and develop more confident {interest2} skills.",
+        "Sharing a long-term perspective on careers in {interest1} and {interest2}, with advice that is calm, practical, and clear.",
     ],
 }
 
 
 def pick(items, index: int):
     return items[index % len(items)]
+
+
+def professional_bio(persona: dict) -> str:
+    interests = persona.get("interests") or []
+    interest1 = interests[0] if len(interests) > 0 else "professional growth"
+    interest2 = interests[1] if len(interests) > 1 else "collaboration"
+    template_pool = BIO_TEMPLATES.get(persona.get("role"), BIO_TEMPLATES["MENTEE"])
+    template = pick(template_pool, persona.get("id", 0))
+    return template.format(interest1=interest1, interest2=interest2)
+
+
+def normalize_persona(persona: dict) -> dict:
+    normalized = dict(persona)
+
+    if not normalized.get("first_name"):
+        normalized["first_name"] = "Persona"
+    if not normalized.get("last_name"):
+        normalized["last_name"] = str(normalized.get("id", "User"))
+    if not normalized.get("location"):
+        normalized["location"] = "Istanbul"
+    if not normalized.get("role"):
+        normalized["role"] = "MENTEE"
+    if not normalized.get("status"):
+        normalized["status"] = "VERIFIED"
+    if not normalized.get("interests"):
+        normalized["interests"] = ["Professional Growth", "Communication"]
+    if normalized.get("capacity_max") is None:
+        normalized["capacity_max"] = 0
+    if normalized.get("capacity_current") is None:
+        normalized["capacity_current"] = 0
+
+    bio = (normalized.get("bio") or "").strip()
+    if not bio or bio.lower().startswith("i am"):
+        normalized["bio"] = professional_bio(normalized)
+
+    return normalized
 
 
 def generate_bulk_personas(start_id: int = 51, total: int = 80):
@@ -800,6 +910,8 @@ PERSONAS.append(
         "is_banned": False,
     }
 )
+
+PERSONAS = [normalize_persona(persona) for persona in PERSONAS]
 
 
 MENTORSHIP_EDGE_CASES = [
@@ -1063,28 +1175,33 @@ def process_persona(persona: dict, index: int) -> Optional[dict]:
         print("admin fixture exported; backend bootstrap handles ADMIN creation")
         return None
 
-    status, resp, registered_id = register_persona(persona)
-    if status not in (200, 201):
-        if "already" in str(resp).lower() or status == 409:
-            print("already exists, continuing")
-        else:
-            print(f"REGISTER FAILED ({status}): {resp}")
-            return False
-
-    if persona["status"] != "VERIFIED":
-        print("registered as unverified fixture")
-        return None
-
     status, resp, auth = login_persona(persona)
-    if status != 200 or not auth:
-        if status == 401 and "not verified" in str(resp).lower():
-            token = get_verification_token(email)
-            if token:
-                http_get(f"{BASE}/auth/verify-email?token={token}")
-                status, resp, auth = login_persona(persona)
+    registered_id = None
+    if status == 200 and auth:
+        print("already exists, continuing")
+    else:
+        status, resp, registered_id = register_persona(persona)
+        if status not in (200, 201):
+            if "already" in str(resp).lower() or status == 409:
+                print("already exists, continuing")
+            else:
+                print(f"REGISTER FAILED ({status}): {resp}")
+                return False
+
+        if persona["status"] != "VERIFIED":
+            print("registered as unverified fixture")
+            return None
+
+        status, resp, auth = login_persona(persona)
         if status != 200 or not auth:
-            print(f"LOGIN FAILED ({status}): {resp}")
-            return False
+            if status == 401 and "not verified" in str(resp).lower():
+                token = get_verification_token(email)
+                if token:
+                    http_get(f"{BASE}/auth/verify-email?token={token}")
+                    status, resp, auth = login_persona(persona)
+            if status != 200 or not auth:
+                print(f"LOGIN FAILED ({status}): {resp}")
+                return False
 
     status, resp = update_profile(persona, auth["token"])
     if status != 200:

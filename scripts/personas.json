@@ -12,7 +12,7 @@
       "Data Science",
       "Machine Learning"
     ],
-    "bio": "I am transitioning into data science and looking for roadmap advice, project ideas, and a realistic study plan.",
+    "bio": "Transitioning toward Data Science and looking for a realistic roadmap with clear milestones.",
     "is_banned": false
   },
   {
@@ -76,7 +76,7 @@
       "Backend",
       "Interview Prep"
     ],
-    "bio": "I am preparing for internship interviews and want structured help with backend fundamentals and practice questions.",
+    "bio": "Early in a tech journey and focused on learning Backend alongside stronger Interview Prep habits.",
     "is_banned": true
   },
   {
@@ -92,7 +92,7 @@
       "Frontend",
       "Career Switch"
     ],
-    "bio": "I am exploring a career switch into software and want guidance on where to focus first.",
+    "bio": "Preparing for an internship and aiming to grow in Frontend while becoming more effective at Career Switch.",
     "is_banned": false
   },
   {
@@ -109,7 +109,7 @@
       "React",
       "Portfolio Review"
     ],
-    "bio": "I am a final-year computer engineering student looking to improve my portfolio and get ready for my first job.",
+    "bio": "Recently completed a bootcamp and now looking to apply Frontend in real-world projects with stronger React skills.",
     "is_banned": false
   },
   {
@@ -126,7 +126,7 @@
       "Python",
       "Data Science"
     ],
-    "bio": "I am preparing for a master's program in artificial intelligence and need project ideas and a better study roadmap.",
+    "bio": "Exploring a career shift into Machine Learning and seeking practical advice on Python and next steps.",
     "is_banned": false
   },
   {
@@ -194,7 +194,7 @@
       "Frontend",
       "Design Systems"
     ],
-    "bio": "I am moving from graphic design into product design and want feedback on user experience and portfolio quality.",
+    "bio": "Focused on turning curiosity about UI/UX into a serious path, with extra attention on Frontend.",
     "is_banned": false
   },
   {
@@ -228,7 +228,7 @@
       "Career Switch",
       "Business Analysis"
     ],
-    "bio": "I am preparing to move into a business analyst role and want help with interview questions and a focused study plan.",
+    "bio": "Preparing for study abroad and building skills in Interview Prep while improving Career Switch for collaboration.",
     "is_banned": false
   },
   {
@@ -262,7 +262,7 @@
       "Content Marketing",
       "SEO"
     ],
-    "bio": "I am transitioning into marketing and want to learn how to build a practical content and SEO strategy.",
+    "bio": "Interested in Digital Marketing and eager to become more disciplined in Content Marketing through mentorship.",
     "is_banned": false
   },
   {
@@ -330,7 +330,7 @@
       "Communication Skills",
       "Career Switch"
     ],
-    "bio": "I am moving from tourism into technology and want to understand which roles fit my communication strengths best.",
+    "bio": "Seeking practical guidance in Sales and steady progress through small, well-defined projects.",
     "is_banned": false
   },
   {
@@ -364,7 +364,7 @@
       "Vue",
       "UI/UX"
     ],
-    "bio": "I am learning frontend development and want to build a small but realistic product while improving my design sense.",
+    "bio": "Open to feedback on a Frontend portfolio, with a strong focus on interview preparation and professional polish.",
     "is_banned": false
   },
   {
@@ -466,7 +466,7 @@
       "Database",
       "Spring Boot"
     ],
-    "bio": "I am a software engineering student looking for mentorship on database design and backend development.",
+    "bio": "Exploring a career shift into Backend and seeking practical advice on Database and next steps.",
     "is_banned": false
   },
   {
@@ -534,7 +534,7 @@
       "Research",
       "Study Abroad"
     ],
-    "bio": "I am exploring graduate study and research-oriented career paths and want to understand my options more clearly.",
+    "bio": "Focused on turning curiosity about Academic Career into a serious path, with extra attention on Research.",
     "is_banned": false
   },
   {
@@ -568,7 +568,7 @@
       "Swift",
       "Mobile Development"
     ],
-    "bio": "I am a beginner in mobile development and want a clearer path for learning iOS development step by step.",
+    "bio": "Preparing for study abroad and building skills in iOS while improving Swift for collaboration.",
     "is_banned": false
   },
   {
@@ -619,7 +619,7 @@
       "TypeScript",
       "React"
     ],
-    "bio": "I am continuing my learning after a bootcamp and want to read real project code and write cleaner frontend applications.",
+    "bio": "Developing a portfolio around Frontend and hoping to present work more confidently through TypeScript.",
     "is_banned": false
   },
   {
@@ -636,7 +636,7 @@
       "Research",
       "Interview Prep"
     ],
-    "bio": "I am a retired professor who helps students with graduate planning, research discipline, and public speaking.",
+    "bio": "Mentoring people who want to grow beyond the basics of Academic Career and develop more confident Research skills.",
     "is_banned": false
   },
   {
@@ -653,7 +653,7 @@
       "Content Marketing",
       "SEO"
     ],
-    "bio": "I am learning digital marketing for my small brand and want guidance on content planning and visibility growth.",
+    "bio": "Committed to long-term growth in Digital Marketing and seeking a mentor who can help refine Content Marketing.",
     "is_banned": false
   },
   {
@@ -687,7 +687,7 @@
       "Data Science",
       "Research"
     ],
-    "bio": "I am in the thesis stage and want to clarify my experimental plan and find examples that match my topic.",
+    "bio": "Transitioning toward Machine Learning and looking for a realistic roadmap with clear milestones.",
     "is_banned": false
   },
   {
@@ -721,7 +721,7 @@
       "Communication Skills",
       "Career Switch"
     ],
-    "bio": "I am preparing to move into a new sector and want to practice expressing myself more clearly in interviews.",
+    "bio": "Working to connect a current background with Interview Prep and would value a structured mentorship plan.",
     "is_banned": false
   },
   {
@@ -853,11 +853,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Frontend",
+      "Frontend Development",
       "React",
       "Portfolio Review"
     ],
-    "bio": "I am looking for practical guidance on Frontend and want to build confidence through small projects.",
+    "bio": "Seeking practical guidance in Frontend Development and steady progress through small, well-defined projects.",
     "is_banned": false
   },
   {
@@ -870,11 +870,11 @@
     "capacity_current": 2,
     "capacity_max": 3,
     "interests": [
-      "Backend",
+      "Backend Engineering",
       "Java",
       "Spring Boot"
     ],
-    "bio": "I have hands-on experience in Backend and enjoy helping people translate theory into practice.",
+    "bio": "Supporting mentees who want to translate theory in Backend Engineering into real-world results and stronger Java habits.",
     "is_banned": false
   },
   {
@@ -891,7 +891,7 @@
       "Data Science",
       "Python"
     ],
-    "bio": "I support mentees who are preparing for careers in Machine Learning and related interview processes.",
+    "bio": "Guiding professionals through career growth in Machine Learning, with additional emphasis on communication and Data Science.",
     "is_banned": false
   },
   {
@@ -905,10 +905,10 @@
     "capacity_max": 0,
     "interests": [
       "Digital Marketing",
-      "Content Marketing",
+      "Content Strategy",
       "SEO"
     ],
-    "bio": "I am trying to connect my background with Digital Marketing and would value a structured mentorship plan.",
+    "bio": "Working to connect a current background with Digital Marketing and would value a structured mentorship plan.",
     "is_banned": false
   },
   {
@@ -925,7 +925,7 @@
       "Interview Prep",
       "Leadership"
     ],
-    "bio": "I mentor people who want to grow in Career Development and I focus on actionable, realistic progress.",
+    "bio": "Focused on helping ambitious learners develop strong foundations in Career Development while improving Interview Prep.",
     "is_banned": false
   },
   {
@@ -938,11 +938,11 @@
     "capacity_current": 1,
     "capacity_max": 3,
     "interests": [
-      "UI/UX",
+      "UI/UX Strategy",
       "Product Design",
       "Figma"
     ],
-    "bio": "I have hands-on experience in UI/UX and enjoy helping people translate theory into practice.",
+    "bio": "Offering mentorship shaped by experience in UI/UX Strategy, leadership, and practical decision-making around Product Design.",
     "is_banned": false
   },
   {
@@ -955,11 +955,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "iOS",
+      "iOS Development",
       "Swift",
       "Mobile Development"
     ],
-    "bio": "I want feedback on my iOS portfolio and help preparing for interviews.",
+    "bio": "Preparing for an internship and aiming to grow in iOS Development while becoming more effective at Swift.",
     "is_banned": false
   },
   {
@@ -976,7 +976,7 @@
       "Finance",
       "Startup Operations"
     ],
-    "bio": "I work across Entrepreneurship and Finance, and I like helping people build confidence through clear milestones.",
+    "bio": "Providing thoughtful feedback to mentees exploring Entrepreneurship and building professional habits around Finance.",
     "is_banned": false
   },
   {
@@ -989,11 +989,11 @@
     "capacity_current": 2,
     "capacity_max": 2,
     "interests": [
-      "Research",
+      "Research Leadership",
       "Academic Career",
       "Public Speaking"
     ],
-    "bio": "I mentor people who want to grow in Research and I focus on actionable, realistic progress.",
+    "bio": "Helping people navigate growth in Research Leadership with realistic planning, accountability, and better Academic Career.",
     "is_banned": false
   },
   {
@@ -1010,7 +1010,7 @@
       "User Research",
       "Leadership"
     ],
-    "bio": "I am switching focus toward Product Management and need a realistic learning roadmap with milestones.",
+    "bio": "Aiming to improve both Product Management and User Research with mentorship that is direct, supportive, and actionable.",
     "is_banned": false
   },
   {
@@ -1023,11 +1023,11 @@
     "capacity_current": 3,
     "capacity_max": 4,
     "interests": [
-      "Frontend",
-      "React",
-      "Accessibility"
+      "Engineering Management",
+      "Team Growth",
+      "Hiring"
     ],
-    "bio": "I support mentees who are preparing for careers in Frontend and related interview processes.",
+    "bio": "Sharing lessons from senior roles in Engineering Management, with an emphasis on clarity, systems thinking, and Team Growth.",
     "is_banned": false
   },
   {
@@ -1040,11 +1040,11 @@
     "capacity_current": 3,
     "capacity_max": 5,
     "interests": [
-      "Backend",
-      "Java",
-      "Spring Boot"
+      "Angel Investing",
+      "Startup Strategy",
+      "Mentorship"
     ],
-    "bio": "I work across Backend and Java, and I like helping people build confidence through clear milestones.",
+    "bio": "Mentoring with a balance of empathy and structure for people building skills in Angel Investing and Startup Strategy.",
     "is_banned": false
   },
   {
@@ -1057,11 +1057,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Machine Learning",
-      "Data Science",
-      "Python"
+      "Blockchain",
+      "Smart Contracts",
+      "Web3"
     ],
-    "bio": "I am looking for practical guidance on Machine Learning and want to build confidence through small projects.",
+    "bio": "Focused on turning curiosity about Blockchain into a serious path, with extra attention on Smart Contracts.",
     "is_banned": false
   },
   {
@@ -1074,11 +1074,11 @@
     "capacity_current": 2,
     "capacity_max": 3,
     "interests": [
-      "Digital Marketing",
-      "Brand Strategy",
-      "Analytics"
+      "Retirement Planning",
+      "Financial Literacy",
+      "Life Design"
     ],
-    "bio": "I have hands-on experience in Digital Marketing and enjoy helping people translate theory into practice.",
+    "bio": "Drawing from experience in architecture, delivery, and team growth to mentor around Retirement Planning and Financial Literacy.",
     "is_banned": true
   },
   {
@@ -1091,11 +1091,11 @@
     "capacity_current": 2,
     "capacity_max": 4,
     "interests": [
-      "Career Development",
-      "Interview Prep",
-      "Leadership"
+      "Security Architecture",
+      "Threat Modeling",
+      "Zero Trust"
     ],
-    "bio": "I support mentees who are preparing for careers in Career Development and related interview processes.",
+    "bio": "Helping mentees connect technical depth in Security Architecture with the professional habits needed for Threat Modeling.",
     "is_banned": false
   },
   {
@@ -1108,11 +1108,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "UI/UX",
-      "Figma",
-      "Design Systems"
+      "Data Engineering",
+      "ETL",
+      "SQL"
     ],
-    "bio": "I am trying to connect my background with UI/UX and would value a structured mentorship plan.",
+    "bio": "Working toward a first role in tech and aiming to sharpen Data Engineering as well as ETL.",
     "is_banned": false
   },
   {
@@ -1125,11 +1125,11 @@
     "capacity_current": 2,
     "capacity_max": 2,
     "interests": [
-      "iOS",
-      "Swift",
-      "Mobile Development"
+      "Agile Leadership",
+      "Scrum",
+      "Cross-Functional Collaboration"
     ],
-    "bio": "I mentor people who want to grow in iOS and I focus on actionable, realistic progress.",
+    "bio": "Guiding the next generation of builders in Agile Leadership with a strong focus on feedback, iteration, and Scrum.",
     "is_banned": false
   },
   {
@@ -1142,11 +1142,11 @@
     "capacity_current": 1,
     "capacity_max": 3,
     "interests": [
-      "Entrepreneurship",
-      "Finance",
-      "Startup Operations"
+      "MLOps",
+      "Model Deployment",
+      "Operational Excellence"
     ],
-    "bio": "I have hands-on experience in Entrepreneurship and enjoy helping people translate theory into practice.",
+    "bio": "Bringing cross-industry experience to mentorship in MLOps and Model Deployment, especially for people navigating change.",
     "is_banned": false
   },
   {
@@ -1159,11 +1159,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Research",
-      "Academic Career",
-      "Study Abroad"
+      "Algorithms",
+      "Competitive Programming",
+      "Problem Solving"
     ],
-    "bio": "I want feedback on my Research portfolio and help preparing for interviews.",
+    "bio": "Learning Algorithms from scratch while building the communication and planning habits needed for Competitive Programming.",
     "is_banned": false
   },
   {
@@ -1176,11 +1176,11 @@
     "capacity_current": 4,
     "capacity_max": 5,
     "interests": [
-      "Cloud",
-      "DevOps",
-      "System Design"
+      "Startup Founding",
+      "Fundraising",
+      "Go-to-Market"
     ],
-    "bio": "I work across Cloud and DevOps, and I like helping people build confidence through clear milestones.",
+    "bio": "Sharing a long-term perspective on careers in Startup Founding and Fundraising, with advice that is calm, practical, and clear.",
     "is_banned": false
   },
   {
@@ -1193,11 +1193,11 @@
     "capacity_current": 0,
     "capacity_max": 2,
     "interests": [
-      "Frontend",
-      "React",
-      "Accessibility"
+      "Technical Writing",
+      "Documentation",
+      "Developer Experience"
     ],
-    "bio": "I mentor people who want to grow in Frontend and I focus on actionable, realistic progress.",
+    "bio": "Bringing years of hands-on experience in Technical Writing and Documentation, with a focus on practical, measurable growth.",
     "is_banned": false
   },
   {
@@ -1210,11 +1210,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Backend",
-      "System Design",
-      "Interview Prep"
+      "English Writing",
+      "Technical Blogging",
+      "Personal Branding"
     ],
-    "bio": "I am switching focus toward Backend and need a realistic learning roadmap with milestones.",
+    "bio": "Transitioning toward English Writing and looking for a realistic roadmap with clear milestones.",
     "is_banned": false
   },
   {
@@ -1227,11 +1227,11 @@
     "capacity_current": 3,
     "capacity_max": 4,
     "interests": [
-      "Machine Learning",
-      "Data Science",
-      "Python"
+      "FinTech",
+      "Payments",
+      "Regulatory Compliance"
     ],
-    "bio": "I support mentees who are preparing for careers in Machine Learning and related interview processes.",
+    "bio": "Guiding professionals through career growth in FinTech, with additional emphasis on communication and Payments.",
     "is_banned": false
   },
   {
@@ -1244,11 +1244,11 @@
     "capacity_current": 3,
     "capacity_max": 5,
     "interests": [
-      "Digital Marketing",
-      "Brand Strategy",
-      "Analytics"
+      "HealthTech",
+      "Privacy",
+      "Clinical Workflows"
     ],
-    "bio": "I work across Digital Marketing and Brand Strategy, and I like helping people build confidence through clear milestones.",
+    "bio": "Working across HealthTech and Privacy, and helping people build confidence through clear milestones.",
     "is_banned": false
   },
   {
@@ -1261,11 +1261,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Career Switch",
-      "Communication Skills",
-      "Business Analysis"
+      "Full Stack Development",
+      "Node.js",
+      "MongoDB"
     ],
-    "bio": "I am looking for practical guidance on Career Switch and want to build confidence through small projects.",
+    "bio": "Building confidence in Full Stack Development while strengthening Node.js through consistent practice and support.",
     "is_banned": false
   },
   {
@@ -1278,11 +1278,11 @@
     "capacity_current": 2,
     "capacity_max": 3,
     "interests": [
-      "UI/UX",
-      "Product Design",
-      "Figma"
+      "Game Industry",
+      "Production",
+      "Live Operations"
     ],
-    "bio": "I have hands-on experience in UI/UX and enjoy helping people translate theory into practice.",
+    "bio": "Offering mentorship shaped by experience in Game Industry, leadership, and practical decision-making around Production.",
     "is_banned": false
   },
   {
@@ -1295,11 +1295,11 @@
     "capacity_current": 2,
     "capacity_max": 4,
     "interests": [
-      "iOS",
-      "Swift",
-      "Mobile Development"
+      "Embedded Systems",
+      "Firmware",
+      "Hardware Debugging"
     ],
-    "bio": "I support mentees who are preparing for careers in iOS and related interview processes.",
+    "bio": "Actively mentoring people who are preparing for their next step in Embedded Systems and want to become stronger in Firmware.",
     "is_banned": false
   },
   {
@@ -1312,11 +1312,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Entrepreneurship",
-      "Finance",
-      "Pitch Deck"
+      "AI Ethics",
+      "Prompting",
+      "Responsible AI"
     ],
-    "bio": "I am trying to connect my background with Entrepreneurship and would value a structured mentorship plan.",
+    "bio": "Recently completed a bootcamp and now looking to apply AI Ethics in real-world projects with stronger Prompting skills.",
     "is_banned": false
   },
   {
@@ -1329,11 +1329,11 @@
     "capacity_current": 1,
     "capacity_max": 2,
     "interests": [
-      "Research",
-      "Academic Career",
-      "Public Speaking"
+      "Customer Success",
+      "B2B Growth",
+      "Retention"
     ],
-    "bio": "I mentor people who want to grow in Research and I focus on actionable, realistic progress.",
+    "bio": "Helping people navigate growth in Customer Success with realistic planning, accountability, and better B2B Growth.",
     "is_banned": false
   },
   {
@@ -1346,11 +1346,11 @@
     "capacity_current": 1,
     "capacity_max": 3,
     "interests": [
-      "Cloud",
-      "DevOps",
-      "System Design"
+      "Sales Engineering",
+      "Discovery Calls",
+      "Solution Design"
     ],
-    "bio": "I have hands-on experience in Cloud and enjoy helping people translate theory into practice.",
+    "bio": "Bringing a startup and product perspective to conversations about Sales Engineering and Discovery Calls.",
     "is_banned": true
   },
   {
@@ -1363,11 +1363,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Frontend",
-      "React",
-      "Portfolio Review"
+      "Bootcamp Graduate",
+      "First Job",
+      "Portfolio Building"
     ],
-    "bio": "I want feedback on my Frontend portfolio and help preparing for interviews.",
+    "bio": "Eager to build a stronger foundation in Bootcamp Graduate and learn how professionals approach First Job.",
     "is_banned": false
   },
   {
@@ -1380,11 +1380,11 @@
     "capacity_current": 4,
     "capacity_max": 5,
     "interests": [
-      "Backend",
-      "Java",
-      "Spring Boot"
+      "Frontend Architecture",
+      "React",
+      "Accessibility"
     ],
-    "bio": "I work across Backend and Java, and I like helping people build confidence through clear milestones.",
+    "bio": "Mentoring with a balance of empathy and structure for people building skills in Frontend Architecture and React.",
     "is_banned": false
   },
   {
@@ -1397,11 +1397,11 @@
     "capacity_current": 2,
     "capacity_max": 2,
     "interests": [
-      "Machine Learning",
-      "Data Science",
-      "Python"
+      "Backend Engineering",
+      "Java",
+      "Spring Boot"
     ],
-    "bio": "I mentor people who want to grow in Machine Learning and I focus on actionable, realistic progress.",
+    "bio": "Supporting learners who are moving from early exploration to confident execution in Backend Engineering and Java.",
     "is_banned": false
   },
   {
@@ -1414,11 +1414,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Digital Marketing",
-      "Content Marketing",
-      "SEO"
+      "Machine Learning",
+      "Data Science",
+      "Python"
     ],
-    "bio": "I am switching focus toward Digital Marketing and need a realistic learning roadmap with milestones.",
+    "bio": "Looking for guidance that can turn practice in Machine Learning into measurable progress and stronger Data Science.",
     "is_banned": false
   },
   {
@@ -1431,11 +1431,11 @@
     "capacity_current": 3,
     "capacity_max": 4,
     "interests": [
-      "Career Development",
-      "Interview Prep",
-      "Leadership"
+      "Digital Marketing",
+      "Brand Strategy",
+      "Analytics"
     ],
-    "bio": "I support mentees who are preparing for careers in Career Development and related interview processes.",
+    "bio": "Helping mentees connect technical depth in Digital Marketing with the professional habits needed for Brand Strategy.",
     "is_banned": false
   },
   {
@@ -1448,11 +1448,11 @@
     "capacity_current": 3,
     "capacity_max": 5,
     "interests": [
-      "UI/UX",
-      "Product Design",
-      "Figma"
+      "Career Development",
+      "Interview Prep",
+      "Leadership"
     ],
-    "bio": "I work across UI/UX and Product Design, and I like helping people build confidence through clear milestones.",
+    "bio": "Offering practical mentorship for those pursuing growth in Career Development, especially when paired with stronger Interview Prep.",
     "is_banned": false
   },
   {
@@ -1465,11 +1465,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "iOS",
-      "Swift",
-      "Mobile Development"
+      "UI/UX Design",
+      "Figma",
+      "Design Systems"
     ],
-    "bio": "I am looking for practical guidance on iOS and want to build confidence through small projects.",
+    "bio": "Interested in UI/UX Design and eager to become more disciplined in Figma through mentorship.",
     "is_banned": false
   },
   {
@@ -1482,11 +1482,11 @@
     "capacity_current": 2,
     "capacity_max": 3,
     "interests": [
-      "Entrepreneurship",
-      "Finance",
-      "Startup Operations"
+      "iOS Engineering",
+      "Swift",
+      "Mobile Development"
     ],
-    "bio": "I have hands-on experience in Entrepreneurship and enjoy helping people translate theory into practice.",
+    "bio": "Bringing cross-industry experience to mentorship in iOS Engineering and Swift, especially for people navigating change.",
     "is_banned": false
   },
   {
@@ -1499,11 +1499,11 @@
     "capacity_current": 2,
     "capacity_max": 4,
     "interests": [
-      "Research",
-      "Academic Career",
-      "Public Speaking"
+      "Entrepreneurship",
+      "Finance",
+      "Startup Operations"
     ],
-    "bio": "I support mentees who are preparing for careers in Research and related interview processes.",
+    "bio": "Mentoring people who want to grow beyond the basics of Entrepreneurship and develop more confident Finance skills.",
     "is_banned": false
   },
   {
@@ -1516,11 +1516,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Product Management",
-      "User Research",
-      "Leadership"
+      "Research",
+      "Academic Career",
+      "Study Abroad"
     ],
-    "bio": "I am trying to connect my background with Product Management and would value a structured mentorship plan.",
+    "bio": "Committed to long-term growth in Research and seeking a mentor who can help refine Academic Career.",
     "is_banned": false
   },
   {
@@ -1533,11 +1533,11 @@
     "capacity_current": 2,
     "capacity_max": 2,
     "interests": [
-      "Frontend",
-      "React",
-      "Accessibility"
+      "Cloud Architecture",
+      "DevOps",
+      "System Design"
     ],
-    "bio": "I mentor people who want to grow in Frontend and I focus on actionable, realistic progress.",
+    "bio": "Bringing years of hands-on experience in Cloud Architecture and DevOps, with a focus on practical, measurable growth.",
     "is_banned": false
   },
   {
@@ -1550,11 +1550,11 @@
     "capacity_current": 1,
     "capacity_max": 3,
     "interests": [
-      "Backend",
-      "Java",
-      "Spring Boot"
+      "Engineering Management",
+      "Team Growth",
+      "Hiring"
     ],
-    "bio": "I have hands-on experience in Backend and enjoy helping people translate theory into practice.",
+    "bio": "Supporting mentees who want to translate theory in Engineering Management into real-world results and stronger Team Growth habits.",
     "is_banned": false
   },
   {
@@ -1567,11 +1567,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Machine Learning",
-      "Data Science",
-      "Python"
+      "Game Development",
+      "Unity",
+      "3D Modeling"
     ],
-    "bio": "I want feedback on my Machine Learning portfolio and help preparing for interviews.",
+    "bio": "Open to feedback on a Game Development portfolio, with a strong focus on interview preparation and professional polish.",
     "is_banned": false
   },
   {
@@ -1584,11 +1584,11 @@
     "capacity_current": 4,
     "capacity_max": 5,
     "interests": [
-      "Digital Marketing",
-      "Brand Strategy",
-      "Analytics"
+      "Career Transition",
+      "Coaching",
+      "Personal Growth"
     ],
-    "bio": "I work across Digital Marketing and Brand Strategy, and I like helping people build confidence through clear milestones.",
+    "bio": "Working across Career Transition and Coaching, and helping people build confidence through clear milestones.",
     "is_banned": false
   },
   {
@@ -1601,11 +1601,11 @@
     "capacity_current": 0,
     "capacity_max": 2,
     "interests": [
-      "Career Development",
-      "Interview Prep",
-      "Leadership"
+      "Retirement Planning",
+      "Financial Literacy",
+      "Life Design"
     ],
-    "bio": "I mentor people who want to grow in Career Development and I focus on actionable, realistic progress.",
+    "bio": "Focused on helping ambitious learners develop strong foundations in Retirement Planning while improving Financial Literacy.",
     "is_banned": false
   },
   {
@@ -1618,11 +1618,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "UI/UX",
-      "Figma",
-      "Design Systems"
+      "QA Automation",
+      "Selenium",
+      "Test Strategy"
     ],
-    "bio": "I am switching focus toward UI/UX and need a realistic learning roadmap with milestones.",
+    "bio": "Early in a tech journey and focused on learning QA Automation alongside stronger Selenium habits.",
     "is_banned": false
   },
   {
@@ -1635,11 +1635,11 @@
     "capacity_current": 3,
     "capacity_max": 4,
     "interests": [
-      "iOS",
-      "Swift",
-      "Mobile Development"
+      "Data Platform Design",
+      "Streaming",
+      "Governance"
     ],
-    "bio": "I support mentees who are preparing for careers in iOS and related interview processes.",
+    "bio": "Actively mentoring people who are preparing for their next step in Data Platform Design and want to become stronger in Streaming.",
     "is_banned": false
   },
   {
@@ -1652,11 +1652,11 @@
     "capacity_current": 3,
     "capacity_max": 5,
     "interests": [
-      "Entrepreneurship",
-      "Finance",
-      "Startup Operations"
+      "Agile Leadership",
+      "Scrum",
+      "Cross-Functional Collaboration"
     ],
-    "bio": "I work across Entrepreneurship and Finance, and I like helping people build confidence through clear milestones.",
+    "bio": "Providing thoughtful feedback to mentees exploring Agile Leadership and building professional habits around Scrum.",
     "is_banned": true
   },
   {
@@ -1669,11 +1669,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Research",
-      "Academic Career",
-      "Study Abroad"
+      "Mobile App Development",
+      "Flutter",
+      "Startup Ideas"
     ],
-    "bio": "I am looking for practical guidance on Research and want to build confidence through small projects.",
+    "bio": "Exploring a career shift into Mobile App Development and seeking practical advice on Flutter and next steps.",
     "is_banned": false
   },
   {
@@ -1686,11 +1686,11 @@
     "capacity_current": 2,
     "capacity_max": 3,
     "interests": [
-      "Cloud",
-      "DevOps",
-      "System Design"
+      "Platform Engineering",
+      "Observability",
+      "Reliability"
     ],
-    "bio": "I have hands-on experience in Cloud and enjoy helping people translate theory into practice.",
+    "bio": "Bringing a startup and product perspective to conversations about Platform Engineering and Observability.",
     "is_banned": false
   },
   {
@@ -1703,11 +1703,11 @@
     "capacity_current": 2,
     "capacity_max": 4,
     "interests": [
-      "Frontend",
-      "React",
-      "Accessibility"
+      "Startup Founding",
+      "Fundraising",
+      "Go-to-Market"
     ],
-    "bio": "I support mentees who are preparing for careers in Frontend and related interview processes.",
+    "bio": "Sharing lessons from senior roles in Startup Founding, with an emphasis on clarity, systems thinking, and Fundraising.",
     "is_banned": false
   },
   {
@@ -1720,11 +1720,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Backend",
-      "System Design",
-      "Interview Prep"
+      "Time Management",
+      "Study Habits",
+      "Focus"
     ],
-    "bio": "I am trying to connect my background with Backend and would value a structured mentorship plan.",
+    "bio": "Balancing studies and personal projects while developing Time Management and better Study Habits habits.",
     "is_banned": false
   },
   {
@@ -1737,11 +1737,11 @@
     "capacity_current": 1,
     "capacity_max": 2,
     "interests": [
-      "Machine Learning",
-      "Data Science",
-      "Python"
+      "Open Source",
+      "Community Building",
+      "Code Review"
     ],
-    "bio": "I mentor people who want to grow in Machine Learning and I focus on actionable, realistic progress.",
+    "bio": "Supporting learners who are moving from early exploration to confident execution in Open Source and Community Building.",
     "is_banned": false
   },
   {
@@ -1754,11 +1754,11 @@
     "capacity_current": 1,
     "capacity_max": 3,
     "interests": [
-      "Digital Marketing",
-      "Brand Strategy",
-      "Analytics"
+      "FinTech",
+      "Payments",
+      "Regulatory Compliance"
     ],
-    "bio": "I have hands-on experience in Digital Marketing and enjoy helping people translate theory into practice.",
+    "bio": "Drawing from experience in architecture, delivery, and team growth to mentor around FinTech and Payments.",
     "is_banned": false
   },
   {
@@ -1771,11 +1771,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Career Switch",
-      "Communication Skills",
-      "Business Analysis"
+      "Computer Vision",
+      "OpenCV",
+      "Research Papers"
     ],
-    "bio": "I want feedback on my Career Switch portfolio and help preparing for interviews.",
+    "bio": "Preparing for study abroad and building skills in Computer Vision while improving OpenCV for collaboration.",
     "is_banned": false
   },
   {
@@ -1788,11 +1788,11 @@
     "capacity_current": 4,
     "capacity_max": 5,
     "interests": [
-      "UI/UX",
-      "Product Design",
-      "Figma"
+      "EdTech",
+      "Curriculum Design",
+      "Learning Science"
     ],
-    "bio": "I work across UI/UX and Product Design, and I like helping people build confidence through clear milestones.",
+    "bio": "Offering practical mentorship for those pursuing growth in EdTech, especially when paired with stronger Curriculum Design.",
     "is_banned": false
   },
   {
@@ -1805,11 +1805,11 @@
     "capacity_current": 2,
     "capacity_max": 2,
     "interests": [
-      "iOS",
-      "Swift",
-      "Mobile Development"
+      "Game Industry",
+      "Production",
+      "Live Operations"
     ],
-    "bio": "I mentor people who want to grow in iOS and I focus on actionable, realistic progress.",
+    "bio": "Guiding the next generation of builders in Game Industry with a strong focus on feedback, iteration, and Production.",
     "is_banned": false
   },
   {
@@ -1822,11 +1822,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Entrepreneurship",
-      "Finance",
-      "Pitch Deck"
+      "Game Design",
+      "Level Design",
+      "Storytelling"
     ],
-    "bio": "I am switching focus toward Entrepreneurship and need a realistic learning roadmap with milestones.",
+    "bio": "Developing a portfolio around Game Design and hoping to present work more confidently through Level Design.",
     "is_banned": false
   },
   {
@@ -1839,11 +1839,11 @@
     "capacity_current": 3,
     "capacity_max": 4,
     "interests": [
-      "Research",
-      "Academic Career",
-      "Public Speaking"
+      "AI Governance",
+      "Model Risk",
+      "Responsible Innovation"
     ],
-    "bio": "I support mentees who are preparing for careers in Research and related interview processes.",
+    "bio": "Mentoring people who want to grow beyond the basics of AI Governance and develop more confident Model Risk skills.",
     "is_banned": false
   },
   {
@@ -1856,11 +1856,11 @@
     "capacity_current": 3,
     "capacity_max": 5,
     "interests": [
-      "Cloud",
-      "DevOps",
-      "System Design"
+      "Customer Success",
+      "B2B Growth",
+      "Retention"
     ],
-    "bio": "I work across Cloud and DevOps, and I like helping people build confidence through clear milestones.",
+    "bio": "Sharing a long-term perspective on careers in Customer Success and B2B Growth, with advice that is calm, practical, and clear.",
     "is_banned": false
   },
   {
@@ -1873,11 +1873,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Frontend",
-      "React",
-      "Portfolio Review"
+      "Study Abroad",
+      "GRE Prep",
+      "Campus Networking"
     ],
-    "bio": "I am looking for practical guidance on Frontend and want to build confidence through small projects.",
+    "bio": "Seeking practical guidance in Study Abroad and steady progress through small, well-defined projects.",
     "is_banned": false
   },
   {
@@ -1890,11 +1890,11 @@
     "capacity_current": 2,
     "capacity_max": 3,
     "interests": [
-      "Backend",
-      "Java",
-      "Spring Boot"
+      "Mentoring First-Gen Talent",
+      "Inclusive Hiring",
+      "Career Growth"
     ],
-    "bio": "I have hands-on experience in Backend and enjoy helping people translate theory into practice.",
+    "bio": "Supporting mentees who want to translate theory in Mentoring First-Gen Talent into real-world results and stronger Inclusive Hiring habits.",
     "is_banned": false
   },
   {
@@ -1907,11 +1907,11 @@
     "capacity_current": 2,
     "capacity_max": 4,
     "interests": [
-      "Machine Learning",
-      "Data Science",
-      "Python"
+      "Frontend Architecture",
+      "React",
+      "Accessibility"
     ],
-    "bio": "I support mentees who are preparing for careers in Machine Learning and related interview processes.",
+    "bio": "Guiding professionals through career growth in Frontend Architecture, with additional emphasis on communication and React.",
     "is_banned": false
   },
   {
@@ -1924,11 +1924,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Digital Marketing",
-      "Content Marketing",
-      "SEO"
+      "Backend Development",
+      "System Design",
+      "Interview Prep"
     ],
-    "bio": "I am trying to connect my background with Digital Marketing and would value a structured mentorship plan.",
+    "bio": "Working to connect a current background with Backend Development and would value a structured mentorship plan.",
     "is_banned": false
   },
   {
@@ -1941,11 +1941,11 @@
     "capacity_current": 2,
     "capacity_max": 2,
     "interests": [
-      "Career Development",
-      "Interview Prep",
-      "Leadership"
+      "Machine Learning",
+      "Data Science",
+      "Python"
     ],
-    "bio": "I mentor people who want to grow in Career Development and I focus on actionable, realistic progress.",
+    "bio": "Focused on helping ambitious learners develop strong foundations in Machine Learning while improving Data Science.",
     "is_banned": false
   },
   {
@@ -1958,11 +1958,11 @@
     "capacity_current": 1,
     "capacity_max": 3,
     "interests": [
-      "UI/UX",
-      "Product Design",
-      "Figma"
+      "Digital Marketing",
+      "Brand Strategy",
+      "Analytics"
     ],
-    "bio": "I have hands-on experience in UI/UX and enjoy helping people translate theory into practice.",
+    "bio": "Offering mentorship shaped by experience in Digital Marketing, leadership, and practical decision-making around Brand Strategy.",
     "is_banned": false
   },
   {
@@ -1975,11 +1975,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "iOS",
-      "Swift",
-      "Mobile Development"
+      "Career Switch",
+      "Communication Skills",
+      "Business Analysis"
     ],
-    "bio": "I want feedback on my iOS portfolio and help preparing for interviews.",
+    "bio": "Preparing for an internship and aiming to grow in Career Switch while becoming more effective at Communication Skills.",
     "is_banned": false
   },
   {
@@ -1992,11 +1992,11 @@
     "capacity_current": 4,
     "capacity_max": 5,
     "interests": [
-      "Entrepreneurship",
-      "Finance",
-      "Startup Operations"
+      "UI/UX Strategy",
+      "Product Design",
+      "Figma"
     ],
-    "bio": "I work across Entrepreneurship and Finance, and I like helping people build confidence through clear milestones.",
+    "bio": "Providing thoughtful feedback to mentees exploring UI/UX Strategy and building professional habits around Product Design.",
     "is_banned": false
   },
   {
@@ -2009,11 +2009,11 @@
     "capacity_current": 0,
     "capacity_max": 2,
     "interests": [
-      "Research",
-      "Academic Career",
-      "Public Speaking"
+      "iOS Engineering",
+      "Swift",
+      "Mobile Development"
     ],
-    "bio": "I mentor people who want to grow in Research and I focus on actionable, realistic progress.",
+    "bio": "Helping people navigate growth in iOS Engineering with realistic planning, accountability, and better Swift.",
     "is_banned": false
   },
   {
@@ -2026,11 +2026,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Product Management",
-      "User Research",
-      "Leadership"
+      "Entrepreneurship",
+      "Finance",
+      "Pitch Deck"
     ],
-    "bio": "I am switching focus toward Product Management and need a realistic learning roadmap with milestones.",
+    "bio": "Aiming to improve both Entrepreneurship and Finance with mentorship that is direct, supportive, and actionable.",
     "is_banned": false
   },
   {
@@ -2043,11 +2043,11 @@
     "capacity_current": 3,
     "capacity_max": 4,
     "interests": [
-      "Frontend",
-      "React",
-      "Accessibility"
+      "Research Leadership",
+      "Academic Career",
+      "Public Speaking"
     ],
-    "bio": "I support mentees who are preparing for careers in Frontend and related interview processes.",
+    "bio": "Sharing lessons from senior roles in Research Leadership, with an emphasis on clarity, systems thinking, and Academic Career.",
     "is_banned": false
   },
   {
@@ -2060,11 +2060,11 @@
     "capacity_current": 3,
     "capacity_max": 5,
     "interests": [
-      "Backend",
-      "Java",
-      "Spring Boot"
+      "Cloud Architecture",
+      "DevOps",
+      "System Design"
     ],
-    "bio": "I work across Backend and Java, and I like helping people build confidence through clear milestones.",
+    "bio": "Mentoring with a balance of empathy and structure for people building skills in Cloud Architecture and DevOps.",
     "is_banned": false
   },
   {
@@ -2077,11 +2077,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Machine Learning",
-      "Data Science",
-      "Python"
+      "Cyber Security",
+      "Ethical Hacking",
+      "Internship Hunt"
     ],
-    "bio": "I am looking for practical guidance on Machine Learning and want to build confidence through small projects.",
+    "bio": "Focused on turning curiosity about Cyber Security into a serious path, with extra attention on Ethical Hacking.",
     "is_banned": false
   },
   {
@@ -2094,11 +2094,11 @@
     "capacity_current": 2,
     "capacity_max": 3,
     "interests": [
-      "Digital Marketing",
-      "Brand Strategy",
-      "Analytics"
+      "Angel Investing",
+      "Startup Strategy",
+      "Mentorship"
     ],
-    "bio": "I have hands-on experience in Digital Marketing and enjoy helping people translate theory into practice.",
+    "bio": "Drawing from experience in architecture, delivery, and team growth to mentor around Angel Investing and Startup Strategy.",
     "is_banned": false
   },
   {
@@ -2111,11 +2111,11 @@
     "capacity_current": 2,
     "capacity_max": 4,
     "interests": [
-      "Career Development",
-      "Interview Prep",
-      "Leadership"
+      "Career Transition",
+      "Coaching",
+      "Personal Growth"
     ],
-    "bio": "I support mentees who are preparing for careers in Career Development and related interview processes.",
+    "bio": "Helping mentees connect technical depth in Career Transition with the professional habits needed for Coaching.",
     "is_banned": false
   },
   {
@@ -2128,11 +2128,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "UI/UX",
-      "Figma",
-      "Design Systems"
+      "DevOps",
+      "Docker",
+      "Cloud Fundamentals"
     ],
-    "bio": "I am trying to connect my background with UI/UX and would value a structured mentorship plan.",
+    "bio": "Working toward a first role in tech and aiming to sharpen DevOps as well as Docker.",
     "is_banned": false
   },
   {
@@ -2145,11 +2145,11 @@
     "capacity_current": 1,
     "capacity_max": 2,
     "interests": [
-      "iOS",
-      "Swift",
-      "Mobile Development"
+      "Security Architecture",
+      "Threat Modeling",
+      "Zero Trust"
     ],
-    "bio": "I mentor people who want to grow in iOS and I focus on actionable, realistic progress.",
+    "bio": "Guiding the next generation of builders in Security Architecture with a strong focus on feedback, iteration, and Threat Modeling.",
     "is_banned": false
   },
   {
@@ -2162,11 +2162,11 @@
     "capacity_current": 1,
     "capacity_max": 3,
     "interests": [
-      "Entrepreneurship",
-      "Finance",
-      "Startup Operations"
+      "Data Platform Design",
+      "Streaming",
+      "Governance"
     ],
-    "bio": "I have hands-on experience in Entrepreneurship and enjoy helping people translate theory into practice.",
+    "bio": "Bringing cross-industry experience to mentorship in Data Platform Design and Streaming, especially for people navigating change.",
     "is_banned": false
   },
   {
@@ -2179,11 +2179,11 @@
     "capacity_current": 0,
     "capacity_max": 0,
     "interests": [
-      "Research",
-      "Academic Career",
-      "Study Abroad"
+      "Cloud Engineering",
+      "AWS",
+      "Certification Prep"
     ],
-    "bio": "I want feedback on my Research portfolio and help preparing for interviews.",
+    "bio": "Learning Cloud Engineering from scratch while building the communication and planning habits needed for AWS.",
     "is_banned": false
   },
   {
@@ -2196,11 +2196,11 @@
     "capacity_current": 4,
     "capacity_max": 5,
     "interests": [
-      "Cloud",
-      "DevOps",
-      "System Design"
+      "MLOps",
+      "Model Deployment",
+      "Operational Excellence"
     ],
-    "bio": "I work across Cloud and DevOps, and I like helping people build confidence through clear milestones.",
+    "bio": "Sharing a long-term perspective on careers in MLOps and Model Deployment, with advice that is calm, practical, and clear.",
     "is_banned": false
   },
   {
