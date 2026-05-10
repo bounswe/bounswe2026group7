@@ -2058,6 +2058,20 @@
   color: var(--text-muted);
 }
 
+/* Cancel-mentorship warning panel inside the cancel confirmation modal (#127) */
+.md-cancel-warning {
+  background: #fff5f5;
+  border: 1px solid #f0d0d0;
+  border-left: 4px solid #c53030;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-dark);
+  margin-top: 12px;
+  line-height: 1.5;
+}
+.md-cancel-warning strong { color: #c53030; }
+
 .md-stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
