@@ -15,6 +15,7 @@ import {
   getBlogPost,
   listIncomingRequests,
   listActiveMentorships,
+  setSharedGoal,
 } from '../fixtures/mentorshipApi.js';
 import { LoginPage } from '../pages/LoginPage.js';
 import { ExplorePage } from '../pages/ExplorePage.js';
@@ -111,6 +112,15 @@ test('AT-02 mentorship lifecycle + blog publish', async ({ browser, request }) =
     // (Side check: there are no longer any incoming pending requests for the mentor.)
     const remainingRequests = await listIncomingRequests(request, mentorAuth.sessionToken);
     expect(remainingRequests.filter(r => r.status === 'PENDING')).toHaveLength(0);
+
+    // Shared goal is the precondition for any meeting / task / milestone write
+    // since #335 added the gate; set it as the mentor before scheduling.
+    await setSharedGoal(
+      request,
+      mentorAuth.sessionToken,
+      mentorshipId,
+      'Build a portfolio project together end-to-end',
+    );
 
     // 4. Mentor schedules a meeting (API leg — no create UI on /schedule yet).
     const inOneWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();

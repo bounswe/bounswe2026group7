@@ -66,6 +66,19 @@ export async function createMeeting(request, token, mentorshipId, body) {
   return responseBody?.meetings?.[0] ?? responseBody;
 }
 
+/**
+ * PUT /api/mentorships/{id}/goal — set shared goal. Required before any
+ * meeting / task / milestone write since #335 added the precondition gate.
+ * Either mentor or mentee can set it.
+ */
+export async function setSharedGoal(request, token, mentorshipId, sharedGoal) {
+  const res = await request.put(`${apiBase()}/api/mentorships/${mentorshipId}/goal`, {
+    headers: authHeaders(token),
+    data: { sharedGoal },
+  });
+  return expectOk(res, `PUT /api/mentorships/${mentorshipId}/goal`);
+}
+
 /** POST /api/meetings/{id}/confirm — mentee accepts the proposed slot. */
 export async function confirmMeeting(request, token, meetingId) {
   const res = await request.post(`${apiBase()}/api/meetings/${meetingId}/confirm`, {
