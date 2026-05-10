@@ -428,6 +428,46 @@ export async function searchFeed({ q, hashtag, page = 0, size = 20 }) {
   return handleResponse(res)
 }
 
+// ── Feed interactions (share, bookmark) — #340 ───────────────────────────
+// Backend: FeedInteractionController. Each endpoint returns a
+// FeedPostInteractionState { likeCount, commentCount, shareCount,
+// bookmarkCount, viewerHasLiked, viewerHasBookmarked } the UI uses to
+// render counts + viewer-relative toggle state.
+
+export async function getPostInteractions(postId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/interactions`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function toggleBookmarkOnPost(postId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/bookmark`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function recordShareOnPost(postId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/share`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMyBookmarks(page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/me/bookmarks?page=${page}&size=${size}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 export async function getMenteeAvailability() {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentee-availability`, {
