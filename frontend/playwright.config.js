@@ -12,6 +12,14 @@ export default defineConfig({
   // mid-test reset wipes the other worker's session. True isolation needs
   // schema-per-worker or per-test data namespacing; tracked as a follow-up.
   workers: process.env.CI ? 1 : undefined,
+  // AT-02 has ~15 sequential UI+API steps including two UI logins that each
+  // wait up to 20s for /home navigation (`expect(page).toHaveURL(/\/home$/,
+  // { timeout: 20_000 })`). The spec's own per-action timeouts already
+  // permit ~40s of login budget alone, exceeding Playwright's default 30s
+  // testTimeout. 60s aligns the framework ceiling with the spec's
+  // arithmetic. Doesn't mask real regressions — passing tests exit on
+  // assertions, not on the ceiling.
+  timeout: 60_000,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL,
