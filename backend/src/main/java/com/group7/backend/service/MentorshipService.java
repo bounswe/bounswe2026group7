@@ -1,11 +1,14 @@
 package com.group7.backend.service;
 
 import com.group7.backend.dto.request.AcceptRequestRequest;
+import com.group7.backend.dto.request.CancelMentorshipRequest;
 import com.group7.backend.dto.request.SharedGoalRequest;
+import com.group7.backend.dto.response.MentorshipAuditLogResponse;
 import com.group7.backend.dto.response.MentorshipResponse;
 import com.group7.backend.entity.*;
 import com.group7.backend.exception.MentorshipRequestException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.MentorshipAuditLogRepository;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.MentorshipRequestRepository;
 import org.slf4j.Logger;
@@ -16,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -26,15 +30,24 @@ public class MentorshipService {
 
     private final MentorshipRepository mentorshipRepository;
     private final MentorshipRequestRepository mentorshipRequestRepository;
+    private final MentorshipAuditLogRepository mentorshipAuditLogRepository;
+    private final MentorshipCleanupService mentorshipCleanupService;
+    private final MentorshipCooldownPolicy mentorshipCooldownPolicy;
     private final NotificationEventPublisher notificationEventPublisher;
     private final Clock clock;
 
     public MentorshipService(MentorshipRepository mentorshipRepository,
                              MentorshipRequestRepository mentorshipRequestRepository,
+                             MentorshipAuditLogRepository mentorshipAuditLogRepository,
+                             MentorshipCleanupService mentorshipCleanupService,
+                             MentorshipCooldownPolicy mentorshipCooldownPolicy,
                              NotificationEventPublisher notificationEventPublisher,
                              Clock clock) {
         this.mentorshipRepository = mentorshipRepository;
         this.mentorshipRequestRepository = mentorshipRequestRepository;
+        this.mentorshipAuditLogRepository = mentorshipAuditLogRepository;
+        this.mentorshipCleanupService = mentorshipCleanupService;
+        this.mentorshipCooldownPolicy = mentorshipCooldownPolicy;
         this.notificationEventPublisher = notificationEventPublisher;
         this.clock = clock;
     }
@@ -68,6 +81,10 @@ public class MentorshipService {
             throw new MentorshipRequestException("Duration must be 1, 3, or 6 months");
         }
 
+        // Cool-down (#133): block re-acceptance if this pair just terminated.
+        // Throws MentorshipRequestException; caller surfaces 409.
+        mentorshipCooldownPolicy.assertNotInCooldown(mentor.getId(), mentee.getId());
+
         request.setStatus(MentorshipRequestStatus.ACCEPTED);
 
         OffsetDateTime now = OffsetDateTime.now(clock);
@@ -85,6 +102,8 @@ public class MentorshipService {
         mentorshipRequestRepository.cancelOtherPendingRequests(mentee.getId(), requestId);
 
         Mentorship saved = mentorshipRepository.save(mentorship);
+        mentorshipAuditLogRepository.save(MentorshipAuditLog.of(
+                saved.getId(), null, MentorshipStatus.ACTIVE, mentorId, null));
         log.info("Mentorship accepted: mentorshipId={}, mentorId={}, menteeId={}, requestId={}",
             saved.getId(), mentor.getId(), mentee.getId(), requestId);
         notificationEventPublisher.publishRequestAccepted(mentee.getId(), mentor.getFirstName());
@@ -133,6 +152,76 @@ public class MentorshipService {
         Mentorship saved = mentorshipRepository.save(mentorship);
         log.info("Shared goal updated: mentorshipId={}, updatedByUserId={}", mentorshipId, userId);
         return MentorshipResponse.from(saved);
+    }
+
+    /**
+     * Cancels an active mentorship (#133). Either participant may cancel; the
+     * other side gets a notification. Children (meetings, tasks, milestones,
+     * conversation/messages) are deleted by {@link MentorshipCleanupService};
+     * the mentorship row itself is kept with {@code status = CANCELLED} so
+     * cool-down lookups can find the termination.
+     *
+     * @throws ResourceNotFoundException if the user is not a participant
+     * @throws MentorshipRequestException if the mentorship is not currently ACTIVE
+     */
+    @Transactional
+    public MentorshipResponse cancelMentorship(Long actorUserId,
+                                               Long mentorshipId,
+                                               CancelMentorshipRequest dto) {
+        Mentorship mentorship = findForParticipant(actorUserId, mentorshipId);
+
+        if (mentorship.getStatus() != MentorshipStatus.ACTIVE) {
+            log.warn("Cancel rejected: mentorshipId={} is in status {}", mentorshipId, mentorship.getStatus());
+            throw new MentorshipRequestException("Mentorship is not active");
+        }
+
+        Mentor mentor = mentorship.getMentor();
+        Mentee mentee = mentorship.getMentee();
+        boolean actorIsMentor = mentor.getId().equals(actorUserId);
+        Long otherUserId = actorIsMentor ? mentee.getId() : mentor.getId();
+        String actorFirstName = actorIsMentor ? mentor.getFirstName() : mentee.getFirstName();
+
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        mentorship.setStatus(MentorshipStatus.CANCELLED);
+        mentorship.setTerminatedAt(now);
+        mentorship.setTerminatedByUserId(actorUserId);
+        mentorship.setCancellationReason(dto.getReason());
+
+        // Free the mentee's slot only if this mentorship is the active one.
+        // Guards against a stale activeMentorId that points elsewhere.
+        if (Objects.equals(mentee.getActiveMentorId(), mentor.getId())) {
+            mentee.setActiveMentorId(null);
+        }
+        if (mentor.getCurrentMenteeCount() > 0) {
+            mentor.setCurrentMenteeCount(mentor.getCurrentMenteeCount() - 1);
+        }
+
+        // Cleanup children (meetings, tasks, milestones, conversation). Same
+        // transaction — if anything fails, the status flip rolls back too.
+        mentorshipCleanupService.cleanupChildren(mentorshipId);
+
+        Mentorship saved = mentorshipRepository.save(mentorship);
+
+        mentorshipAuditLogRepository.save(MentorshipAuditLog.of(
+                saved.getId(), MentorshipStatus.ACTIVE, MentorshipStatus.CANCELLED,
+                actorUserId, dto.getReason()));
+
+        notificationEventPublisher.publishMentorshipCancelled(otherUserId, actorFirstName, dto.getReason());
+
+        log.info("Mentorship cancelled: mentorshipId={}, actorUserId={}, otherUserId={}, "
+                        + "actorIsMentor={}",
+                mentorshipId, actorUserId, otherUserId, actorIsMentor);
+        return MentorshipResponse.from(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorshipAuditLogResponse> getAuditTrail(Long userId, Long mentorshipId) {
+        // Participant gate: throws 404 if userId is not the mentor or mentee.
+        findForParticipant(userId, mentorshipId);
+        return mentorshipAuditLogRepository
+                .findByMentorshipIdOrderByCreatedAtAsc(mentorshipId).stream()
+                .map(MentorshipAuditLogResponse::from)
+                .toList();
     }
 
     /**

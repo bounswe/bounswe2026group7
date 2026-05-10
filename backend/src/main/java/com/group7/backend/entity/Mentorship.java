@@ -50,9 +50,28 @@ public class Mentorship {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @Column(name = "terminated_at")
+    private OffsetDateTime terminatedAt;
+
+    @Column(name = "terminated_by_user_id")
+    private Long terminatedByUserId;
+
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
+
     @PrePersist
     protected void onCreate() {
-        this.createdAt = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
     public boolean hasSharedGoal() {

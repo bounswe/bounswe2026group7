@@ -237,6 +237,15 @@ public class NotificationEventPublisher {
         );
     }
 
+    public void publishMentorshipCancelled(Long recipientId, String otherFirstName, String reason) {
+        publish(
+                recipientId,
+                NotificationType.MENTORSHIP_CANCELLED,
+                "Mentorship cancelled",
+                otherFirstName + " cancelled your mentorship. Reason: " + reason
+        );
+    }
+
     public void publish(Long recipientId, NotificationType type, String title, String body) {
         applicationEventPublisher.publishEvent(new NotificationCreatedEvent(recipientId, type, title, body));
     }

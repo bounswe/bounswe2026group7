@@ -48,6 +48,13 @@ public class MentorshipResponse {
             example = "true")
     private boolean goalDefined;
 
+    @Schema(description = "When the mentorship was terminated, or null if still active. (#133)")
+    private OffsetDateTime terminatedAt;
+
+    @Schema(description = "Reason captured at cancellation time, or null if still active. (#133)",
+            example = "Schedules no longer line up.")
+    private String cancellationReason;
+
     public static MentorshipResponse from(Mentorship mentorship) {
         MentorshipResponse r = new MentorshipResponse();
         r.setId(mentorship.getId());
@@ -61,6 +68,8 @@ public class MentorshipResponse {
         r.setStatus(mentorship.getStatus().name());
         r.setSharedGoal(mentorship.getSharedGoal());
         r.setGoalDefined(mentorship.hasSharedGoal());
+        r.setTerminatedAt(mentorship.getTerminatedAt());
+        r.setCancellationReason(mentorship.getCancellationReason());
         return r;
     }
 }
