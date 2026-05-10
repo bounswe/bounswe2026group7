@@ -83,13 +83,13 @@ export default function LoginPage() {
         <div className="auth-sub">Sign in to continue your journey</div>
 
         {registered && !serverError && (
-          <div className="auth-success">Account created! Please sign in.</div>
+          <div className="auth-success" data-testid="login-registered-banner">Account created! Please sign in.</div>
         )}
         {serverError && (
-          <div className="auth-error">{serverError}</div>
+          <div className="auth-error" data-testid="login-error">{serverError}</div>
         )}
 
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} noValidate data-testid="login-form">
           <label className="field-label">Email</label>
           <input
             type="email"
@@ -98,6 +98,7 @@ export default function LoginPage() {
             onChange={e => handleChange('email', e.target.value)}
             placeholder="you@example.com"
             aria-invalid={!!errors.email}
+            data-testid="login-email"
           />
           {errors.email && <div className="field-error-msg">{errors.email}</div>}
 
@@ -109,12 +110,13 @@ export default function LoginPage() {
             onChange={e => handleChange('password', e.target.value)}
             placeholder="••••••••"
             aria-invalid={!!errors.password}
+            data-testid="login-password"
           />
           {errors.password && <div className="field-error-msg">{errors.password}</div>}
 
-          <Link to="/forgot-password" className="forgot-link">Forgot password?</Link>
+          <Link to="/forgot-password" className="forgot-link" data-testid="login-forgot-link">Forgot password?</Link>
 
-          <button type="submit" className="auth-btn" disabled={isLoading}>
+          <button type="submit" className="auth-btn" disabled={isLoading} data-testid="login-submit">
             {isLoading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>

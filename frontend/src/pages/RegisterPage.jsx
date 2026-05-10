@@ -92,9 +92,9 @@ export default function RegisterPage() {
         <div className="auth-title">Create Account</div>
         <div className="auth-sub">Join the mentorship community</div>
 
-        {serverError && <div className="auth-error">{serverError}</div>}
+        {serverError && <div className="auth-error" data-testid="register-error">{serverError}</div>}
 
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} noValidate data-testid="register-form">
           <label className="field-label">First Name</label>
           <input
             type="text"
@@ -103,6 +103,7 @@ export default function RegisterPage() {
             onChange={e => handleChange('firstName', e.target.value)}
             placeholder="First name"
             aria-invalid={!!errors.firstName}
+            data-testid="register-first-name"
           />
           {errors.firstName && <div className="field-error-msg">{errors.firstName}</div>}
 
@@ -114,6 +115,7 @@ export default function RegisterPage() {
             onChange={e => handleChange('lastName', e.target.value)}
             placeholder="Last name"
             aria-invalid={!!errors.lastName}
+            data-testid="register-last-name"
           />
           {errors.lastName && <div className="field-error-msg">{errors.lastName}</div>}
 
@@ -125,6 +127,7 @@ export default function RegisterPage() {
             onChange={e => handleChange('email', e.target.value)}
             placeholder="you@example.com"
             aria-invalid={!!errors.email}
+            data-testid="register-email"
           />
           {errors.email && <div className="field-error-msg">{errors.email}</div>}
 
@@ -136,6 +139,7 @@ export default function RegisterPage() {
             onChange={e => handleChange('password', e.target.value)}
             placeholder="••••••••"
             aria-invalid={!!errors.password}
+            data-testid="register-password"
           />
           {errors.password && <div className="field-error-msg">{errors.password}</div>}
 
@@ -145,6 +149,7 @@ export default function RegisterPage() {
               type="button"
               className={`role-btn${!fields.isMentor ? ' active' : ''}`}
               onClick={() => handleChange('isMentor', false)}
+              data-testid="register-role-mentee"
             >
               Mentee
             </button>
@@ -152,12 +157,13 @@ export default function RegisterPage() {
               type="button"
               className={`role-btn${fields.isMentor ? ' active' : ''}`}
               onClick={() => handleChange('isMentor', true)}
+              data-testid="register-role-mentor"
             >
               Mentor
             </button>
           </div>
 
-          <button type="submit" className="auth-btn" disabled={isLoading}>
+          <button type="submit" className="auth-btn" disabled={isLoading} data-testid="register-submit">
             {isLoading ? 'Creating account...' : 'Create Account'}
           </button>
         </form>

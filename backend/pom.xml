@@ -126,6 +126,15 @@
             <artifactId>firebase-admin</artifactId>
             <version>9.4.1</version>
         </dependency>
+        <!-- Faker generator for the profile-gated TestSupportController (#315).
+             Used to seed users in CI E2E runs; the controller bean is loaded
+             only when app.test-endpoints.enabled=true, so this dependency is
+             never exercised in production. -->
+        <dependency>
+            <groupId>net.datafaker</groupId>
+            <artifactId>datafaker</artifactId>
+            <version>2.4.2</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

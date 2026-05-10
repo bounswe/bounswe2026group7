@@ -43,15 +43,15 @@ export default function ForgotPasswordPage() {
         <div className="auth-title">Forgot<br /><em>password?</em></div>
         <div className="auth-sub">Enter your email to receive a reset link</div>
 
-        {serverError && <div className="auth-error">{serverError}</div>}
+        {serverError && <div className="auth-error" data-testid="forgot-password-error">{serverError}</div>}
         {success && (
-          <div className="auth-success">
+          <div className="auth-success" data-testid="forgot-password-success">
             Reset link sent! Check your inbox.
           </div>
         )}
 
         {!success && (
-          <form onSubmit={handleSubmit} noValidate>
+          <form onSubmit={handleSubmit} noValidate data-testid="forgot-password-form">
             <label className="field-label">Email</label>
             <input
               type="email"
@@ -60,10 +60,11 @@ export default function ForgotPasswordPage() {
               onChange={e => handleChange(e.target.value)}
               placeholder="you@example.com"
               aria-invalid={!!emailError}
+              data-testid="forgot-password-email"
             />
             {emailError && <div className="field-error-msg">{emailError}</div>}
 
-            <button type="submit" className="auth-btn" disabled={isLoading}>
+            <button type="submit" className="auth-btn" disabled={isLoading} data-testid="forgot-password-submit">
               {isLoading ? 'Sending...' : 'Send Reset Link'}
             </button>
           </form>

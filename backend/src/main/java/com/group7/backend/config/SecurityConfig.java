@@ -32,6 +32,16 @@ public class SecurityConfig {
     private String[] allowedOrigins;
 
     /**
+     * Defence-in-depth for the {@code /api/test/**} endpoints (#315). The
+     * {@link com.group7.backend.controller.TestSupportController} bean is itself
+     * gated by {@code app.test-endpoints.enabled}; when this flag is off we also
+     * 404 the path here so the surface area cannot leak even if a misconfigured
+     * deployment somehow registers the controller.
+     */
+    @Value("${app.test-endpoints.enabled:false}")
+    private boolean testEndpointsEnabled;
+
+    /**
      * {@code rateLimitFilter} is wrapped in {@link Optional} so {@code @WebMvcTest}
      * controller slices that import {@link SecurityConfig} without the rate-limit
      * beans still wire a filter chain.
@@ -44,9 +54,18 @@ public class SecurityConfig {
 
     @Bean
     public WebSecurityCustomizer webSecurityCustomizer() {
-        return web -> web.ignoring().requestMatchers(
-            "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs", "/v3/api-docs/**"
-        );
+        return web -> {
+            web.ignoring().requestMatchers(
+                "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs", "/v3/api-docs/**"
+            );
+            // When test endpoints are disabled, ignore the path entirely so the
+            // dispatcher answers with a genuine 404 (the conditional controller
+            // bean isn't registered). With this, prod responses don't leak that
+            // /api/test exists at all.
+            if (!testEndpointsEnabled) {
+                web.ignoring().requestMatchers("/api/test/**");
+            }
+        };
     }
 
     @Bean
@@ -60,7 +79,13 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
+            .authorizeHttpRequests(auth -> {
+                if (testEndpointsEnabled) {
+                    auth.requestMatchers("/api/test/**").permitAll();
+                } else {
+                    auth.requestMatchers("/api/test/**").denyAll();
+                }
+                auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
@@ -82,8 +107,8 @@ public class SecurityConfig {
                 // enumeration is rate-limited by IP via the
                 // {@code availability-ical} rule in application.properties.
                 .requestMatchers(HttpMethod.GET, "/api/availability/*/ical").permitAll()
-                .anyRequest().authenticated()
-            )
+                .anyRequest().authenticated();
+            })
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         rateLimitFilter.ifPresent(filter ->
