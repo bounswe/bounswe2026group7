@@ -171,6 +171,21 @@ function mapMessages(rawMessages: any[], currentUserId: number): ChatMessage[] {
   return messages;
 }
 
+function buildMentorshipThreadSummary(rawMessages: any[], currentUserId: number) {
+  const latest = rawMessages[0];
+  const preview = latest
+    ? latest.attachment
+      ? `${latest.content || 'Attachment'} · ${latest.attachment.filename}`
+      : latest.content
+    : 'No messages yet';
+  const time = latest ? formatRelativeTime(latest.sentAt) : '';
+  const unread = rawMessages.filter(
+    (message) => message.senderId !== currentUserId && !message.readAt
+  ).length;
+
+  return { preview, time, unread };
+}
+
 export default function MessagesScreen() {
   const { role } = useRole();
   const isMentor = role === 'mentor';
@@ -218,17 +233,10 @@ export default function MessagesScreen() {
             try {
               const threadRes = await apiClient.get(`/mentorships/${mentorship.id}/messages?page=0&size=100`);
               const threadMessages = threadRes.data?.content ?? [];
-              const latest = threadMessages[0];
-              if (latest) {
-                preview = latest.attachment
-                  ? `${latest.content || 'Attachment'} · ${latest.attachment.filename}`
-                  : latest.content;
-                time = formatRelativeTime(latest.sentAt);
-              }
-              unread = threadMessages.filter(
-                (message: any) =>
-                  message.senderId !== parsedUserId && !message.readAt
-              ).length;
+              const summary = buildMentorshipThreadSummary(threadMessages, parsedUserId ?? -1);
+              preview = summary.preview;
+              time = summary.time;
+              unread = summary.unread;
             } catch {
               // Keep list usable even if preview fetch fails for one mentorship.
             }
@@ -354,20 +362,19 @@ export default function MessagesScreen() {
         const rawMessages = res.data?.content ?? [];
         setMessages(mapMessages(rawMessages, currentUserId));
         await apiClient.patch(readEndpoint).catch(() => undefined);
-        setMentorshipConversations((prev) =>
-          prev.map((conversation) =>
+
+        const clearUnread = (items: ConversationItem[]) =>
+          items.map((conversation) =>
             conversation.id === selectedConversation.id
               ? { ...conversation, unread: 0 }
               : conversation
-          )
-        );
-        setPeerMentorConversations((prev) =>
-          prev.map((conversation) =>
-            conversation.id === selectedConversation.id
-              ? { ...conversation, unread: 0 }
-              : conversation
-          )
-        );
+          );
+
+        if (selectedConversation.threadKind === 'mentorship') {
+          setMentorshipConversations((prev) => clearUnread(prev));
+        } else {
+          setPeerMentorConversations((prev) => clearUnread(prev));
+        }
       } catch (error) {
         console.error('Failed to load thread:', error);
         Alert.alert('Error', 'Could not load the message thread.');
@@ -540,7 +547,7 @@ export default function MessagesScreen() {
             : conversation
         );
 
-      if (selectedConversation.threadKind === 'mentorship') {
+              if (selectedConversation.threadKind === 'mentorship') {
         setMentorshipConversations((prev) => applyPreviewUpdate(prev));
       } else {
         setPeerMentorConversations((prev) => applyPreviewUpdate(prev));
@@ -953,16 +960,14 @@ function ConversationRow({
 }) {
   return (
     <TouchableOpacity
-      style={styles.conversationRow}
+      style={[styles.conversationRow, item.unread ? styles.conversationRowUnread : null]}
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.counterpartName}. ${item.subtitle ? `${item.subtitle}. ` : ''}${item.preview}. ${item.unread && item.unread > 0 ? `${item.unread} unread messages.` : 'No unread messages.'}`}
-      accessibilityHint="Opens the conversation thread"
     >
       <View style={styles.avatarWrap}>
         <View style={[styles.avatar, { backgroundColor: item.avatarBg }]}>
           <Text style={[styles.avatarText, { color: item.avatarText }]}>{item.initials}</Text>
         </View>
+        {item.unread ? <View style={styles.unreadDot} /> : null}
       </View>
 
       <View style={styles.conversationBody}>
@@ -973,12 +978,22 @@ function ConversationRow({
             </Text>
             {item.subtitle ? <Text style={styles.conversationSubtitle}>{item.subtitle}</Text> : null}
           </View>
-          <Text style={[styles.conversationTime, item.unread ? styles.conversationTimeUnread : null]}>
-            {item.time}
-          </Text>
+          <View style={styles.conversationMetaWrap}>
+            <Text style={[styles.conversationTime, item.unread ? styles.conversationTimeUnread : null]}>
+              {item.time}
+            </Text>
+            {item.unread ? (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{item.unread > 99 ? '99+' : item.unread}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
 
-        <Text numberOfLines={1} style={[styles.conversationPreview, item.unread ? styles.conversationPreviewUnread : null]}>
+        <Text
+          numberOfLines={1}
+          style={[styles.conversationPreview, item.unread ? styles.conversationPreviewUnread : null]}
+        >
           {item.preview}
         </Text>
       </View>
@@ -1123,9 +1138,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0EBE3',
   },
+  conversationRowUnread: {
+    backgroundColor: '#F8FBF8',
+  },
   avatarWrap: {
     marginRight: 11,
     position: 'relative',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4A7C5A',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   avatar: {
     width: 44,
@@ -1146,6 +1175,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 3,
   },
+  conversationMetaWrap: {
+    alignItems: 'flex-end',
+  },
   conversationTitleWrap: {
     flex: 1,
     paddingRight: 8,
@@ -1156,7 +1188,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   conversationNameUnread: {
-    color: '#214734',
+    color: '#13301F',
   },
   conversationSubtitle: {
     color: '#9A9288',
@@ -1168,7 +1200,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   conversationTimeUnread: {
-    color: '#3D6B52',
+    color: '#4A7C5A',
     fontWeight: '700',
   },
   conversationPreview: {
@@ -1176,18 +1208,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   conversationPreviewUnread: {
-    color: '#5A5248',
+    color: '#4E5F55',
     fontWeight: '600',
   },
   unreadBadge: {
-    backgroundColor: '#3D6B52',
-    minWidth: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: '#4A7C5A',
+    borderRadius: 999,
+    minWidth: 22,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+    marginTop: 6,
   },
   unreadBadgeText: {
     color: '#FFFFFF',
