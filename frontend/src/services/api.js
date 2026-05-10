@@ -356,6 +356,78 @@ export async function markMentorPairMessagesRead(otherMentorId) {
   return handleResponse(res)
 }
 
+// ── Social feed ───────────────────────────────────────────────────────────
+// Backend: FeedPostController + FeedReadController (+ FeedInteractionController in #340)
+
+export async function createFeedPost({ body, hashtags = [] }) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ body, hashtags }),
+  })
+  return handleResponse(res)
+}
+
+export async function getFeedPostById(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function updateFeedPost(id, { body, hashtags }) {
+  const token = localStorage.getItem('auth_token')
+  const payload = {}
+  if (body !== undefined) payload.body = body
+  if (hashtags !== undefined) payload.hashtags = hashtags
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(res)
+}
+
+export async function deleteFeedPost(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getForYouFeed(page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/for-you?page=${page}&size=${size}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getFollowingFeed(page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/following?page=${page}&size=${size}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function searchFeed({ q, hashtag, page = 0, size = 20 }) {
+  const token = localStorage.getItem('auth_token')
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (hashtag) params.set('hashtag', hashtag)
+  params.set('page', String(page))
+  params.set('size', String(size))
+  const res = await fetch(`${BASE_URL}/feed/search?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 export async function getMenteeAvailability() {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentee-availability`, {
