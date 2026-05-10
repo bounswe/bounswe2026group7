@@ -2036,6 +2036,28 @@
 .md-status-terminated,
 .md-status-cancelled { background: rgba(192,57,43,0.9); color: #fff; }
 
+/* Auto-termination / ended banner — sits between header and hero on a non-active mentorship (#341) */
+.md-ended-banner {
+  background: var(--green-bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--text-muted);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--text-dark);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: baseline;
+}
+.md-ended-banner strong { color: var(--text-dark); }
+.md-ended-banner-sub {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .md-stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
