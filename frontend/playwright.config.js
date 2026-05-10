@@ -7,7 +7,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // CI is serialized to 1 worker because /api/test/reset TRUNCATEs the whole
+  // DB and parallel workers race-stomp on each other's seeded users — a
+  // mid-test reset wipes the other worker's session. True isolation needs
+  // schema-per-worker or per-test data namespacing; tracked as a follow-up.
+  workers: process.env.CI ? 1 : undefined,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL,
