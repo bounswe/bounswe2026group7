@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright (#315)
+/playwright-report
+/test-results
+/playwright/.cache

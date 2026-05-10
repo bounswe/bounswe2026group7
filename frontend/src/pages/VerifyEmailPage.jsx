@@ -22,7 +22,7 @@ export default function VerifyEmailPage() {
   if (status === 'loading') {
     return (
       <div className="auth-screen">
-        <div className="auth-card">
+        <div className="auth-card" data-testid="verify-email-loading">
           <div className="auth-sub">Verifying your email...</div>
         </div>
       </div>
@@ -32,7 +32,7 @@ export default function VerifyEmailPage() {
   if (status === 'error') {
     return (
       <div className="auth-screen">
-        <div className="auth-card">
+        <div className="auth-card" data-testid="verify-email-error">
           <div className="auth-title">Verification<br /><em>failed.</em></div>
           <div className="auth-error">This verification link is invalid or has expired.</div>
           <div className="auth-footer">
@@ -45,7 +45,7 @@ export default function VerifyEmailPage() {
 
   return (
     <div className="auth-screen">
-      <div className="auth-card">
+      <div className="auth-card" data-testid="verify-email-success">
         <div className="auth-title">Email<br /><em>verified!</em></div>
         <div className="auth-success">Your email has been verified. You can now sign in.</div>
         <div className="auth-footer">

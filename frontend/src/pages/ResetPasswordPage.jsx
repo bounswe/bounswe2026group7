@@ -81,9 +81,9 @@ export default function ResetPasswordPage() {
         <div className="auth-title">Reset<br /><em>password.</em></div>
         <div className="auth-sub">Enter your new password below</div>
 
-        {serverError && <div className="auth-error">{serverError}</div>}
+        {serverError && <div className="auth-error" data-testid="reset-password-error">{serverError}</div>}
 
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={handleSubmit} noValidate data-testid="reset-password-form">
           <label className="field-label">New Password</label>
           <input
             type="password"
@@ -92,10 +92,11 @@ export default function ResetPasswordPage() {
             onChange={e => handleChange(e.target.value)}
             placeholder="••••••••"
             aria-invalid={!!passwordError}
+            data-testid="reset-password-new-password"
           />
           {passwordError && <div className="field-error-msg">{passwordError}</div>}
 
-          <button type="submit" className="auth-btn" disabled={isLoading}>
+          <button type="submit" className="auth-btn" disabled={isLoading} data-testid="reset-password-submit">
             {isLoading ? 'Resetting...' : 'Reset Password'}
           </button>
         </form>

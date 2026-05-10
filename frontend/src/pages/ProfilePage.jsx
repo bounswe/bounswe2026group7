@@ -317,7 +317,7 @@ export default function ProfilePage() {
         <div className="card">
           <div className="section-label">Edit Information</div>
 
-          <form onSubmit={handleSave} noValidate>
+          <form onSubmit={handleSave} noValidate data-testid="profile-form">
             <div className="form-field">
               <label className="form-label">Full Name</label>
               <input
@@ -326,6 +326,7 @@ export default function ProfilePage() {
                 maxLength={100}
                 value={form.name}
                 onChange={e => handleChange('name', e.target.value)}
+                data-testid="profile-name"
               />
               {errors.name && <div style={{ color: 'var(--red-text)', fontSize: '13px', marginTop: '4px' }}>{errors.name}</div>}
             </div>
@@ -338,6 +339,7 @@ export default function ProfilePage() {
                 value={form.interests}
                 onChange={e => handleChange('interests', e.target.value)}
                 placeholder="e.g. Mobile Development, AI/ML"
+                data-testid="profile-interests"
               />
             </div>
 
@@ -533,17 +535,17 @@ export default function ProfilePage() {
             )}
 
             {saveSuccess && (
-              <div style={{ color: 'var(--green-dark)', fontSize: '13px', marginBottom: '8px' }}>
+              <div data-testid="profile-save-success" style={{ color: 'var(--green-dark)', fontSize: '13px', marginBottom: '8px' }}>
                 Profile saved successfully.
               </div>
             )}
             {saveError && (
-              <div style={{ color: 'var(--red-text)', fontSize: '13px', marginBottom: '8px' }}>
+              <div data-testid="profile-save-error" style={{ color: 'var(--red-text)', fontSize: '13px', marginBottom: '8px' }}>
                 {saveError}
               </div>
             )}
 
-            <button type="submit" className="save-btn" style={{ marginTop: '16px' }} disabled={saving}>
+            <button type="submit" className="save-btn" style={{ marginTop: '16px' }} disabled={saving} data-testid="profile-save">
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </form>

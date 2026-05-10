@@ -39,7 +39,8 @@ public class MeetingController {
                     content = @Content(schema = @Schema(implementation = MeetingCreateResponse.class))),
             @ApiResponse(responseCode = "403", description = "Not authorized", content = @Content),
             @ApiResponse(responseCode = "404", description = "Mentorship not found", content = @Content),
-            @ApiResponse(responseCode = "409", description = "Conflict", content = @Content)
+            @ApiResponse(responseCode = "409", description = "Schedule conflict, mentorship not active, " +
+                    "or shared goal not defined (body carries code=\"GOAL_REQUIRED\")", content = @Content)
     })
     public ResponseEntity<MeetingCreateResponse> createMeetings(
             @Parameter(description = "Mentorship ID") @PathVariable Long id,

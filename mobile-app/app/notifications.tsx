@@ -111,18 +111,33 @@ export default function NotificationsScreen() {
           <Text style={styles.statusIcons}>▲ ▮</Text>
         </View>
         <View style={styles.headerRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
           {unreadCount > 0 && (
-            <TouchableOpacity style={styles.markAllButton} onPress={markAllAsRead}>
+            <TouchableOpacity
+              style={styles.markAllButton}
+              onPress={markAllAsRead}
+              accessibilityRole="button"
+              accessibilityLabel={`Mark all ${unreadCount} notifications as read`}
+            >
               <Text style={styles.markAllText}>Mark all read</Text>
             </TouchableOpacity>
           )}
         </View>
         <Text style={styles.title}>Notifications</Text>
         {unreadCount > 0 && (
-          <Text style={styles.subtitle}>{unreadCount} unread</Text>
+          <Text
+            style={styles.subtitle}
+            accessibilityLabel={`${unreadCount} unread notifications`}
+          >
+            {unreadCount} unread
+          </Text>
         )}
       </View>
 
@@ -153,6 +168,9 @@ export default function NotificationsScreen() {
                 style={[styles.card, !n.isRead && styles.cardUnread]}
                 onPress={() => handleNotificationPress(n)}
                 activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`${n.title}. ${n.body}. ${n.isRead ? 'Read' : 'Unread'}. ${timeAgo(n.createdAt)}`}
+                accessibilityHint="Opens the relevant screen for this notification"
               >
                 <View style={styles.cardLeft}>
                   <Text style={styles.cardIcon}>{TYPE_ICON[n.type] ?? '🔔'}</Text>
@@ -160,7 +178,13 @@ export default function NotificationsScreen() {
                 <View style={styles.cardBody}>
                   <View style={styles.cardTopRow}>
                     <Text style={styles.cardTitle}>{n.title}</Text>
-                    {!n.isRead && <View style={styles.unreadDot} />}
+                    {!n.isRead && (
+                      <View
+                        style={styles.unreadDot}
+                        accessibilityElementsHidden
+                        importantForAccessibility="no-hide-descendants"
+                      />
+                    )}
                   </View>
                   <Text style={styles.cardText}>{n.body}</Text>
                   <Text style={styles.cardTime}>{timeAgo(n.createdAt)}</Text>

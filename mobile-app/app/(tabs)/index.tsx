@@ -108,6 +108,10 @@ export default function HomeScreen() {
     }
   };
 
+  const openSocialFeed = () => {
+    router.push('/social-feed' as any);
+  };
+
   const openConnectionProfile = (item: ConnectionCard) => {
     const colors = getAvatarColors(item.connectedUserId);
     const initials = item.connectedUserFirstName.substring(0, 2).toUpperCase();
@@ -161,10 +165,19 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.headerTopRow}>
-          <View style={styles.profileBadge}>
-            <Text style={styles.profileBadgeText}>
-              {isMentor ? 'Mentor Mode' : 'Mentee Mode'}
-            </Text>
+          <View style={styles.headerActionGroup}>
+            <View style={styles.profileBadge}>
+              <Text style={styles.profileBadgeText}>
+                {isMentor ? 'Mentor Mode' : 'Mentee Mode'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.feedButton}
+              onPress={openSocialFeed}
+            >
+              <Text style={styles.feedButtonText}>Feed</Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity
@@ -338,6 +351,25 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 9,
     fontWeight: '700',
+  },
+  headerActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  feedButton: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  feedButtonText: {
+    color: '#F7F4EE',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
   title: {
     color: '#F7F4EE',
