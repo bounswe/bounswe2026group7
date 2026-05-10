@@ -433,6 +433,27 @@ export async function deleteMilestoneActionItem(itemId) {
   return handleResponse(res)
 }
 
+// ── Mentorship progress + timeline (#126 + #333) ──────────────────────────
+// Backend: MentorshipController.
+//   /progress  → MentorshipProgressResponse (counts + 0..1 ratio + lastActivityAt)
+//   /timeline  → TimelineResponse (startDate, endDate, currentDate, items[])
+
+export async function getMentorshipProgress(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/progress`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMentorshipTimeline(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/timeline`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 export async function updateSharedGoal(id, sharedGoal) {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentorships/${id}/goal`, {

@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import MentorshipMilestones from '../components/MentorshipMilestones'
+import MentorshipProgressTimeline from '../components/MentorshipProgressTimeline'
+import MentorMenteesProgress from '../components/MentorMenteesProgress'
 import { getMentorshipById, getUserById, updateSharedGoal, cancelMentorship, endMentorship } from '../services/api'
 import { getNextUpcomingMeeting } from '../services/mentorshipMocks'
 import { useAuth } from '../context/AuthContext'
@@ -557,6 +559,11 @@ export default function MentorshipDetailPage() {
         </section>
       )}
 
+      {/* Progress + Timeline (#126 + #333, gated in #277) */}
+      {mentorship.sharedGoal && (
+        <MentorshipProgressTimeline mentorshipId={mentorship.id} />
+      )}
+
       {/* Milestones (#288, gated by goal in #277) */}
       <MentorshipMilestones
         mentorshipId={mentorship.id}
@@ -564,6 +571,12 @@ export default function MentorshipDetailPage() {
         isActive={isActive}
         hasSharedGoal={!!mentorship.sharedGoal}
       />
+
+      {/* Mentor cross-mentee comparison (#126). Self-hides when viewer is a
+          mentee or when no other active mentees exist. */}
+      {viewerIsMentor && (
+        <MentorMenteesProgress currentMentorshipId={mentorship.id} />
+      )}
 
       {/* Profile */}
       <section className="card md-profile">
