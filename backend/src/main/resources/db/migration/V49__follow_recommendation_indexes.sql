@@ -12,17 +12,23 @@
 -- The failed_graph_syncs table is consumed by FollowGraphResyncJob to
 -- replay Postgres → Neo4j writes that failed at AFTER_COMMIT time.
 
-CREATE INDEX idx_feed_post_likes_user_created_at
+-- IF NOT EXISTS so the migration is re-runnable against any Postgres
+-- that may already carry one of these indexes — happens in dev / CI when
+-- a sibling branch's migration (e.g. #347's feed-engagement indexes
+-- landed in dev as V48 of "feed engagement user created indexes") races
+-- with this one and either applies first into a shared container, or
+-- the previous Flyway run partially succeeded.
+CREATE INDEX IF NOT EXISTS idx_feed_post_likes_user_created_at
     ON feed_post_likes (user_id, created_at DESC);
 
-CREATE INDEX idx_feed_post_shares_sharer_created_at
+CREATE INDEX IF NOT EXISTS idx_feed_post_shares_sharer_created_at
     ON feed_post_shares (sharer_id, created_at DESC);
 
-CREATE INDEX idx_feed_post_comments_author_created_at_active
+CREATE INDEX IF NOT EXISTS idx_feed_post_comments_author_created_at_active
     ON feed_post_comments (author_id, created_at DESC)
     WHERE deleted_at IS NULL;
 
-CREATE TABLE failed_graph_syncs (
+CREATE TABLE IF NOT EXISTS failed_graph_syncs (
     id              BIGSERIAL PRIMARY KEY,
     follower_id     BIGINT       NOT NULL,
     -- USER_DELETED rows carry only the deleted user's id in follower_id; the
@@ -42,6 +48,6 @@ CREATE TABLE failed_graph_syncs (
     )
 );
 
-CREATE INDEX idx_failed_graph_syncs_unsynced
+CREATE INDEX IF NOT EXISTS idx_failed_graph_syncs_unsynced
     ON failed_graph_syncs (failed_at)
     WHERE resynced_at IS NULL;
