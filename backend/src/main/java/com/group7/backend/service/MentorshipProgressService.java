@@ -1,9 +1,11 @@
 package com.group7.backend.service;
 
 import com.group7.backend.dto.response.MentorshipProgressResponse;
+import com.group7.backend.entity.MeetingStatus;
 import com.group7.backend.entity.Mentorship;
 import com.group7.backend.entity.MilestoneStatus;
 import com.group7.backend.entity.TaskStatus;
+import com.group7.backend.repository.MeetingRepository;
 import com.group7.backend.repository.MilestoneRepository;
 import com.group7.backend.repository.TaskRepository;
 import com.group7.backend.repository.TaskSubmissionRepository;
@@ -11,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Read-only aggregator for mentorship progress (#334, spec 1.1.5.5).
@@ -25,15 +29,18 @@ public class MentorshipProgressService {
     private final TaskRepository taskRepository;
     private final TaskSubmissionRepository taskSubmissionRepository;
     private final MilestoneRepository milestoneRepository;
+    private final MeetingRepository meetingRepository;
 
     public MentorshipProgressService(MentorshipService mentorshipService,
                                      TaskRepository taskRepository,
                                      TaskSubmissionRepository taskSubmissionRepository,
-                                     MilestoneRepository milestoneRepository) {
+                                     MilestoneRepository milestoneRepository,
+                                     MeetingRepository meetingRepository) {
         this.mentorshipService = mentorshipService;
         this.taskRepository = taskRepository;
         this.taskSubmissionRepository = taskSubmissionRepository;
         this.milestoneRepository = milestoneRepository;
+        this.meetingRepository = meetingRepository;
     }
 
     @Transactional(readOnly = true)
@@ -54,6 +61,10 @@ public class MentorshipProgressService {
 
         OffsetDateTime lastActivityAt = computeLastActivity(mid);
 
+        long sessionsAttended =
+                meetingRepository.countByMentorshipIdAndStatus(mid, MeetingStatus.COMPLETED);
+        long daysRemaining = computeDaysRemaining(mentorship.getEndDate());
+
         return new MentorshipProgressResponse(
                 mid,
                 taskTotal,
@@ -62,8 +73,22 @@ public class MentorshipProgressService {
                 milestoneTotal,
                 milestoneCompleted,
                 progressRatio,
-                lastActivityAt
+                lastActivityAt,
+                sessionsAttended,
+                daysRemaining
         );
+    }
+
+    /**
+     * Whole days from now until {@code endDate}, never negative. A null end date — which
+     * the schema disallows but defensive code is cheap — returns 0.
+     */
+    private static long computeDaysRemaining(OffsetDateTime endDate) {
+        if (endDate == null) {
+            return 0L;
+        }
+        long days = ChronoUnit.DAYS.between(OffsetDateTime.now(ZoneOffset.UTC), endDate);
+        return Math.max(0L, days);
     }
 
     /**

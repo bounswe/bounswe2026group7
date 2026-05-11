@@ -31,5 +31,16 @@ public enum NotificationType {
     // overrides; BAN_EXPIRED fires once when the timer runs out.
     USER_BANNED,
     BAN_LIFTED,
-    BAN_EXPIRED
+    BAN_EXPIRED,
+    // Mentorship cancellation (#133). Sent to the OTHER participant when
+    // either side cancels an active mentorship; body includes the reason.
+    MENTORSHIP_CANCELLED,
+    // Mentorship lifecycle (#237). MENTORSHIP_ENDED is sent to the mentee
+    // when the mentor closes a mentorship gracefully (status -> COMPLETED).
+    // MENTORSHIP_EXTENDED is sent to the mentee when the mentor pushes
+    // end_date forward. MENTORSHIP_AUTO_COMPLETED fires from the scheduler
+    // when end_date passes; both participants receive it.
+    MENTORSHIP_ENDED,
+    MENTORSHIP_EXTENDED,
+    MENTORSHIP_AUTO_COMPLETED
 }

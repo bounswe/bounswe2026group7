@@ -20,7 +20,7 @@ docker compose up -d postgres                    # Postgres on port 5433
 nc -z localhost 5433 && echo "OK"                # confirm it's up
 mvn verify                                       # all tests
 mvn test -Dtest=EndToEndWorkflowTest             # just the cross-feature suite
-mvn test -Dtest=MentorshipRatingControllerTest   # just one slice test
+mvn test -Dtest=MentorshipControllerTest         # just one slice test
 ```
 
 If a previous branch left an incompatible Flyway migration in your local DB (Flyway will surface this as a `Validate failed: Migrations have failed validation` error on context boot), wipe the schema:

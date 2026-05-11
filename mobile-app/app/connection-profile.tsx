@@ -76,6 +76,22 @@ function parseJsonList(value: string | string[] | undefined): string[] {
   }
 }
 
+function formatDateLabel(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatStatusLabel(status: MilestoneStatus): string {
+  return status === 'IN_PROGRESS' ? 'In Progress' : status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function toIsoDateOrNull(dateStr: string): string | null {
+  if (!dateStr.trim()) return null;
+  const d = new Date(dateStr.trim());
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 export default function ConnectionProfileScreen() {
   const { role } = useRole();
   const isMentorViewer = role === 'mentor';
@@ -257,6 +273,7 @@ export default function ConnectionProfileScreen() {
         mode,
         targetName: name,
         targetType: type,
+        mentorshipId,
       },
     });
   };

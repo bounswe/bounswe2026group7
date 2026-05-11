@@ -144,10 +144,6 @@ export default function HomeScreen() {
     });
   };
 
-  const openSocialFeed = () => {
-    router.push('/social-feed' as any);
-  };
-
   const sectionTitle = isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS';
   const visibleConnections = isMentor
     ? connections.filter((c) => c.type === 'mentee')

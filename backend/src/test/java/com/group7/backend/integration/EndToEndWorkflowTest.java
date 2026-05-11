@@ -101,21 +101,30 @@ class EndToEndWorkflowTest extends AbstractE2ETest {
         api.submitTask(mentee, taskId, "Done — chapter notes attached.");
         api.reviewTask(mentor, taskId, TaskStatus.COMPLETED, "Solid summary, well done.");
 
-        // End the mentorship first — #237's rating endpoint requires
-        // COMPLETED/CANCELLED status before a mentee can rate.
+        // ── Pre-end assertions: children exist while mentorship is ACTIVE ─
+        assertThat(taskRepository.findById(taskId))
+                .isPresent()
+                .hasValueSatisfying(t -> assertThat(t.getStatus()).isEqualTo(TaskStatus.COMPLETED));
+        assertThat(meetingRepository.findById(meetingId)).isPresent();
+
+        // End the mentorship — #237's rating endpoint requires COMPLETED /
+        // CANCELLED status, and MentorshipCleanupService wipes tasks /
+        // meetings / milestones as a side effect.
         api.endMentorship(mentor, mentorshipId, "Goal achieved");
 
         Long ratingId = api.rateMentor(mentee, mentorshipId,
                 5, "Great mentor — supportive and clear.");
 
-        // ── Persisted side-effect assertions ────────────────────────────
-        // endMentorship transitioned the mentorship from ACTIVE → COMPLETED.
+        // ── Post-end assertions: status flipped, children cleaned, rating present.
         assertThat(mentorshipRepository.findById(mentorshipId))
                 .isPresent()
                 .hasValueSatisfying(m -> assertThat(m.getStatus()).isEqualTo(MentorshipStatus.COMPLETED));
         assertThat(taskRepository.findById(taskId))
-                .isPresent()
-                .hasValueSatisfying(t -> assertThat(t.getStatus()).isEqualTo(TaskStatus.COMPLETED));
+                .as("cleanupChildren should remove the task when mentorship ends")
+                .isEmpty();
+        assertThat(meetingRepository.findById(meetingId))
+                .as("cleanupChildren should remove the meeting when mentorship ends")
+                .isEmpty();
         assertThat(mentorRatingRepository.findById(ratingId))
                 .isPresent()
                 .hasValueSatisfying(r -> {
@@ -123,7 +132,6 @@ class EndToEndWorkflowTest extends AbstractE2ETest {
                     assertThat(r.getMenteeId()).isEqualTo(mentee.id());
                     assertThat(r.getMentorId()).isEqualTo(mentor.id());
                 });
-        assertThat(meetingRepository.findById(meetingId)).isPresent();
     }
 
     /**

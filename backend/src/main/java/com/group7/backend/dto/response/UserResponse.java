@@ -27,4 +27,11 @@ public class UserResponse {
     private OffsetDateTime createdAt;
     @Schema(description = "Role", example = "MENTEE")
     private String role;
+    @Schema(description = "Average mentor rating (1.0–5.0). Populated only on profile-detail "
+                        + "endpoints (#237); null on list / search responses and for non-mentor "
+                        + "users.", example = "4.6")
+    private Double averageRating;
+    @Schema(description = "Number of ratings the mentor has received (#237). 0 when "
+                        + "averageRating is null.", example = "12")
+    private Long ratingCount;
 }

@@ -27,4 +27,10 @@ public interface MentorshipRequestRepository extends JpaRepository<MentorshipReq
             + "WHERE r.mentee.id = :menteeId AND r.status = com.group7.backend.entity.MentorshipRequestStatus.PENDING "
             + "AND r.id != :excludeId")
     int cancelOtherPendingRequests(@Param("menteeId") Long menteeId, @Param("excludeId") Long excludeId);
+
+    // Stats aggregations (#253).
+
+    long countByMentor_IdAndStatus(Long mentorId, MentorshipRequestStatus status);
+
+    long countByMentee_Id(Long menteeId);
 }

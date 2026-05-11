@@ -85,5 +85,29 @@ public interface MeetingRepository extends JpaRepository<Meeting, Long> {
     @Modifying
     @Query("UPDATE Meeting m SET m.status = 'COMPLETED' WHERE m.id = :meetingId AND m.status = 'CONFIRMED'")
     int completeMeeting(@Param("meetingId") Long meetingId);
+
+    // Stats aggregations (#253).
+
+    long countByMentorshipIdAndStatus(Long mentorshipId, MeetingStatus status);
+
+    @Query("SELECT COUNT(m) FROM Meeting m "
+            + "WHERE m.mentorship.mentee.id = :menteeId "
+            + "AND m.startTime > :now "
+            + "AND m.status IN :statuses")
+    long countUpcomingByMenteeId(@Param("menteeId") Long menteeId,
+                                 @Param("now") OffsetDateTime now,
+                                 @Param("statuses") Collection<MeetingStatus> statuses);
+
+    /**
+     * Total completed meeting hours for a mentor across all their mentorships.
+     * Native query because JPQL has no portable interval-to-seconds conversion;
+     * Postgres' {@code EXTRACT(EPOCH FROM interval)} is the cleanest single-row
+     * aggregate. Returns 0.0 (not null) for mentors with zero completed meetings.
+     */
+    @Query(value = "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (m.end_time - m.start_time)) / 3600.0), 0) "
+            + "FROM meetings m JOIN mentorships ms ON m.mentorship_id = ms.id "
+            + "WHERE ms.mentor_id = :mentorId AND m.status = 'COMPLETED'",
+            nativeQuery = true)
+    double sumCompletedMeetingHoursForMentor(@Param("mentorId") Long mentorId);
 }
 
