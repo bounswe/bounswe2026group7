@@ -376,7 +376,7 @@ export default function FeedPage() {
                             onClick={() => !rec.isFollowing && !rec.busy && handleFollowSuggestion(rec.id)}
                             disabled={rec.busy || rec.isFollowing}
                           >
-                            {rec.busy ? 'Updating...' : rec.isFollowing ? 'Following' : 'Follow'}
+                            {rec.busy ? 'Updating...' : rec.isFollowing ? 'Unfollow' : 'Follow'}
                           </button>
                         </div>
                       </div>

@@ -254,7 +254,7 @@ export default function UserProfilePage() {
               onClick={toggleFollow}
               disabled={followLoading}
             >
-              {followLoading ? 'Updating...' : isFollowing ? 'Following' : 'Follow'}
+              {followLoading ? 'Updating...' : isFollowing ? 'Unfollow' : 'Follow'}
             </button>
           )}
 
