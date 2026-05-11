@@ -45,6 +45,28 @@ public abstract class User {
     @Column(name = "suspected_at")
     private OffsetDateTime suspectedAt;
 
+    /**
+     * Optional human-readable city (e.g. "Istanbul"). Free-form to avoid a
+     * gazetteer dependency; the proximity signal uses case-insensitive
+     * equality for the "same city" fallback when coordinates are absent.
+     * See {@code V34__add_user_location.sql} for the schema rationale.
+     */
+    @Column(length = 120)
+    private String city;
+
+    /**
+     * Optional latitude in decimal degrees (-90 to 90). NULL when the user
+     * hasn't set coordinates. CHECK constraint at the DB level rejects out-
+     * of-range values; pair-completeness constraint ensures both lat+lon
+     * are either present together or both absent.
+     */
+    private Double latitude;
+
+    /**
+     * Optional longitude in decimal degrees (-180 to 180). See {@link #latitude}.
+     */
+    private Double longitude;
+
     @Version
     @Column(nullable = false)
     private Long version;
