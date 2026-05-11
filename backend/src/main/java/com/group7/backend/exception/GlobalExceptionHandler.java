@@ -235,13 +235,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
-    @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, String>> handleAccessDenied(AccessDeniedException ex,
-                                                                   HttpServletRequest request) {
-        log.warn("Access denied: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
-        return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", "Access denied");
-    }
-
     /**
      * Handles {@code @Min}/{@code @Max}/{@code @Pattern} (and similar)
      * violations on controller method parameters guarded by
@@ -250,13 +243,36 @@ public class GlobalExceptionHandler {
      * {@link #handleValidationErrors} covers {@code @Valid} on
      * {@code @RequestBody}; this handler covers the corresponding
      * shape for {@code @RequestParam} / {@code @PathVariable}.
+     *
+     * <p>Returns the same per-field
+     * {@code {"error": "Validation Failed", "messages": {field: msg, ...}}}
+     * shape as {@link #handleValidationErrors} so the frontend has one
+     * code path for both bind-time and parameter-level validation.
      */
     @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
-    public ResponseEntity<Map<String, String>> handleConstraintViolation(
-            jakarta.validation.ConstraintViolationException ex, HttpServletRequest request) {
-        log.warn("Constraint violation: method={}, path={}, message={}",
-                request.getMethod(), request.getRequestURI(), ex.getMessage());
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    public ResponseEntity<Map<String, Object>> handleConstraintViolations(
+            jakarta.validation.ConstraintViolationException ex,
+            HttpServletRequest request) {
+        Map<String, String> fieldErrors = new HashMap<>();
+        ex.getConstraintViolations().forEach(v -> {
+            // propertyPath looks like "search.lang" — keep the last segment so
+            // the client sees the param name without the controller method.
+            String path = v.getPropertyPath().toString();
+            int dot = path.lastIndexOf('.');
+            String field = dot >= 0 ? path.substring(dot + 1) : path;
+            fieldErrors.put(field, v.getMessage());
+        });
+        log.warn("Constraint violation: method={}, path={}, fieldErrorCount={}",
+                request.getMethod(), request.getRequestURI(), fieldErrors.size());
+        Map<String, Object> body = Map.of("error", "Validation Failed", "messages", fieldErrors);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleAccessDenied(AccessDeniedException ex,
+                                                                   HttpServletRequest request) {
+        log.warn("Access denied: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", "Access denied");
     }
 
     /**
