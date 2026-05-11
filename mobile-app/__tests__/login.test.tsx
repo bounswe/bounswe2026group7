@@ -39,6 +39,8 @@ jest.mock('expo-router', () => ({
 describe('LoginScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
+    (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
   });
 
   it('does not submit until both fields are filled', () => {
@@ -52,7 +54,7 @@ describe('LoginScreen', () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
-  it('submits credentials, stores session data, and redirects on success', async () => {
+  it('submits credentials, clears stale session data, stores session data, and redirects on success', async () => {
     (apiClient.post as jest.Mock).mockResolvedValue({
       data: {
         sessionToken: 'session-token',
@@ -74,8 +76,12 @@ describe('LoginScreen', () => {
       });
     });
 
-    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('userToken', 'session-token');
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('userToken');
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('userId');
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('userRole');
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith('userId', '42');
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('userRole', 'mentor');
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('userToken', 'session-token');
     expect(mockSetRole).toHaveBeenCalledWith('mentor');
     expect(router.replace).toHaveBeenCalledWith('/(tabs)');
   });
@@ -94,6 +100,43 @@ describe('LoginScreen', () => {
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith('Login Failed', 'Invalid email or password.');
     });
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('cleans up partial session state when secure storage write fails', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    (apiClient.post as jest.Mock).mockResolvedValue({
+      data: {
+        sessionToken: 'session-token',
+        role: 'MENTOR',
+        userId: 42,
+      },
+    });
+
+    (SecureStore.setItemAsync as jest.Mock).mockImplementation(async (key: string) => {
+      if (key === 'userRole') {
+        throw new Error('Disk write failed');
+      }
+      return undefined;
+    });
+
+    const { getByPlaceholderText, getByText } = render(<LoginScreen />);
+
+    fireEvent.changeText(getByPlaceholderText('ovgu@boun.edu.tr'), 'mentor@example.com');
+    fireEvent.changeText(getByPlaceholderText('••••••••'), 'secret123');
+    fireEvent.press(getByText('Sign In'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Login Failed', 'Invalid email or password.');
+    });
+
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('userToken');
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('userId');
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('userRole');
+    expect(router.replace).not.toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
   });
