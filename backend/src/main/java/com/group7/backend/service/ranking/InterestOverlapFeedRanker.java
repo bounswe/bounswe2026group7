@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -62,10 +63,12 @@ public class InterestOverlapFeedRanker implements FeedRanker {
     }
 
     @Override
-    public double score(FeedPost post, FeedRankingContext context) {
-        return interestWeight * interestOverlap(post, context.viewerInterestHashtags())
+    public FeedScoreResult score(FeedPost post, FeedRankingContext context) {
+        double weighted = interestWeight * interestOverlap(post, context.viewerInterestHashtags())
                 + timeDecayWeight * timeDecay(post.getCreatedAt(), context.now())
                 + followBoostWeight * followBoost(post, context.viewerFollowedAuthorIds());
+        int bounded = (int) Math.round(Math.max(0.0, Math.min(1.0, weighted)) * 100);
+        return new FeedScoreResult(bounded, List.of());
     }
 
     private static double interestOverlap(FeedPost post, Set<String> viewerInterests) {

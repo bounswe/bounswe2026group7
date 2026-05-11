@@ -168,7 +168,8 @@ public class FeedInteractionService {
                 p.getHashtags().stream().map(h -> h.getId().getTag()).sorted().toList(),
                 p.getCreatedAt(),
                 0L,
-                0L
+                0L,
+                List.of()
         )).toList();
         return new PageImpl<>(items, pageable, postIds.getTotalElements());
     }
