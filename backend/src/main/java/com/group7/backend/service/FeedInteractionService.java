@@ -109,7 +109,7 @@ public class FeedInteractionService {
      */
     @Transactional
     public FeedPostInteractionState toggleLike(Long postId, Long userId) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         FeedPostLikeId id = new FeedPostLikeId(postId, userId);
         boolean nowLiked;
         if (likeRepository.existsByIdPostIdAndIdUserId(postId, userId)) {
@@ -118,7 +118,7 @@ public class FeedInteractionService {
         } else {
             likeRepository.upsertLike(postId, userId);
             nowLiked = true;
-            publishEngagement(postId, userId);
+            publishEngagement(post, userId);
         }
         log.info("Toggle like: postId={}, userId={}, nowLiked={}", postId, userId, nowLiked);
         return interactionState(postId, userId);
@@ -134,7 +134,7 @@ public class FeedInteractionService {
      */
     @Transactional
     public FeedPostInteractionState toggleBookmark(Long postId, Long userId) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         FeedPostBookmarkId id = new FeedPostBookmarkId(postId, userId);
         boolean nowBookmarked;
         if (bookmarkRepository.existsByIdPostIdAndIdUserId(postId, userId)) {
@@ -143,7 +143,7 @@ public class FeedInteractionService {
         } else {
             bookmarkRepository.upsertBookmark(postId, userId);
             nowBookmarked = true;
-            publishEngagement(postId, userId);
+            publishEngagement(post, userId);
         }
         log.info("Toggle bookmark: postId={}, userId={}, nowBookmarked={}",
                 postId, userId, nowBookmarked);
@@ -186,9 +186,9 @@ public class FeedInteractionService {
 
     @Transactional
     public FeedPostInteractionState recordShare(Long postId, Long sharerId) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         shareRepository.save(new FeedPostShare(postId, sharerId));
-        publishEngagement(postId, sharerId);
+        publishEngagement(post, sharerId);
         log.info("Recorded share: postId={}, sharerId={}", postId, sharerId);
         return interactionState(postId, sharerId);
     }
@@ -197,7 +197,7 @@ public class FeedInteractionService {
 
     @Transactional
     public FeedCommentResponse addComment(Long postId, Long authorId, String body) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         if (body == null || body.isBlank()) {
             throw new IllegalArgumentException("Comment body must not be blank");
         }
@@ -206,7 +206,7 @@ public class FeedInteractionService {
         comment.setCreatedAt(now);
         comment.setUpdatedAt(now);
         FeedPostComment saved = commentRepository.save(comment);
-        publishEngagement(postId, authorId);
+        publishEngagement(post, authorId);
         log.info("Created comment: id={}, postId={}, authorId={}", saved.getId(), postId, authorId);
         return mapComment(saved, authorId, resolveAuthorName(authorId));
     }
@@ -297,8 +297,8 @@ public class FeedInteractionService {
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    private void requireVisiblePost(Long postId) {
-        feedPostRepository.findByIdAndDeletedAtIsNull(postId)
+    private FeedPost requireVisiblePost(Long postId) {
+        return feedPostRepository.findByIdAndDeletedAtIsNull(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Feed post not found with id: " + postId));
     }
 
@@ -312,18 +312,19 @@ public class FeedInteractionService {
      * the listener doesn't need to re-load the post in its own
      * transaction. Hashtags are read inside the calling {@code @Transactional}
      * method so the LAZY collection populates before commit; the listener
-     * receives a defensive copy via the event's compact constructor.
+     * receives a defensive copy via the event's compact constructor. The
+     * caller passes the post entity from its own {@code requireVisiblePost}
+     * call so the bandit hook doesn't re-issue a SELECT.
      */
-    private void publishEngagement(Long postId, Long viewerId) {
-        feedPostRepository.findByIdAndDeletedAtIsNull(postId).ifPresent(post -> {
-            Set<String> hashtags = post.getHashtags().stream()
-                    .map(FeedPostHashtag::getId)
-                    .map(id -> id.getTag())
-                    .collect(Collectors.toSet());
-            if (!hashtags.isEmpty()) {
-                eventPublisher.publishEvent(new FeedEngagementEvent(viewerId, hashtags));
-            }
-        });
+    private void publishEngagement(FeedPost post, Long viewerId) {
+        if (post == null) return;
+        Set<String> hashtags = post.getHashtags().stream()
+                .map(FeedPostHashtag::getId)
+                .map(id -> id.getTag())
+                .collect(Collectors.toSet());
+        if (!hashtags.isEmpty()) {
+            eventPublisher.publishEvent(new FeedEngagementEvent(viewerId, hashtags));
+        }
     }
 
     private FeedCommentResponse mapComment(FeedPostComment c, Long viewerId, String authorName) {

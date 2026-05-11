@@ -119,12 +119,16 @@ public class ForYouScoringPipeline {
         int bestLift = 0;
         for (int i = 0; i < reranked.size(); i++) {
             if (!reranked.get(i).diversePick()) continue;
-            // diversePick implies the item's pre-MMR index > its post-MMR
-            // index; we don't have a direct lift number but the LATEST
-            // promoted item (largest move up) tends to be the most surprising.
-            int lift = i; // proxy — lower i = higher rank
-            if (bestLiftIdx == -1 || lift < bestLift) {
-                bestLift = lift;
+            // MmrReranker.Reranked only flags diverse-pick as a boolean;
+            // it doesn't surface the exact relevance-rank → MMR-rank delta.
+            // Without that signal we attribute the chip to the highest-
+            // placed (smallest output index) diverse-pick — that's the
+            // promotion the user will notice first, even if a later slot
+            // had a bigger lift. Single-argmax matches the mentor-side
+            // contract; if MmrReranker grows a lift accessor later, switch
+            // to argmax(lift).
+            if (bestLiftIdx == -1 || i < bestLift) {
+                bestLift = i;
                 bestLiftIdx = i;
             }
         }

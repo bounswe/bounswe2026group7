@@ -90,12 +90,18 @@ public class ThompsonSamplingService {
         try {
             repository.incrementAlphaBatch(viewerId, normalized);
         } catch (RuntimeException ex) {
-            // Honour the listener contract: log WARN with viewer/hashtag/cause,
-            // do NOT propagate — bandit consistency is best-effort, not a
-            // correctness invariant. The user's engagement write has already
-            // committed before this fires.
-            log.warn("bandit-upsert-failed viewerId={} hashtags={} cause={}",
-                    viewerId, java.util.Arrays.toString(normalized), ex.getClass().getSimpleName());
+            // Honour the listener contract: log WARN with viewer + tag count
+            // + cause, do NOT propagate — bandit consistency is best-effort,
+            // not a correctness invariant. The user's engagement write has
+            // already committed before this fires. We deliberately log
+            // tagCount rather than the tag values: hashtags carry user
+            // intent (interests, political affiliation, mental-health
+            // signals) and a chatty WARN under sustained DB pressure would
+            // bleed that content into ops logs at scale. Reproducing a
+            // specific failure can use (viewerId, timestamp) to find the
+            // engagement row and reconstruct the tag set.
+            log.warn("bandit-upsert-failed viewerId={} tagCount={} cause={}",
+                    viewerId, normalized.length, ex.getClass().getSimpleName());
         }
     }
 

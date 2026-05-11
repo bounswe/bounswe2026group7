@@ -11,8 +11,8 @@ import java.util.Optional;
 
 /**
  * JPA repository for {@link ViewerHashtagEngagement}. The α-update path
- * goes through {@link #incrementAlpha(Long, String)} — a single atomic
- * UPSERT that's safe under concurrent engagements on the same
+ * goes through {@link #incrementAlphaBatch} — a single atomic UPSERT
+ * that's safe under concurrent engagements on the same
  * {@code (viewer, hashtag)} pair. The JPA {@code merge}/{@code save} path
  * is read-modify-write and WOULD lose updates under contention.
  */
