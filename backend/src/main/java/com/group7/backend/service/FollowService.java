@@ -5,11 +5,13 @@ import com.group7.backend.entity.Follow;
 import com.group7.backend.entity.FollowId;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.User;
+import com.group7.backend.event.FollowChangedEvent;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.exception.SelfFollowException;
 import com.group7.backend.repository.FollowRepository;
 import com.group7.backend.repository.UserRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -53,10 +55,14 @@ public class FollowService {
 
     private final FollowRepository followRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public FollowService(FollowRepository followRepository, UserRepository userRepository) {
+    public FollowService(FollowRepository followRepository,
+                         UserRepository userRepository,
+                         ApplicationEventPublisher eventPublisher) {
         this.followRepository = followRepository;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -75,6 +81,11 @@ public class FollowService {
             throw new ResourceNotFoundException("User not found with id: " + followeeId);
         }
         int inserted = followRepository.upsertFollow(followerId, followeeId);
+        if (inserted == 1) {
+            // Fire only on a fresh edge — duplicate follows don't change graph state.
+            // Listener runs AFTER_COMMIT so a Neo4j outage can't roll this back (#437).
+            eventPublisher.publishEvent(FollowChangedEvent.followed(followerId, followeeId));
+        }
         return new FollowResult(followerId, followeeId, inserted == 1);
     }
 
@@ -85,7 +96,11 @@ public class FollowService {
      */
     @Transactional
     public void unfollow(Long followerId, Long followeeId) {
-        followRepository.deleteById(new FollowId(followerId, followeeId));
+        FollowId id = new FollowId(followerId, followeeId);
+        if (followRepository.existsById(id)) {
+            followRepository.deleteById(id);
+            eventPublisher.publishEvent(FollowChangedEvent.unfollowed(followerId, followeeId));
+        }
     }
 
     /**
