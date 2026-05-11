@@ -8,15 +8,20 @@ import {
 import { timeAgo } from '../utils/timeAgo'
 import '../styles/main.css'
 
+import { useNavigate } from 'react-router-dom'
+
 const PAGE_SIZE = 20
 
 const TYPE_ICON = {
   REQUEST_ACCEPTED: '✅',
   REQUEST_REJECTED: '❌',
-  REQUEST_RECEIVED: '🔔',
+  REQUEST_RECEIVED: '📥',
+  REQUEST_SUBMITTED: '📤',
   MATCH_FOUND: '🤝',
   NEW_MESSAGE: '💬',
   MEETING_REMINDER: '📅',
+  TASK_DEADLINE_REMINDER: '⏰',
+  MILESTONE_REMINDER: '🚩',
 }
 
 function iconFor(type) {
@@ -24,6 +29,7 @@ function iconFor(type) {
 }
 
 export default function NotificationsPage() {
+  const navigate = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -121,13 +127,49 @@ export default function NotificationsPage() {
                 <li
                   key={n.id}
                   className={`notif-page-item${!n.read ? ' notif-page-item--unread' : ''}`}
-                  onClick={() => !n.read && handleMarkRead(n.id)}
-                  role={!n.read ? 'button' : undefined}
-                  tabIndex={!n.read ? 0 : undefined}
+                  onClick={() => {
+                    if (!n.read) handleMarkRead(n.id)
+                    const rid = n.relatedId || n.entityId
+                    if (!rid) return
+                    switch (n.type) {
+                      case 'REQUEST_SUBMITTED':
+                      case 'REQUEST_ACCEPTED':
+                      case 'REQUEST_RECEIVED':
+                        navigate(`/mentorships/${rid}`)
+                        break
+                      case 'TASK_DEADLINE_REMINDER':
+                        navigate(`/tasks?mentorshipId=${rid}`)
+                        break
+                      case 'MILESTONE_REMINDER':
+                        navigate(`/mentorships/${rid}#milestones`)
+                        break
+                      default:
+                        break
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
                   onKeyDown={e => {
-                    if (!n.read && (e.key === 'Enter' || e.key === ' ')) {
+                    if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      handleMarkRead(n.id)
+                      if (!n.read) handleMarkRead(n.id)
+                      const rid = n.relatedId || n.entityId
+                      if (!rid) return
+                      switch (n.type) {
+                        case 'REQUEST_SUBMITTED':
+                        case 'REQUEST_ACCEPTED':
+                        case 'REQUEST_RECEIVED':
+                          navigate(`/mentorships/${rid}`)
+                          break
+                        case 'TASK_DEADLINE_REMINDER':
+                          navigate(`/tasks?mentorshipId=${rid}`)
+                          break
+                        case 'MILESTONE_REMINDER':
+                          navigate(`/mentorships/${rid}#milestones`)
+                          break
+                        default:
+                          break
+                      }
                     }
                   }}
                   data-testid={`notifications-item-${n.id}`}

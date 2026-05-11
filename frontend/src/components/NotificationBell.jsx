@@ -4,34 +4,60 @@ import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } 
 import { timeAgo } from '../utils/timeAgo'
 
 function TypeIcon({ type }) {
-  if (type === 'REQUEST_ACCEPTED') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
-    )
+  switch (type) {
+    case 'REQUEST_ACCEPTED':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      )
+    case 'REQUEST_REJECTED':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      )
+    case 'REQUEST_SUBMITTED':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M22 2L11 13" />
+          <polygon points="22 2 15 22 11 13 2 9 22 2" />
+        </svg>
+      )
+    case 'TASK_DEADLINE_REMINDER':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+      )
+    case 'MILESTONE_REMINDER':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+          <line x1="4" y1="22" x2="4" y2="15" />
+        </svg>
+      )
+    default:
+      // Default bell icon for unknown types
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      )
   }
-  if (type === 'REQUEST_REJECTED') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-        <line x1="18" y1="6" x2="6" y2="18" />
-        <line x1="6" y1="6" x2="18" y2="18" />
-      </svg>
-    )
-  }
-  // REQUEST_RECEIVED and any other type
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-    </svg>
-  )
 }
 
 function typeColorClass(type) {
-  if (type === 'REQUEST_ACCEPTED') return 'notif-icon--green'
-  if (type === 'REQUEST_REJECTED') return 'notif-icon--red'
-  return 'notif-icon--blue'
+  switch (type) {
+    case 'REQUEST_ACCEPTED': return 'notif-icon--green'
+    case 'REQUEST_REJECTED': return 'notif-icon--red'
+    case 'TASK_DEADLINE_REMINDER': return 'notif-icon--orange'
+    case 'MILESTONE_REMINDER': return 'notif-icon--purple'
+    default: return 'notif-icon--blue'
+  }
 }
 
 export default function NotificationBell() {
@@ -171,7 +197,28 @@ export default function NotificationBell() {
               <div
                 key={n.id}
                 className={`notif-item${!n.read ? ' notif-item--unread' : ''}`}
-                onClick={() => !n.read && handleMarkRead(n.id)}
+                onClick={() => {
+                  if (!n.read) handleMarkRead(n.id)
+                  setOpen(false)
+                  const rid = n.relatedId || n.entityId
+                  if (!rid) return
+                  switch (n.type) {
+                    case 'REQUEST_SUBMITTED':
+                    case 'REQUEST_ACCEPTED':
+                    case 'REQUEST_RECEIVED':
+                      navigate(`/mentorships/${rid}`)
+                      break
+                    case 'TASK_DEADLINE_REMINDER':
+                      navigate(`/tasks?mentorshipId=${rid}`)
+                      break
+                    case 'MILESTONE_REMINDER':
+                      navigate(`/mentorships/${rid}#milestones`)
+                      break
+                    default:
+                      // Fallback: No navigation for unknown types unless we want a default
+                      break
+                  }
+                }}
               >
                 <div className={`notif-icon ${typeColorClass(n.type)}`}>
                   <TypeIcon type={n.type} />
