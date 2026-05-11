@@ -131,4 +131,36 @@ class FailedGraphSyncSchemaTest {
                 .extracting(FailedGraphSync::getFollowerId)
                 .containsExactly(1L);
     }
+
+    @Test
+    void deleteResyncedOlderThan_deletesOnlyAgedResynced_keepsPending() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+
+        // pending row, ancient — must stay (resync hasn't happened)
+        FailedGraphSync pendingOld = FailedGraphSync.from(
+                FollowChangedEvent.followed(1L, 2L), "");
+        pendingOld.setFailedAt(now.minusDays(60));
+
+        // resynced 5 days ago — within retention, must stay
+        FailedGraphSync recentlyResynced = FailedGraphSync.from(
+                FollowChangedEvent.followed(3L, 4L), "");
+        recentlyResynced.setFailedAt(now.minusDays(7));
+        recentlyResynced.setResyncedAt(now.minusDays(5));
+
+        // resynced 45 days ago — past 30-day threshold, must be deleted
+        FailedGraphSync agedResynced = FailedGraphSync.from(
+                FollowChangedEvent.followed(5L, 6L), "");
+        agedResynced.setFailedAt(now.minusDays(50));
+        agedResynced.setResyncedAt(now.minusDays(45));
+
+        repo.saveAll(java.util.List.of(pendingOld, recentlyResynced, agedResynced));
+
+        int deleted = repo.deleteResyncedOlderThan(now.minusDays(30));
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(repo.findAll())
+                .extracting(FailedGraphSync::getFollowerId)
+                .containsExactlyInAnyOrder(1L, 3L)
+                .doesNotContain(5L);
+    }
 }

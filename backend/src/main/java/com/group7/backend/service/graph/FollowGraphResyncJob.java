@@ -12,7 +12,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -94,6 +96,11 @@ public class FollowGraphResyncJob {
         int replayed = drainFailedQueue();
         log.info("Failed-event queue drained: {} events replayed", replayed);
 
+        int purged = purgeAgedResyncedRows();
+        if (purged > 0) {
+            log.info("Failed-event queue purged: {} aged resynced rows deleted", purged);
+        }
+
         long pgCount = follows.count();
         long neoCount;
         try {
@@ -111,6 +118,36 @@ public class FollowGraphResyncJob {
             log.info("No significant drift (postgres={}, neo4j={})", pgCount, neoCount);
         }
     }
+
+    /**
+     * Deletes successfully-resynced rows older than the retention horizon
+     * so the {@code failed_graph_syncs} table doesn't grow without bound.
+     * The partial index on {@code (failed_at) WHERE resynced_at IS NULL}
+     * means unresolved-queue scans stay fast regardless, but the heap
+     * grows linearly with cumulative failures otherwise.
+     *
+     * <p>30-day retention is conservative — long enough that an on-call
+     * can dig into "what failed two weeks ago" if a graph-sync incident
+     * surfaces, short enough that even a noisy production keeps the
+     * table under a few thousand rows.
+     *
+     * <p>Wrapped in its own write transaction (via the Spring Data
+     * {@code @Modifying} contract) so the delete commits independently of
+     * the surrounding replay loop.
+     */
+    @Transactional
+    int purgeAgedResyncedRows() {
+        OffsetDateTime threshold = OffsetDateTime.now().minusDays(RESYNCED_RETENTION_DAYS);
+        try {
+            return failedLog.deleteResyncedOlderThan(threshold);
+        } catch (Exception e) {
+            log.warn("Failed-event queue purge failed; rows will be retried next cycle", e);
+            return 0;
+        }
+    }
+
+    /** Retention horizon for resynced rows. 30 days = month-of-history for on-call. */
+    static final int RESYNCED_RETENTION_DAYS = 30;
 
     static boolean driftExceedsThreshold(long pgCount, long neoCount) {
         long delta = Math.abs(pgCount - neoCount);

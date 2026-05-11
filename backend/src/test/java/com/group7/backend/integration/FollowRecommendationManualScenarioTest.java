@@ -183,6 +183,27 @@ class FollowRecommendationManualScenarioTest {
         assertThat(page.getContent()).allSatisfy(r ->
                 assertThat(r.getFactors()).allSatisfy(f ->
                         assertThat(f).isNotBlank()));
+
+        // 8. ANCHOR: BOB's score must land in a tight band so a weight
+        //    rebalance or formula drift in any signal surfaces here.
+        //    With sync.enabled=false + semantic-affinity-enabled=false the
+        //    enabled signals are: interest-overlap (0.10), second-hop (0.13),
+        //    recent-engagement (0.13), direct-interaction (0.12),
+        //    cold-start-popularity (0.12 but BOB is not cold-start).
+        //    BOB's expected contributions:
+        //      interest-overlap : 3 of {ai,ml,nlp} match against 3 candidate
+        //                         labels → 3/max(3,5)=0.6 × 0.10 = 0.06
+        //      second-hop       : 0 (Alice has no followees who follow BOB)
+        //      recent-engagement: 5·1 + 10·3 = 35 weighted, decay≈1,
+        //                         tanh(35/50)≈0.604 × 0.13 ≈ 0.0785
+        //      direct-interaction: 1.0 × 0.12 = 0.12
+        //    Σ ≈ 0.2585 → round(25.85) = 26.
+        //    Allow ±3 for clock drift on the engagement decay.
+        assertThat(bobResp.getScore())
+                .as("BOB score regression — expected ~26 (interest 6 + engagement 8 + interaction 12). "
+                        + "Actual=%d. If you tuned signal weights or the engagement formula, update this assertion "
+                        + "with the new derived expected value.", bobResp.getScore())
+                .isBetween(23, 29);
     }
 
     @Test

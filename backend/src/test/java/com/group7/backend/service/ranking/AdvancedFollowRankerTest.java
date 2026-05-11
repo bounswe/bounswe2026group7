@@ -115,6 +115,31 @@ class AdvancedFollowRankerTest {
     }
 
     @Test
+    void everySignalThrowing_yieldsZeroScore_andAllErrorFactors_noException() {
+        // Worst-case resilience: every signal in the pipeline raises. The
+        // service must return a usable ScoreResult (score=0, factors carry
+        // the *-error breadcrumbs) instead of propagating a 5xx to the
+        // caller. Without the catch-per-signal in AdvancedFollowRanker
+        // this would throw out of score() and the controller would 500.
+        FollowScoringSignal a = throwingStub("a");
+        FollowScoringSignal b = throwingStub("b");
+        FollowScoringSignal c = throwingStub("c");
+        FollowScoringSignal d = throwingStub("d");
+        FollowScoringSignal e = throwingStub("e");
+        FollowScoringSignal f = throwingStub("f");
+        FollowScoringSignal g = throwingStub("g");
+
+        AdvancedFollowRanker ranker = new AdvancedFollowRanker(
+                List.of(a, b, c, d, e, f, g));
+
+        ScoreResult r = ranker.score(CANDIDATE, CTX);
+        assertThat(r.score()).isZero();
+        assertThat(r.factors()).containsExactlyInAnyOrder(
+                "a-error", "b-error", "c-error", "d-error",
+                "e-error", "f-error", "g-error");
+    }
+
+    @Test
     void zeroWeightSignal_addsFactorsButNoScore() {
         FollowScoringSignal zero = stub("zero", true, 0.0,
                 new SignalContribution(1.0, List.of("zero-factor")));

@@ -2,8 +2,11 @@ package com.group7.backend.repository;
 
 import com.group7.backend.entity.FailedGraphSync;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -24,4 +27,21 @@ public interface FailedGraphSyncRepository extends JpaRepository<FailedGraphSync
     List<FailedGraphSync> findAllUnsynced();
 
     long countByResyncedAtIsNull();
+
+    /**
+     * Deletes resynced rows older than {@code threshold} — called by the
+     * nightly resync job to keep the queue from growing unboundedly. Only
+     * touches rows where {@code resyncedAt IS NOT NULL} so unprocessed
+     * failures stay queued even if they're old.
+     *
+     * @return number of rows deleted (driven by Spring Data's @Modifying
+     *         delete return type).
+     */
+    @Modifying
+    @Query("""
+            delete from FailedGraphSync f
+            where f.resyncedAt is not null
+              and f.resyncedAt < :threshold
+            """)
+    int deleteResyncedOlderThan(@Param("threshold") OffsetDateTime threshold);
 }
