@@ -62,6 +62,12 @@ export default function MentorshipRequestsScreen() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      console.log('[mentorship-requests] loading request lists', {
+        currentRole: role,
+        sentEndpoint: isMentor ? '/mentorship-requests/received' : '/mentorship-requests/sent',
+        activeMentorshipsEndpoint: '/mentorships',
+        note: 'This screen currently lists mentorship requests only, not change or end requests.',
+      });
       const [requestsRes, mentorshipsRes] = await Promise.all([
         apiClient.get(isMentor ? '/mentorship-requests/received' : '/mentorship-requests/sent'),
         apiClient.get('/mentorships'),
@@ -70,6 +76,10 @@ export default function MentorshipRequestsScreen() {
       const pending = (requestsRes.data.content ?? requestsRes.data).filter(
         (r: any) => r.status === 'PENDING'
       );
+      console.log('[mentorship-requests] loaded mentorship requests', {
+        count: pending.length,
+        rawStatuses: (requestsRes.data.content ?? requestsRes.data).map((r: any) => r.status),
+      });
       setIncomingRequests(pending);
       setActiveMentorships(mentorshipsRes.data);
     } catch (error: any) {

@@ -70,6 +70,11 @@ jobs:
           # (10/min); AT-07 calls /api/test/reset-ratelimits before its
           # 11-login probe so it doesn't leak state into other specs.
           APP_RATELIMIT_ENABLED: "true"
+          # Spam-bot defences (#345) require a form-token round-trip and a
+          # honeypot field on /api/auth/register. The frontend hasn't been
+          # wired up to send them yet, so AT-01 would 400 on every register.
+          # Disable in e2e until the frontend integration lands.
+          APP_SPAM_ENABLED: "false"
           APP_BASE_URL: http://localhost:8080
           APP_FRONTEND_URL: http://localhost:8000
           APP_CORS_ALLOWED_ORIGINS: http://localhost:8000,http://localhost:5173

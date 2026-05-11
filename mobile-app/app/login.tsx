@@ -25,6 +25,14 @@ export default function LoginScreen() {
 
   const { setRole } = useRole(); // RoleContext'i alıyoruz
 
+  const clearStoredSession = async () => {
+    await Promise.allSettled([
+      SecureStore.deleteItemAsync('userToken'),
+      SecureStore.deleteItemAsync('userId'),
+      SecureStore.deleteItemAsync('userRole'),
+    ]);
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please fill in all fields.");

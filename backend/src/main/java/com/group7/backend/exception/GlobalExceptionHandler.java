@@ -42,6 +42,10 @@ public class GlobalExceptionHandler {
                 request.getMethod(), request.getRequestURI(), ban.getUser().getId(), ban.getExpiresAt());
         Map<String, Object> body = new HashMap<>();
         body.put("error", "Forbidden");
+        // Stable client-facing code so the frontend can branch on banned vs.
+        // generic 403 without parsing the message string. Required by #280:
+        // "banned users get 403 BANNED_UNTIL response".
+        body.put("code", "BANNED_UNTIL");
         body.put("message", ex.getMessage());
         body.put("reason", ban.getReason());
         body.put("expiresAt", ban.getExpiresAt().toString());
@@ -130,6 +134,16 @@ public class GlobalExceptionHandler {
                                                                   HttpServletRequest request) {
         log.warn("Invalid token: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    @ExceptionHandler(SpamDetectionException.class)
+    public ResponseEntity<Map<String, String>> handleSpamDetection(SpamDetectionException ex,
+                                                                   HttpServletRequest request) {
+        // Log the specific signal internally but return a generic body so the
+        // bot can't fingerprint which check rejected it (#345).
+        log.warn("Spam-bot signal rejected request: method={}, path={}, signal={}",
+                request.getMethod(), request.getRequestURI(), ex.getSignalType());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", "Request rejected");
     }
 
     @ExceptionHandler(SelfFollowException.class)

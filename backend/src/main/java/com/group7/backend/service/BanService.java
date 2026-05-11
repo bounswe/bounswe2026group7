@@ -2,6 +2,7 @@ package com.group7.backend.service;
 
 import com.group7.backend.config.BanProperties;
 import com.group7.backend.entity.Ban;
+import com.group7.backend.entity.BanSource;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ResourceNotFoundException;
@@ -74,6 +75,21 @@ public class BanService {
                 .findFirst();
     }
 
+    /**
+     * Active ban of a specific origin (#345 review). Used by the spam
+     * clear-flag flow to isolate the system-imposed ban — querying
+     * {@link #getActiveBan} alone would surface whichever active row had
+     * the latest expiry, which on a user that also has an admin ban could
+     * route a "clear bot flag" click into lifting the admin ban instead.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Ban> getActiveBanBySource(Long userId, BanSource source) {
+        return banRepository.findActiveBySource(
+                userId, source, OffsetDateTime.now(clock), PageRequest.of(0, 1))
+                .stream()
+                .findFirst();
+    }
+
     @Transactional(readOnly = true)
     public List<Ban> listBansForUser(Long userId) {
         return banRepository.findByUser_IdOrderByCreatedAtDesc(userId);
@@ -109,6 +125,7 @@ public class BanService {
         Ban ban = new Ban();
         ban.setUser(mentee);
         ban.setReason(reason);
+        ban.setSource(BanSource.MENTEE_CANCELLATION);
         ban.setBanCount((int) banOrdinal);
         ban.setExpiresAt(now.plusHours(hours));
         Ban saved = banRepository.save(ban);
@@ -119,6 +136,101 @@ public class BanService {
         log.warn("Auto-ban imposed: menteeId={}, banOrdinal={}, hours={}, expiresAt={}",
                 menteeId, banOrdinal, hours, saved.getExpiresAt());
         return Optional.of(saved);
+    }
+
+    /**
+     * Admin-initiated ban (#280). Inserts a fresh row immediately; if the user
+     * already has an active ban it is left in place and the new row stacks
+     * (the {@link #getActiveBan} query takes the row with the latest
+     * {@code expiresAt}, so the longer ban wins).
+     *
+     * <p>Uses {@code countNonLiftedByUserId(...) + 1} for the ordinal so an
+     * admin override participates in the same escalation accounting as
+     * auto-bans — consistent with how {@link #recordCancellation} computes
+     * its ordinal.
+     *
+     * @throws ResourceNotFoundException 404 — target user or admin not found
+     * @throws IllegalArgumentException 400 — non-positive duration
+     */
+    @Transactional
+    public Ban imposeAdminBan(Long targetUserId, Long adminId,
+                              String reason, long durationHours) {
+        if (durationHours <= 0) {
+            throw new IllegalArgumentException("durationHours must be positive");
+        }
+        User target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        // Admin existence is verified by the @PreAuthorize at the controller,
+        // but we still resolve the row to fail fast on a missing JWT subject.
+        userRepository.findById(adminId)
+                .orElseThrow(() -> new ResourceNotFoundException("Admin not found"));
+
+        long banOrdinal = banRepository.countNonLiftedByUserId(targetUserId) + 1;
+        OffsetDateTime now = OffsetDateTime.now(clock);
+
+        Ban ban = new Ban();
+        ban.setUser(target);
+        ban.setReason(reason);
+        ban.setSource(BanSource.ADMIN);
+        ban.setBanCount((int) banOrdinal);
+        ban.setExpiresAt(now.plusHours(durationHours));
+        Ban saved = banRepository.save(ban);
+
+        notificationEventPublisher.publishUserBanned(
+                targetUserId, saved.getExpiresAt(), reason, saved.getBanCount());
+
+        log.warn("Admin-imposed ban: targetUserId={}, adminId={}, durationHours={}, expiresAt={}",
+                targetUserId, adminId, durationHours, saved.getExpiresAt());
+        return saved;
+    }
+
+    /**
+     * System-initiated ban (#345). Mirrors {@link #imposeAdminBan} but with
+     * no admin attribution — the {@code lifted_by_admin_id} column stays
+     * null for the lifetime of the row, semantically "imposed by the
+     * platform's automated abuse signal rather than by a human admin".
+     *
+     * @throws ResourceNotFoundException 404 — target user not found
+     * @throws IllegalArgumentException 400 — non-positive duration
+     */
+    @Transactional
+    public Ban imposeSystemBan(Long targetUserId, String reason, long durationHours) {
+        if (durationHours <= 0) {
+            throw new IllegalArgumentException("durationHours must be positive");
+        }
+        User target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        long banOrdinal = banRepository.countNonLiftedByUserId(targetUserId) + 1;
+        OffsetDateTime now = OffsetDateTime.now(clock);
+
+        Ban ban = new Ban();
+        ban.setUser(target);
+        ban.setReason(reason);
+        ban.setSource(BanSource.SYSTEM_SPAM);
+        ban.setBanCount((int) banOrdinal);
+        ban.setExpiresAt(now.plusHours(durationHours));
+        Ban saved = banRepository.save(ban);
+
+        notificationEventPublisher.publishUserBanned(
+                targetUserId, saved.getExpiresAt(), reason, saved.getBanCount());
+
+        log.warn("System-imposed ban: targetUserId={}, durationHours={}, expiresAt={}",
+                targetUserId, durationHours, saved.getExpiresAt());
+        return saved;
+    }
+
+    /**
+     * Admin unban (#280): lifts the user's currently-active ban. Returns the
+     * lifted ban; throws 404 if the user has no active ban so the admin gets
+     * a clear signal rather than a silent no-op.
+     */
+    @Transactional
+    public Ban unbanUser(Long targetUserId, Long adminId) {
+        Ban active = getActiveBan(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "User has no active ban"));
+        return liftBan(active.getId(), adminId);
     }
 
     /** Admin override. Idempotent — lifting an already-lifted ban is a no-op. */

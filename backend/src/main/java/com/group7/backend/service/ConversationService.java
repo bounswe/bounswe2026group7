@@ -1,5 +1,6 @@
 package com.group7.backend.service;
 
+import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Conversation;
 import com.group7.backend.entity.ConversationKind;
 import com.group7.backend.entity.Mentor;
@@ -8,6 +9,7 @@ import com.group7.backend.entity.MentorshipStatus;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.ConversationParticipantRepository;
 import com.group7.backend.repository.ConversationRepository;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.UserRepository;
@@ -16,7 +18,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -51,15 +55,18 @@ public class ConversationService {
     private final ConversationRepository conversationRepository;
     private final MentorshipRepository mentorshipRepository;
     private final UserRepository userRepository;
+    private final ConversationParticipantRepository participantRepository;
     private final ConversationCreator conversationCreator;
 
     public ConversationService(ConversationRepository conversationRepository,
                                MentorshipRepository mentorshipRepository,
                                UserRepository userRepository,
+                               ConversationParticipantRepository participantRepository,
                                ConversationCreator conversationCreator) {
         this.conversationRepository = conversationRepository;
         this.mentorshipRepository = mentorshipRepository;
         this.userRepository = userRepository;
+        this.participantRepository = participantRepository;
         this.conversationCreator = conversationCreator;
     }
 
@@ -189,6 +196,121 @@ public class ConversationService {
                                 "Mentor-pair creation race resolved with no row visible — "
                                         + "transaction isolation issue?", e);
                     });
+        }
+    }
+
+    // ── Admin direct + broadcast (#280) ─────────────────────────────────────
+
+    /**
+     * Returns the {@link ConversationKind#ADMIN_DIRECT} conversation between
+     * the calling admin and {@code otherUserId}, creating it on first call.
+     * Same race-recovery shape as {@link #findOrCreateForMentorPair} — the
+     * find/create flow stays non-transactional and the
+     * {@link DataIntegrityViolationException} on the unique-index race is
+     * resolved by re-read.
+     *
+     * <p>Authorization: at least one side of the pair must be an
+     * {@link Admin}. Admin <-> admin is allowed (both sides admins). The
+     * mentorship requirement is intentionally absent — that's the whole
+     * point of this kind.
+     *
+     * @throws IllegalArgumentException 400 — same id on both sides, or neither
+     *         side is an admin (admin DM requires admin authority).
+     * @throws ResourceNotFoundException 404 — either user id is unknown.
+     */
+    public Conversation findOrCreateForAdminDirect(Long adminId, Long otherUserId) {
+        if (Objects.equals(adminId, otherUserId)) {
+            throw new IllegalArgumentException(
+                    "Cannot start a conversation with yourself");
+        }
+
+        long lower = Math.min(adminId, otherUserId);
+        long higher = Math.max(adminId, otherUserId);
+        Optional<Conversation> existing = conversationRepository
+                .findByPairAIdAndPairBIdAndKind(lower, higher, ConversationKind.ADMIN_DIRECT);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        User adminUser = userRepository.findById(adminId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        User other = userRepository.findById(otherUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (!(adminUser instanceof Admin) && !(other instanceof Admin)) {
+            throw new IllegalArgumentException(
+                    "Admin direct conversations require at least one admin participant");
+        }
+
+        try {
+            return conversationCreator.createForAdminDirectInNewTx(adminUser, other, lower, higher);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("Concurrent admin-direct creation for ({}, {}); resolving via re-find",
+                    lower, higher);
+            return conversationRepository
+                    .findByPairAIdAndPairBIdAndKind(lower, higher, ConversationKind.ADMIN_DIRECT)
+                    .orElseThrow(() -> {
+                        log.error("Admin-direct conversation race resolved with no row visible "
+                                + "(pair=({}, {})); transaction isolation misconfigured?",
+                                lower, higher, e);
+                        return new IllegalStateException(
+                                "Admin-direct creation race resolved with no row visible — "
+                                        + "transaction isolation issue?", e);
+                    });
+        }
+    }
+
+    /**
+     * Returns the singleton {@link ConversationKind#ADMIN_BROADCAST}
+     * conversation, creating it on first call and re-syncing its participant
+     * list to include every current admin. Re-syncing on each access is what
+     * lets a newly-added admin see broadcasts going forward without a
+     * dedicated "register-admin" hook — the cost is one extra query per
+     * broadcast, dominated by the message insert that follows.
+     *
+     * <p>Race recovery: the partial unique index pins the broadcast row to
+     * exactly one; concurrent first-call inserts collapse via the same
+     * insert-then-fallback shape as the other find-or-create methods.
+     */
+    public Conversation findOrCreateAdminBroadcast() {
+        Optional<Conversation> existing = conversationRepository.findFirstByKind(
+                ConversationKind.ADMIN_BROADCAST);
+        Conversation conversation;
+        if (existing.isPresent()) {
+            conversation = existing.get();
+        } else {
+            List<User> admins = userRepository.findAllAdmins();
+            try {
+                conversation = conversationCreator.createForAdminBroadcastInNewTx(admins);
+            } catch (DataIntegrityViolationException e) {
+                log.warn("Concurrent admin-broadcast creation; resolving via re-find");
+                conversation = conversationRepository.findFirstByKind(
+                        ConversationKind.ADMIN_BROADCAST)
+                        .orElseThrow(() -> {
+                            log.error("Admin-broadcast conversation race resolved with no row "
+                                    + "visible; transaction isolation misconfigured?", e);
+                            return new IllegalStateException(
+                                    "Admin-broadcast creation race resolved with no row "
+                                            + "visible — transaction isolation issue?", e);
+                        });
+            }
+        }
+        syncAdminBroadcastParticipants(conversation);
+        return conversation;
+    }
+
+    /**
+     * Adds any current admin who is not yet a participant of the broadcast
+     * conversation. Idempotent: existing participants are left alone, so
+     * re-running this on every send is cheap.
+     */
+    @Transactional
+    public void syncAdminBroadcastParticipants(Conversation broadcast) {
+        List<User> admins = userRepository.findAllAdmins();
+        for (User admin : admins) {
+            if (!participantRepository.existsByConversationIdAndUserId(
+                    broadcast.getId(), admin.getId())) {
+                conversationCreator.addParticipantInNewTx(broadcast, admin);
+            }
         }
     }
 

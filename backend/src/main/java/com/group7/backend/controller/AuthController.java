@@ -6,7 +6,11 @@ import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.dto.request.ResetPasswordRequest;
 import com.group7.backend.dto.response.AuthResponse;
 import com.group7.backend.dto.response.UserResponse;
+import com.group7.backend.repository.UserRepository;
 import com.group7.backend.service.AuthService;
+import com.group7.backend.service.FormTokenService;
+import com.group7.backend.service.SpamDetectionService;
+import jakarta.servlet.http.HttpServletRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -26,9 +30,29 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final SpamDetectionService spamDetectionService;
+    private final FormTokenService formTokenService;
+    private final UserRepository userRepository;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService,
+                          SpamDetectionService spamDetectionService,
+                          FormTokenService formTokenService,
+                          UserRepository userRepository) {
         this.authService = authService;
+        this.spamDetectionService = spamDetectionService;
+        this.formTokenService = formTokenService;
+        this.userRepository = userRepository;
+    }
+
+    @GetMapping("/form-token")
+    @Operation(summary = "Issue registration form-render token (#345)",
+            description = "Returns a short-lived HMAC-signed timestamp that must be round-tripped"
+                    + " on the register call. Used as the basis for the minimum submit-time check.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Token issued", content = @Content)
+    })
+    public ResponseEntity<Map<String, String>> formToken() {
+        return ResponseEntity.ok(Map.of("token", formTokenService.issue()));
     }
 
     @PostMapping("/register")
@@ -39,8 +63,18 @@ public class AuthController {
             @ApiResponse(responseCode = "400", description = "Validation error", content = @Content),
             @ApiResponse(responseCode = "409", description = "Email already in use", content = @Content)
     })
-    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request,
+                                                 HttpServletRequest http) {
+        // Spam-bot defences run BEFORE AuthService.register so the signal
+        // saves are not enclosed in the registration @Transactional — a
+        // rejection-throw would otherwise mark the outer tx rollback-only
+        // and undo the bot_signals row we just wrote (#345).
+        spamDetectionService.evaluateRegistration(request, http);
         UserResponse response = authService.register(request);
+        // Post-commit auto-ban hook runs in its own transaction so the
+        // system ban survives even if a subsequent failure occurs.
+        userRepository.findById(response.getId())
+                .ifPresent(u -> spamDetectionService.onRegistrationCommitted(u, http));
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

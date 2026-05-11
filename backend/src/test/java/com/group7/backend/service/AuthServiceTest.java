@@ -58,6 +58,9 @@ class AuthServiceTest {
     @Mock
     private EmailService emailService;
 
+    @Mock
+    private com.group7.backend.service.BanService banService;
+
     @Spy
     private Clock clock = Clock.systemUTC();
 

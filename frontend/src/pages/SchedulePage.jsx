@@ -4,9 +4,14 @@ import MainLayout from '../components/MainLayout'
 import {
   getActiveMentorships,
   listMentorshipMeetings,
+  getMeetingDetail,
   createMeeting,
   confirmMeeting,
   declineMeeting,
+  requestMeetingReschedule,
+  approveMeetingReschedule,
+  rejectMeetingReschedule,
+  cancelMeeting,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -82,7 +87,7 @@ export default function SchedulePage() {
   const [params] = useSearchParams()
   const scopedId = params.get('mentorshipId')
   const navigate = useNavigate()
-  const { role } = useAuth()
+  const { role, userId } = useAuth()
   const isMentor = role === 'MENTOR'
 
   const [mentorships, setMentorships] = useState([])
@@ -91,6 +96,7 @@ export default function SchedulePage() {
   const [error, setError] = useState(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [busyMeetingId, setBusyMeetingId] = useState(null)
+  const [rescheduleTarget, setRescheduleTarget] = useState(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -167,6 +173,46 @@ export default function SchedulePage() {
     }
   }
 
+  async function handleApproveReschedule(meeting, rescheduleId) {
+    setBusyMeetingId(meeting.id)
+    try {
+      await approveMeetingReschedule(meeting.id, rescheduleId)
+      reload()
+    } catch (err) {
+      window.alert(err?.message || 'Failed to approve reschedule')
+    } finally {
+      setBusyMeetingId(null)
+    }
+  }
+
+  async function handleRejectReschedule(meeting, rescheduleId) {
+    if (!window.confirm('Reject this reschedule request? The other party will be notified.')) return
+    setBusyMeetingId(meeting.id)
+    try {
+      await rejectMeetingReschedule(meeting.id, rescheduleId)
+      reload()
+    } catch (err) {
+      window.alert(err?.message || 'Failed to reject reschedule')
+    } finally {
+      setBusyMeetingId(null)
+    }
+  }
+
+  async function handleCancel(meeting) {
+    if (!window.confirm(
+      `Cancel "${meeting.title}"? The mentee will be notified and any pending confirmation will be invalidated.`,
+    )) return
+    setBusyMeetingId(meeting.id)
+    try {
+      await cancelMeeting(meeting.id)
+      reload()
+    } catch (err) {
+      window.alert(err?.message || 'Failed to cancel meeting')
+    } finally {
+      setBusyMeetingId(null)
+    }
+  }
+
   return (
     <MainLayout>
       <div className="page-header">
@@ -212,16 +258,22 @@ export default function SchedulePage() {
             title="Upcoming"
             meetings={buckets.upcoming}
             isMentor={isMentor}
+            userId={userId}
             counterpartFor={counterpartFor}
             scoped={!!scopedId}
             busyMeetingId={busyMeetingId}
             onConfirm={handleConfirm}
             onDecline={handleDecline}
+            onRequestReschedule={meeting => setRescheduleTarget(meeting)}
+            onApproveReschedule={handleApproveReschedule}
+            onRejectReschedule={handleRejectReschedule}
+            onCancel={handleCancel}
           />
           <MeetingBucket
             title="Past"
             meetings={buckets.past}
             isMentor={isMentor}
+            userId={userId}
             counterpartFor={counterpartFor}
             scoped={!!scopedId}
             past
@@ -236,6 +288,14 @@ export default function SchedulePage() {
           onCreated={() => { setCreateOpen(false); reload() }}
         />
       )}
+
+      {rescheduleTarget && (
+        <RescheduleMeetingModal
+          meeting={rescheduleTarget}
+          onClose={() => setRescheduleTarget(null)}
+          onRequested={() => { setRescheduleTarget(null); reload() }}
+        />
+      )}
     </MainLayout>
   )
 }
@@ -243,8 +303,9 @@ export default function SchedulePage() {
 // ── Bucket ─────────────────────────────────────────────────────────────────
 
 function MeetingBucket({
-  title, meetings, isMentor, counterpartFor, scoped, past = false,
+  title, meetings, isMentor, userId, counterpartFor, scoped, past = false,
   busyMeetingId, onConfirm, onDecline,
+  onRequestReschedule, onApproveReschedule, onRejectReschedule, onCancel,
 }) {
   return (
     <section className={`task-bucket${past ? ' task-bucket--past' : ''}`}>
@@ -261,11 +322,17 @@ function MeetingBucket({
               key={m.id}
               meeting={m}
               isMentor={isMentor}
+              userId={userId}
               counterpart={counterpartFor(m.mentorshipId)}
               showCounterpart={!scoped}
               busy={busyMeetingId === m.id}
               onConfirm={onConfirm}
               onDecline={onDecline}
+              onRequestReschedule={onRequestReschedule}
+              onApproveReschedule={onApproveReschedule}
+              onRejectReschedule={onRejectReschedule}
+              onCancel={onCancel}
+              past={past}
             />
           ))}
         </div>
@@ -276,12 +343,52 @@ function MeetingBucket({
 
 // ── Meeting card ───────────────────────────────────────────────────────────
 
-function MeetingCard({ meeting, isMentor, counterpart, showCounterpart, busy, onConfirm, onDecline }) {
+function MeetingCard({
+  meeting, isMentor, userId, counterpart, showCounterpart, busy, past,
+  onConfirm, onDecline,
+  onRequestReschedule, onApproveReschedule, onRejectReschedule, onCancel,
+}) {
   const dur = durationMinutes(meeting.startTime, meeting.endTime)
-  const showMenteeActions = !isMentor && meeting.status === 'PENDING_CONFIRMATION'
+  const isUpcomingActive = !past
+    && (meeting.status === 'PENDING_CONFIRMATION' || meeting.status === 'CONFIRMED')
+
+  const showMenteeConfirmDecline = !isMentor && meeting.status === 'PENDING_CONFIRMATION'
+  const showRequestReschedule = isUpcomingActive
+  const showCancel = isMentor && isUpcomingActive
+
+  // Lazy-load detail (which carries pendingRescheduleRequest) on first expand.
+  const [expanded, setExpanded] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState(null)
+
+  // Refresh detail when the card is open and the meeting summary changes
+  // (e.g. after a confirm / reschedule / cancel triggers SchedulePage.reload).
+  useEffect(() => {
+    if (!expanded) return undefined
+    let cancelled = false
+    setDetailLoading(true)
+    setDetailError(null)
+    getMeetingDetail(meeting.id)
+      .then(d => { if (!cancelled) setDetail(d) })
+      .catch(err => { if (!cancelled) setDetailError(err?.message || 'Failed to load meeting') })
+      .finally(() => { if (!cancelled) setDetailLoading(false) })
+    return () => { cancelled = true }
+  }, [expanded, meeting.id, meeting.status, meeting.startTime, meeting.endTime])
+
+  const pendingReschedule = detail?.pendingRescheduleRequest || null
+  const viewerIsRequester = pendingReschedule
+    && String(pendingReschedule.requestedById) === String(userId)
+  const viewerCanDecide = pendingReschedule && !viewerIsRequester
+
   return (
     <article className="task-card">
-      <div className="task-card-summary" style={{ cursor: 'default' }}>
+      <button
+        type="button"
+        className="task-card-summary"
+        onClick={() => setExpanded(v => !v)}
+        aria-expanded={expanded}
+      >
         <div className="task-card-main">
           <div className="task-card-title">{meeting.title || 'Meeting'}</div>
           <div className="task-card-meta">
@@ -304,24 +411,103 @@ function MeetingCard({ meeting, isMentor, counterpart, showCounterpart, busy, on
           )}
         </div>
         <span className={statusBadgeClass(meeting.status)}>{statusLabel(meeting.status)}</span>
-      </div>
+      </button>
 
-      {showMenteeActions && (
+      {expanded && (
+        <div className="task-card-detail">
+          {detailLoading && <div className="task-detail-loading">Loading meeting…</div>}
+          {detailError && <div className="task-detail-empty">{detailError}</div>}
+          {detail && detail.description && (
+            <div className="task-detail-row">
+              <div className="section-label">Description</div>
+              <div className="task-detail-body">{detail.description}</div>
+            </div>
+          )}
+
+          {/* Pending reschedule callout */}
+          {pendingReschedule && (
+            <div className="task-detail-row meeting-reschedule-pending">
+              <div className="section-label">Pending reschedule request</div>
+              <div className="meeting-reschedule-meta">
+                {viewerIsRequester ? 'You proposed' : 'The other party proposed'}
+                {' · '}
+                <strong>{formatStart(pendingReschedule.proposedStart)}</strong>
+                {pendingReschedule.proposedEnd && (
+                  <> → {formatStart(pendingReschedule.proposedEnd)}</>
+                )}
+              </div>
+              {pendingReschedule.reason && (
+                <div className="meeting-reschedule-reason">"{pendingReschedule.reason}"</div>
+              )}
+              {viewerCanDecide && (
+                <div className="task-card-actions" style={{ padding: 0, marginTop: '8px' }}>
+                  <button
+                    className="task-action-primary"
+                    onClick={() => onApproveReschedule?.(meeting, pendingReschedule.id)}
+                    disabled={busy}
+                  >
+                    {busy ? 'Working…' : 'Approve'}
+                  </button>
+                  <button
+                    className="task-action-danger"
+                    onClick={() => onRejectReschedule?.(meeting, pendingReschedule.id)}
+                    disabled={busy}
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
+              {viewerIsRequester && (
+                <div className="meeting-reschedule-meta" style={{ marginTop: '4px' }}>
+                  Waiting for the other party to approve or reject.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Action row — confirm/decline always visible to mentee on PENDING;
+          reschedule + cancel always available on upcoming active meetings */}
+      {(showMenteeConfirmDecline || showRequestReschedule || showCancel) && (
         <div className="task-card-actions">
-          <button
-            className="task-action-primary"
-            onClick={() => onConfirm?.(meeting)}
-            disabled={busy}
-          >
-            {busy ? 'Confirming…' : 'Confirm'}
-          </button>
-          <button
-            className="task-action-danger"
-            onClick={() => onDecline?.(meeting)}
-            disabled={busy}
-          >
-            Decline
-          </button>
+          {showMenteeConfirmDecline && (
+            <>
+              <button
+                className="task-action-primary"
+                onClick={() => onConfirm?.(meeting)}
+                disabled={busy}
+              >
+                {busy ? 'Confirming…' : 'Confirm'}
+              </button>
+              <button
+                className="task-action-danger"
+                onClick={() => onDecline?.(meeting)}
+                disabled={busy}
+              >
+                Decline
+              </button>
+            </>
+          )}
+          {showRequestReschedule && !pendingReschedule && (
+            <button
+              className="task-action-primary"
+              onClick={() => onRequestReschedule?.(meeting)}
+              disabled={busy}
+              style={{ background: '#2563eb' }}
+            >
+              Request reschedule
+            </button>
+          )}
+          {showCancel && (
+            <button
+              className="task-action-danger"
+              onClick={() => onCancel?.(meeting)}
+              disabled={busy}
+            >
+              Cancel meeting
+            </button>
+          )}
         </div>
       )}
     </article>
@@ -514,6 +700,141 @@ function NewMeetingModal({ mentorshipId, onClose, onCreated }) {
           <button className="modal-btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
           <button className="modal-btn-primary" onClick={handleSubmit} disabled={busy}>
             {busy ? 'Creating…' : 'Create meeting'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Reschedule meeting modal (#338) ────────────────────────────────────────
+
+/**
+ * Either party (mentor OR mentee) can request a reschedule. Backend accepts
+ * { proposedStart, proposedEnd, reason? } and creates a MeetingRescheduleRequest
+ * that the other party then approves or rejects.
+ *
+ * Pre-fills duration from the meeting's current span so the user just needs
+ * to pick a new start time (and tweak duration if they want).
+ */
+function RescheduleMeetingModal({ meeting, onClose, onRequested }) {
+  const overlayRef = useRef(null)
+  const initialDuration = durationMinutes(meeting.startTime, meeting.endTime) || 60
+  const [startStr, setStartStr] = useState('')
+  const [durationMin, setDurationMin] = useState(initialDuration)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape' && !busy) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, busy])
+
+  function validate() {
+    if (!startStr) return 'New start time is required.'
+    const startDate = new Date(startStr)
+    if (isNaN(startDate.getTime())) return 'Start time is invalid.'
+    if (startDate.getTime() <= Date.now()) return 'New start time must be in the future.'
+    if (!Number.isInteger(durationMin) || durationMin < 15 || durationMin > 480) {
+      return 'Duration must be between 15 and 480 minutes.'
+    }
+    return null
+  }
+
+  async function handleSubmit() {
+    const v = validate()
+    if (v) { setErr(v); return }
+    setBusy(true); setErr(null)
+    try {
+      const startDate = new Date(startStr)
+      const endDate = new Date(startDate.getTime() + durationMin * 60000)
+      await requestMeetingReschedule(meeting.id, {
+        proposedStart: startDate.toISOString(),
+        proposedEnd: endDate.toISOString(),
+        reason: reason.trim() || undefined,
+      })
+      onRequested()
+    } catch (e) {
+      setErr(e?.message || 'Failed to request reschedule')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      className="modal-overlay"
+      ref={overlayRef}
+      onMouseDown={e => { if (e.target === overlayRef.current && !busy) onClose() }}
+    >
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="rescheduleTitle">
+        <div className="modal-header">
+          <div>
+            <h2 id="rescheduleTitle">Request reschedule</h2>
+            <p className="modal-subtitle">
+              Propose a new time for "{meeting.title}". The other party will
+              need to approve or reject the request.
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        <div className="meeting-reschedule-pending" style={{ background: '#f9faf9', marginTop: '12px' }}>
+          <div className="meeting-reschedule-meta">
+            Current: <strong>{formatStart(meeting.startTime)}</strong>
+            {meeting.endTime && <> → {formatStart(meeting.endTime)}</>}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: '10px', marginTop: '12px' }}>
+          <div>
+            <label className="section-label" style={{ display: 'block' }}>Proposed start (required)</label>
+            <input
+              type="datetime-local"
+              className="modal-textarea"
+              style={{ minHeight: 'auto', height: '40px' }}
+              value={startStr}
+              onChange={e => setStartStr(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+          <div>
+            <label className="section-label" style={{ display: 'block' }}>Duration (min)</label>
+            <input
+              type="number"
+              className="modal-textarea"
+              style={{ minHeight: 'auto', height: '40px' }}
+              value={durationMin}
+              onChange={e => setDurationMin(parseInt(e.target.value, 10) || 0)}
+              min={15}
+              max={480}
+              step={15}
+              disabled={busy}
+            />
+          </div>
+        </div>
+
+        <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>
+          Reason (optional)
+        </label>
+        <textarea
+          className="modal-textarea"
+          rows={3}
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          disabled={busy}
+          placeholder="Why is the reschedule needed?"
+          maxLength={500}
+        />
+
+        {err && <div className="md-composer-error" style={{ marginTop: '8px' }}>{err}</div>}
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button className="modal-btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="modal-btn-primary" onClick={handleSubmit} disabled={busy}>
+            {busy ? 'Sending…' : 'Send reschedule request'}
           </button>
         </div>
       </div>
