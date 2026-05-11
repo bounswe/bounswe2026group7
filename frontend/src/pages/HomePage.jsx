@@ -288,6 +288,8 @@ export default function HomePage() {
                           <div className="req-name">{req.menteeFirstName}</div>
                           <div className="req-time">{timeAgo(req.createdAt)}</div>
                         </div>
+                      </div>
+                      {req.message && <div className="req-msg">{req.message}</div>}
 
                       {/* Duration picker shown when accepting this request */}
                       {acceptingId === req.id ? (
@@ -303,24 +305,23 @@ export default function HomePage() {
                               >
                                 {d} {d === 1 ? 'month' : 'months'}
                               </button>
-                            </div>
+                            ))}
                           </div>
-                        ) : (
                           <div className="req-actions">
                             <button
                               className="btn-accept"
-                              onClick={() => { setAcceptingId(req.id); setSelectedDuration(3) }}
+                              onClick={handleAcceptConfirm}
                               disabled={actionLoading}
                               data-testid={`mentor-inbox-confirm-${req.id}`}
                             >
-                              Accept
+                              {actionLoading ? 'Confirming…' : 'Confirm'}
                             </button>
                             <button
                               className="btn-decline"
-                              onClick={() => handleReject(req.id)}
+                              onClick={() => setAcceptingId(null)}
                               disabled={actionLoading}
                             >
-                              Decline
+                              Cancel
                             </button>
                           </div>
                         </div>
