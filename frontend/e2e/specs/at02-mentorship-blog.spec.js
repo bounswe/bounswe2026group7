@@ -43,56 +43,69 @@ import { TasksPage } from '../pages/TasksPage.js';
  * simultaneously without juggling logout/login on a single context. Each
  * spec resets the DB up front so the run is order-independent across the
  * three browser projects.
- */
-
-async function loginViaUi(page, { email, password }) {
-  const loginPage = new LoginPage(page);
-  await loginPage.goto();
-  // Capture the /api/auth/login response opportunistically so a 401/429 on
-  // the backend gives us a useful diagnostic. We don't await this directly
-  // (webkit + framer-motion entrance animation can delay the request enough
-  // that a tight 10s wait fires before the POST goes out, even though the
-  // login itself succeeds shortly after); the swallow on the catch keeps
-  // the timeout from masking the real navigation outcome below.
-  // Budget tracks the navigation wait below: response-fallback must outlive
-  // the nav assertion so a slow webkit POST surfaces its real status code
-  // instead of degrading to a generic "stuck on /login" message.
-  const loginResponsePromise = page
-    .waitForResponse(
-      res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',
-      { timeout: 45_000 },
-    )
-    .catch(() => null);
-  await loginPage.signIn({ email, password });
-  // Successful login navigates to /home; on failure we stay on /login. Wait
-  // on the navigation as the source of truth — if it doesn't happen, fall
-  // back to the captured response (if any) for a useful error message.
-  // 40s here absorbs CI webkit slowness: AT-01 webkit takes ~10s for the
-  // same login navigation against ~4s on chromium, so the previous 20s
-  // budget left no headroom once first-paint slack and framer-motion
-  // entrance stacked up under load.
-  try {
-    await expect(page).toHaveURL(/\/home$/, { timeout: 40_000 });
-  } catch (navErr) {
-    const loginResponse = await loginResponsePromise;
-    if (loginResponse && !loginResponse.ok()) {
-      const body = await loginResponse.text().catch(() => '');
-      throw new Error(`UI login for ${email} returned ${loginResponse.status()}: ${body}`);
+ */                                                                                                                                                                                    
+  async function loginViaUi(page, { email, password }) {                           
+    const loginPage = new LoginPage(page);                                                                                                                                              
+    await loginPage.goto();                                                        
+                                                                                                                                                                                        
+    // Let the framer-motion entrance + React hydration settle before                  
+    // touching the form. Without this, fast machines sometimes fill the               
+    // inputs during the ~250ms entrance animation; the controlled-input                                                                                                                
+    // state can be reset by a concurrent re-render and validate() then                                                                                                                 
+    // rejects the form for "missing email/password" without ever firing                                                                                                                
+    // the POST. The page subsequently sits on /login indefinitely.                                                                                                                     
+    await page.waitForLoadState('networkidle');                                                                                                                                         
+                                                                                                                                                                                        
+    // Step 1. Wait for the form to be fully interactive before clicking.                                                                                                               
+    // The login page uses a framer-motion entrance animation; during the ~250ms                                                                                                        
+    // it runs, the submit button receives clicks but the underlying form's                                                                                                             
+    // submit handler can be racy. Waiting for the button's `enabled` state                                                                                                             
+    // (which the React component clears once mount + initial render settle)           
+    // gates the click on a real "ready to submit" signal rather than guessing.                                                                                                         
+    const submit = page.getByTestId('login-submit');                                                                                                                                    
+    await expect(submit).toBeEnabled({ timeout: 10_000 });                                                                                                                              
+                                                                                                                                                                                        
+    // Step 2. Atomic submit-and-wait. Register the response listener BEFORE                                                                                                            
+    // dispatching the click so a fast backend can't return the response                                                                                                                
+    // before we attach. Use Promise.all so a missed click (button still                                                                                                                
+    // animating, hydration not done, etc.) surfaces here as a response                                                                                                                 
+    // timeout — not silently 40s later on the navigation assertion.               
+    const [loginResponse] = await Promise.all([                                                                                                                                         
+      page.waitForResponse(                                                        
+        res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',                                                                                              
+        { timeout: 30_000 },
+      ),                                                                                                                                                                                
+      loginPage.signIn({ email, password }),                                       
+    ]);                                                                                                                                                                                 
+                          
+    // Step 3. Diagnose backend-rejected logins (401/429/5xx) with the real                                                                                                             
+    // status code instead of degrading to a generic "stuck on /login".            
+    if (!loginResponse.ok()) {                                                                                                                                                          
+      const body = await loginResponse.text().catch(() => '');                         
+      throw new Error(`UI login for ${email} returned ${loginResponse.status()}: ${body}`);                                                                                             
+    }                                                                                                                                                                                   
+                                                                                       
+    // Step 4. React commit + redirect should land on /home within ~15s.                                                                                                                
+    // If it doesn't, fall back to checking auth_token / visible error banner                                                                                                           
+    // before giving up — this absorbs the rare case where the response was OK
+    // but React batched a navigation that the URL-poll didn't catch in time.                                                                                                           
+    try {                                                                              
+      await expect(page).toHaveURL(/\/home$/, { timeout: 15_000 });                                                                                                                     
+    } catch (navErr) {                                                                                                                                                                  
+      const token = await page.evaluate(() => localStorage.getItem('auth_token')).catch(() => null);                                                                                    
+      if (token) {                                                                                                                                                                      
+        await page.goto('/home');                                                                                                                                                       
+        await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });              
+        return;                                                                                                                                                                         
+      }                                                                                
+      const errorBanner = page.getByTestId('login-error');                                                                                                                              
+      if (await errorBanner.isVisible({ timeout: 2_000 }).catch(() => false)) {                                                                                                         
+        const message = await errorBanner.textContent();
+        throw new Error(`UI login for ${email} failed: ${message || 'unknown error'}`);                                                                                                 
+      }                                                                            
+      throw navErr;                                                                                                                                                                     
     }
-    const token = await page.evaluate(() => localStorage.getItem('auth_token')).catch(() => null);
-    if (token) {
-      await page.goto('/home');
-      await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
-      return;
-    }
-    const errorBanner = page.getByTestId('login-error');
-    if (await errorBanner.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      const message = await errorBanner.textContent();
-      throw new Error(`UI login for ${email} failed: ${message || 'unknown error'}`);
-    }
-    throw navErr;
-  }
-}
+  }                     
 
 test('AT-02 mentorship lifecycle + blog publish', async ({ browser, request }) => {
   await resetDb(request);

@@ -2,10 +2,12 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.response.FeedPostResponse;
 import com.group7.backend.entity.Admin;
+import com.group7.backend.entity.Attachment;
 import com.group7.backend.entity.FeedPost;
 import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.AttachmentRepository;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.UserRepository;
 import org.slf4j.Logger;
@@ -15,8 +17,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Service surface for the social-feed posts core (#348).
@@ -68,19 +74,40 @@ public class FeedPostService {
 
     private static final Logger log = LoggerFactory.getLogger(FeedPostService.class);
 
+    /**
+     * Hard cap on attachments per post (#485). Mirrored at the request DTO
+     * layer ({@code @Size(max = 4)}) and at the DB layer (junction CHECK
+     * {@code position BETWEEN 0 AND 3}). Defense in depth: the DTO bound
+     * fails fast on user input; the service constant catches programmatic
+     * callers; the DB CHECK is the final invariant.
+     */
+    private static final int MAX_ATTACHMENTS_PER_POST = 4;
+
+    /**
+     * Feed-only image content-type allow-list. The shared upload pipeline
+     * accepts PDF / DOCX / text for chat, but the feed surface restricts to
+     * statically-renderable image types — animated / video / document media
+     * is out of scope for v1 per the issue spec.
+     */
+    private static final Set<String> ALLOWED_IMAGE_CONTENT_TYPES = Set.of(
+            "image/jpeg", "image/png", "image/gif", "image/webp");
+
     private final FeedPostRepository feedPostRepository;
     private final UserRepository userRepository;
+    private final AttachmentRepository attachmentRepository;
     private final HashtagNormalizer hashtagNormalizer;
     private final FeedPostMapper feedPostMapper;
     private final FeedPostEventPublisher feedPostEventPublisher;
 
     public FeedPostService(FeedPostRepository feedPostRepository,
                            UserRepository userRepository,
+                           AttachmentRepository attachmentRepository,
                            HashtagNormalizer hashtagNormalizer,
                            FeedPostMapper feedPostMapper,
                            FeedPostEventPublisher feedPostEventPublisher) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
+        this.attachmentRepository = attachmentRepository;
         this.hashtagNormalizer = hashtagNormalizer;
         this.feedPostMapper = feedPostMapper;
         this.feedPostEventPublisher = feedPostEventPublisher;
@@ -90,11 +117,18 @@ public class FeedPostService {
      * Creates a fresh post on behalf of {@code authorId}. Rejects
      * {@link Admin} requesters with {@link AccessDeniedException}.
      * Validates body non-blank (defensive — DTO {@code @NotBlank} and
-     * DB CHECK are backstops), normalises hashtags, persists, and
-     * returns the DTO mapped inside this transaction.
+     * DB CHECK are backstops), normalises hashtags, attaches any supplied
+     * image attachments after their provenance + content-type checks pass,
+     * persists, and returns the DTO mapped inside this transaction.
+     *
+     * @param attachmentIds optional image-attachment UUIDs (0-4). Each must
+     *                      be owned by {@code authorId} and have an image
+     *                      content type. Null or empty creates a text-only
+     *                      post.
      */
     @Transactional
-    public FeedPostResponse create(Long authorId, String body, List<String> rawHashtags) {
+    public FeedPostResponse create(Long authorId, String body, List<String> rawHashtags,
+                                    List<UUID> attachmentIds) {
         User author = userRepository.findById(authorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + authorId));
         if (author instanceof Admin) {
@@ -106,6 +140,7 @@ public class FeedPostService {
             throw new IllegalArgumentException("body must not be blank");
         }
         Set<String> normalisedTags = hashtagNormalizer.normalize(rawHashtags);
+        List<Attachment> resolvedAttachments = resolveAttachments(attachmentIds, authorId);
 
         FeedPost post = new FeedPost(authorId, body);
         OffsetDateTime now = OffsetDateTime.now();
@@ -118,10 +153,19 @@ public class FeedPostService {
         for (String tag : normalisedTags) {
             saved.getHashtags().add(new FeedPostHashtag(saved, tag));
         }
-        // Cascade=PERSIST flushes the children at @Transactional commit.
+        if (!resolvedAttachments.isEmpty()) {
+            // @OrderColumn writes positions 0..n in iteration order on flush.
+            // The list is empty at this point — adding to a fresh ArrayList is
+            // the only mutation the @ManyToMany ever sees on the create path,
+            // so the @OrderColumn-fragile partial-mutation case cannot arise.
+            saved.getAttachments().addAll(resolvedAttachments);
+        }
+        // Cascade=PERSIST flushes the hashtag children, and the dirty
+        // @ManyToMany collection writes the junction rows, at @Transactional
+        // commit.
 
-        log.info("Created feed post: id={}, authorId={}, hashtags={}",
-                saved.getId(), authorId, normalisedTags.size());
+        log.info("Created feed post: id={}, authorId={}, hashtags={}, attachments={}",
+                saved.getId(), authorId, normalisedTags.size(), resolvedAttachments.size());
 
         // Publish inside the @Transactional boundary so AFTER_COMMIT
         // delivery in FeedFanoutListener is bound to a real commit (#349).
@@ -149,10 +193,15 @@ public class FeedPostService {
      * service can distinguish 403 (non-author) from 404 (deleted /
      * missing) cleanly. {@code null} fields on the request are not
      * touched (the codebase's partial-update convention).
+     *
+     * <p>{@code attachmentIds == null} leaves the existing attachment list
+     * unchanged; an empty list removes all attachments; a non-empty list
+     * fully replaces the set in the supplied order.
      */
     @Transactional
     public FeedPostResponse update(Long postId, Long requesterId,
-                                    String body, List<String> rawHashtags) {
+                                    String body, List<String> rawHashtags,
+                                    List<UUID> attachmentIds) {
         FeedPost post = feedPostRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Feed post not found with id: " + postId));
         assertAuthor(post, requesterId);
@@ -179,12 +228,24 @@ public class FeedPostService {
             }
             modified = true;
         }
+        if (attachmentIds != null) {
+            // Resolve + authorise BEFORE mutating the collection — if any id
+            // fails the provenance or content-type gate we abort with a 4xx
+            // before the @OrderColumn delete/re-insert begins.
+            List<Attachment> resolved = resolveAttachments(attachmentIds, requesterId);
+            // @OrderColumn-driven @ManyToMany: only clear() + addAll()
+            // preserves the position invariant. Partial mutations
+            // ({@code list.set}, {@code list.remove(int)}) de-sync the column.
+            post.getAttachments().clear();
+            post.getAttachments().addAll(resolved);
+            modified = true;
+        }
         if (modified) {
             post.setUpdatedAt(OffsetDateTime.now());
         }
         FeedPost saved = feedPostRepository.save(post);
-        log.info("Updated feed post: id={}, authorId={}, bodyTouched={}, hashtagsTouched={}",
-                postId, requesterId, body != null, rawHashtags != null);
+        log.info("Updated feed post: id={}, authorId={}, bodyTouched={}, hashtagsTouched={}, attachmentsTouched={}",
+                postId, requesterId, body != null, rawHashtags != null, attachmentIds != null);
         return feedPostMapper.toResponse(saved, requesterId);
     }
 
@@ -216,5 +277,68 @@ public class FeedPostService {
                     post.getId(), requesterId, post.getAuthorId());
             throw new AccessDeniedException("Only the post author can perform this action");
         }
+    }
+
+    /**
+     * Resolves an optional list of attachment ids into managed entities for
+     * the create / update paths, applying size + duplicate + provenance +
+     * content-type checks in that order. Returns an empty list for the
+     * {@code null} / empty case so callers can pass the result to
+     * {@code addAll} unconditionally.
+     *
+     * <p>"Already attached to another post" is intentionally NOT pre-checked
+     * here — the DB UNIQUE on {@code feed_post_attachments(attachment_id)}
+     * is the single source of truth and surfaces as
+     * {@code DataIntegrityViolationException} → 409 via the global handler.
+     * A service-level pre-check would race with concurrent PATCHes and add
+     * an extra SELECT per id for no integrity gain.
+     *
+     * @throws IllegalArgumentException   list exceeds the max, contains
+     *                                    duplicates, or an attachment has a
+     *                                    non-image content type (400)
+     * @throws ResourceNotFoundException  an id does not resolve to an
+     *                                    attachment row (404)
+     * @throws AccessDeniedException      an attachment was uploaded by
+     *                                    someone other than the author (403)
+     */
+    private List<Attachment> resolveAttachments(List<UUID> attachmentIds, Long authorId) {
+        if (attachmentIds == null || attachmentIds.isEmpty()) {
+            return List.of();
+        }
+        if (attachmentIds.size() > MAX_ATTACHMENTS_PER_POST) {
+            throw new IllegalArgumentException(
+                    "A post can carry at most " + MAX_ATTACHMENTS_PER_POST + " attachments");
+        }
+        if (new HashSet<>(attachmentIds).size() != attachmentIds.size()) {
+            throw new IllegalArgumentException("Duplicate attachment ids in request");
+        }
+        List<Attachment> resolved = new ArrayList<>(attachmentIds.size());
+        for (UUID id : attachmentIds) {
+            resolved.add(loadAndAuthorizeFeedAttachment(id, authorId));
+        }
+        return resolved;
+    }
+
+    /**
+     * Resolves and authorises a single attachment id at post create / update
+     * time. Mirrors the {@code MessageService} provenance gate ("only the
+     * uploader can attach") so the same invariant holds across chat and
+     * feed, and adds the feed-only image content-type allow-list.
+     */
+    private Attachment loadAndAuthorizeFeedAttachment(UUID attachmentId, Long authorId) {
+        Attachment attachment = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found: " + attachmentId));
+        Long uploaderId = attachment.getUploader() != null ? attachment.getUploader().getId() : null;
+        if (!Objects.equals(uploaderId, authorId)) {
+            log.warn("Non-uploader attempted to attach to feed post: attachmentId={}, requesterId={}, uploaderId={}",
+                    attachmentId, authorId, uploaderId);
+            throw new AccessDeniedException("You may only attach files you uploaded yourself");
+        }
+        if (!ALLOWED_IMAGE_CONTENT_TYPES.contains(attachment.getContentType())) {
+            throw new IllegalArgumentException(
+                    "Feed attachments must be one of image/jpeg, image/png, image/gif, image/webp "
+                            + "(got: " + attachment.getContentType() + ")");
+        }
+        return attachment;
     }
 }

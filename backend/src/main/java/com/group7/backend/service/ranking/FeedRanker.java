@@ -6,29 +6,30 @@ import java.time.OffsetDateTime;
 import java.util.Set;
 
 /**
- * Strategy for scoring a feed post against a viewer (#350). Today the
- * only impl is {@code InterestOverlapFeedRanker} (a weighted-sum of
- * interest overlap, time-decay, and follow-graph proximity); a future
- * AI-driven ranker plugs in here behind {@code @Primary} without any
- * service-layer changes.
+ * Strategy for scoring a feed post against a viewer. The legacy impl
+ * ({@code InterestOverlapFeedRanker}) is a weighted-sum of interest
+ * overlap, time-decay, and follow-graph proximity; an AI-driven advanced
+ * ranker plugs in here behind {@code @Primary} without service-layer
+ * changes.
  *
  * <p><b>Contract:</b> implementations MUST NOT make repository or
  * external calls. The {@link FeedRankingContext} carries everything the
- * ranker needs (viewer state, follow graph, viewer interests). Stateless
- * pure functions sort and slice cleanly under concurrency; reaching
- * back to repos at scoring time would surface in the For-You critical
- * path as N+1 — exactly the trap that {@code MentorRanker} was designed
- * to avoid.
+ * ranker needs (viewer state, follow graph, viewer interests, plus any
+ * pre-computed maps for engagement and author affinity). Stateless pure
+ * functions sort and slice cleanly under concurrency; reaching back to
+ * repos at scoring time would surface in the For-You critical path as
+ * N+1 — exactly the trap that {@code MentorRanker} was designed to
+ * avoid.
  */
-@FunctionalInterface
 public interface FeedRanker {
 
     /**
-     * Compute a score for {@code post} from {@code viewer}'s perspective.
-     * Higher scores rank above lower. Return value is opaque — callers
-     * sort but do not interpret the magnitude.
+     * Compute a bounded score for {@code post} from {@code viewer}'s
+     * perspective along with any factor codes explaining the result.
+     * Higher {@code score} ranks above lower; callers sort but do not
+     * interpret the magnitude beyond ordering.
      */
-    double score(FeedPost post, FeedRankingContext context);
+    FeedScoreResult score(FeedPost post, FeedRankingContext context);
 
     /**
      * Bag of inputs the ranker uses, computed once per request and shared

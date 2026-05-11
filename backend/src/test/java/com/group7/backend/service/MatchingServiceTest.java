@@ -11,7 +11,16 @@ import com.group7.backend.repository.AvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.group7.backend.config.MentorRecommendationProperties;
+import com.group7.backend.config.SemanticSimilarityProperties;
+import com.group7.backend.service.embedding.SemanticSimilarityService;
+import com.group7.backend.service.explanation.MatchExplanationService;
+import com.group7.backend.service.ranking.MentorScoringPipeline;
+import com.group7.backend.service.ranking.MmrReranker;
 import com.group7.backend.service.ranking.RuleBasedMentorRanker;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,10 +79,57 @@ class MatchingServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Real RuleBasedMentorRanker — pure function over already-loaded entities.
+        // The pipeline wraps it with a no-op MMR (mmr.enabled=false) so scoring
+        // stays byte-identical to the pre-decomposition behaviour these tests
+        // were originally written against.
+        var recProps = new MentorRecommendationProperties(
+                new MentorRecommendationProperties.Advanced(false),
+                new MentorRecommendationProperties.Weights(0, 0, 0, 0, 0, 0, 0),
+                new MentorRecommendationProperties.Signals(false, false, false, false, false, false),
+                new MentorRecommendationProperties.Proximity(100, 0.0),
+                null);
+        var simProps = new SemanticSimilarityProperties(
+                "text-embedding-3-small",
+                new SemanticSimilarityProperties.Cache(64, 1),
+                true);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<org.springframework.ai.embedding.EmbeddingModel> noEmbeddingModel =
+                org.mockito.Mockito.mock(ObjectProvider.class);
+        lenient().when(noEmbeddingModel.getIfAvailable()).thenReturn(null);
+        var sim = new SemanticSimilarityService(noEmbeddingModel, simProps, new SimpleMeterRegistry());
+
+        var noCentroidStats = org.mockito.Mockito.mock(
+                com.group7.backend.service.embedding.MentorPopulationStats.class);
+        lenient().when(noCentroidStats.centroid()).thenReturn(java.util.Optional.empty());
+
+        var pipeline = new MentorScoringPipeline(
+                new RuleBasedMentorRanker(),
+                recProps,
+                sim,
+                java.util.Optional.of(noCentroidStats));
+
+        @SuppressWarnings("unchecked")
+        ObjectProvider<org.springframework.ai.chat.model.ChatModel> noChatModel =
+                org.mockito.Mockito.mock(ObjectProvider.class);
+        lenient().when(noChatModel.getIfAvailable()).thenReturn(null);
+        var explanationService = new MatchExplanationService(
+                noChatModel, new ObjectMapper(), recProps, new SimpleMeterRegistry());
+
+        // Stub PlatformTransactionManager so TransactionTemplate.execute(...)
+        // runs the callback inline — these are pure unit tests with no real
+        // JPA session, so the transaction boundary doesn't matter. The
+        // SimpleTransactionStatus stub lets commit() pass cleanly.
+        var txManager = org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class);
+        lenient().when(txManager.getTransaction(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
+
         matchingService = new MatchingService(
                 menteeRepository, mentorRepository,
                 availabilitySlotRepository, menteeAvailabilitySlotRepository,
-                new RuleBasedMentorRanker(),  // real ranker — pure function over already-loaded entities
+                pipeline,
+                explanationService,
+                txManager,
                 /*rankingWindow*/ 200);
 
         pageable = PageRequest.of(0, 20);

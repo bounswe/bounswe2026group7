@@ -49,6 +49,12 @@ public record FeedPostResponse(
         boolean isEdited,
 
         @Schema(description = "True if the viewer is the post author")
-        boolean isAuthor
+        boolean isAuthor,
+
+        @Schema(description = "Image attachments on the post, in author-specified order. Empty when "
+                + "the post has no media (#485). Each downloadUrl resolves to the feed-scoped "
+                + "/api/uploads/feed-media/{id} endpoint, which requires authentication but no "
+                + "per-user ACL.")
+        List<AttachmentSummary> attachments
 ) {
 }

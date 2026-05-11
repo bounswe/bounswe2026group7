@@ -1,13 +1,10 @@
 package com.group7.backend.service;
 
-import com.group7.backend.dto.response.MenteeCandidateResponse;
 import com.group7.backend.dto.response.MentorMatchResponse;
 import com.group7.backend.entity.LastMatchNotification;
 import com.group7.backend.entity.Mentee;
-import com.group7.backend.entity.Mentor;
 import com.group7.backend.repository.LastMatchNotificationRepository;
 import com.group7.backend.repository.MenteeRepository;
-import com.group7.backend.repository.MentorRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,7 +23,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,7 +41,6 @@ class MatchNotificationProcessorTest {
 
     @Mock private MatchingService matchingService;
     @Mock private MenteeRepository menteeRepository;
-    @Mock private MentorRepository mentorRepository;
     @Mock private LastMatchNotificationRepository stateRepository;
     @Mock private NotificationEventPublisher notificationEventPublisher;
 
@@ -59,7 +54,6 @@ class MatchNotificationProcessorTest {
         processor = new MatchNotificationProcessor(
                 matchingService,
                 menteeRepository,
-                mentorRepository,
                 stateRepository,
                 notificationEventPublisher,
                 fixedClock);
@@ -75,24 +69,8 @@ class MatchNotificationProcessorTest {
         return m;
     }
 
-    private Mentor eligibleMentor(Long id) {
-        Mentor m = new Mentor();
-        m.setId(id);
-        m.setFirstName("Mentor" + id);
-        m.setMaxMenteeCapacity(3);
-        m.setCurrentMenteeCount(0);  // has capacity
-        return m;
-    }
-
     private MentorMatchResponse mentorMatch(Long id, String firstName) {
         MentorMatchResponse r = new MentorMatchResponse();
-        r.setId(id);
-        r.setFirstName(firstName);
-        return r;
-    }
-
-    private MenteeCandidateResponse menteeCandidate(Long id, String firstName) {
-        MenteeCandidateResponse r = new MenteeCandidateResponse();
         r.setId(id);
         r.setFirstName(firstName);
         return r;
@@ -211,109 +189,6 @@ class MatchNotificationProcessorTest {
                 .thenReturn(List.of(mentorMatch(null, "Ali")));
 
         boolean published = processor.processMentee(1L);
-
-        assertThat(published).isFalse();
-        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
-        verify(stateRepository, never()).save(any());
-    }
-
-    // ── Mentor side ──────────────────────────────────────────────────────────
-
-    @Test
-    void processMentor_publishesAndUpserts_whenStateRowAbsent() {
-        Mentor mentor = eligibleMentor(7L);
-        when(mentorRepository.findById(7L)).thenReturn(Optional.of(mentor));
-        when(matchingService.findCandidateMenteesFor(mentor, null))
-                .thenReturn(List.of(menteeCandidate(101L, "Cara")));
-        when(stateRepository.findById(7L)).thenReturn(Optional.empty());
-
-        boolean published = processor.processMentor(7L);
-
-        assertThat(published).isTrue();
-        verify(notificationEventPublisher).publishMatchFound(7L, "Cara");
-        ArgumentCaptor<LastMatchNotification> saved = ArgumentCaptor.forClass(LastMatchNotification.class);
-        verify(stateRepository).save(saved.capture());
-        assertThat(saved.getValue().getUserId()).isEqualTo(7L);
-        assertThat(saved.getValue().getNotifiedMatchUserId()).isEqualTo(101L);
-    }
-
-    @Test
-    void processMentor_skips_whenTopMatchUnchanged() {
-        Mentor mentor = eligibleMentor(7L);
-        when(mentorRepository.findById(7L)).thenReturn(Optional.of(mentor));
-        when(matchingService.findCandidateMenteesFor(mentor, null))
-                .thenReturn(List.of(menteeCandidate(101L, "Cara")));
-        when(stateRepository.findById(7L)).thenReturn(Optional.of(stateRow(7L, 101L)));
-
-        boolean published = processor.processMentor(7L);
-
-        assertThat(published).isFalse();
-        verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());
-        verify(stateRepository, never()).save(any());
-    }
-
-    @Test
-    void processMentor_skips_whenMentorRaceDeleted() {
-        when(mentorRepository.findById(7L)).thenReturn(Optional.empty());
-
-        boolean published = processor.processMentor(7L);
-
-        assertThat(published).isFalse();
-        verify(matchingService, never()).findCandidateMenteesFor(any(), any());
-    }
-
-    @Test
-    void processMentor_skips_whenMentorRaceFilledCapacity() {
-        Mentor mentor = eligibleMentor(7L);
-        mentor.setCurrentMenteeCount(mentor.getMaxMenteeCapacity());  // raced: now full
-        when(mentorRepository.findById(7L)).thenReturn(Optional.of(mentor));
-
-        boolean published = processor.processMentor(7L);
-
-        assertThat(published).isFalse();
-        verify(matchingService, never()).findCandidateMenteesFor(any(), any());
-    }
-
-    @Test
-    void processMentor_skips_whenCandidateListEmpty() {
-        Mentor mentor = eligibleMentor(7L);
-        when(mentorRepository.findById(7L)).thenReturn(Optional.of(mentor));
-        when(matchingService.findCandidateMenteesFor(mentor, null)).thenReturn(List.of());
-
-        boolean published = processor.processMentor(7L);
-
-        assertThat(published).isFalse();
-        verify(stateRepository, never()).findById(eq(7L));
-    }
-
-    @Test
-    void processMentor_publishesAndUpserts_whenTopMatchDiffers() {
-        Mentor mentor = eligibleMentor(7L);
-        when(mentorRepository.findById(7L)).thenReturn(Optional.of(mentor));
-        when(matchingService.findCandidateMenteesFor(mentor, null))
-                .thenReturn(List.of(menteeCandidate(202L, "Dana")));
-        when(stateRepository.findById(7L))
-                .thenReturn(Optional.of(stateRow(7L, /*previously notified*/ 101L)));
-
-        boolean published = processor.processMentor(7L);
-
-        assertThat(published).isTrue();
-        verify(notificationEventPublisher).publishMatchFound(7L, "Dana");
-        ArgumentCaptor<LastMatchNotification> saved = ArgumentCaptor.forClass(LastMatchNotification.class);
-        verify(stateRepository).save(saved.capture());
-        assertThat(saved.getValue().getNotifiedMatchUserId()).isEqualTo(202L);
-    }
-
-    @Test
-    void processMentor_skips_whenTopMatchHasNullId() {
-        Mentor mentor = eligibleMentor(7L);
-        when(mentorRepository.findById(7L)).thenReturn(Optional.of(mentor));
-        // Symmetric to the mentee-side defensive guard: a DTO emit with id=null
-        // is logged + skipped rather than NPE-ing through equality compare.
-        when(matchingService.findCandidateMenteesFor(mentor, null))
-                .thenReturn(List.of(menteeCandidate(null, "Dana")));
-
-        boolean published = processor.processMentor(7L);
 
         assertThat(published).isFalse();
         verify(notificationEventPublisher, never()).publishMatchFound(anyLong(), anyString());

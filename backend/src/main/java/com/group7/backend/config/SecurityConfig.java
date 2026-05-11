@@ -174,6 +174,12 @@ public class SecurityConfig {
         }
         config.addAllowedMethod("*");
         config.addAllowedHeader("*");
+        // Browsers ignore non-CORS-safelisted response headers unless the
+        // server explicitly lists them in Access-Control-Expose-Headers.
+        // X-Total-Count is set by PageTotalCountHeaderAdvice on paged
+        // responses; without this line, JS clients on a different origin
+        // cannot read it.
+        config.addExposedHeader("X-Total-Count");
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 

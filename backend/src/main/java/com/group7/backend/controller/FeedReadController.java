@@ -1,11 +1,13 @@
 package com.group7.backend.controller;
 
 import com.group7.backend.controller.support.PageableSupport;
+import com.group7.backend.docs.feed.FeedApiExamples;
 import com.group7.backend.dto.response.FeedPostListItem;
 import com.group7.backend.service.FeedReadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -60,7 +62,10 @@ public class FeedReadController {
                     + "not the global post count — the For-You feed deliberately ranks a "
                     + "rolling window of recent candidates and caps at that size.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Paged ranked posts"),
+            @ApiResponse(responseCode = "200", description = "Paged ranked posts",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.FOR_YOU_RESPONSE))),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
     })
     public ResponseEntity<Page<FeedPostListItem>> forYou(
@@ -77,7 +82,10 @@ public class FeedReadController {
             description = "Returns posts authored by users the viewer follows, ordered by "
                     + "creation time descending. Empty when the viewer follows nobody.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Paged followed-author posts"),
+            @ApiResponse(responseCode = "200", description = "Paged followed-author posts",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.FOLLOWING_RESPONSE))),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
     })
     public ResponseEntity<Page<FeedPostListItem>> following(
@@ -94,7 +102,10 @@ public class FeedReadController {
             description = "Returns non-deleted posts authored by the given user id, "
                     + "ordered by creation time descending.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Paged author posts"),
+            @ApiResponse(responseCode = "200", description = "Paged author posts",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.POSTS_BY_AUTHOR_RESPONSE))),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
     })
     public ResponseEntity<Page<FeedPostListItem>> postsByAuthor(
@@ -115,7 +126,10 @@ public class FeedReadController {
                     + "leading-# stripped); a hashtag that fails normalisation returns an "
                     + "empty page rather than 400. Combined queries AND the two predicates.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Paged matching posts"),
+            @ApiResponse(responseCode = "200", description = "Paged matching posts",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.SEARCH_RESPONSE))),
             @ApiResponse(responseCode = "400", description = "Both `q` and `hashtag` missing", content = @Content),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
     })
