@@ -133,7 +133,7 @@ public class FeedInteractionService {
         } else {
             likeRepository.upsertLike(postId, userId);
             nowLiked = true;
-            publishEngagement(postId, userId);
+            publishEngagement(post, userId);
         }
         log.info("Toggle like: postId={}, userId={}, nowLiked={}", postId, userId, nowLiked);
         if (nowLiked && !userId.equals(post.getAuthorId())) {
@@ -153,7 +153,7 @@ public class FeedInteractionService {
      */
     @Transactional
     public FeedPostInteractionState toggleBookmark(Long postId, Long userId) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         FeedPostBookmarkId id = new FeedPostBookmarkId(postId, userId);
         boolean nowBookmarked;
         if (bookmarkRepository.existsByIdPostIdAndIdUserId(postId, userId)) {
@@ -162,7 +162,7 @@ public class FeedInteractionService {
         } else {
             bookmarkRepository.upsertBookmark(postId, userId);
             nowBookmarked = true;
-            publishEngagement(postId, userId);
+            publishEngagement(post, userId);
         }
         log.info("Toggle bookmark: postId={}, userId={}, nowBookmarked={}",
                 postId, userId, nowBookmarked);
@@ -246,7 +246,7 @@ public class FeedInteractionService {
     public FeedPostInteractionState recordShare(Long postId, Long sharerId) {
         FeedPost post = requireVisiblePost(postId);
         shareRepository.save(new FeedPostShare(postId, sharerId));
-        publishEngagement(postId, sharerId);
+        publishEngagement(post, sharerId);
         log.info("Recorded share: postId={}, sharerId={}", postId, sharerId);
         if (!sharerId.equals(post.getAuthorId())) {
             notificationEventPublisher.publishFeedShare(
@@ -268,7 +268,7 @@ public class FeedInteractionService {
         comment.setCreatedAt(now);
         comment.setUpdatedAt(now);
         FeedPostComment saved = commentRepository.save(comment);
-        publishEngagement(postId, authorId);
+        publishEngagement(post, authorId);
         log.info("Created comment: id={}, postId={}, authorId={}", saved.getId(), postId, authorId);
         String actorFirstName = resolveAuthorName(authorId);
         if (!authorId.equals(post.getAuthorId())) {
@@ -379,18 +379,19 @@ public class FeedInteractionService {
      * the listener doesn't need to re-load the post in its own
      * transaction. Hashtags are read inside the calling {@code @Transactional}
      * method so the LAZY collection populates before commit; the listener
-     * receives a defensive copy via the event's compact constructor.
+     * receives a defensive copy via the event's compact constructor. The
+     * caller passes the post entity from its own {@code requireVisiblePost}
+     * call so the bandit hook doesn't re-issue a SELECT.
      */
-    private void publishEngagement(Long postId, Long viewerId) {
-        feedPostRepository.findByIdAndDeletedAtIsNull(postId).ifPresent(post -> {
-            Set<String> hashtags = post.getHashtags().stream()
-                    .map(FeedPostHashtag::getId)
-                    .map(id -> id.getTag())
-                    .collect(Collectors.toSet());
-            if (!hashtags.isEmpty()) {
-                eventPublisher.publishEvent(new FeedEngagementEvent(viewerId, hashtags));
-            }
-        });
+    private void publishEngagement(FeedPost post, Long viewerId) {
+        if (post == null) return;
+        Set<String> hashtags = post.getHashtags().stream()
+                .map(FeedPostHashtag::getId)
+                .map(id -> id.getTag())
+                .collect(Collectors.toSet());
+        if (!hashtags.isEmpty()) {
+            eventPublisher.publishEvent(new FeedEngagementEvent(viewerId, hashtags));
+        }
     }
 
     private FeedCommentResponse mapComment(FeedPostComment c, Long viewerId, String authorName) {
