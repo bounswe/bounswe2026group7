@@ -3,7 +3,16 @@ import { useParams, useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
-import { getUserById, createMentorshipRequest, getSentMentorshipRequests, getActiveMentorships, getMentorAvailability } from '../services/api'
+import {
+  getUserById,
+  createMentorshipRequest,
+  getSentMentorshipRequests,
+  getActiveMentorships,
+  getMentorAvailability,
+  followUser,
+  unfollowUser,
+  getFollowing,
+} from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
 
@@ -51,6 +60,9 @@ export default function UserProfilePage() {
   const [requestError, setRequestError] = useState('')
   const [requestSent, setRequestSent] = useState(false)
 
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
+
   useEffect(() => {
     getUserById(id)
       .then(data => {
@@ -89,6 +101,26 @@ export default function UserProfilePage() {
     }
   }, [id, isMentee])
 
+  useEffect(() => {
+    if (!userId || !id || !profile) return
+    if (String(userId) === String(id)) return
+    if (role === 'MENTEE' && profile.role === 'MENTEE') return
+    let ignore = false
+    async function loadFollowState() {
+      try {
+        const page = await getFollowing(userId, 0, 200)
+        const list = page?.content || []
+        if (!ignore) {
+          setIsFollowing(list.some(u => String(u.id) === String(id)))
+        }
+      } catch {
+        // ignore follow-state failures; toggle will still work
+      }
+    }
+    loadFollowState()
+    return () => { ignore = true }
+  }, [userId, id, profile, role])
+
   async function handleSubmitRequest(message) {
     setRequestLoading(true)
     setRequestError('')
@@ -100,6 +132,26 @@ export default function UserProfilePage() {
       setRequestError(err.message || 'Failed to send request.')
     } finally {
       setRequestLoading(false)
+    }
+  }
+
+  async function toggleFollow() {
+    if (followLoading) return
+    setFollowLoading(true)
+    try {
+      if (isFollowing) {
+        await unfollowUser(id)
+        setIsFollowing(false)
+        setProfile(prev => prev ? { ...prev, followerCount: Math.max(0, (prev.followerCount ?? 0) - 1) } : prev)
+      } else {
+        await followUser(id)
+        setIsFollowing(true)
+        setProfile(prev => prev ? { ...prev, followerCount: (prev.followerCount ?? 0) + 1 } : prev)
+      }
+    } catch (err) {
+      window.alert(err?.message || 'Failed to update follow status')
+    } finally {
+      setFollowLoading(false)
     }
   }
 
@@ -141,6 +193,11 @@ export default function UserProfilePage() {
     ? profile.profilePhoto
     : (canSeePhoto ? profile.profilePhoto : null)
 
+  const followerCount = profile.followerCount ?? 0
+  const followingCount = profile.followingCount ?? 0
+  const canFollow = !isOwnProfile && !(role === 'MENTEE' && profile.role === 'MENTEE')
+  const canViewFollowGraph = !(role === 'MENTEE' && profile.role === 'MENTEE' && !isOwnProfile)
+
   return (
     <MainLayout>
       <div className="page-header">
@@ -168,6 +225,38 @@ export default function UserProfilePage() {
               </span>
             )}
           </div>
+
+          <div className="profile-follow-stats">
+            <button
+              type="button"
+              className="profile-follow-stat"
+              onClick={() => canViewFollowGraph && navigate(`/users/${id}/followers`)}
+              disabled={!canViewFollowGraph}
+            >
+              <div className="profile-follow-num">{followerCount}</div>
+              <div className="profile-follow-label">Followers</div>
+            </button>
+            <button
+              type="button"
+              className="profile-follow-stat"
+              onClick={() => canViewFollowGraph && navigate(`/users/${id}/following`)}
+              disabled={!canViewFollowGraph}
+            >
+              <div className="profile-follow-num">{followingCount}</div>
+              <div className="profile-follow-label">Following</div>
+            </button>
+          </div>
+
+          {canFollow && (
+            <button
+              type="button"
+              className={`follow-btn${isFollowing ? ' follow-btn--active' : ''}`}
+              onClick={toggleFollow}
+              disabled={followLoading}
+            >
+              {followLoading ? 'Updating...' : isFollowing ? 'Following' : 'Follow'}
+            </button>
+          )}
 
           {isMentorProfile && (
             <div className="profile-stats-row">

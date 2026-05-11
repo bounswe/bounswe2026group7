@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import FeedPostCard from '../components/FeedPostCard'
+import Avatar from '../components/Avatar'
 import {
   getForYouFeed,
   getFollowingFeed,
@@ -9,6 +10,8 @@ import {
   createFeedPost,
   updateFeedPost,
   deleteFeedPost,
+  getFollowRecommendations,
+  followUser,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -17,6 +20,36 @@ const TABS = [
   { key: 'for-you', label: 'For you' },
   { key: 'following', label: 'Following' },
 ]
+
+function displayUserName(user) {
+  if (!user) return 'User'
+  if (user.role === 'MENTOR') {
+    return [user.firstName, user.lastName].filter(Boolean).join(' ')
+  }
+  return user.firstName || 'User'
+}
+
+function userInitials(user) {
+  if (!user) return '?'
+  const parts = user.role === 'MENTOR'
+    ? [user.firstName, user.lastName]
+    : [user.firstName]
+  const initials = parts.filter(Boolean).map(w => w[0]).join('')
+  return initials ? initials.toUpperCase().slice(0, 2) : '?'
+}
+
+function formatFollowFactor(factor) {
+  if (!factor) return ''
+  if (factor.startsWith('shared-interest:')) {
+    const label = factor.replace('shared-interest:', '')
+    return `Shared interest: ${label}`
+  }
+  if (factor.startsWith('followed-by-')) {
+    const match = factor.match(/followed-by-(\d+)-of-your-follows/)
+    if (match) return `Followed by ${match[1]} of your follows`
+  }
+  return factor
+}
 
 export default function FeedPage() {
   const [params, setParams] = useSearchParams()
@@ -27,6 +60,10 @@ export default function FeedPage() {
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  const [recommendations, setRecommendations] = useState([])
+  const [recLoading, setRecLoading] = useState(false)
+  const [recError, setRecError] = useState(null)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag? } or null
@@ -67,6 +104,26 @@ export default function FeedPage() {
   }, [tab, activeSearch])
 
   useEffect(() => { reload() }, [reload])
+
+  const loadRecommendations = useCallback(async () => {
+    setRecLoading(true)
+    setRecError(null)
+    try {
+      const page = await getFollowRecommendations(0, 8)
+      const list = (page?.content || []).map(r => ({ ...r, isFollowing: false, busy: false }))
+      setRecommendations(list)
+    } catch (err) {
+      setRecError(err?.message || 'Failed to load suggestions')
+      setRecommendations([])
+    } finally {
+      setRecLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab !== 'following' || activeSearch || loading || posts.length > 0) return
+    loadRecommendations()
+  }, [tab, activeSearch, loading, posts.length, loadRecommendations])
 
   // ── Tab nav ───────────────────────────────────────────────────────────
   function changeTab(next) {
@@ -164,6 +221,19 @@ export default function FeedPage() {
     }
   }
 
+  async function handleFollowSuggestion(userId) {
+    setRecommendations(prev => prev.map(r => r.id === userId ? { ...r, busy: true } : r))
+    try {
+      await followUser(userId)
+      setRecommendations(prev => prev.map(r => r.id === userId
+        ? { ...r, busy: false, isFollowing: true }
+        : r))
+    } catch (err) {
+      setRecommendations(prev => prev.map(r => r.id === userId ? { ...r, busy: false } : r))
+      window.alert(err?.message || 'Failed to follow user')
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <MainLayout>
@@ -249,13 +319,75 @@ export default function FeedPage() {
             <div className="md-error-sub">{error}</div>
           </div>
         ) : posts.length === 0 ? (
-          <div className="empty-state">
-            {activeSearch
-              ? 'No posts match this search.'
-              : tab === 'following'
-                ? 'You don\'t follow anyone yet — switch to For you to discover posts.'
-                : 'No posts yet — be the first to share something.'}
-          </div>
+          activeSearch ? (
+            <div className="empty-state">No posts match this search.</div>
+          ) : tab === 'following' ? (
+            <div className="empty-following">
+              <div className="empty-state">
+                You do not follow anyone yet. Find people to follow to populate your feed.
+              </div>
+
+              <div className="follow-suggested">
+                <div className="follow-suggested-header">
+                  <div className="follow-suggested-title">Suggested to follow</div>
+                  {recLoading && <div className="follow-suggested-sub">Loading…</div>}
+                  {!recLoading && recError && <div className="follow-suggested-sub">{recError}</div>}
+                </div>
+
+                {recLoading ? (
+                  <div className="md-loading">Loading suggestions…</div>
+                ) : recError ? null : recommendations.length === 0 ? (
+                  <div className="empty-state">No suggestions available right now.</div>
+                ) : (
+                  <div className="follow-suggested-rail">
+                    {recommendations.map(rec => (
+                      <div className="follow-suggested-card" key={rec.id}>
+                        <div className="follow-suggested-main">
+                          <Avatar
+                            src={rec.profilePhoto}
+                            initials={userInitials(rec)}
+                            size="md"
+                          />
+                          <div>
+                            <div className="follow-suggested-name">{displayUserName(rec)}</div>
+                            <div className="follow-suggested-role">{rec.role === 'MENTOR' ? 'Mentor' : 'Mentee'}</div>
+                          </div>
+                        </div>
+                        {Array.isArray(rec.factors) && rec.factors.length > 0 && (
+                          <div className="follow-suggested-factors">
+                            {rec.factors.slice(0, 2).map((f, i) => (
+                              <span className="follow-suggested-factor" key={`${rec.id}-f-${i}`}>
+                                {formatFollowFactor(f)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="follow-suggested-actions">
+                          <button
+                            className="view-profile-btn"
+                            type="button"
+                            onClick={() => navigate(`/users/${rec.id}`)}
+                          >
+                            View Profile
+                          </button>
+                          <button
+                            className={`follow-btn${rec.isFollowing ? ' follow-btn--active' : ''}`}
+                            type="button"
+                            onClick={() => !rec.isFollowing && !rec.busy && handleFollowSuggestion(rec.id)}
+                            disabled={rec.busy || rec.isFollowing}
+                          >
+                            {rec.busy ? 'Updating...' : rec.isFollowing ? 'Following' : 'Follow'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">No posts yet — be the first to share something.</div>
+          )
         ) : (
           <div className="feed-list">
             {posts.map(p => (

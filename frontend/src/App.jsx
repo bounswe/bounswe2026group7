@@ -11,6 +11,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import UserProfilePage from './pages/UserProfilePage'
+import UserFollowListPage from './pages/UserFollowListPage'
 import MentorshipDetailPage from './pages/MentorshipDetailPage'
 import MessagesPage from './pages/MessagesPage'
 import TasksPage from './pages/TasksPage'
@@ -37,6 +38,8 @@ export default function App() {
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/users/:id" element={<UserProfilePage />} />
+          <Route path="/users/:id/followers" element={<UserFollowListPage mode="followers" />} />
+          <Route path="/users/:id/following" element={<UserFollowListPage mode="following" />} />
           <Route path="/mentorships/:id" element={<MentorshipDetailPage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/tasks" element={<TasksPage />} />
