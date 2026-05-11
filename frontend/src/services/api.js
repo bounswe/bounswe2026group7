@@ -728,6 +728,30 @@ export async function getPostInteractions(postId) {
   return handleResponse(res)
 }
 
+export async function toggleLikeOnPost(postId) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/like`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getPostComments(postId, page = 0, size = 20) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/comments?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function addCommentToPost(postId, body) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/comments`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ body }),
+  })
+  return handleResponse(res)
+}
+
 export async function toggleBookmarkOnPost(postId) {
   const res = await fetch(`${BASE_URL}/feed/posts/${postId}/bookmark`, {
     method: 'POST',
