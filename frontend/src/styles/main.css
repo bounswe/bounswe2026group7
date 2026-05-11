@@ -2263,6 +2263,25 @@
 .task-bucket--past { opacity: 0.85; }
 .task-bucket--past .task-card { background: #fafbfa; }
 
+/* Pending reschedule callout inside an expanded meeting card (#338) */
+.meeting-reschedule-pending {
+  background: #fff8e1;
+  border: 1px solid #f0d08a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.meeting-reschedule-meta {
+  font-size: 13px;
+  color: var(--text-dark);
+}
+.meeting-reschedule-reason {
+  font-size: 13px;
+  color: var(--text-mid);
+  font-style: italic;
+  margin-top: 4px;
+}
+
 /* ── MILESTONES (#288) ── */
 .md-milestones { margin-top: 16px; }
 .milestone-progress {
