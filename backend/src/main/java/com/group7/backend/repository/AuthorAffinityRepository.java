@@ -1,5 +1,6 @@
 package com.group7.backend.repository;
 
+import com.group7.backend.entity.FeedPost;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -25,10 +26,10 @@ import java.util.Map;
 @Component
 public class AuthorAffinityRepository {
 
-    private final InternalRepo repo;
+    private final AuthorAffinityQueries queries;
 
-    public AuthorAffinityRepository(InternalRepo repo) {
-        this.repo = repo;
+    public AuthorAffinityRepository(AuthorAffinityQueries queries) {
+        this.queries = queries;
     }
 
     /**
@@ -40,46 +41,48 @@ public class AuthorAffinityRepository {
         if (viewerId == null || since == null) {
             return Map.of();
         }
-        List<Long[]> rows = repo.weightedAuthorAffinityForViewer(viewerId, since);
+        List<Object[]> rows = queries.weightedAuthorAffinityForViewer(viewerId, since);
         Map<Long, Integer> out = new HashMap<>(rows.size());
-        for (Long[] row : rows) {
-            out.put(row[0], row[1].intValue());
+        for (Object[] row : rows) {
+            Long authorId = ((Number) row[0]).longValue();
+            int total = ((Number) row[1]).intValue();
+            out.put(authorId, total);
         }
         return out;
     }
+}
 
-    public interface InternalRepo extends Repository<com.group7.backend.entity.FeedPost, Long> {
+interface AuthorAffinityQueries extends Repository<FeedPost, Long> {
 
-        @Query(value = """
-                SELECT author_id, SUM(weight)::bigint AS total
-                FROM (
-                    SELECT p.author_id, 1 AS weight
-                    FROM feed_post_likes l
-                    JOIN feed_posts p ON p.id = l.post_id
-                    WHERE l.user_id = :viewerId AND l.created_at > :since
-                      AND p.deleted_at IS NULL
-                    UNION ALL
-                    SELECT p.author_id, 2 AS weight
-                    FROM feed_post_comments c
-                    JOIN feed_posts p ON p.id = c.post_id
-                    WHERE c.author_id = :viewerId AND c.created_at > :since
-                      AND c.deleted_at IS NULL AND p.deleted_at IS NULL
-                    UNION ALL
-                    SELECT p.author_id, 3 AS weight
-                    FROM feed_post_shares s
-                    JOIN feed_posts p ON p.id = s.post_id
-                    WHERE s.sharer_id = :viewerId AND s.created_at > :since
-                      AND p.deleted_at IS NULL
-                    UNION ALL
-                    SELECT p.author_id, 4 AS weight
-                    FROM feed_post_bookmarks b
-                    JOIN feed_posts p ON p.id = b.post_id
-                    WHERE b.user_id = :viewerId AND b.created_at > :since
-                      AND p.deleted_at IS NULL
-                ) AS engaged
-                GROUP BY author_id
-                """, nativeQuery = true)
-        List<Long[]> weightedAuthorAffinityForViewer(@Param("viewerId") Long viewerId,
-                                                    @Param("since") OffsetDateTime since);
-    }
+    @Query(value = """
+            SELECT author_id, SUM(weight)::bigint AS total
+            FROM (
+                SELECT p.author_id, 1 AS weight
+                FROM feed_post_likes l
+                JOIN feed_posts p ON p.id = l.post_id
+                WHERE l.user_id = :viewerId AND l.created_at > :since
+                  AND p.deleted_at IS NULL
+                UNION ALL
+                SELECT p.author_id, 2 AS weight
+                FROM feed_post_comments c
+                JOIN feed_posts p ON p.id = c.post_id
+                WHERE c.author_id = :viewerId AND c.created_at > :since
+                  AND c.deleted_at IS NULL AND p.deleted_at IS NULL
+                UNION ALL
+                SELECT p.author_id, 3 AS weight
+                FROM feed_post_shares s
+                JOIN feed_posts p ON p.id = s.post_id
+                WHERE s.sharer_id = :viewerId AND s.created_at > :since
+                  AND p.deleted_at IS NULL
+                UNION ALL
+                SELECT p.author_id, 4 AS weight
+                FROM feed_post_bookmarks b
+                JOIN feed_posts p ON p.id = b.post_id
+                WHERE b.user_id = :viewerId AND b.created_at > :since
+                  AND p.deleted_at IS NULL
+            ) AS engaged
+            GROUP BY author_id
+            """, nativeQuery = true)
+    List<Object[]> weightedAuthorAffinityForViewer(@Param("viewerId") Long viewerId,
+                                                  @Param("since") OffsetDateTime since);
 }

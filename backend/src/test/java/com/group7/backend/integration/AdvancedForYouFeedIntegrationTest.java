@@ -133,7 +133,7 @@ class AdvancedForYouFeedIntegrationTest {
         reg.setPassword("Password123!");
         reg.setFirstName("Test");
         reg.setLastName("User");
-        reg.setRole("MENTEE");
+        reg.setIsMentor(false);
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(reg)))
@@ -153,7 +153,7 @@ class AdvancedForYouFeedIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
         JsonNode body = objectMapper.readTree(loginResult.getResponse().getContentAsString());
-        return body.get("token").asText();
+        return body.get("sessionToken").asText();
     }
 
     private long createPost(String token, String body, List<String> hashtags) throws Exception {

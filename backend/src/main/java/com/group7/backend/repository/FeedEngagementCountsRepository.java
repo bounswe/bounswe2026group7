@@ -1,5 +1,6 @@
 package com.group7.backend.repository;
 
+import com.group7.backend.entity.FeedPost;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -22,17 +23,18 @@ import java.util.Map;
  * {@code feed_post_comments(author_id, created_at) WHERE deleted_at IS
  * NULL}; the other three branches have no deleted-at column.
  *
- * <p>Implemented as a thin Spring Data {@code Repository} interface plus
- * a thin {@code @Component} wrapper that converts the raw rows to a
- * {@code Map<postId, weightedCount>}.
+ * <p>Spring-Data backing interface {@link FeedEngagementCountsQueries}
+ * lives as a top-level type so the default Spring Data scan picks it up
+ * (nested interfaces inside @Component classes are not visited by the
+ * default repository scanner).
  */
 @Component
 public class FeedEngagementCountsRepository {
 
-    private final InternalRepo repo;
+    private final FeedEngagementCountsQueries queries;
 
-    public FeedEngagementCountsRepository(InternalRepo repo) {
-        this.repo = repo;
+    public FeedEngagementCountsRepository(FeedEngagementCountsQueries queries) {
+        this.queries = queries;
     }
 
     /**
@@ -44,39 +46,41 @@ public class FeedEngagementCountsRepository {
         if (postIds == null || postIds.isEmpty()) {
             return Map.of();
         }
-        List<Long[]> rows = repo.weightedCountsForPosts(postIds);
+        List<Object[]> rows = queries.weightedCountsForPosts(postIds);
         Map<Long, Integer> out = new HashMap<>(rows.size());
-        for (Long[] row : rows) {
-            // row[0] = post_id, row[1] = total weighted count
-            out.put(row[0], row[1].intValue());
+        for (Object[] row : rows) {
+            // row[0] = post_id (Long), row[1] = total weighted count (Number)
+            Long postId = ((Number) row[0]).longValue();
+            int total = ((Number) row[1]).intValue();
+            out.put(postId, total);
         }
         return out;
     }
+}
 
-    /**
-     * Spring Data backing interface. Native UNION ALL gathers the four
-     * interaction types into a single round-trip with weights baked into
-     * the SELECT; the outer GROUP BY sums by post id.
-     */
-    public interface InternalRepo extends Repository<com.group7.backend.entity.FeedPost, Long> {
+/**
+ * Spring Data backing interface. Native UNION ALL gathers the four
+ * interaction types into a single round-trip with weights baked into
+ * the SELECT; the outer GROUP BY sums by post id.
+ */
+interface FeedEngagementCountsQueries extends Repository<FeedPost, Long> {
 
-        @Query(value = """
-                SELECT post_id, SUM(weight)::bigint AS total
-                FROM (
-                    SELECT post_id, 1 AS weight FROM feed_post_likes
-                    WHERE post_id IN (:postIds)
-                    UNION ALL
-                    SELECT post_id, 2 AS weight FROM feed_post_comments
-                    WHERE post_id IN (:postIds) AND deleted_at IS NULL
-                    UNION ALL
-                    SELECT post_id, 3 AS weight FROM feed_post_shares
-                    WHERE post_id IN (:postIds)
-                    UNION ALL
-                    SELECT post_id, 4 AS weight FROM feed_post_bookmarks
-                    WHERE post_id IN (:postIds)
-                ) AS engaged
-                GROUP BY post_id
-                """, nativeQuery = true)
-        List<Long[]> weightedCountsForPosts(@Param("postIds") Collection<Long> postIds);
-    }
+    @Query(value = """
+            SELECT post_id, SUM(weight)::bigint AS total
+            FROM (
+                SELECT post_id, 1 AS weight FROM feed_post_likes
+                WHERE post_id IN (:postIds)
+                UNION ALL
+                SELECT post_id, 2 AS weight FROM feed_post_comments
+                WHERE post_id IN (:postIds) AND deleted_at IS NULL
+                UNION ALL
+                SELECT post_id, 3 AS weight FROM feed_post_shares
+                WHERE post_id IN (:postIds)
+                UNION ALL
+                SELECT post_id, 4 AS weight FROM feed_post_bookmarks
+                WHERE post_id IN (:postIds)
+            ) AS engaged
+            GROUP BY post_id
+            """, nativeQuery = true)
+    List<Object[]> weightedCountsForPosts(@Param("postIds") Collection<Long> postIds);
 }

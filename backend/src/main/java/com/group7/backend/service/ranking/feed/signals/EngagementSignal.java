@@ -26,7 +26,7 @@ import java.util.List;
  * scope; the share weight (3) absorbs some of the double-counting but
  * the signal still mildly over-credits frequently-reshared posts.
  */
-@Component
+@Component("feedEngagementSignal")
 public class EngagementSignal implements FeedScoringSignal {
 
     private final ForYouRecommendationProperties props;

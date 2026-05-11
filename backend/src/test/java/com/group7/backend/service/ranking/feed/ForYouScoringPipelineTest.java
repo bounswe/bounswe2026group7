@@ -62,8 +62,12 @@ class ForYouScoringPipelineTest {
         when(bandit.samplePosterior(anyLong(), anyString())).thenReturn(0.5);
 
         props = defaultProps();
+        // Full-weight freshness so the freshness-decayed scores stay distinct
+        // after the int [0,100] rounding (small weights compress the
+        // spread into 24-25 and MMR ties depend on input order, which is
+        // not what we're testing here).
         AdvancedForYouFeedRanker ranker = new AdvancedForYouFeedRanker(
-                List.of(new FreshnessSignal(0.25)));
+                List.of(new FreshnessSignal(1.0)));
         pipeline = new ForYouScoringPipeline(
                 ranker, engagementRepo, affinityRepo, semantic,
                 new MmrReranker(), new DiversityFloorEnforcer(), bandit, props);
@@ -99,6 +103,16 @@ class ForYouScoringPipelineTest {
 
     @Test
     void diversityFloor_swapsInOutsider_whenAllPlacedShareTopHashtag() {
+        // Build a pool where "ai" is clearly the #1 hashtag and "cooking"
+        // is unique. With topHashtagsCount=1 (set via floorProps below), "ai"
+        // is the only "primary" tag, so cooking is an outsider.
+        props = floorProps(/* topHashtagsCount */ 1, /* mmrEnabled */ false);
+        AdvancedForYouFeedRanker ranker = new AdvancedForYouFeedRanker(
+                List.of(new FreshnessSignal(1.0)));
+        pipeline = new ForYouScoringPipeline(
+                ranker, engagementRepo, affinityRepo, semantic,
+                new MmrReranker(), new DiversityFloorEnforcer(), bandit, props);
+
         FeedPost ai1 = post(1L, List.of("ai"), NOW);
         FeedPost ai2 = post(2L, List.of("ai"), NOW.minusMinutes(10));
         FeedPost cooking = post(3L, List.of("cooking"), NOW.minusHours(2)); // older → lower score
@@ -106,8 +120,8 @@ class ForYouScoringPipelineTest {
         List<ForYouScoringPipeline.RankedFeedPost> out = pipeline.rank(
                 List.of(ai1, ai2, cooking), VIEWER_ID, Set.of(), Set.of(), NOW, 2, 0);
 
-        // Page-of-2 by score = [ai1, ai2]. Both share "ai" which is the
-        // top-3 hashtag in the pool. cooking is in the candidate pool as
+        // Page-of-2 by score = [ai1, ai2]. Both share "ai" which IS the
+        // top-1 hashtag in the pool. cooking is in the candidate pool as
         // an outsider. Diversity floor should swap ai2 (lower score) for
         // cooking, emitting feed:outside-primary-goal.
         assertThat(out).hasSize(2);
@@ -118,19 +132,28 @@ class ForYouScoringPipelineTest {
 
     @Test
     void pageOne_skipsDiversityFloorAndBandit() {
-        FeedPost ai1 = post(1L, List.of("ai"), NOW);
-        FeedPost ai2 = post(2L, List.of("ai"), NOW.minusMinutes(1));
-        FeedPost ai3 = post(3L, List.of("ai"), NOW.minusMinutes(2));
-        FeedPost cooking = post(4L, List.of("cooking"), NOW.minusHours(3));
+        // Use topHashtagsCount=1 + bigger time gaps so freshness scores
+        // are distinct after int rounding, and "ai" is the sole top tag.
+        props = floorProps(/* topHashtagsCount */ 1, /* mmrEnabled */ false);
+        AdvancedForYouFeedRanker ranker = new AdvancedForYouFeedRanker(
+                List.of(new FreshnessSignal(1.0)));
+        pipeline = new ForYouScoringPipeline(
+                ranker, engagementRepo, affinityRepo, semantic,
+                new MmrReranker(), new DiversityFloorEnforcer(), bandit, props);
 
-        // pageSize=1, pageNumber=1 → only the second-best post.
+        FeedPost ai1 = post(1L, List.of("ai"), NOW);
+        FeedPost ai2 = post(2L, List.of("ai"), NOW.minusHours(2));
+        FeedPost ai3 = post(3L, List.of("ai"), NOW.minusHours(4));
+        FeedPost cooking = post(4L, List.of("cooking"), NOW.minusHours(8));
+
+        // pageSize=1, pageNumber=1 → second-best by freshness (ai2).
         List<ForYouScoringPipeline.RankedFeedPost> out = pipeline.rank(
                 List.of(ai3, cooking, ai1, ai2), VIEWER_ID, Set.of(), Set.of(),
                 NOW, 1, 1);
 
-        // Expected: page 1 contains ai2 (second by freshness). The
-        // diversity-floor swap-in (cooking) would have fired only on
-        // page 0; page 1 must be pure weighted+MMR order.
+        // Expected: page 1 contains ai2. The diversity-floor swap-in
+        // (cooking) would have fired only on page 0; page 1 must be pure
+        // weighted+MMR order with no bandit/floor factors.
         assertThat(out).hasSize(1);
         assertThat(out.get(0).post().getId()).isEqualTo(ai2.getId());
         assertThat(out.get(0).factors()).doesNotContain("feed:outside-primary-goal");
@@ -189,6 +212,18 @@ class ForYouScoringPipelineTest {
                 new ForYouRecommendationProperties.Affinity(30, 0.30, 10),
                 new ForYouRecommendationProperties.Mmr(true, 0.7, 3),
                 new ForYouRecommendationProperties.DiversityFloor(true, 3),
+                new ForYouRecommendationProperties.Bandit(false, 0.10));
+    }
+
+    private static ForYouRecommendationProperties floorProps(int topHashtagsCount, boolean mmrEnabled) {
+        return new ForYouRecommendationProperties(
+                new ForYouRecommendationProperties.Advanced(true),
+                new ForYouRecommendationProperties.Weights(0.0, 0.0, 0.0, 1.0),
+                new ForYouRecommendationProperties.Signals(true, true, true, true),
+                new ForYouRecommendationProperties.TimeDecay(Duration.ofHours(24), 6),
+                new ForYouRecommendationProperties.Affinity(30, 0.30, 10),
+                new ForYouRecommendationProperties.Mmr(mmrEnabled, 0.7, 3),
+                new ForYouRecommendationProperties.DiversityFloor(true, topHashtagsCount),
                 new ForYouRecommendationProperties.Bandit(false, 0.10));
     }
 
