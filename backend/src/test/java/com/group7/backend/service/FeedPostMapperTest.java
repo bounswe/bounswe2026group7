@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 class FeedPostMapperTest {
 
     @Mock private UserRepository userRepository;
+    @Mock private AttachmentUrlBuilder attachmentUrlBuilder;
     @InjectMocks private FeedPostMapper feedPostMapper;
 
     @Test

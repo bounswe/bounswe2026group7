@@ -68,7 +68,7 @@ class FeedPostControllerTest {
 
     private static FeedPostResponse stub(Long id, Long authorId) {
         return new FeedPostResponse(id, authorId, "Alice", "Hello", List.of("data"),
-                OffsetDateTime.now(), OffsetDateTime.now(), false, true);
+                OffsetDateTime.now(), OffsetDateTime.now(), false, true, List.of());
     }
 
     // ── POST /api/feed/posts ────────────────────────────────────────────────
@@ -76,9 +76,9 @@ class FeedPostControllerTest {
     @Test
     void create_happyPath_returns201() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        when(feedPostService.create(eq(1L), any(), any())).thenReturn(stub(42L, 1L));
+        when(feedPostService.create(eq(1L), any(), any(), any())).thenReturn(stub(42L, 1L));
 
-        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of("data"));
+        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of("data"), null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -93,7 +93,7 @@ class FeedPostControllerTest {
 
     @Test
     void create_unauthenticated_returns403() throws Exception {
-        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of());
+        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of(), null);
         mockMvc.perform(post("/api/feed/posts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -103,7 +103,7 @@ class FeedPostControllerTest {
     @Test
     void create_blankBody_returns400() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        CreateFeedPostRequest body = new CreateFeedPostRequest("", List.of());
+        CreateFeedPostRequest body = new CreateFeedPostRequest("", List.of(), null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -116,7 +116,7 @@ class FeedPostControllerTest {
     void create_oversizeBody_returns400() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
         String tooLong = "x".repeat(FeedPostLimits.MAX_BODY_LENGTH + 1);
-        CreateFeedPostRequest body = new CreateFeedPostRequest(tooLong, List.of());
+        CreateFeedPostRequest body = new CreateFeedPostRequest(tooLong, List.of(), null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -130,7 +130,7 @@ class FeedPostControllerTest {
         mockMenteeJwt(TOKEN, 1L);
         List<String> tooMany = IntStream.range(0, FeedPostLimits.MAX_HASHTAGS + 1)
                 .mapToObj(i -> "tag" + i).collect(Collectors.toList());
-        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", tooMany);
+        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", tooMany, null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -142,10 +142,10 @@ class FeedPostControllerTest {
     @Test
     void create_adminRequester_returns403() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        when(feedPostService.create(eq(1L), any(), any()))
+        when(feedPostService.create(eq(1L), any(), any(), any()))
                 .thenThrow(new AccessDeniedException("Admins cannot create feed posts"));
 
-        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of());
+        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of(), null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -197,9 +197,9 @@ class FeedPostControllerTest {
     @Test
     void update_happyPath_returns200() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        when(feedPostService.update(eq(42L), eq(1L), any(), any())).thenReturn(stub(42L, 1L));
+        when(feedPostService.update(eq(42L), eq(1L), any(), any(), any())).thenReturn(stub(42L, 1L));
 
-        UpdateFeedPostRequest body = new UpdateFeedPostRequest("Updated", null);
+        UpdateFeedPostRequest body = new UpdateFeedPostRequest("Updated", null, null);
 
         mockMvc.perform(patch("/api/feed/posts/42")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -212,10 +212,10 @@ class FeedPostControllerTest {
     @Test
     void update_nonAuthor_returns403() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        when(feedPostService.update(eq(42L), eq(1L), any(), any()))
+        when(feedPostService.update(eq(42L), eq(1L), any(), any(), any()))
                 .thenThrow(new AccessDeniedException("Only the post author can perform this action"));
 
-        UpdateFeedPostRequest body = new UpdateFeedPostRequest("hostile", null);
+        UpdateFeedPostRequest body = new UpdateFeedPostRequest("hostile", null, null);
 
         mockMvc.perform(patch("/api/feed/posts/42")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -227,10 +227,10 @@ class FeedPostControllerTest {
     @Test
     void update_softDeleted_returns404() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        when(feedPostService.update(eq(42L), eq(1L), any(), any()))
+        when(feedPostService.update(eq(42L), eq(1L), any(), any(), any()))
                 .thenThrow(new ResourceNotFoundException("Feed post not found with id: 42"));
 
-        UpdateFeedPostRequest body = new UpdateFeedPostRequest("late edit", null);
+        UpdateFeedPostRequest body = new UpdateFeedPostRequest("late edit", null, null);
 
         mockMvc.perform(patch("/api/feed/posts/42")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -242,10 +242,10 @@ class FeedPostControllerTest {
     @Test
     void update_concurrentModification_returns409() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        when(feedPostService.update(eq(42L), eq(1L), any(), any()))
+        when(feedPostService.update(eq(42L), eq(1L), any(), any(), any()))
                 .thenThrow(new OptimisticLockingFailureException("stale version"));
 
-        UpdateFeedPostRequest body = new UpdateFeedPostRequest("v1", null);
+        UpdateFeedPostRequest body = new UpdateFeedPostRequest("v1", null, null);
 
         mockMvc.perform(patch("/api/feed/posts/42")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -256,7 +256,7 @@ class FeedPostControllerTest {
 
     @Test
     void update_unauthenticated_returns403() throws Exception {
-        UpdateFeedPostRequest body = new UpdateFeedPostRequest("x", null);
+        UpdateFeedPostRequest body = new UpdateFeedPostRequest("x", null, null);
         mockMvc.perform(patch("/api/feed/posts/42")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))

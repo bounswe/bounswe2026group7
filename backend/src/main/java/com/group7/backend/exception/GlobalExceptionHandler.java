@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -70,6 +71,24 @@ public class GlobalExceptionHandler {
                 request.getMethod(), request.getRequestURI(), ex.getClass().getSimpleName());
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict",
                 "This action conflicted with a concurrent update. Please retry.");
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(DataIntegrityViolationException ex,
+                                                                            HttpServletRequest request) {
+        // Database integrity violations — UNIQUE collisions, FK or CHECK
+        // breaches — surface as 409 Conflict. The specific case driving this
+        // handler is the {@code feed_post_attachments_unique_attachment}
+        // constraint (#485): claiming an attachment id that is already
+        // referenced by another feed post. Service-layer pre-checks short-
+        // circuit the common case with cleaner messages; this handler is the
+        // race-window backstop and the uniform response for any other
+        // integrity violation that bubbles past the service.
+        log.warn("Data integrity violation: method={}, path={}, mostSpecificCause={}",
+                request.getMethod(), request.getRequestURI(),
+                ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict",
+                "This action conflicts with the current state of the resource (constraint violation).");
     }
 
     @ExceptionHandler(OverlappingSlotException.class)

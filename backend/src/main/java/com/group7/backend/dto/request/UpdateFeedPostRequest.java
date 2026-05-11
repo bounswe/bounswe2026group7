@@ -2,9 +2,11 @@ package com.group7.backend.dto.request;
 
 import com.group7.backend.dto.feed.FeedPostLimits;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Request body for {@code PATCH /api/feed/posts/{id}} (#348). Both
@@ -25,6 +27,12 @@ public record UpdateFeedPostRequest(
 
         @Schema(description = "New hashtags, or null to leave unchanged. Server applies the same normalisation as create.")
         @Size(max = FeedPostLimits.MAX_HASHTAGS)
-        List<@Size(max = FeedPostLimits.MAX_HASHTAG_LENGTH) String> hashtags
+        List<@Size(max = FeedPostLimits.MAX_HASHTAG_LENGTH) String> hashtags,
+
+        @Schema(description = "New attachment id set, or null to leave unchanged. Empty list clears all "
+                + "attachments. Otherwise replaces the post's attachment list with the supplied ids in "
+                + "order (validation rules match the create path).")
+        @Size(max = 4, message = "A post can carry at most 4 attachments")
+        List<@NotNull UUID> attachmentIds
 ) {
 }

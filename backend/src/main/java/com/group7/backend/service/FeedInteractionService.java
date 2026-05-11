@@ -183,28 +183,13 @@ public class FeedInteractionService {
                 .map(byId::get)
                 .filter(p -> p != null && p.getDeletedAt() == null)
                 .toList();
-        Map<Long, String> authorNames = new HashMap<>();
-        userRepository.findAllById(ordered.stream().map(FeedPost::getAuthorId)
-                .collect(Collectors.toSet()))
-                .forEach(u -> authorNames.put(u.getId(), u.getFirstName()));
+        // Single source of truth for the list-item shape — author-name batching,
+        // attachment URL construction, and per-post counts all routed through
+        // the mapper + batchCounts. Keeps list rendering identical across
+        // /for-you, /following, /search, /author posts, and /me/bookmarks.
         Map<Long, PostCounts> counts = batchCounts(
                 ordered.stream().map(FeedPost::getId).toList());
-        List<FeedPostListItem> items = ordered.stream().map(p -> {
-            PostCounts c = counts.get(p.getId());
-            long likeCount = (c == null) ? 0L : c.likeCount();
-            long commentCount = (c == null) ? 0L : c.commentCount();
-            return new FeedPostListItem(
-                    p.getId(),
-                    p.getAuthorId(),
-                    authorNames.getOrDefault(p.getAuthorId(), null),
-                    p.getBody(),
-                    p.getHashtags().stream().map(h -> h.getId().getTag()).sorted().toList(),
-                    p.getCreatedAt(),
-                    likeCount,
-                    commentCount,
-                    List.of()
-            );
-        }).toList();
+        List<FeedPostListItem> items = feedPostMapper.toListItems(ordered, userId, counts);
         return new PageImpl<>(items, pageable, postIds.getTotalElements());
     }
 

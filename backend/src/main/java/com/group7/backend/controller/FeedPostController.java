@@ -76,7 +76,8 @@ public class FeedPostController {
             @Valid @RequestBody CreateFeedPostRequest request,
             Authentication authentication) {
         Long authorId = (Long) authentication.getCredentials();
-        FeedPostResponse body = feedPostService.create(authorId, request.body(), request.hashtags());
+        FeedPostResponse body = feedPostService.create(
+                authorId, request.body(), request.hashtags(), request.attachmentIds());
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
@@ -114,7 +115,8 @@ public class FeedPostController {
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(
-                feedPostService.update(id, requesterId, request.body(), request.hashtags()));
+                feedPostService.update(id, requesterId, request.body(), request.hashtags(),
+                        request.attachmentIds()));
     }
 
     @DeleteMapping("/{id:\\d+}")
