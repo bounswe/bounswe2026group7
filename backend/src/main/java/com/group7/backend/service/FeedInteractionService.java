@@ -9,6 +9,8 @@ import com.group7.backend.entity.FeedPostComment;
 import com.group7.backend.entity.FeedPostLikeId;
 import com.group7.backend.entity.FeedPostShare;
 import com.group7.backend.entity.User;
+import com.group7.backend.entity.FeedPostHashtag;
+import com.group7.backend.event.FeedEngagementEvent;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FeedPostBookmarkRepository;
 import com.group7.backend.repository.FeedPostCommentRepository;
@@ -19,6 +21,7 @@ import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.projection.PostCountTuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -76,6 +79,7 @@ public class FeedInteractionService {
     private final UserRepository userRepository;
     private final FeedPostMapper feedPostMapper;
     private final NotificationEventPublisher notificationEventPublisher;
+    private final ApplicationEventPublisher eventPublisher;
 
     public FeedInteractionService(FeedPostRepository feedPostRepository,
                                    FeedPostLikeRepository likeRepository,
@@ -84,7 +88,8 @@ public class FeedInteractionService {
                                    FeedPostCommentRepository commentRepository,
                                    UserRepository userRepository,
                                    FeedPostMapper feedPostMapper,
-                                   NotificationEventPublisher notificationEventPublisher) {
+                                   NotificationEventPublisher notificationEventPublisher,
+                                   ApplicationEventPublisher eventPublisher) {
         this.feedPostRepository = feedPostRepository;
         this.likeRepository = likeRepository;
         this.bookmarkRepository = bookmarkRepository;
@@ -93,6 +98,7 @@ public class FeedInteractionService {
         this.userRepository = userRepository;
         this.feedPostMapper = feedPostMapper;
         this.notificationEventPublisher = notificationEventPublisher;
+        this.eventPublisher = eventPublisher;
     }
 
     // ── Likes ──────────────────────────────────────────────────────────────
@@ -127,6 +133,7 @@ public class FeedInteractionService {
         } else {
             likeRepository.upsertLike(postId, userId);
             nowLiked = true;
+            publishEngagement(postId, userId);
         }
         log.info("Toggle like: postId={}, userId={}, nowLiked={}", postId, userId, nowLiked);
         if (nowLiked && !userId.equals(post.getAuthorId())) {
@@ -155,6 +162,7 @@ public class FeedInteractionService {
         } else {
             bookmarkRepository.upsertBookmark(postId, userId);
             nowBookmarked = true;
+            publishEngagement(postId, userId);
         }
         log.info("Toggle bookmark: postId={}, userId={}, nowBookmarked={}",
                 postId, userId, nowBookmarked);
@@ -238,6 +246,7 @@ public class FeedInteractionService {
     public FeedPostInteractionState recordShare(Long postId, Long sharerId) {
         FeedPost post = requireVisiblePost(postId);
         shareRepository.save(new FeedPostShare(postId, sharerId));
+        publishEngagement(postId, sharerId);
         log.info("Recorded share: postId={}, sharerId={}", postId, sharerId);
         if (!sharerId.equals(post.getAuthorId())) {
             notificationEventPublisher.publishFeedShare(
@@ -259,6 +268,7 @@ public class FeedInteractionService {
         comment.setCreatedAt(now);
         comment.setUpdatedAt(now);
         FeedPostComment saved = commentRepository.save(comment);
+        publishEngagement(postId, authorId);
         log.info("Created comment: id={}, postId={}, authorId={}", saved.getId(), postId, authorId);
         String actorFirstName = resolveAuthorName(authorId);
         if (!authorId.equals(post.getAuthorId())) {
@@ -357,6 +367,30 @@ public class FeedInteractionService {
     private FeedPost requireVisiblePost(Long postId) {
         return feedPostRepository.findByIdAndDeletedAtIsNull(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Feed post not found with id: " + postId));
+    }
+
+    /**
+     * Publishes a {@link FeedEngagementEvent} for the bandit α-update
+     * trampoline. Called only from positive-engagement (insert) branches;
+     * toggle-off paths must NOT publish (without β updates a
+     * like-then-unlike would otherwise double-credit α).
+     *
+     * <p>The event payload carries the post's normalized hashtag set so
+     * the listener doesn't need to re-load the post in its own
+     * transaction. Hashtags are read inside the calling {@code @Transactional}
+     * method so the LAZY collection populates before commit; the listener
+     * receives a defensive copy via the event's compact constructor.
+     */
+    private void publishEngagement(Long postId, Long viewerId) {
+        feedPostRepository.findByIdAndDeletedAtIsNull(postId).ifPresent(post -> {
+            Set<String> hashtags = post.getHashtags().stream()
+                    .map(FeedPostHashtag::getId)
+                    .map(id -> id.getTag())
+                    .collect(Collectors.toSet());
+            if (!hashtags.isEmpty()) {
+                eventPublisher.publishEvent(new FeedEngagementEvent(viewerId, hashtags));
+            }
+        });
     }
 
     private FeedCommentResponse mapComment(FeedPostComment c, Long viewerId, String authorName) {
