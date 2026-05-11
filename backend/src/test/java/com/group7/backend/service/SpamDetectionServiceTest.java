@@ -5,6 +5,7 @@ import com.group7.backend.config.ratelimit.BucketCache;
 import com.group7.backend.config.ratelimit.ClientIpResolver;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.entity.Ban;
+import com.group7.backend.entity.BanSource;
 import com.group7.backend.entity.BotSignal;
 import com.group7.backend.entity.BotSignal.SignalType;
 import com.group7.backend.entity.Mentee;
@@ -216,33 +217,71 @@ class SpamDetectionServiceTest {
     }
 
     @Test
-    void clearFlag_clearsAndLiftsBan() {
+    void clearFlag_clearsAndLiftsSystemSpamBan() {
         User user = new Mentee();
         user.setId(42L);
         user.setIsSuspectedBot(true);
         user.setSuspectedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        Ban spamBan = new Ban();
+        spamBan.setId(99L);
+        spamBan.setSource(BanSource.SYSTEM_SPAM);
         when(userRepository.findById(42L)).thenReturn(Optional.of(user));
-        when(banService.getActiveBan(42L)).thenReturn(Optional.of(new Ban()));
-        when(banService.unbanUser(eq(42L), eq(7L))).thenReturn(new Ban());
+        when(banService.getActiveBanBySource(42L, BanSource.SYSTEM_SPAM))
+                .thenReturn(Optional.of(spamBan));
+        when(banService.liftBan(eq(99L), eq(7L))).thenReturn(spamBan);
 
         service.clearFlag(42L, 7L);
 
         assertThat(user.getIsSuspectedBot()).isFalse();
         assertThat(user.getSuspectedAt()).isNull();
-        verify(banService).unbanUser(42L, 7L);
+        verify(banService).liftBan(99L, 7L);
+        // Must not fall back to the source-blind unban path — that would
+        // re-introduce the bug where an admin ban could get lifted instead.
+        verify(banService, never()).unbanUser(anyLong(), anyLong());
     }
 
     @Test
-    void clearFlag_isIdempotentWhenNoActiveBan() {
+    void clearFlag_isIdempotentWhenNoActiveSpamBan() {
         User user = new Mentee();
         user.setId(42L);
         user.setIsSuspectedBot(true);
         when(userRepository.findById(42L)).thenReturn(Optional.of(user));
-        when(banService.getActiveBan(42L)).thenReturn(Optional.empty());
+        when(banService.getActiveBanBySource(42L, BanSource.SYSTEM_SPAM))
+                .thenReturn(Optional.empty());
 
         service.clearFlag(42L, 7L);
 
         assertThat(user.getIsSuspectedBot()).isFalse();
+        verify(banService, never()).liftBan(anyLong(), anyLong());
         verify(banService, never()).unbanUser(anyLong(), anyLong());
+    }
+
+    /**
+     * Reviewer scenario (#345): user has both a SYSTEM_SPAM ban and an
+     * unrelated ADMIN ban active. clearFlag must touch the spam one only —
+     * the admin ban (which by construction is unrelated to the bot
+     * heuristic) stays in place. This is the regression test for the bug
+     * where {@code getActiveBan} returned the latest-expiring row of any
+     * source, allowing the admin ban to be lifted by accident.
+     */
+    @Test
+    void clearFlag_doesNotLiftUnrelatedAdminBan() {
+        User user = new Mentee();
+        user.setId(42L);
+        user.setIsSuspectedBot(true);
+        when(userRepository.findById(42L)).thenReturn(Optional.of(user));
+        // No active spam ban (e.g. it already expired); the admin ban that
+        // also exists must not be reachable through this code path.
+        when(banService.getActiveBanBySource(42L, BanSource.SYSTEM_SPAM))
+                .thenReturn(Optional.empty());
+
+        service.clearFlag(42L, 7L);
+
+        assertThat(user.getIsSuspectedBot()).isFalse();
+        verify(banService, never()).liftBan(anyLong(), anyLong());
+        verify(banService, never()).unbanUser(anyLong(), anyLong());
+        // Critically: clearFlag must never query the source-blind helper —
+        // that's exactly the call site that used to misroute admin lifts.
+        verify(banService, never()).getActiveBan(anyLong());
     }
 }

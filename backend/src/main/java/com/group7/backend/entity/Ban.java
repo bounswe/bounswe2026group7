@@ -38,6 +38,16 @@ public class Ban {
     @Column(nullable = false, length = 255)
     private String reason;
 
+    /**
+     * Discriminator for the imposition path (#345). Persisted as a string
+     * so DB dumps stay legible and the enum can be widened without a data
+     * migration. The "clear bot flag" admin flow filters by this column so
+     * a system spam-ban lift cannot accidentally touch an admin ban.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    private BanSource source;
+
     @Column(name = "ban_count", nullable = false)
     private int banCount;
 

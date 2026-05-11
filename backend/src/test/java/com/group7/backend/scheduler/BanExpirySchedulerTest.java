@@ -1,6 +1,7 @@
 package com.group7.backend.scheduler;
 
 import com.group7.backend.entity.Ban;
+import com.group7.backend.entity.BanSource;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.User;
 import com.group7.backend.repository.BanRepository;
@@ -90,6 +91,7 @@ class BanExpirySchedulerTest {
         Ban ban = new Ban();
         ban.setId(userId * 10);
         ban.setUser(user);
+        ban.setSource(BanSource.MENTEE_CANCELLATION);
         ban.setExpiresAt(OffsetDateTime.now(clock).minusMinutes(5));
         ban.setExpiryNotified(false);
         return ban;

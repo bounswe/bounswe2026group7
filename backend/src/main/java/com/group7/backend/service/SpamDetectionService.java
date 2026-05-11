@@ -6,6 +6,7 @@ import com.group7.backend.config.ratelimit.ClientIpResolver;
 import com.group7.backend.config.ratelimit.KeyStrategy;
 import com.group7.backend.config.ratelimit.RateLimitRule;
 import com.group7.backend.dto.request.RegisterRequest;
+import com.group7.backend.entity.BanSource;
 import com.group7.backend.entity.BotSignal;
 import com.group7.backend.entity.BotSignal.SignalType;
 import com.group7.backend.entity.User;
@@ -180,9 +181,15 @@ public class SpamDetectionService {
 
     /**
      * Admin clear-bot-flag (#345). Resets the user's flag and lifts the
-     * active auto-ban so the user can log in again. Idempotent: a missing
-     * active ban is not an error here (the auto-ban may already have
-     * expired or been lifted manually).
+     * active system spam-ban so the user can log in again. Idempotent: a
+     * missing active spam-ban is not an error here (the auto-ban may
+     * already have expired or been lifted manually).
+     *
+     * <p>Scoped strictly to {@link BanSource#SYSTEM_SPAM}: if the user
+     * also has an unrelated active {@link BanSource#ADMIN} or
+     * {@link BanSource#MENTEE_CANCELLATION} ban, this method leaves it in
+     * place. Lifting those is the {@code BanService.unbanUser} / admin
+     * UI's job, not the spam-flag clear path's.
      */
     @Transactional
     public void clearFlag(Long userId, Long adminId) {
@@ -192,16 +199,13 @@ public class SpamDetectionService {
         user.setSuspectedAt(null);
         userRepository.save(user);
 
-        // Check-then-act rather than catching ResourceNotFoundException: a
-        // thrown 404 from unbanUser propagates through the inner @Transactional
-        // and marks the outer (this) transaction rollback-only, which would
-        // surface as an UnexpectedRollbackException on commit. The gap
-        // between getActiveBan and unbanUser is harmless — if the ban expires
-        // in between, unbanUser will simply throw and the user is still left
-        // in a coherent state (flag cleared; no active ban anyway).
-        if (banService.getActiveBan(userId).isPresent()) {
-            banService.unbanUser(userId, adminId);
-        }
+        // Look up the spam ban directly and lift it by id, instead of
+        // calling unbanUser(userId,...) — that helper re-resolves "the"
+        // active ban and would route around the source filter we just
+        // applied. liftBan is also idempotent on an already-lifted row,
+        // so a tiny race between the lookup and lift commit is harmless.
+        banService.getActiveBanBySource(userId, BanSource.SYSTEM_SPAM)
+                .ifPresent(ban -> banService.liftBan(ban.getId(), adminId));
 
         log.info("Bot flag cleared by admin: userId={}, adminId={}", userId, adminId);
     }

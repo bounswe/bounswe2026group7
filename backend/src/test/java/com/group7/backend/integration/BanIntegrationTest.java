@@ -6,6 +6,7 @@ import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Ban;
+import com.group7.backend.entity.BanSource;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.Notification;
@@ -189,6 +190,7 @@ class BanIntegrationTest {
         Ban active = new Ban();
         active.setUser(mentee);
         active.setReason("Frequent cancellations");
+        active.setSource(BanSource.MENTEE_CANCELLATION);
         active.setBanCount(1);
         active.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).plusHours(24));
         Ban saved = banRepository.save(active);
@@ -246,6 +248,7 @@ class BanIntegrationTest {
         Ban expired = new Ban();
         expired.setUser(mentee);
         expired.setReason("test");
+        expired.setSource(BanSource.MENTEE_CANCELLATION);
         expired.setBanCount(1);
         expired.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(5));
         expired.setExpiryNotified(false);
