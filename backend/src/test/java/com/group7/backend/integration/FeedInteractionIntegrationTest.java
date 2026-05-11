@@ -5,12 +5,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.entity.User;
+import com.group7.backend.entity.Notification;
+import com.group7.backend.entity.NotificationType;
 import com.group7.backend.repository.FeedPostLikeRepository;
+import com.group7.backend.repository.NotificationRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.VerificationTokenRepository;
 import com.group7.backend.service.EmailService;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -57,6 +63,7 @@ class FeedInteractionIntegrationTest {
     @Autowired private UserRepository userRepository;
     @Autowired private VerificationTokenRepository verificationTokenRepository;
     @Autowired private FeedPostLikeRepository likeRepository;
+    @Autowired private NotificationRepository notificationRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
     @MockitoBean private EmailService emailService;
 
@@ -418,6 +425,54 @@ class FeedInteractionIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // ── Comment permalink (#489) ──────────────────────────────────────────
+
+    @Test
+    void commentPermalink_happyPath_returnsComment() throws Exception {
+        String tokenA = registerAndLogin("perma_a@test.com");
+        String tokenB = registerAndLogin("perma_b@test.com");
+        long pid = createPost(tokenA, "permalink target", List.of());
+        long commentId = addComment(tokenB, pid, "linkable comment");
+
+        mockMvc.perform(get("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(commentId))
+                .andExpect(jsonPath("$.postId").value(pid))
+                .andExpect(jsonPath("$.body").value("linkable comment"))
+                .andExpect(jsonPath("$.isDeleted").value(false));
+    }
+
+    @Test
+    void commentPermalink_softDeletedComment_returns404() throws Exception {
+        String tokenA = registerAndLogin("perma_del_a@test.com");
+        long pid = createPost(tokenA, "post", List.of());
+        long commentId = addComment(tokenA, pid, "to be deleted");
+
+        mockMvc.perform(delete("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void commentPermalink_parentPostSoftDeleted_returns404() throws Exception {
+        String tokenA = registerAndLogin("perma_parent_a@test.com");
+        long pid = createPost(tokenA, "orphan parent", List.of());
+        long commentId = addComment(tokenA, pid, "comment on soon-deleted post");
+
+        mockMvc.perform(delete("/api/feed/posts/" + pid)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNotFound());
+    }
+
     // ── Auth gate ──────────────────────────────────────────────────────────
 
     @Test
@@ -428,6 +483,7 @@ class FeedInteractionIntegrationTest {
         mockMvc.perform(post("/api/feed/posts/1/comments")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/me/bookmarks")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/posts/1/interactions")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/feed/comments/1")).andExpect(status().isForbidden());
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -471,5 +527,130 @@ class FeedInteractionIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
         return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asLong();
+    }
+
+    private long addComment(String token, long postId, String body) throws Exception {
+        // ObjectMapper-based body construction so future tests can pass
+        // bodies containing quotes or backslashes without breaking the
+        // JSON literal.
+        MvcResult res = mockMvc.perform(post("/api/feed/posts/" + postId + "/comments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("body", body))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asLong();
+    }
+
+    private long userIdByEmail(String email) {
+        return userRepository.findByEmail(email).orElseThrow().getId();
+    }
+
+    private List<Notification> notificationsFor(Long userId, NotificationType type) {
+        return notificationRepository.findForUser(userId, false).stream()
+                .filter(n -> n.getType() == type)
+                .toList();
+    }
+
+    private List<Notification> awaitNotifications(Long userId, NotificationType type, int expectedCount) {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .pollInterval(Duration.ofMillis(50))
+                .untilAsserted(() -> assertThat(notificationsFor(userId, type)).hasSize(expectedCount));
+        return notificationsFor(userId, type);
+    }
+
+    // ── Engagement notifications ───────────────────────────────────────────
+
+    @Test
+    void toggleLike_publishesFeedLikeNotification_toPostAuthorOnly() throws Exception {
+        String authorToken = registerAndLogin("notif_like_author@test.com");
+        String likerToken = registerAndLogin("notif_like_liker@test.com");
+        long pid = createPost(authorToken, "post to like", List.of());
+        long authorId = userIdByEmail("notif_like_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/like")
+                        .header("Authorization", "Bearer " + likerToken))
+                .andExpect(status().isOk());
+
+        List<Notification> rows = awaitNotifications(authorId, NotificationType.FEED_LIKE, 1);
+        assertThat(rows.get(0).getBody()).contains("liked your post.");
+
+        // Author self-likes → no extra notification (self-actor skip).
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/like")
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk());
+        // Give the async listener a beat; it should still settle at 1.
+        Thread.sleep(200);
+        assertThat(notificationsFor(authorId, NotificationType.FEED_LIKE)).hasSize(1);
+    }
+
+    @Test
+    void toggleLike_secondLikeAcrossPosts_collapsesUnder24hDedup() throws Exception {
+        String authorToken = registerAndLogin("notif_dedup_author@test.com");
+        String likerToken = registerAndLogin("notif_dedup_liker@test.com");
+        long pidA = createPost(authorToken, "post A", List.of());
+        long pidB = createPost(authorToken, "post B", List.of());
+        long authorId = userIdByEmail("notif_dedup_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pidA + "/like")
+                        .header("Authorization", "Bearer " + likerToken))
+                .andExpect(status().isOk());
+        awaitNotifications(authorId, NotificationType.FEED_LIKE, 1);
+        mockMvc.perform(post("/api/feed/posts/" + pidB + "/like")
+                        .header("Authorization", "Bearer " + likerToken))
+                .andExpect(status().isOk());
+        // Same body "<firstName> liked your post." → second insert is deduped.
+        // Give the listener time to run and confirm it stays at 1.
+        Thread.sleep(300);
+        assertThat(notificationsFor(authorId, NotificationType.FEED_LIKE)).hasSize(1);
+    }
+
+    @Test
+    void addComment_publishesFeedCommentNotification_toPostAuthor() throws Exception {
+        String authorToken = registerAndLogin("notif_cmt_author@test.com");
+        String commenterToken = registerAndLogin("notif_cmt_commenter@test.com");
+        long pid = createPost(authorToken, "post to comment", List.of());
+        long authorId = userIdByEmail("notif_cmt_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/comments")
+                        .header("Authorization", "Bearer " + commenterToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"hi\"}"))
+                .andExpect(status().isCreated());
+
+        List<Notification> rows = awaitNotifications(authorId, NotificationType.FEED_COMMENT, 1);
+        assertThat(rows.get(0).getBody()).contains("commented on your post.");
+
+        // Author self-comments → no extra notification (self-actor skip).
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/comments")
+                        .header("Authorization", "Bearer " + authorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"my own\"}"))
+                .andExpect(status().isCreated());
+        Thread.sleep(200);
+        assertThat(notificationsFor(authorId, NotificationType.FEED_COMMENT)).hasSize(1);
+    }
+
+    @Test
+    void recordShare_publishesFeedShareNotification_toPostAuthor() throws Exception {
+        String authorToken = registerAndLogin("notif_share_author@test.com");
+        String sharerToken = registerAndLogin("notif_share_sharer@test.com");
+        long pid = createPost(authorToken, "post to share", List.of());
+        long authorId = userIdByEmail("notif_share_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/share")
+                        .header("Authorization", "Bearer " + sharerToken))
+                .andExpect(status().isOk());
+
+        List<Notification> rows = awaitNotifications(authorId, NotificationType.FEED_SHARE, 1);
+        assertThat(rows.get(0).getBody()).contains("shared your post.");
+
+        // Author self-shares → no extra notification.
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/share")
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk());
+        Thread.sleep(200);
+        assertThat(notificationsFor(authorId, NotificationType.FEED_SHARE)).hasSize(1);
     }
 }

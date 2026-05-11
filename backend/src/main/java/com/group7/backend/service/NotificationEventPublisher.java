@@ -277,6 +277,54 @@ public class NotificationEventPublisher {
         );
     }
 
+    /** Fires FEED_LIKE to the post author. Body collapses cross-post likes per actor under the 24h dedup gate. */
+    public void publishFeedLike(Long recipientId, String actorFirstName, Long postId) {
+        applicationEventPublisher.publishEvent(new NotificationCreatedEvent(
+                recipientId,
+                NotificationType.FEED_LIKE,
+                "New like",
+                actorFirstName + " liked your post.",
+                postId,
+                null
+        ));
+    }
+
+    /** Fires FEED_COMMENT to the post author for each new visible comment. */
+    public void publishFeedComment(Long recipientId, String actorFirstName, Long postId) {
+        applicationEventPublisher.publishEvent(new NotificationCreatedEvent(
+                recipientId,
+                NotificationType.FEED_COMMENT,
+                "New comment",
+                actorFirstName + " commented on your post.",
+                postId,
+                null
+        ));
+    }
+
+    /** Fires FEED_SHARE to the post author whenever someone shares the post. */
+    public void publishFeedShare(Long recipientId, String actorFirstName, Long postId) {
+        applicationEventPublisher.publishEvent(new NotificationCreatedEvent(
+                recipientId,
+                NotificationType.FEED_SHARE,
+                "Post shared",
+                actorFirstName + " shared your post.",
+                postId,
+                null
+        ));
+    }
+
+    /** Fires NEW_FOLLOWER to the followee. entityId carries the follower's user id for deep-link context. */
+    public void publishNewFollower(Long recipientId, String followerFirstName, Long followerId) {
+        applicationEventPublisher.publishEvent(new NotificationCreatedEvent(
+                recipientId,
+                NotificationType.NEW_FOLLOWER,
+                "New follower",
+                followerFirstName + " started following you.",
+                followerId,
+                null
+        ));
+    }
+
     public void publish(Long recipientId, NotificationType type, String title, String body) {
         applicationEventPublisher.publishEvent(new NotificationCreatedEvent(recipientId, type, title, body));
     }

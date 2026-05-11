@@ -69,8 +69,15 @@ class FeedPostIntegrationTest {
     void cleanDb() {
         // Children first by FK, then parents. Cascade would handle this,
         // but explicit ordering is more debuggable when something goes wrong.
+        // feed_post_attachments references attachments with NO ACTION, so any
+        // junction rows must be cleared before the attachments DELETE.
+        jdbcTemplate.update("DELETE FROM feed_post_attachments");
         jdbcTemplate.update("DELETE FROM feed_post_hashtags");
         jdbcTemplate.update("DELETE FROM feed_posts");
+        // Messages reference attachments via SET NULL — clearing messages
+        // first ensures attachment-row deletes don't trip the FK.
+        jdbcTemplate.update("DELETE FROM messages");
+        jdbcTemplate.update("DELETE FROM attachments");
         verificationTokenRepository.deleteAll();
         userRepository.deleteAll();
         doNothing().when(emailService).sendVerificationEmail(any(), anyString());

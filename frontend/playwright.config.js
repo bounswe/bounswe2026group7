@@ -28,6 +28,16 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
+    // Framer-motion's LoginPage entrance animation (opacity + y + scale)
+    // is the dominant variance source for AT-02's Firefox login flake on
+    // GitHub Actions: the runner schedules the click during the tail of
+    // the entrance tween, the submit-button click is delayed past the 40s
+    // navigation budget, and the page stays on /login. Asking Playwright
+    // to set prefers-reduced-motion: reduce on every browser context
+    // tells framer-motion to skip the tween entirely — production
+    // behaviour for users with the OS-level reduced-motion preference is
+    // unaffected.
+    reducedMotion: 'reduce',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },

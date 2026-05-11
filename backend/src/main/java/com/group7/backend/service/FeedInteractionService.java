@@ -9,6 +9,8 @@ import com.group7.backend.entity.FeedPostComment;
 import com.group7.backend.entity.FeedPostLikeId;
 import com.group7.backend.entity.FeedPostShare;
 import com.group7.backend.entity.User;
+import com.group7.backend.entity.FeedPostHashtag;
+import com.group7.backend.event.FeedEngagementEvent;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FeedPostBookmarkRepository;
 import com.group7.backend.repository.FeedPostCommentRepository;
@@ -19,6 +21,7 @@ import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.projection.PostCountTuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -75,6 +78,8 @@ public class FeedInteractionService {
     private final FeedPostCommentRepository commentRepository;
     private final UserRepository userRepository;
     private final FeedPostMapper feedPostMapper;
+    private final NotificationEventPublisher notificationEventPublisher;
+    private final ApplicationEventPublisher eventPublisher;
 
     public FeedInteractionService(FeedPostRepository feedPostRepository,
                                    FeedPostLikeRepository likeRepository,
@@ -82,7 +87,9 @@ public class FeedInteractionService {
                                    FeedPostShareRepository shareRepository,
                                    FeedPostCommentRepository commentRepository,
                                    UserRepository userRepository,
-                                   FeedPostMapper feedPostMapper) {
+                                   FeedPostMapper feedPostMapper,
+                                   NotificationEventPublisher notificationEventPublisher,
+                                   ApplicationEventPublisher eventPublisher) {
         this.feedPostRepository = feedPostRepository;
         this.likeRepository = likeRepository;
         this.bookmarkRepository = bookmarkRepository;
@@ -90,6 +97,8 @@ public class FeedInteractionService {
         this.commentRepository = commentRepository;
         this.userRepository = userRepository;
         this.feedPostMapper = feedPostMapper;
+        this.notificationEventPublisher = notificationEventPublisher;
+        this.eventPublisher = eventPublisher;
     }
 
     // ── Likes ──────────────────────────────────────────────────────────────
@@ -115,7 +124,7 @@ public class FeedInteractionService {
      */
     @Transactional
     public FeedPostInteractionState toggleLike(Long postId, Long userId) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         FeedPostLikeId id = new FeedPostLikeId(postId, userId);
         boolean nowLiked;
         if (likeRepository.existsByIdPostIdAndIdUserId(postId, userId)) {
@@ -124,8 +133,13 @@ public class FeedInteractionService {
         } else {
             likeRepository.upsertLike(postId, userId);
             nowLiked = true;
+            publishEngagement(post, userId);
         }
         log.info("Toggle like: postId={}, userId={}, nowLiked={}", postId, userId, nowLiked);
+        if (nowLiked && !userId.equals(post.getAuthorId())) {
+            notificationEventPublisher.publishFeedLike(
+                    post.getAuthorId(), resolveAuthorName(userId), postId);
+        }
         return interactionState(postId, userId);
     }
 
@@ -139,7 +153,7 @@ public class FeedInteractionService {
      */
     @Transactional
     public FeedPostInteractionState toggleBookmark(Long postId, Long userId) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         FeedPostBookmarkId id = new FeedPostBookmarkId(postId, userId);
         boolean nowBookmarked;
         if (bookmarkRepository.existsByIdPostIdAndIdUserId(postId, userId)) {
@@ -148,6 +162,7 @@ public class FeedInteractionService {
         } else {
             bookmarkRepository.upsertBookmark(postId, userId);
             nowBookmarked = true;
+            publishEngagement(post, userId);
         }
         log.info("Toggle bookmark: postId={}, userId={}, nowBookmarked={}",
                 postId, userId, nowBookmarked);
@@ -168,25 +183,13 @@ public class FeedInteractionService {
                 .map(byId::get)
                 .filter(p -> p != null && p.getDeletedAt() == null)
                 .toList();
-        Map<Long, String> authorNames = new HashMap<>();
-        userRepository.findAllById(ordered.stream().map(FeedPost::getAuthorId)
-                .collect(Collectors.toSet()))
-                .forEach(u -> authorNames.put(u.getId(), u.getFirstName()));
+        // Single source of truth for the list-item shape — author-name batching,
+        // attachment URL construction, and per-post counts all routed through
+        // the mapper + batchCounts. Keeps list rendering identical across
+        // /for-you, /following, /search, /author posts, and /me/bookmarks.
         Map<Long, PostCounts> counts = batchCounts(
                 ordered.stream().map(FeedPost::getId).toList());
-        List<FeedPostListItem> items = ordered.stream().map(p -> {
-            PostCounts c = counts.get(p.getId());
-            return new FeedPostListItem(
-                    p.getId(),
-                    p.getAuthorId(),
-                    authorNames.getOrDefault(p.getAuthorId(), null),
-                    p.getBody(),
-                    p.getHashtags().stream().map(h -> h.getId().getTag()).sorted().toList(),
-                    p.getCreatedAt(),
-                    c.likeCount(),
-                    c.commentCount()
-            );
-        }).toList();
+        List<FeedPostListItem> items = feedPostMapper.toListItems(ordered, userId, counts);
         return new PageImpl<>(items, pageable, postIds.getTotalElements());
     }
 
@@ -226,9 +229,14 @@ public class FeedInteractionService {
 
     @Transactional
     public FeedPostInteractionState recordShare(Long postId, Long sharerId) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         shareRepository.save(new FeedPostShare(postId, sharerId));
+        publishEngagement(post, sharerId);
         log.info("Recorded share: postId={}, sharerId={}", postId, sharerId);
+        if (!sharerId.equals(post.getAuthorId())) {
+            notificationEventPublisher.publishFeedShare(
+                    post.getAuthorId(), resolveAuthorName(sharerId), postId);
+        }
         return interactionState(postId, sharerId);
     }
 
@@ -236,7 +244,7 @@ public class FeedInteractionService {
 
     @Transactional
     public FeedCommentResponse addComment(Long postId, Long authorId, String body) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         if (body == null || body.isBlank()) {
             throw new IllegalArgumentException("Comment body must not be blank");
         }
@@ -245,8 +253,14 @@ public class FeedInteractionService {
         comment.setCreatedAt(now);
         comment.setUpdatedAt(now);
         FeedPostComment saved = commentRepository.save(comment);
+        publishEngagement(post, authorId);
         log.info("Created comment: id={}, postId={}, authorId={}", saved.getId(), postId, authorId);
-        return mapComment(saved, authorId, resolveAuthorName(authorId));
+        String actorFirstName = resolveAuthorName(authorId);
+        if (!authorId.equals(post.getAuthorId())) {
+            notificationEventPublisher.publishFeedComment(
+                    post.getAuthorId(), actorFirstName, postId);
+        }
+        return mapComment(saved, authorId, actorFirstName);
     }
 
     public Page<FeedCommentResponse> listComments(Long postId, Long viewerId, Pageable pageable) {
@@ -296,6 +310,30 @@ public class FeedInteractionService {
         log.info("Soft-deleted comment: id={}, authorId={}", commentId, requesterId);
     }
 
+    /**
+     * Single-comment read (#489 permalink). Returns the comment iff it is
+     * not soft-deleted AND its parent post is still visible — without
+     * the parent-visibility check, a permalink to a comment on a
+     * soft-deleted post would surface orphan content with no navigation
+     * affordance. 404 on either condition.
+     *
+     * <p>Lives on this service (not {@code FeedReadService}) because
+     * every other single-comment operation already lives here; splitting
+     * one comment op into a different service would fragment the
+     * comment logic.
+     */
+    public FeedCommentResponse getComment(Long commentId, Long viewerId) {
+        FeedPostComment comment = commentRepository.findByIdAndDeletedAtIsNull(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
+        // Orphan-permalink guard: 404 when the parent post is soft-deleted.
+        // Same exception message as the comment-missing branch — distinguishing
+        // the two would leak whether the comment id ever existed, an
+        // unnecessary information disclosure for anyone probing ids.
+        feedPostRepository.findByIdAndDeletedAtIsNull(comment.getPostId())
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
+        return mapComment(comment, viewerId, resolveAuthorName(comment.getAuthorId()));
+    }
+
     // ── Aggregate state ────────────────────────────────────────────────────
 
     /**
@@ -335,9 +373,34 @@ public class FeedInteractionService {
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    private void requireVisiblePost(Long postId) {
-        feedPostRepository.findByIdAndDeletedAtIsNull(postId)
+    private FeedPost requireVisiblePost(Long postId) {
+        return feedPostRepository.findByIdAndDeletedAtIsNull(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Feed post not found with id: " + postId));
+    }
+
+    /**
+     * Publishes a {@link FeedEngagementEvent} for the bandit α-update
+     * trampoline. Called only from positive-engagement (insert) branches;
+     * toggle-off paths must NOT publish (without β updates a
+     * like-then-unlike would otherwise double-credit α).
+     *
+     * <p>The event payload carries the post's normalized hashtag set so
+     * the listener doesn't need to re-load the post in its own
+     * transaction. Hashtags are read inside the calling {@code @Transactional}
+     * method so the LAZY collection populates before commit; the listener
+     * receives a defensive copy via the event's compact constructor. The
+     * caller passes the post entity from its own {@code requireVisiblePost}
+     * call so the bandit hook doesn't re-issue a SELECT.
+     */
+    private void publishEngagement(FeedPost post, Long viewerId) {
+        if (post == null) return;
+        Set<String> hashtags = post.getHashtags().stream()
+                .map(FeedPostHashtag::getId)
+                .map(id -> id.getTag())
+                .collect(Collectors.toSet());
+        if (!hashtags.isEmpty()) {
+            eventPublisher.publishEvent(new FeedEngagementEvent(viewerId, hashtags));
+        }
     }
 
     private FeedCommentResponse mapComment(FeedPostComment c, Long viewerId, String authorName) {

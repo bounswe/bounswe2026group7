@@ -43,6 +43,17 @@ public record FeedPostListItem(
         long likeCount,
 
         @Schema(description = "Number of comments (placeholder 0 until #347)", example = "0")
-        long commentCount
+        long commentCount,
+
+        @Schema(description = "Short codes explaining why the For-You ranker placed this post. "
+                + "Empty for non-ranked feeds (Following, search, author profile). "
+                + "Codes from the advanced ranker are namespaced with a `feed:` prefix; the "
+                + "frontend strips the prefix and maps each code to a localized chip.",
+                example = "[\"feed:semantic-match:0.82\", \"feed:fresh\", \"feed:follow-boost\"]")
+        List<String> factors,
+
+        @Schema(description = "Image attachments on the post, in author-specified order. Empty when "
+                + "the post has no media (#485).")
+        List<AttachmentSummary> attachments
 ) {
 }

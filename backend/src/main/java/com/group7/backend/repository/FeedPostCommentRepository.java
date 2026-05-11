@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface FeedPostCommentRepository extends JpaRepository<FeedPostComment, Long> {
@@ -23,6 +24,15 @@ public interface FeedPostCommentRepository extends JpaRepository<FeedPostComment
     Page<FeedPostComment> findByPostIdOrderByCreatedAtAscIdAsc(Long postId, Pageable pageable);
 
     long countByPostIdAndDeletedAtIsNull(Long postId);
+
+    /**
+     * Permalink lookup (#489): returns the comment only when it is not
+     * soft-deleted. Used by {@code GET /api/feed/comments/{id}} to back
+     * the single-comment view. Derived method name matches the
+     * project-wide convention set by
+     * {@code FeedPostRepository.findByIdAndDeletedAtIsNull}.
+     */
+    Optional<FeedPostComment> findByIdAndDeletedAtIsNull(Long id);
 
     /**
      * Batch visible-comment-count projection across many posts in one

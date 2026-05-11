@@ -48,39 +48,53 @@ import { TasksPage } from '../pages/TasksPage.js';
 async function loginViaUi(page, { email, password }) {
   const loginPage = new LoginPage(page);
   await loginPage.goto();
-  // Capture the /api/auth/login response opportunistically so a 401/429 on
-  // the backend gives us a useful diagnostic. We don't await this directly
-  // (webkit + framer-motion entrance animation can delay the request enough
-  // that a tight 10s wait fires before the POST goes out, even though the
-  // login itself succeeds shortly after); the swallow on the catch keeps
-  // the timeout from masking the real navigation outcome below.
-  // Budget tracks the navigation wait below: response-fallback must outlive
-  // the nav assertion so a slow webkit POST surfaces its real status code
-  // instead of degrading to a generic "stuck on /login" message.
-  const loginResponsePromise = page
-    .waitForResponse(
+  // Let the framer-motion entrance + React hydration settle before
+  // touching the form. Without this, fast machines sometimes fill the
+  // inputs during the ~250ms entrance animation; the controlled-input
+  // state can be reset by a concurrent re-render and validate() then
+  // rejects the form for "missing email/password" without ever firing
+  // the POST. The page subsequently sits on /login indefinitely.
+  await page.waitForLoadState('networkidle');
+
+  // Step 1. Wait for the form to be fully interactive before clicking.
+  // The login page uses a framer-motion entrance animation; during the ~250ms
+  // it runs, the submit button receives clicks but the underlying form's
+  // submit handler can be racy. Waiting for the button's `enabled` state
+  // (which the React component clears once mount + initial render settle)
+  // gates the click on a real "ready to submit" signal rather than guessing.
+  const submit = page.getByTestId('login-submit');
+  await expect(submit).toBeEnabled({ timeout: 10_000 });
+
+  // Step 2. Atomic submit-and-wait. Register the response listener BEFORE
+  // dispatching the click so a fast backend can't return the response
+  // before we attach. Use Promise.all so a missed click (button still
+  // animating, hydration not done, etc.) surfaces here as a response
+  // timeout — not silently 40s later on the navigation assertion.
+  const [loginResponse] = await Promise.all([
+    page.waitForResponse(
       res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',
-      { timeout: 45_000 },
-    )
-    .catch(() => null);
-  await loginPage.signIn({ email, password });
-  // Successful login navigates to /home; on failure we stay on /login. Wait
-  // on the navigation as the source of truth — if it doesn't happen, fall
-  // back to the captured response (if any) for a useful error message.
-  // 40s here absorbs CI webkit slowness: AT-01 webkit takes ~10s for the
-  // same login navigation against ~4s on chromium, so the previous 20s
-  // budget left no headroom once first-paint slack and framer-motion
-  // entrance stacked up under load.
-  try {
-    await expect(page).toHaveURL(/\/home$/, { timeout: 40_000 });
-  } catch (navErr) {
-    const loginResponse = await loginResponsePromise;
-    if (loginResponse && !loginResponse.ok()) {
-      const body = await loginResponse.text().catch(() => '');
-      throw new Error(`UI login for ${email} returned ${loginResponse.status()}: ${body}`);
-    }
-    throw navErr;
+      { timeout: 30_000 },
+    ),
+    loginPage.signIn({ email, password }),
+  ]);
+
+  // Step 3. Diagnose backend-rejected logins with the real status code.
+  // 401 (bad creds), 429 (rate-limited by AT-07 running in parallel) and
+  // 5xx all return here with a useful message instead of degrading to a
+  // generic "stuck on /login".
+  if (!loginResponse.ok()) {
+    const body = await loginResponse.text().catch(() => '');
+    throw new Error(`UI login for ${email} returned ${loginResponse.status()}: ${body}`);
   }
+
+  // Step 4. React commit after a successful login: persist session token,
+  // re-render Router, redirect to /home. This is a same-thread sequence
+  // but the URL-change polling races against React batching, so allow a
+  // small navigation budget. 15s is generous for our React app — the
+  // long 40s window in the previous version was masking the real issue
+  // (the click sometimes didn't dispatch at all, which the assertion above
+  // now catches deterministically).
+  await expect(page).toHaveURL(/\/home$/, { timeout: 15_000 });
 }
 
 test('AT-02 mentorship lifecycle + blog publish', async ({ browser, request }) => {

@@ -2,7 +2,6 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.response.FeedPostListItem;
 import com.group7.backend.entity.FeedPost;
-import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.User;
@@ -11,6 +10,8 @@ import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.FollowRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.service.ranking.FeedRanker;
+import com.group7.backend.service.ranking.FeedScoreResult;
+import com.group7.backend.service.ranking.feed.ForYouScoringPipeline;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,12 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Read service for the social-feed surfaces in #350 — For-You,
@@ -70,6 +70,8 @@ public class FeedReadService {
     private final HashtagNormalizer hashtagNormalizer;
     private final FeedRanker feedRanker;
     private final FeedInteractionService feedInteractionService;
+    private final Optional<ForYouScoringPipeline> forYouPipeline;
+    private final FeedPostMapper feedPostMapper;
     private final int candidateWindow;
 
     public FeedReadService(FeedPostRepository feedPostRepository,
@@ -78,6 +80,8 @@ public class FeedReadService {
                            HashtagNormalizer hashtagNormalizer,
                            FeedRanker feedRanker,
                            FeedInteractionService feedInteractionService,
+                           Optional<ForYouScoringPipeline> forYouPipeline,
+                           FeedPostMapper feedPostMapper,
                            @Value("${app.feed.forYou.candidate-window:200}") int candidateWindow) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
@@ -85,6 +89,8 @@ public class FeedReadService {
         this.hashtagNormalizer = hashtagNormalizer;
         this.feedRanker = feedRanker;
         this.feedInteractionService = feedInteractionService;
+        this.forYouPipeline = forYouPipeline;
+        this.feedPostMapper = feedPostMapper;
         this.candidateWindow = candidateWindow;
     }
 
@@ -102,21 +108,70 @@ public class FeedReadService {
             return Page.empty(pageable);
         }
 
+        // When the advanced ranker is wired in, route through the full
+        // ForYouScoringPipeline (precompute → score → MMR → diversity
+        // floor → bandit slots on page 0). Otherwise fall back to the
+        // legacy Schwartzian-transform path on the single-shot
+        // InterestOverlapFeedRanker; both produce the same Page<FeedPostListItem>
+        // shape, so downstream callers are unaffected.
+        if (forYouPipeline.isPresent()) {
+            return slicePageFromPipeline(candidates, viewerId, pageable);
+        }
+
         FeedRanker.FeedRankingContext context = buildRankingContext(viewerId);
-        // Score once, sort once, slice once. Comparator.comparingDouble re-runs
+        // Score once, sort once, slice once. Comparator.comparingInt re-runs
         // its key extractor on every compare(a, b), so a naive
-        // .sorted(comparingDouble(p -> ranker.score(p, ctx))) calls the ranker
-        // O(N log N) times instead of N. Schwartzian transform fixes that:
-        // materialise (score, post) tuples once, sort by the cached score, then
-        // unwrap. Cheap enough for our 200-candidate window; if the window
-        // grows past a few thousand a partial-selection (k-largest) is the
-        // next move.
-        List<FeedPost> ranked = candidates.stream()
+        // .sorted(comparingInt(p -> ranker.score(p, ctx).score())) calls the
+        // ranker O(N log N) times instead of N. Schwartzian transform fixes
+        // that: materialise (FeedScoreResult, post) tuples once, sort by the
+        // cached score, then unwrap. Cheap enough for our 200-candidate
+        // window; if the window grows past a few thousand a partial-selection
+        // (k-largest) is the next move.
+        List<Scored> ranked = candidates.stream()
                 .map(p -> new Scored(feedRanker.score(p, context), p))
-                .sorted(Comparator.comparingDouble(Scored::score).reversed())
-                .map(Scored::post)
+                .sorted(Comparator.comparingInt((Scored s) -> s.result().score()).reversed())
                 .toList();
-        return slicePage(ranked, pageable);
+        return slicePage(ranked, pageable, viewerId);
+    }
+
+    /**
+     * Advanced-path slice. Asks the pipeline for the already-paginated
+     * ranked list (the pipeline handles MMR + diversity floor + bandit
+     * internally) and maps each entry through {@code toListItem} with
+     * its accumulated factor list.
+     *
+     * <p>Note: pipeline owns page slicing because the floor and bandit
+     * are page-0 contracts — slicing before the floor would lose the
+     * outsider candidate to draw from.
+     */
+    private Page<FeedPostListItem> slicePageFromPipeline(List<FeedPost> candidates,
+                                                        Long viewerId,
+                                                        Pageable pageable) {
+        FeedRanker.FeedRankingContext context = buildRankingContext(viewerId);
+        List<ForYouScoringPipeline.RankedFeedPost> ranked = forYouPipeline.get().rank(
+                candidates,
+                context.viewerId(),
+                context.viewerInterestHashtags(),
+                context.viewerFollowedAuthorIds(),
+                context.now(),
+                pageable.getPageSize(),
+                pageable.getPageNumber());
+
+        if (ranked.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, candidates.size());
+        }
+        List<FeedPost> rankedPosts = ranked.stream()
+                .map(ForYouScoringPipeline.RankedFeedPost::post).toList();
+        Map<Long, FeedInteractionService.PostCounts> counts =
+                feedInteractionService.batchCounts(
+                        rankedPosts.stream().map(FeedPost::getId).toList());
+        Map<Long, List<String>> factorsByPostId = ranked.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        r -> r.post().getId(),
+                        ForYouScoringPipeline.RankedFeedPost::factors));
+        List<FeedPostListItem> items = feedPostMapper.toListItems(
+                rankedPosts, viewerId, counts, factorsByPostId);
+        return new PageImpl<>(items, pageable, candidates.size());
     }
 
     /**
@@ -125,7 +180,7 @@ public class FeedReadService {
      */
     public Page<FeedPostListItem> followingFeed(Long viewerId, Pageable pageable) {
         Page<FeedPost> page = feedPostRepository.findFollowingFeed(viewerId, pageable);
-        return mapPage(page);
+        return mapPage(page, viewerId);
     }
 
     /**
@@ -134,7 +189,7 @@ public class FeedReadService {
      */
     public Page<FeedPostListItem> postsByAuthor(Long authorId, Pageable pageable) {
         Page<FeedPost> page = feedPostRepository.findByAuthorIdForFeed(authorId, pageable);
-        return mapPage(page);
+        return mapPage(page, null);
     }
 
     /**
@@ -171,7 +226,7 @@ public class FeedReadService {
                     "Search requires at least one of 'q' or 'hashtag' — use /api/feed/for-you or /api/feed/following for the full feed");
         }
         Page<FeedPost> page = feedPostRepository.searchPosts(normalisedKeyword, normalisedHashtag, pageable);
-        return mapPage(page);
+        return mapPage(page, null);
     }
 
     /**
@@ -241,64 +296,48 @@ public class FeedReadService {
         return hashtagNormalizer.normalize(labels);
     }
 
-    private Page<FeedPostListItem> mapPage(Page<FeedPost> page) {
+    /**
+     * Maps a JPA {@link Page} of posts into list-item DTOs while preserving
+     * pagination metadata. Delegates DTO assembly to {@link FeedPostMapper}
+     * so the single source of truth for author-name batching and attachment
+     * URL construction stays in one place.
+     */
+    private Page<FeedPostListItem> mapPage(Page<FeedPost> page, Long viewerId) {
         if (page.isEmpty()) {
             return Page.empty(page.getPageable());
         }
-        Map<Long, String> authorNames = resolveAuthorNames(page.getContent());
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(
                         page.getContent().stream().map(FeedPost::getId).toList());
-        return page.map(p -> toListItem(p, authorNames, counts));
+        List<FeedPostListItem> items = feedPostMapper.toListItems(
+                page.getContent(), viewerId, counts);
+        return new PageImpl<>(items, page.getPageable(), page.getTotalElements());
     }
 
-    private Page<FeedPostListItem> slicePage(List<FeedPost> ranked, Pageable pageable) {
+    private Page<FeedPostListItem> slicePage(List<Scored> ranked, Pageable pageable, Long viewerId) {
         int total = ranked.size();
         int from = Math.min((int) pageable.getOffset(), total);
         int to = Math.min(from + pageable.getPageSize(), total);
-        List<FeedPost> slice = ranked.subList(from, to);
+        List<Scored> slice = ranked.subList(from, to);
         if (slice.isEmpty()) {
             return new PageImpl<>(List.of(), pageable, total);
         }
-        Map<Long, String> authorNames = resolveAuthorNames(slice);
+        List<FeedPost> posts = slice.stream().map(Scored::post).toList();
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(
-                        slice.stream().map(FeedPost::getId).toList());
-        List<FeedPostListItem> items = slice.stream()
-                .map(p -> toListItem(p, authorNames, counts))
-                .toList();
+                        posts.stream().map(FeedPost::getId).toList());
+        Map<Long, List<String>> factorsByPostId = slice.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        s -> s.post().getId(),
+                        s -> s.result().factors()));
+        List<FeedPostListItem> items = feedPostMapper.toListItems(
+                posts, viewerId, counts, factorsByPostId);
         return new PageImpl<>(items, pageable, total);
     }
 
-    private Map<Long, String> resolveAuthorNames(List<FeedPost> posts) {
-        Set<Long> ids = posts.stream().map(FeedPost::getAuthorId).collect(Collectors.toSet());
-        Map<Long, String> names = new HashMap<>();
-        userRepository.findAllById(ids).forEach(u -> names.put(u.getId(), u.getFirstName()));
-        return names;
-    }
-
-    private static FeedPostListItem toListItem(FeedPost post,
-                                               Map<Long, String> authorNames,
-                                               Map<Long, FeedInteractionService.PostCounts> counts) {
-        List<String> tags = post.getHashtags().stream()
-                .map(FeedPostHashtag::getId)
-                .map(id -> id.getTag())
-                .sorted()
-                .toList();
-        FeedInteractionService.PostCounts c = counts.get(post.getId());
-        return new FeedPostListItem(
-                post.getId(),
-                post.getAuthorId(),
-                authorNames.getOrDefault(post.getAuthorId(), null),
-                post.getBody(),
-                tags,
-                post.getCreatedAt(),
-                c.likeCount(),
-                c.commentCount()
-        );
-    }
-
-    /** Holds a feed post alongside its computed ranker score so the sort
-     *  key is materialised exactly once per post (Schwartzian transform). */
-    private record Scored(double score, FeedPost post) {}
+    /** Holds a feed post alongside its scoring result so the sort key is
+     *  materialised exactly once per post (Schwartzian transform) and the
+     *  factor list flows from scoring to the response without a second
+     *  ranker pass. */
+    private record Scored(FeedScoreResult result, FeedPost post) {}
 }

@@ -15,6 +15,7 @@ import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.TaggedTermLists;
 import com.group7.backend.entity.User;
+import com.group7.backend.event.FollowChangedEvent;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FollowRepository;
@@ -23,6 +24,7 @@ import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.repository.AvailabilitySlotRepository;
 import com.group7.backend.repository.UserRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -45,6 +47,7 @@ public class UserService {
     private final FollowRepository followRepository;
     private final FileStorageService fileStorageService;
     private final MentorRatingService mentorRatingService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public UserService(UserRepository userRepository, MentorRepository mentorRepository,
                        MenteeRepository menteeRepository,
@@ -52,7 +55,8 @@ public class UserService {
                        MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository,
                        FollowRepository followRepository,
                        FileStorageService fileStorageService,
-                       MentorRatingService mentorRatingService) {
+                       MentorRatingService mentorRatingService,
+                       ApplicationEventPublisher eventPublisher) {
         this.userRepository = userRepository;
         this.mentorRepository = mentorRepository;
         this.menteeRepository = menteeRepository;
@@ -61,6 +65,7 @@ public class UserService {
         this.followRepository = followRepository;
         this.fileStorageService = fileStorageService;
         this.mentorRatingService = mentorRatingService;
+        this.eventPublisher = eventPublisher;
     }
 
     // ── Existing methods ────────────────────────────────────
@@ -185,6 +190,13 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
         String photoUrl = user.getProfilePhoto();
         userRepository.delete(user);
+
+        // The Postgres-side ON DELETE CASCADE on follows reaps follow rows
+        // silently — no per-row JPA event fires. Publish an explicit event so
+        // the Neo4j follow-graph mirror can DETACH DELETE the matching :User
+        // node and its incident edges. Listener runs AFTER_COMMIT so a Neo4j
+        // outage cannot abort this transaction.
+        eventPublisher.publishEvent(FollowChangedEvent.userDeleted(id));
 
         // Delete file AFTER transaction commits
         if (photoUrl != null) {
