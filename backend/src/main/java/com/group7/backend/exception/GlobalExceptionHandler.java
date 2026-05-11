@@ -136,6 +136,16 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
     }
 
+    @ExceptionHandler(SpamDetectionException.class)
+    public ResponseEntity<Map<String, String>> handleSpamDetection(SpamDetectionException ex,
+                                                                   HttpServletRequest request) {
+        // Log the specific signal internally but return a generic body so the
+        // bot can't fingerprint which check rejected it (#345).
+        log.warn("Spam-bot signal rejected request: method={}, path={}, signal={}",
+                request.getMethod(), request.getRequestURI(), ex.getSignalType());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", "Request rejected");
+    }
+
     @ExceptionHandler(SelfFollowException.class)
     public ResponseEntity<Map<String, String>> handleSelfFollow(SelfFollowException ex,
                                                                 HttpServletRequest request) {

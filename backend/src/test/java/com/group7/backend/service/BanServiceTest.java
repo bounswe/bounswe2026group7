@@ -3,6 +3,7 @@ package com.group7.backend.service;
 import com.group7.backend.config.BanProperties;
 import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Ban;
+import com.group7.backend.entity.BanSource;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ResourceNotFoundException;
@@ -115,10 +116,42 @@ class BanServiceTest {
         Ban saved = captor.getValue();
         assertThat(saved.getBanCount()).isEqualTo(1);
         assertThat(saved.getReason()).isEqualTo("Frequent cancellations");
+        assertThat(saved.getSource()).isEqualTo(BanSource.MENTEE_CANCELLATION);
         // First ban: 24h * factor^0 = 24h
         assertThat(saved.getExpiresAt()).isEqualTo(OffsetDateTime.now(clock).plusHours(24));
         verify(notificationEventPublisher).publishUserBanned(
                 eq(7L), eq(saved.getExpiresAt()), eq("Frequent cancellations"), eq(1));
+    }
+
+    // ── imposeAdminBan / imposeSystemBan: source discriminator (#345) ────
+
+    @Test
+    void imposeAdminBan_stampsSourceAdmin() {
+        when(userRepository.findById(7L)).thenReturn(Optional.of((User) mentee));
+        Admin admin = new Admin();
+        admin.setId(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of((User) admin));
+        when(banRepository.countNonLiftedByUserId(7L)).thenReturn(0L);
+        when(banRepository.save(any(Ban.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.imposeAdminBan(7L, 1L, "harassment", 168);
+
+        ArgumentCaptor<Ban> captor = ArgumentCaptor.forClass(Ban.class);
+        verify(banRepository).save(captor.capture());
+        assertThat(captor.getValue().getSource()).isEqualTo(BanSource.ADMIN);
+    }
+
+    @Test
+    void imposeSystemBan_stampsSourceSystemSpam() {
+        when(userRepository.findById(7L)).thenReturn(Optional.of((User) mentee));
+        when(banRepository.countNonLiftedByUserId(7L)).thenReturn(0L);
+        when(banRepository.save(any(Ban.class))).thenAnswer(i -> i.getArgument(0));
+
+        service.imposeSystemBan(7L, "automated abuse signal", 24);
+
+        ArgumentCaptor<Ban> captor = ArgumentCaptor.forClass(Ban.class);
+        verify(banRepository).save(captor.capture());
+        assertThat(captor.getValue().getSource()).isEqualTo(BanSource.SYSTEM_SPAM);
     }
 
     // ── recordCancellation: 2nd ban → 48h ────────────────────────────────

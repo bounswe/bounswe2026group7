@@ -1,6 +1,7 @@
 package com.group7.backend.repository;
 
 import com.group7.backend.entity.Ban;
+import com.group7.backend.entity.BanSource;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -33,6 +34,25 @@ public interface BanRepository extends JpaRepository<Ban, Long> {
     List<Ban> findActive(@Param("userId") Long userId,
                          @Param("now") OffsetDateTime now,
                          Pageable pageable);
+
+    /**
+     * Same active-ban lookup as {@link #findActive}, additionally constrained
+     * to a specific {@link BanSource}. Used by the spam clear-flag path so an
+     * admin lift on the bot heuristic cannot accidentally touch a parallel
+     * admin ban that happens to expire later.
+     */
+    @Query("""
+            SELECT b FROM Ban b
+            WHERE b.user.id = :userId
+              AND b.source = :source
+              AND b.liftedAt IS NULL
+              AND b.expiresAt > :now
+            ORDER BY b.expiresAt DESC
+            """)
+    List<Ban> findActiveBySource(@Param("userId") Long userId,
+                                 @Param("source") BanSource source,
+                                 @Param("now") OffsetDateTime now,
+                                 Pageable pageable);
 
     /** Audit: full history newest-first. */
     List<Ban> findByUser_IdOrderByCreatedAtDesc(Long userId);

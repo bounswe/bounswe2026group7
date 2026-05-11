@@ -7,8 +7,11 @@ import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.dto.response.AuthResponse;
 import com.group7.backend.dto.response.UserResponse;
+import com.group7.backend.repository.UserRepository;
 import com.group7.backend.service.AuthService;
+import com.group7.backend.service.FormTokenService;
 import com.group7.backend.service.JwtService;
+import com.group7.backend.service.SpamDetectionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -46,6 +49,15 @@ class AuthControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private SpamDetectionService spamDetectionService;
+
+    @MockitoBean
+    private FormTokenService formTokenService;
+
+    @MockitoBean
+    private UserRepository userRepository;
 
     // --- Register Endpoint (1.2.3.1) ---
 
