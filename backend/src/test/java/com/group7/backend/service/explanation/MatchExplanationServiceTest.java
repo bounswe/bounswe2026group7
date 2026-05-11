@@ -312,4 +312,97 @@ class MatchExplanationServiceTest {
         // Different content → different hash.
         assertThat(a).isNotEqualTo(MatchExplanationService.signalsHash(List.of("alpha", "beta")));
     }
+
+    // ── invokeChat / parseExplanationJson edge cases (coverage gate) ─────
+
+    @Test
+    void chatReturnsNullResponse_proseNullAndCountsAsFailure() {
+        ChatModel chat = mock(ChatModel.class);
+        when(chat.call(any(org.springframework.ai.chat.prompt.Prompt.class))).thenReturn(null);
+        var meters = new SimpleMeterRegistry();
+        var svc = new MatchExplanationService(
+                provider(() -> chat), new ObjectMapper(),
+                props(true, 10000), meters);
+
+        var page = new ArrayList<>(List.of(mentor(1L, "A", "x")));
+        svc.attach(page, mentee());
+        assertThat(page.get(0).getExplanation()).isNull();
+        assertThat(meters.counter("openai.chat.calls", "outcome", "failure").count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void chatReturnsBlankContent_proseNull() {
+        ChatModel chat = mock(ChatModel.class);
+        when(chat.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
+                .thenReturn(chatResponseFor(""));
+        var svc = new MatchExplanationService(
+                provider(() -> chat), new ObjectMapper(),
+                props(true, 10000), new SimpleMeterRegistry());
+
+        var page = new ArrayList<>(List.of(mentor(1L, "A", "x")));
+        svc.attach(page, mentee());
+        assertThat(page.get(0).getExplanation()).isNull();
+    }
+
+    @Test
+    void jsonWithoutExplanationsArray_yieldsNoProse() {
+        ChatModel chat = mock(ChatModel.class);
+        when(chat.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
+                .thenReturn(chatResponseFor("{\"unexpected\":\"shape\"}"));
+        var svc = new MatchExplanationService(
+                provider(() -> chat), new ObjectMapper(),
+                props(true, 10000), new SimpleMeterRegistry());
+
+        var page = new ArrayList<>(List.of(mentor(1L, "A", "x")));
+        svc.attach(page, mentee());
+        assertThat(page.get(0).getExplanation()).isNull();
+    }
+
+    @Test
+    void shutdown_terminatesExecutorCleanly() {
+        var svc = new MatchExplanationService(
+                provider(() -> mock(ChatModel.class)),
+                new ObjectMapper(),
+                props(true, 10000),
+                new SimpleMeterRegistry());
+        // No throw means the @PreDestroy happy path completed; covers the
+        // executor shutdown + awaitTermination(true) lines.
+        svc.shutdown();
+    }
+
+    @Test
+    void constructor_acceptsNullPropsForDefensiveBoot() {
+        // A boot-time null props (e.g. binding failure that left the record
+        // null) shouldn't crash construction. The service ends up disabled
+        // — every call lands on the early-return.
+        var svc = new MatchExplanationService(
+                provider(() -> mock(ChatModel.class)),
+                new ObjectMapper(),
+                null,
+                new SimpleMeterRegistry());
+        var page = new ArrayList<>(List.of(mentor(1L, "A", "x")));
+        svc.attach(page, mentee());
+        assertThat(page.get(0).getExplanation()).isNull();
+    }
+
+    @Test
+    void jsonWithMalformedEntries_skipsBadOnesButKeepsValid() {
+        // Covers the parseExplanationJson branches: non-numeric id continues,
+        // non-textual explanation continues, blank prose skipped.
+        ChatModel chat = mock(ChatModel.class);
+        when(chat.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
+                .thenReturn(chatResponseFor("{\"explanations\":["
+                        + "{\"id\":\"not-a-long\",\"explanation\":\"a\"},"
+                        + "{\"id\":1,\"explanation\":42},"
+                        + "{\"id\":1,\"explanation\":\"  \"},"
+                        + "{\"id\":1,\"explanation\":\"valid prose\"}"
+                        + "]}"));
+        var svc = new MatchExplanationService(
+                provider(() -> chat), new ObjectMapper(),
+                props(true, 10000), new SimpleMeterRegistry());
+
+        var page = new ArrayList<>(List.of(mentor(1L, "A", "x")));
+        svc.attach(page, mentee());
+        assertThat(page.get(0).getExplanation()).isEqualTo("valid prose");
+    }
 }
