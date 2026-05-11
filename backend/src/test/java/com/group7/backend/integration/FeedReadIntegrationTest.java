@@ -115,6 +115,73 @@ class FeedReadIntegrationTest {
                 .andExpect(jsonPath("$.content.length()").value(0));
     }
 
+    @Test
+    void authorPostsFeed_returnsOnlyThatAuthorsPosts_chronologically() throws Exception {
+        String viewerToken = registerAndLogin("author_viewer@test.com", true);
+        String tokenA = registerAndLogin("author_a@test.com", true);
+        String tokenB = registerAndLogin("author_b@test.com", true);
+        Long authorAId = userRepository.findByEmail("author_a@test.com").orElseThrow().getId();
+
+        long a1 = createPost(tokenA, "A post 1", List.of());
+        Thread.sleep(20);
+        long b1 = createPost(tokenB, "B post 1", List.of());
+        Thread.sleep(20);
+        long a2 = createPost(tokenA, "A post 2", List.of());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/users/" + authorAId + "/posts")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andReturn();
+
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        List<Long> ids = StreamSupport.stream(body.get("content").spliterator(), false)
+                .map(n -> n.get("id").asLong())
+                .toList();
+        assertThat(ids).containsExactly(a2, a1);
+        assertThat(ids).doesNotContain(b1);
+    }
+
+    @Test
+    void authorPostsFeed_excludesSoftDeletedPosts() throws Exception {
+        String viewerToken = registerAndLogin("author_del_viewer@test.com", true);
+        String authorToken = registerAndLogin("author_del@test.com", true);
+        Long authorId = userRepository.findByEmail("author_del@test.com").orElseThrow().getId();
+
+        long live = createPost(authorToken, "live", List.of());
+        long deleted = createPost(authorToken, "deleted", List.of());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/feed/posts/" + deleted)
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isNoContent());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/users/" + authorId + "/posts")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andReturn();
+
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        List<Long> ids = StreamSupport.stream(body.get("content").spliterator(), false)
+                .map(n -> n.get("id").asLong())
+                .toList();
+        assertThat(ids).containsExactly(live);
+    }
+
+    @Test
+    void authorPostsFeed_whenAuthorHasNoPosts_returnsEmpty() throws Exception {
+        String viewerToken = registerAndLogin("author_empty_viewer@test.com", true);
+        registerAndLogin("author_empty@test.com", true);
+        Long authorId = userRepository.findByEmail("author_empty@test.com").orElseThrow().getId();
+
+        mockMvc.perform(get("/api/feed/users/" + authorId + "/posts")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
     // ── Search ──────────────────────────────────────────────────────────────
 
     @Test
@@ -349,6 +416,7 @@ class FeedReadIntegrationTest {
         mockMvc.perform(get("/api/feed/for-you")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/following")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/search")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/feed/users/1/posts")).andExpect(status().isForbidden());
     }
 
     // ── Page-size clamp ─────────────────────────────────────────────────────

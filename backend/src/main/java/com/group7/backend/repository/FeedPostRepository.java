@@ -79,6 +79,24 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
     Page<FeedPost> findFollowingFeed(@Param("viewerId") Long viewerId, Pageable pageable);
 
     /**
+     * Author-profile feed query (#471). Returns non-deleted posts for a
+     * specific author in reverse chronological order.
+     */
+    @Query(value = """
+            SELECT * FROM feed_posts p
+            WHERE p.deleted_at IS NULL
+              AND p.author_id = :authorId
+            ORDER BY p.created_at DESC, p.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM feed_posts p
+            WHERE p.deleted_at IS NULL
+              AND p.author_id = :authorId
+            """,
+            nativeQuery = true)
+    Page<FeedPost> findByAuthorIdForFeed(@Param("authorId") Long authorId, Pageable pageable);
+
+    /**
      * For-You candidate fetch (#350). Returns the most recent N posts
      * eligible for ranking — excludes posts authored by the viewer
      * themselves (their own posts surface elsewhere) and soft-deleted
