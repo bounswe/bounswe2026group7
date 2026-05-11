@@ -26,15 +26,24 @@ export default function SplashScreen() {
       try {
         await new Promise((resolve) => setTimeout(resolve, 2500));
         
-        const token = await SecureStore.getItemAsync('userToken');
+        const [token, userId, userRole] = await Promise.all([
+          SecureStore.getItemAsync('userToken'),
+          SecureStore.getItemAsync('userId'),
+          SecureStore.getItemAsync('userRole'),
+        ]);
 
-        if (token) {
+        if (token && userId && (userRole === 'mentor' || userRole === 'mentee')) {
           router.replace('/(tabs)/profile');
         } else {
-          router.replace('/onboarding');
+          await Promise.allSettled([
+            SecureStore.deleteItemAsync('userToken'),
+            SecureStore.deleteItemAsync('userId'),
+            SecureStore.deleteItemAsync('userRole'),
+          ]);
+          router.replace('/login');
         }
       } catch (error) {
-        router.replace('/onboarding');
+        router.replace('/login');
       }
     };
 

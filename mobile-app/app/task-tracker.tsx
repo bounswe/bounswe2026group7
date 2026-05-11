@@ -10,9 +10,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
 import apiClient from '../api/client';
 import { useRole } from '../components/RoleContext';
+import { useProtectedSession } from '../components/useProtectedSession';
 
 type TaskSummary = {
   id: number;
@@ -112,6 +112,7 @@ function buildSectionTitle(isMentor: boolean, key: 'pending' | 'review' | 'compl
 export default function TaskTrackerScreen() {
   const params = useLocalSearchParams();
   const { role } = useRole();
+  const { session, sessionLoading } = useProtectedSession('task-tracker');
   const isMentor = role === 'mentor';
   const connectedUserName = parseString(params.connectedUserName) || 'Your Mentor';
   const mentorshipId = parseString(params.mentorshipId);
@@ -125,7 +126,25 @@ export default function TaskTrackerScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [reviewing, setReviewing] = useState(false);
 
+  useEffect(() => {
+    console.log('[tasks] route context', {
+      mentorshipId,
+      sourceScreen: parseString(params.sourceScreen),
+      connectedUserName,
+      connectedUserType: parseString(params.connectedUserType),
+      storedUserId: session?.userId ?? null,
+      storedRole: session?.role ?? null,
+      roleFromContext: role,
+    });
+  }, [connectedUserName, mentorshipId, params.connectedUserType, params.sourceScreen, role, session?.role, session?.userId]);
+
   const fetchTasks = useCallback(async () => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[tasks] skipping protected fetch because session is missing');
+      setListLoading(false);
+      return;
+    }
     if (!mentorshipId) {
       setListLoading(false);
       return;
@@ -133,15 +152,20 @@ export default function TaskTrackerScreen() {
 
     try {
       setListLoading(true);
+      console.log('[tasks] loading tasks', { mentorshipId });
       const response = await apiClient.get(`/mentorships/${mentorshipId}/tasks`);
       setTasks(response.data ?? []);
-    } catch (error) {
-      console.error('Failed to load tasks:', error);
+    } catch (error: any) {
+      console.error('[tasks] failed to load tasks', {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        mentorshipId,
+      });
       Alert.alert('Error', 'Could not load tasks for this mentorship.');
     } finally {
       setListLoading(false);
     }
-  }, [mentorshipId]);
+  }, [mentorshipId, session, sessionLoading]);
 
   useEffect(() => {
     void fetchTasks();
@@ -178,6 +202,18 @@ export default function TaskTrackerScreen() {
     selectedTask.status === 'SUBMITTED' &&
     !!latestSubmission &&
     !latestSubmission.reviewedAt;
+
+  if (sessionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#456B50" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
 
   const submitTask = async () => {
     if (!selectedTask || !submissionDraft.trim()) {

@@ -8,8 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
+import { useProtectedSession } from '../../components/useProtectedSession';
 import apiClient from '../../api/client';
 
 const AVATAR_COLORS = [
@@ -54,6 +54,7 @@ const formatMentorshipStatus = (status: ConnectionCard['status']) => {
 
 export default function HomeScreen() {
   const { role } = useRole();
+  const { session, sessionLoading } = useProtectedSession('dashboard');
   const isMentor = role === 'mentor';
 
   const [connections, setConnections] = useState<ConnectionCard[]>([]);
@@ -62,16 +63,21 @@ export default function HomeScreen() {
   const [selectedTab, setSelectedTab] = useState<MentorshipTab>('active');
 
   const fetchMentorships = useCallback(async () => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[dashboard] skipping mentorship fetch because session is missing');
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const userId = await SecureStore.getItemAsync('userId');
       const res = await apiClient.get('/mentorships');
       const mentorships: any[] = res.data;
 
       const cards: ConnectionCard[] = mentorships
         .filter((m) => ['ACTIVE', 'COMPLETED', 'TERMINATED'].includes(m.status))
         .map((m) => {
-          const isCurrentUserMentor = String(m.mentorId) === userId;
+          const isCurrentUserMentor = Number(m.mentorId) === session.userId;
           const connectedUserId = isCurrentUserMentor ? m.menteeId : m.mentorId;
           const connectedUserFirstName = isCurrentUserMentor ? m.menteeFirstName : m.mentorFirstName;
           const type: 'mentor' | 'mentee' = isCurrentUserMentor ? 'mentee' : 'mentor';
@@ -95,14 +101,20 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session, sessionLoading]);
 
   useEffect(() => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[dashboard] skipping notifications fetch because session is missing');
+      return;
+    }
+
     fetchMentorships();
     apiClient.get('/notifications?unreadOnly=true')
       .then((res) => setUnreadCount(res.data.length))
       .catch(() => {});
-  }, [fetchMentorships]);
+  }, [fetchMentorships, session, sessionLoading]);
 
   const openNotifications = async () => {
     router.push('/notifications' as any);
@@ -127,9 +139,21 @@ export default function HomeScreen() {
     const colors = getAvatarColors(item.connectedUserId);
     const initials = item.connectedUserFirstName.substring(0, 2).toUpperCase();
 
+    console.log('[navigation] opening connection-profile', {
+      sourceScreen: 'dashboard',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId: item.mentorshipId,
+      targetScreen: 'connection-profile',
+      connectedUserId: item.connectedUserId,
+      connectedUserFirstName: item.connectedUserFirstName,
+      connectionType: item.type,
+    });
+
     router.push({
       pathname: '/connection-profile',
       params: {
+        sourceScreen: 'dashboard',
         id: String(item.connectedUserId),
         mentorshipId: String(item.mentorshipId),
         type: item.type,
@@ -165,6 +189,18 @@ export default function HomeScreen() {
   const sectionTitle = selectedTab === 'active'
     ? (isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS')
     : (isMentor ? 'PAST MENTEES' : 'PAST MENTORS');
+
+  if (sessionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#456B50" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>

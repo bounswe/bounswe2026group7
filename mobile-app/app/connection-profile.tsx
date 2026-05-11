@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRole } from '../components/RoleContext';
+import { useProtectedSession } from '../components/useProtectedSession';
 import apiClient from '../api/client';
 
 type AvailabilitySlot = {
@@ -94,6 +95,7 @@ function toIsoDateOrNull(dateStr: string): string | null {
 
 export default function ConnectionProfileScreen() {
   const { role } = useRole();
+  const { session, sessionLoading } = useProtectedSession('connection-profile');
   const isMentorViewer = role === 'mentor';
   const params = useLocalSearchParams();
 
@@ -105,6 +107,7 @@ export default function ConnectionProfileScreen() {
   const avatarBg = parseString(params.avatarBg) || '#D7E8DA';
   const avatarText = parseString(params.avatarText) || '#2F563C';
   const subtitle = parseString(params.subtitle);
+  const sourceScreen = parseString(params.sourceScreen);
 
   const [about, setAbout] = useState(parseString(params.about));
   const [department, setDepartment] = useState(parseString(params.department));
@@ -137,6 +140,25 @@ export default function ConnectionProfileScreen() {
   const [actionItemCreating, setActionItemCreating] = useState(false);
 
   useEffect(() => {
+    console.log('[connection-profile] route context', {
+      id,
+      mentorshipId,
+      sourceScreen,
+      type,
+      name,
+      role,
+      isMentorViewer,
+      sessionUserId: session?.userId ?? null,
+      sessionRole: session?.role ?? null,
+    });
+  }, [id, mentorshipId, sourceScreen, type, name, role, isMentorViewer, session?.role, session?.userId]);
+
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[connection-profile] skipping protected profile fetch because session is missing');
+      return;
+    }
     if (!id) return;
     apiClient.get(`/users/${id}`).then((res) => {
       const d = res.data;
@@ -147,14 +169,19 @@ export default function ConnectionProfileScreen() {
       if (d.interests?.length) setInterests(d.interests);
       if (d.goals) setGoals([d.goals]);
     }).catch(() => {});
-  }, [id]);
+  }, [id, session, sessionLoading]);
 
   useEffect(() => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[connection-profile] skipping mentorship fetch because session is missing');
+      return;
+    }
     if (!mentorshipId) return;
     apiClient.get(`/mentorships/${mentorshipId}`).then((res) => {
       if (res.data.sharedGoal) setSharedGoal(res.data.sharedGoal);
     }).catch(() => {});
-  }, [mentorshipId]);
+  }, [mentorshipId, session, sessionLoading]);
 
   const fetchMilestoneDetail = async (milestoneId: number) => {
     const res = await apiClient.get(`/milestones/${milestoneId}`);
@@ -162,10 +189,21 @@ export default function ConnectionProfileScreen() {
   };
 
   const loadMilestones = useCallback(async (keepSelection = true) => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[connection-profile] skipping milestone fetch because session is missing');
+      setMilestonesLoading(false);
+      setMilestonesRefreshing(false);
+      return;
+    }
     if (!mentorshipId) return;
 
     setMilestonesLoading(true);
     try {
+      console.log('[connection-profile] loading milestones', {
+        mentorshipId,
+        keepSelection,
+      });
       const res = await apiClient.get(`/mentorships/${mentorshipId}/milestones`);
       const summaryItems = ((res.data ?? []) as MilestoneSummary[]).sort(
         (a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)
@@ -188,18 +226,26 @@ export default function ConnectionProfileScreen() {
         if (keepSelection && current && detailMap[current]) return current;
         return summaryItems[0].id;
       });
-    } catch {
+    } catch (error: any) {
+      console.error('[connection-profile] failed to load milestones', {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        mentorshipId,
+        id,
+        role,
+      });
       Alert.alert('Error', 'Could not load milestones right now.');
     } finally {
       setMilestonesLoading(false);
       setMilestonesRefreshing(false);
     }
-  }, [mentorshipId]);
+  }, [id, mentorshipId, role, session, sessionLoading]);
 
   useEffect(() => {
+    if (sessionLoading || !session) return;
     if (!mentorshipId) return;
     loadMilestones(false);
-  }, [mentorshipId, loadMilestones]);
+  }, [mentorshipId, loadMilestones, session, sessionLoading]);
 
   const refreshSelectedMilestone = async (milestoneId: number) => {
     setSelectedMilestoneLoading(true);
@@ -267,6 +313,18 @@ export default function ConnectionProfileScreen() {
   }, [isViewingMentor, id]);
 
   const openRequest = (mode: 'meeting' | 'change' | 'end') => {
+    const mentorId = session?.role === 'mentor' ? session.userId : Number(id);
+    const menteeId = session?.role === 'mentee' ? session.userId : Number(id);
+    console.log('[navigation] opening connection-request', {
+      sourceScreen: 'connection-profile',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId,
+      mentorId,
+      menteeId,
+      mode,
+      targetScreen: 'connection-request',
+    });
     router.push({
       pathname: '/connection-request',
       params: {
@@ -279,20 +337,50 @@ export default function ConnectionProfileScreen() {
   };
 
   const openMeetings = () => {
+    console.log('[navigation] opening meetings-sessions', {
+      sourceScreen: 'connection-profile',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId,
+      targetScreen: 'meetings-sessions',
+    });
     router.push({
       pathname: '/meetings-sessions',
-      params: { connectedUserName: name, connectedUserType: type, mentorshipId },
+      params: { connectedUserName: name, connectedUserType: type, mentorshipId, sourceScreen: 'connection-profile' },
     });
   };
 
   const openTasks = () => {
+    console.log('[navigation] opening task-tracker', {
+      sourceScreen: 'connection-profile',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId,
+      targetScreen: 'task-tracker',
+    });
     router.push({
       pathname: '/task-tracker',
       params: {
         connectedUserName: name,
         connectedUserType: type,
         mentorshipId,
+        sourceScreen: 'connection-profile',
       },
+    });
+  };
+
+  const openMessages = () => {
+    console.log('[navigation] opening messages', {
+      sourceScreen: 'connection-profile',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId,
+      targetScreen: 'messages',
+      openWith: name,
+    });
+    router.navigate({
+      pathname: '/messages',
+      params: { openWith: name, mentorshipId, sourceScreen: 'connection-profile' },
     });
   };
 
@@ -363,6 +451,18 @@ export default function ConnectionProfileScreen() {
       setActionItemSavingId(null);
     }
   };
+
+  if (sessionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#456B50" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>
@@ -818,7 +918,7 @@ export default function ConnectionProfileScreen() {
           <View style={styles.actionsGrid}>
             <TouchableOpacity
               style={styles.actionButtonPrimary}
-              onPress={() => router.navigate({ pathname: '/messages', params: { openWith: name } })}
+              onPress={openMessages}
             >
               <Text style={styles.actionButtonPrimaryText}>Open Messages</Text>
             </TouchableOpacity>

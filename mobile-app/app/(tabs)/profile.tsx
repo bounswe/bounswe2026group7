@@ -4,6 +4,7 @@ import apiClient from '../../api/client'; // Klasör yapına göre kontrol et (a
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
+import { useProtectedSession } from '../../components/useProtectedSession';
 import {
   getPushPermissionState,
   getStoredPushToken,
@@ -43,7 +44,26 @@ const getInitials = (name: string) => {
 
 export default function ProfileScreen() {
   const { role, clearRole } = useRole();
+  const { session, sessionLoading } = useProtectedSession('profile');
   const isMentor = role === 'mentor';
+
+  useEffect(() => {
+    const logProfileSession = async () => {
+      const [storedUserId, storedRole, storedToken] = await Promise.all([
+        SecureStore.getItemAsync('userId'),
+        SecureStore.getItemAsync('userRole'),
+        SecureStore.getItemAsync('userToken'),
+      ]);
+      console.log('[profile] session context', {
+        storedUserId,
+        storedRole,
+        tokenPresent: Boolean(storedToken),
+        roleFromContext: role,
+      });
+    };
+
+    void logProfileSession();
+  }, [role]);
 
   const handleLogout = async () => {
     try {
@@ -69,11 +89,23 @@ export default function ProfileScreen() {
     }
   };
 
-  if (isMentor) {
-    return <MentorProfileContent onLogout={handleLogout} />;
+  if (sessionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text>Loading session…</Text>
+      </View>
+    );
   }
 
-  return <MenteeProfileContent onLogout={handleLogout} />;
+  if (!session) {
+    return null;
+  }
+
+  if (isMentor) {
+    return <MentorProfileContent onLogout={handleLogout} sessionUserId={String(session.userId)} />;
+  }
+
+  return <MenteeProfileContent onLogout={handleLogout} sessionUserId={String(session.userId)} />;
 }
 
 // Token (Chip) Editörü Bileşeni
@@ -442,7 +474,7 @@ function PushSettingsCard() {
 }
 
 // --- MENTEE PROFILI ---
-function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
+function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => void; sessionUserId: string }) {
   const [fullName, setFullName] = useState('');
   const [department, setDepartment] = useState('');
   const [aboutMe, setAboutMe] = useState('');
@@ -488,7 +520,6 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const userId = await SecureStore.getItemAsync('userId');
         const profileRes = await apiClient.get('/users/me');
         const data = profileRes.data;
         setFullName([data.firstName, data.lastName].filter(Boolean).join(' '));
@@ -502,18 +533,15 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
         if (data.skills) setSkills(data.skills);
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
-          if (userId) {
-            await cacheAvatar('mentee', userId, data.profilePhoto);
-          }
-        } else if (userId) {
-          const local = await loadCachedAvatar('mentee', userId);
+          await cacheAvatar('mentee', sessionUserId, data.profilePhoto);
+        } else if (sessionUserId) {
+          const local = await loadCachedAvatar('mentee', sessionUserId);
           if (local) setProfilePhoto(local);
         }
       } catch (error) {
         console.error('Error fetching mentee profile:', error);
-        const userId = await SecureStore.getItemAsync('userId');
-        if (userId) {
-          const local = await loadCachedAvatar('mentee', userId);
+        if (sessionUserId) {
+          const local = await loadCachedAvatar('mentee', sessionUserId);
           if (local) setProfilePhoto(local);
         }
       }
@@ -522,14 +550,24 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
         const reqRes = await apiClient.get('/mentorship-requests/sent');
         const list = reqRes.data.content ?? reqRes.data;
         setSentRequests(list);
-      } catch (error) {
-        console.error('Error fetching sent requests:', error);
+      } catch (error: any) {
+        const [storedUserId, storedRole] = await Promise.all([
+          SecureStore.getItemAsync('userId'),
+          SecureStore.getItemAsync('userRole'),
+        ]);
+        console.error('[profile] failed to fetch sent requests', {
+          status: error?.response?.status,
+          data: error?.response?.data,
+          storedUserId,
+          storedRole,
+          roleFromContext: 'mentee',
+        });
       } finally {
         setRequestsLoading(false);
       }
     };
     fetchAll();
-  }, []);
+  }, [sessionUserId]);
 
   return (
     <View style={styles.container}>
@@ -540,9 +578,7 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
           <TouchableOpacity
             style={styles.avatarCircle}
             onPress={async () => {
-              const userId = await SecureStore.getItemAsync('userId');
-              if (!userId) return;
-              openAvatarActions('mentee', userId, profilePhoto, setProfilePhoto);
+              openAvatarActions('mentee', sessionUserId, profilePhoto, setProfilePhoto);
             }}
             accessibilityRole="button"
             accessibilityLabel="Edit profile photo"
@@ -693,7 +729,7 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
 }
 
 // --- MENTOR PROFILI ---
-function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
+function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => void; sessionUserId: string }) {
   const [displayName, setDisplayName] = useState('');
   const [title, setTitle] = useState('');
   const [bio, setBio] = useState('');
@@ -712,7 +748,6 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
-        const userId = await SecureStore.getItemAsync('userId');
         const response = await apiClient.get('/users/me');
         const data = response.data;
         setDisplayName([data.firstName, data.lastName].filter(Boolean).join(' '));
@@ -728,24 +763,21 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
         if (data.mentorshipDuration != null) setMentorshipDuration(String(data.mentorshipDuration));
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
-          if (userId) {
-            await cacheAvatar('mentor', userId, data.profilePhoto);
-          }
-        } else if (userId) {
-          const local = await loadCachedAvatar('mentor', userId);
+          await cacheAvatar('mentor', sessionUserId, data.profilePhoto);
+        } else if (sessionUserId) {
+          const local = await loadCachedAvatar('mentor', sessionUserId);
           if (local) setProfilePhoto(local);
         }
       } catch (error) {
         console.error('Error fetching mentor profile:', error);
-        const userId = await SecureStore.getItemAsync('userId');
-        if (userId) {
-          const local = await loadCachedAvatar('mentor', userId);
+        if (sessionUserId) {
+          const local = await loadCachedAvatar('mentor', sessionUserId);
           if (local) setProfilePhoto(local);
         }
       }
     };
     fetchProfileData();
-  }, []);
+  }, [sessionUserId]);
 
   const handleSave = async () => {
     const capacity = parseInt(maxMenteeCapacity, 10);

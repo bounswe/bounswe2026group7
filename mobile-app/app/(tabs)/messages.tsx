@@ -19,6 +19,7 @@ import * as Sharing from 'expo-sharing';
 
 import apiClient from '../../api/client';
 import { useRole } from '../../components/RoleContext';
+import { useProtectedSession } from '../../components/useProtectedSession';
 
 type ConversationListTab = 'mentorships' | 'mentorPeers';
 
@@ -26,6 +27,8 @@ type ConversationItem = {
   id: string;
   threadKind: 'mentorship' | 'mentorPair';
   mentorshipId?: number;
+  mentorId?: number;
+  menteeId?: number;
   counterpartId: number;
   counterpartName: string;
   subtitle?: string;
@@ -190,11 +193,11 @@ export default function MessagesScreen() {
   const { role } = useRole();
   const isMentor = role === 'mentor';
   const params = useLocalSearchParams();
+  const { session, sessionLoading } = useProtectedSession('messages');
 
   const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
   const [activeListTab, setActiveListTab] = useState<ConversationListTab>('mentorships');
-  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [mentorshipConversations, setMentorshipConversations] = useState<ConversationItem[]>([]);
   const [peerMentorConversations, setPeerMentorConversations] = useState<ConversationItem[]>([]);
   const [mentorDirectoryOptions, setMentorDirectoryOptions] = useState<ConversationItem[]>([]);
@@ -205,20 +208,86 @@ export default function MessagesScreen() {
   const [sending, setSending] = useState(false);
   const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
+  const currentUserId = session?.userId ?? null;
+
+  useEffect(() => {
+    const logSessionContext = async () => {
+      const [storedUserId, storedRole, storedToken] = await Promise.all([
+        SecureStore.getItemAsync('userId'),
+        SecureStore.getItemAsync('userRole'),
+        SecureStore.getItemAsync('userToken'),
+      ]);
+
+      console.log('[messages] session context', {
+        params,
+        storedUserId,
+        storedRole,
+        tokenPresent: Boolean(storedToken),
+        roleFromContext: role,
+        guardedSessionUserId: session?.userId ?? null,
+      });
+    };
+
+    void logSessionContext();
+  }, [params, role, session?.userId]);
 
   useEffect(() => {
     const loadConversations = async () => {
-      setListLoading(true);
-      try {
-        const storedUserId = await SecureStore.getItemAsync('userId');
-        const parsedUserId = storedUserId ? Number(storedUserId) : null;
-        setCurrentUserId(parsedUserId);
+      if (sessionLoading) {
+        return;
+      }
+      if (!session) {
+        console.log('[messages] skipping protected fetch because session is missing');
+        setListLoading(false);
+        return;
+      }
 
+      setListLoading(true);
+      setSelectedConversation(null);
+      setMessages([]);
+      setMentorshipConversations([]);
+      setPeerMentorConversations([]);
+      setMentorDirectoryOptions([]);
+      try {
+        const meRes = await apiClient.get('/users/me');
         const mentorshipsRes = await apiClient.get('/mentorships');
         const mentorships = mentorshipsRes.data ?? [];
+        console.log('[messages] active mentorship payload', {
+          currentUserId: session.userId,
+          currentRole: session.role,
+          backendMe: {
+            id: meRes.data?.id,
+            role: meRes.data?.role,
+            firstName: meRes.data?.firstName,
+            lastName: meRes.data?.lastName,
+          },
+          mentorships: mentorships.map((mentorship: any) => ({
+            id: mentorship.id,
+            mentorId: mentorship.mentorId,
+            menteeId: mentorship.menteeId,
+            mentorFirstName: mentorship.mentorFirstName,
+            menteeFirstName: mentorship.menteeFirstName,
+            status: mentorship.status,
+          })),
+        });
 
         const mentorshipThreads = await Promise.all(
           mentorships.map(async (mentorship: any, index: number) => {
+            const isParticipant =
+              Number(mentorship.mentorId) === session.userId ||
+              Number(mentorship.menteeId) === session.userId;
+
+            if (!isParticipant) {
+              console.log('[messages] skipping non-participant mentorship', {
+                currentUserId: session.userId,
+                currentRole: session.role,
+                mentorshipId: mentorship.id,
+                mentorId: mentorship.mentorId,
+                menteeId: mentorship.menteeId,
+              });
+              return null;
+            }
+
             const counterpartName = isMentor
               ? mentorship.menteeFirstName
               : mentorship.mentorFirstName;
@@ -233,7 +302,7 @@ export default function MessagesScreen() {
             try {
               const threadRes = await apiClient.get(`/mentorships/${mentorship.id}/messages?page=0&size=100`);
               const threadMessages = threadRes.data?.content ?? [];
-              const summary = buildMentorshipThreadSummary(threadMessages, parsedUserId ?? -1);
+              const summary = buildMentorshipThreadSummary(threadMessages, session.userId);
               preview = summary.preview;
               time = summary.time;
               unread = summary.unread;
@@ -245,6 +314,8 @@ export default function MessagesScreen() {
               id: `mentorship-${mentorship.id}`,
               threadKind: 'mentorship',
               mentorshipId: mentorship.id,
+              mentorId: mentorship.mentorId,
+              menteeId: mentorship.menteeId,
               counterpartId,
               counterpartName: counterpartName || 'Unknown User',
               subtitle: isMentor ? 'Your Mentee' : 'Your Mentor',
@@ -260,67 +331,82 @@ export default function MessagesScreen() {
           })
         );
 
-        setMentorshipConversations(mentorshipThreads);
+        const filteredMentorshipThreads = mentorshipThreads.filter(Boolean) as ConversationItem[];
+        setMentorshipConversations(filteredMentorshipThreads);
 
-        if (isMentor && parsedUserId != null) {
-          const [peerInboxRes, mentorsRes] = await Promise.all([
-            apiClient.get('/conversations/mentor-pair?page=0&size=100'),
-            apiClient.get('/users/mentors/all'),
-          ]);
+        if (isMentor) {
+          try {
+            const [peerInboxRes, mentorsRes] = await Promise.all([
+              apiClient.get('/conversations/mentor-pair?page=0&size=100'),
+              apiClient.get('/users/mentors/all'),
+            ]);
 
-          const peerInboxItems = peerInboxRes.data?.content ?? [];
-          const peerInbox = peerInboxItems.map((conversation: any, index: number) => {
-            const colors = avatarPalette(index + mentorshipThreads.length);
-            return {
-              id: `mentor-pair-${conversation.peerId}`,
-              threadKind: 'mentorPair',
-              counterpartId: Number(conversation.peerId),
-              counterpartName: conversation.peerFirstName || 'Unknown Mentor',
-              subtitle: 'Peer Mentor',
-              preview: conversation.lastMessageContent || 'No messages yet',
-              time: formatRelativeTime(conversation.lastMessageSentAt),
-              unread: Number(conversation.unreadCount ?? 0),
-              online: false,
-              initials: getInitials(conversation.peerFirstName || 'Unknown Mentor'),
-              avatarBg: colors.bg,
-              avatarText: colors.text,
-              type: 'mentor',
-            } satisfies ConversationItem;
-          });
-          setPeerMentorConversations(peerInbox);
-
-          const allMentors = mentorsRes.data ?? [];
-          const peerMentors = allMentors
-            .filter((mentor: any) => Number(mentor.id) !== parsedUserId)
-            .map((mentor: any, index: number) => {
-              const fullName = mentor.lastName
-                ? `${mentor.firstName} ${mentor.lastName}`
-                : mentor.firstName || 'Unknown Mentor';
-              const colors = avatarPalette(index + mentorshipThreads.length + peerInbox.length);
-
+            const peerInboxItems = peerInboxRes.data?.content ?? [];
+            const peerInbox = peerInboxItems.map((conversation: any, index: number) => {
+              const colors = avatarPalette(index + filteredMentorshipThreads.length);
               return {
-                id: `mentor-pair-${mentor.id}`,
+                id: `mentor-pair-${conversation.peerId}`,
                 threadKind: 'mentorPair',
-                counterpartId: Number(mentor.id),
-                counterpartName: fullName,
-                subtitle: mentor.field || mentor.expertise || 'Peer Mentor',
-                preview: 'Open a peer conversation with this mentor.',
-                time: '',
-                unread: 0,
+                counterpartId: Number(conversation.peerId),
+                counterpartName: conversation.peerFirstName || 'Unknown Mentor',
+                subtitle: 'Peer Mentor',
+                preview: conversation.lastMessageContent || 'No messages yet',
+                time: formatRelativeTime(conversation.lastMessageSentAt),
+                unread: Number(conversation.unreadCount ?? 0),
                 online: false,
-                initials: getInitials(fullName),
+                initials: getInitials(conversation.peerFirstName || 'Unknown Mentor'),
                 avatarBg: colors.bg,
                 avatarText: colors.text,
                 type: 'mentor',
               } satisfies ConversationItem;
             });
-          setMentorDirectoryOptions(peerMentors);
+            setPeerMentorConversations(peerInbox);
+
+            const allMentors = mentorsRes.data ?? [];
+            const peerMentors = allMentors
+              .filter((mentor: any) => Number(mentor.id) !== session.userId)
+              .map((mentor: any, index: number) => {
+                const fullName = mentor.lastName
+                  ? `${mentor.firstName} ${mentor.lastName}`
+                  : mentor.firstName || 'Unknown Mentor';
+                const colors = avatarPalette(index + filteredMentorshipThreads.length + peerInbox.length);
+
+                return {
+                  id: `mentor-pair-${mentor.id}`,
+                  threadKind: 'mentorPair',
+                  counterpartId: Number(mentor.id),
+                  counterpartName: fullName,
+                  subtitle: mentor.field || mentor.expertise || 'Peer Mentor',
+                  preview: 'Open a peer conversation with this mentor.',
+                  time: '',
+                  unread: 0,
+                  online: false,
+                  initials: getInitials(fullName),
+                  avatarBg: colors.bg,
+                  avatarText: colors.text,
+                  type: 'mentor',
+                } satisfies ConversationItem;
+              });
+            setMentorDirectoryOptions(peerMentors);
+          } catch (error: any) {
+            console.error('[messages] mentor-peer fetch failed', {
+              status: error?.response?.status,
+              data: error?.response?.data,
+              currentUserId: session.userId,
+              currentRole: session.role,
+            });
+          }
         } else {
           setPeerMentorConversations([]);
           setMentorDirectoryOptions([]);
         }
-      } catch (error) {
-        console.error('Failed to load conversations:', error);
+      } catch (error: any) {
+        console.error('[messages] failed to load conversations', {
+          status: error?.response?.status,
+          data: error?.response?.data,
+          currentUserId: session.userId,
+          currentRole: session.role,
+        });
         Alert.alert('Error', 'Could not load your conversations.');
       } finally {
         setListLoading(false);
@@ -328,24 +414,42 @@ export default function MessagesScreen() {
     };
 
     loadConversations();
-  }, [isMentor]);
+  }, [isMentor, session, sessionLoading]);
+
+  useEffect(() => {
+    const allConversations = [...mentorshipConversations, ...peerMentorConversations];
+    if (selectedConversation && !allConversations.some((conversation) => conversation.id === selectedConversation.id)) {
+      console.log('[messages] clearing stale selected conversation', {
+        selectedConversation,
+      });
+      setSelectedConversation(null);
+      setMessages([]);
+    }
+  }, [mentorshipConversations, peerMentorConversations, selectedConversation]);
 
   useEffect(() => {
     const openWith = Array.isArray(params.openWith) ? params.openWith[0] : params.openWith;
+    const mentorshipIdParam = Array.isArray(params.mentorshipId) ? params.mentorshipId[0] : params.mentorshipId;
     const allConversations = [...mentorshipConversations, ...peerMentorConversations];
     if (!openWith || allConversations.length === 0) return;
 
-    const match = allConversations.find((conversation) =>
-      conversation.counterpartName.toLowerCase().includes(String(openWith).toLowerCase())
-    );
+    const match = allConversations.find((conversation) => {
+      if (mentorshipIdParam && conversation.threadKind === 'mentorship') {
+        return String(conversation.mentorshipId) === String(mentorshipIdParam);
+      }
+      return conversation.counterpartName.toLowerCase().includes(String(openWith).toLowerCase());
+    });
     if (match) {
       setSelectedConversation(match);
     }
-  }, [params.openWith, mentorshipConversations, peerMentorConversations]);
+  }, [params.openWith, params.mentorshipId, mentorshipConversations, peerMentorConversations]);
 
   useEffect(() => {
     const loadMessages = async () => {
       if (!selectedConversation || currentUserId == null) {
+        if (!sessionLoading && !session) {
+          console.log('[messages] skipping thread load because session is missing');
+        }
         return;
       }
 
@@ -357,6 +461,14 @@ export default function MessagesScreen() {
         const readEndpoint = selectedConversation.threadKind === 'mentorship'
           ? `/mentorships/${selectedConversation.mentorshipId}/messages/read`
           : `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages/read`;
+
+        console.log('[messages] loading thread', {
+          endpoint,
+          readEndpoint,
+          currentUserId,
+          currentRole: session?.role ?? role,
+          selectedConversation,
+        });
 
         const res = await apiClient.get(endpoint);
         const rawMessages = res.data?.content ?? [];
@@ -375,8 +487,14 @@ export default function MessagesScreen() {
         } else {
           setPeerMentorConversations((prev) => clearUnread(prev));
         }
-      } catch (error) {
-        console.error('Failed to load thread:', error);
+      } catch (error: any) {
+        console.error('[messages] failed to load thread', {
+          status: error?.response?.status,
+          data: error?.response?.data,
+          currentUserId,
+          currentRole: session?.role ?? role,
+          selectedConversation,
+        });
         Alert.alert('Error', 'Could not load the message thread.');
       } finally {
         setThreadLoading(false);
@@ -491,6 +609,10 @@ export default function MessagesScreen() {
   };
 
   const sendMessage = async () => {
+    if (!session) {
+      console.log('[messages] skipping send because session is missing');
+      return;
+    }
     if (!selectedConversation || sending) {
       return;
     }
@@ -501,6 +623,9 @@ export default function MessagesScreen() {
     }
 
     setSending(true);
+    const messageEndpoint = selectedConversation.threadKind === 'mentorship'
+      ? `/mentorships/${selectedConversation.mentorshipId}/messages`
+      : `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages`;
     try {
       let uploadedAttachment: AttachmentSummary | null = null;
 
@@ -521,10 +646,6 @@ export default function MessagesScreen() {
       }
 
       const content = trimmedDraft || pendingAttachment?.name || 'Attachment';
-      const messageEndpoint = selectedConversation.threadKind === 'mentorship'
-        ? `/mentorships/${selectedConversation.mentorshipId}/messages`
-        : `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages`;
-
       const messageRes = await apiClient.post(messageEndpoint, {
         content,
         ...(uploadedAttachment ? { attachmentId: uploadedAttachment.id } : {}),
@@ -556,6 +677,14 @@ export default function MessagesScreen() {
       setDraft('');
       setPendingAttachment(null);
     } catch (error: any) {
+      console.error('[messages] failed to send message', {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        messageEndpoint,
+        selectedConversation,
+        currentUserId,
+        currentRole: session?.role ?? role,
+      });
       const message =
         error.response?.data?.message ||
         error.response?.data?.error ||
@@ -599,6 +728,18 @@ export default function MessagesScreen() {
       setOpeningAttachmentId(null);
     }
   };
+
+  if (sessionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#456B50" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
 
   if (selectedConversation) {
     return (
