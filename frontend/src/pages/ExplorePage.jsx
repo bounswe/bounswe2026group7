@@ -9,6 +9,42 @@ import '../styles/main.css'
 
 const FILTERS = ['All', 'Backend', 'Mobile', 'AI/ML', 'DevOps', 'Frontend', 'Data']
 
+// ── Factor formatting ─────────────────────────────────────────────────────────
+// Backend emits machine-readable factor strings (see MentorRanker spec 1.1.2.5).
+// We turn them into short user-facing chips. Codes we don't recognize, or
+// operational signals (semantic-unavailable, location-unset) return null so
+// they don't render. `diverse-pick` is rendered separately as a pill, not a chip.
+function formatFactor(code) {
+  if (!code || typeof code !== 'string') return null
+  const colon = code.indexOf(':')
+  const head = colon === -1 ? code : code.slice(0, colon)
+  const value = colon === -1 ? '' : code.slice(colon + 1)
+  switch (head) {
+    case 'interest-match':
+    case 'shared-interest':      return value ? { label: value, kind: 'interest' } : null
+    case 'skill-match':
+    case 'shared-skill':         return value ? { label: value, kind: 'skill' } : null
+    case 'major-exact':
+    case 'major-exact-match':    return { label: 'Same major', kind: 'major' }
+    case 'major-field':
+    case 'major-field-overlap':  return { label: 'Major fits field', kind: 'major' }
+    case 'availability':         return value ? { label: `${value} overlap`, kind: 'time' } : null
+    case 'nearby':               return value ? { label: `${value} away`, kind: 'location' } : null
+    case 'city-match':           return { label: 'Same city', kind: 'location' }
+    case 'semantic-match':       return { label: 'Strong content match', kind: 'semantic' }
+    default:                     return null
+  }
+}
+
+const FACTOR_STYLES = {
+  interest: { background: 'rgba(168,240,198,0.18)', color: '#a8f0c6' },
+  skill:    { background: 'rgba(99,179,237,0.18)',  color: '#b8d8ff' },
+  major:    { background: 'rgba(245,158,11,0.18)',  color: '#fcd34d' },
+  time:     { background: 'rgba(192,132,252,0.18)', color: '#e9d5ff' },
+  location: { background: 'rgba(96,165,250,0.18)',  color: '#bfdbfe' },
+  semantic: { background: 'rgba(244,114,182,0.18)', color: '#fbcfe8' },
+}
+
 // ── Score ring SVG ────────────────────────────────────────────────────────────
 function ScoreRing({ score, animate }) {
   const r = 16
@@ -57,6 +93,9 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
   const locked = hasActiveMentor && !alreadySent
   const btnDisabled = alreadySent || hasActiveMentor || full
   const tags = (mentor.interests || []).slice(0, 3)
+  const rawFactors = Array.isArray(mentor.factors) ? mentor.factors : []
+  const isDiversePick = rawFactors.includes('diverse-pick')
+  const factorChips = rawFactors.map(formatFactor).filter(Boolean)
 
   return (
     <div
@@ -67,6 +106,20 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
       }}
     >
       <div className="match-rank">#{rank + 1}</div>
+      {isDiversePick && (
+        <span
+          className="match-diverse-pick"
+          title="Surfaced outside your primary goal for diversity"
+          style={{
+            position: 'absolute', top: 12, right: 12,
+            background: 'linear-gradient(135deg,#f59e0b,#ec4899)',
+            color: '#fff', fontSize: 10, fontWeight: 700,
+            padding: '3px 8px', borderRadius: 999, letterSpacing: 0.3,
+          }}
+        >
+          Diverse pick
+        </span>
+      )}
 
       <div className="match-card-header">
         <div className="match-avatar">{mentor.firstName?.[0] ?? '?'}</div>
@@ -84,6 +137,23 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
       )}
 
       {mentor.bio && <p className="match-bio">{mentor.bio}</p>}
+
+      {factorChips.length > 0 && (
+        <div className="match-factors" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {factorChips.map((f, i) => (
+            <span
+              key={`${f.kind}-${f.label}-${i}`}
+              className={`match-factor match-factor--${f.kind}`}
+              style={{
+                fontSize: 11, fontWeight: 600, padding: '3px 8px',
+                borderRadius: 999, ...FACTOR_STYLES[f.kind],
+              }}
+            >
+              {f.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="match-actions">
         <button
