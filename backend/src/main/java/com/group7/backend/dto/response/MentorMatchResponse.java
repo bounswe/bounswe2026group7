@@ -1,6 +1,7 @@
 package com.group7.backend.dto.response;
 
 import com.group7.backend.entity.Mentor;
+import com.group7.backend.service.ranking.ScoreResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -65,7 +66,28 @@ public class MentorMatchResponse implements MatchSummary {
     @Schema(description = "Compatibility score (higher = better match)", example = "17")
     private int matchScore;
 
-    public static MentorMatchResponse from(Mentor mentor, int score) {
+    @Schema(description = "Human-readable factors that contributed to the match score. "
+            + "Examples: 'shared-interest:Java', 'major-exact', 'availability:8h', "
+            + "'nearby:23km', 'diverse-pick'. Frontend formats these into 'why "
+            + "recommended?' cards (spec 1.1.2.5).",
+            example = "[\"interest-match:AI\",\"major-exact\",\"availability:6h\"]")
+    private List<String> factors = List.of();
+
+    @Schema(description = "Great-circle distance (km) between mentor and mentee. "
+            + "Null when either side hasn't set lat/lon. Drives the optional "
+            + "?maxDistanceKm filter and the 'nearby' display on the UI card.",
+            example = "23.4", nullable = true)
+    private Double distanceKm;
+
+    @Schema(description = "Optional LLM-generated one-sentence prose explanation of "
+            + "why this mentor is a fit (spec 1.1.2.5). Null when the LLM layer is "
+            + "disabled, missing API key, daily cap exceeded, or the call failed — "
+            + "frontend falls back to formatting the deterministic factor strings.",
+            example = "Ahmet's React expertise aligns with your goal of learning modern frontend.",
+            nullable = true)
+    private String explanation;
+
+    public static MentorMatchResponse from(Mentor mentor, ScoreResult scoreResult) {
         MentorMatchResponse r = new MentorMatchResponse();
         r.setId(mentor.getId());
         r.setFirstName(mentor.getFirstName());
@@ -83,7 +105,17 @@ public class MentorMatchResponse implements MatchSummary {
         r.setPreferredMenteeMajorUri(mentor.getPreferredMenteeMajorUri());
         r.setMentoringGoals(mentor.getMentoringGoals());
         r.setMentorshipDuration(mentor.getMentorshipDuration());
-        r.setMatchScore(score);
+        r.setMatchScore(scoreResult.score());
+        r.setFactors(scoreResult.factors());
         return r;
+    }
+
+    /**
+     * Convenience overload preserving the legacy {@code (Mentor, int)} call shape
+     * for callers that haven't migrated to {@link ScoreResult} yet. New callers
+     * should use {@link #from(Mentor, ScoreResult)}.
+     */
+    public static MentorMatchResponse from(Mentor mentor, int score) {
+        return from(mentor, ScoreResult.of(score));
     }
 }
