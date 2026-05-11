@@ -11,6 +11,7 @@ import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FollowRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.ViewerInteractionRepository;
+import com.group7.backend.service.embedding.SemanticSimilarityService;
 import com.group7.backend.service.ranking.EngagementStatsService;
 import com.group7.backend.service.ranking.MmrReranker;
 import com.group7.backend.service.ranking.RuleBasedFollowRanker;
@@ -64,6 +65,7 @@ class FollowRecommendationServiceTest {
     @Mock private ViewerInteractionRepository viewerInteractionRepository;
     @Mock private PopularityByMajorCache popularityCache;
     @Mock private ObjectProvider<PersonalizedPageRankService> pprServiceProvider;
+    @Mock private ObjectProvider<SemanticSimilarityService> semanticServiceProvider;
 
     private FollowRecommendationService service;
     private Pageable firstPage;
@@ -82,6 +84,7 @@ class FollowRecommendationServiceTest {
                 engagementService, viewerInteractionRepository, popularityCache,
                 new MmrReranker(),
                 pprServiceProvider,
+                semanticServiceProvider,
                 RANKING_WINDOW);
         firstPage = PageRequest.of(0, 20);
 

@@ -10,9 +10,11 @@ import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FollowRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.ViewerInteractionRepository;
+import com.group7.backend.service.embedding.SemanticSimilarityService;
 import com.group7.backend.service.ranking.EngagementStats;
 import com.group7.backend.service.ranking.EngagementStatsService;
 import com.group7.backend.service.ranking.FollowRanker;
+import com.group7.backend.service.ranking.follow.SemanticAffinitySignal;
 import com.group7.backend.service.ranking.FollowRecommendationContext;
 import com.group7.backend.service.ranking.MmrReranker;
 import com.group7.backend.service.ranking.ScoreResult;
@@ -105,6 +107,15 @@ public class FollowRecommendationService {
      * returns null and the PPR signal degrades to "ppr-unavailable".
      */
     private final ObjectProvider<PersonalizedPageRankService> pprServiceProvider;
+    /**
+     * Semantic-similarity service is gated behind
+     * {@code app.recommendations.follow.signals.semantic-affinity-enabled=true}
+     * so deploys without an OpenAI key don't pay any cost. When the flag is
+     * off the bean is absent and {@code viewerInterestEmbedding} stays
+     * null — the {@code SemanticAffinitySignal} bean is similarly absent
+     * so the aggregator just doesn't see it.
+     */
+    private final ObjectProvider<SemanticSimilarityService> semanticServiceProvider;
     private final int rankingWindow;
 
     public FollowRecommendationService(
@@ -118,6 +129,7 @@ public class FollowRecommendationService {
             PopularityByMajorCache popularityCache,
             MmrReranker mmr,
             ObjectProvider<PersonalizedPageRankService> pprServiceProvider,
+            ObjectProvider<SemanticSimilarityService> semanticServiceProvider,
             @Value("${app.matching.ranking-window:200}") int rankingWindow) {
         this.userRepository = userRepository;
         this.followRepository = followRepository;
@@ -129,6 +141,7 @@ public class FollowRecommendationService {
         this.popularityCache = popularityCache;
         this.mmr = mmr;
         this.pprServiceProvider = pprServiceProvider;
+        this.semanticServiceProvider = semanticServiceProvider;
         this.rankingWindow = rankingWindow;
     }
 
@@ -229,10 +242,24 @@ public class FollowRecommendationService {
             }
         }
 
+        float[] viewerEmbedding = null;
+        if (props.signals().semanticAffinityEnabled()) {
+            SemanticSimilarityService semantic = semanticServiceProvider.getIfAvailable();
+            if (semantic != null) {
+                String viewerText = SemanticAffinitySignal.candidateProfileText(viewer);
+                if (!viewerText.isBlank()) {
+                    float[] vec = semantic.embed(viewerText);
+                    if (vec.length > 0) {
+                        viewerEmbedding = vec;
+                    }
+                }
+            }
+        }
+
         return new FollowRecommendationContext(
                 viewer.getId(), interestLabels, followeeIds, secondHop,
                 pprScores, engagement, interacted, popularity,
-                /*viewerInterestEmbedding*/ null, coldStart, now);
+                viewerEmbedding, coldStart, now);
     }
 
     private Set<Long> loadFollowees(Long viewerId) {
