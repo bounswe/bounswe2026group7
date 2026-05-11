@@ -3,6 +3,7 @@ package com.group7.backend.controller;
 import com.group7.backend.dto.request.AdminBanRequest;
 import com.group7.backend.dto.response.BanResponse;
 import com.group7.backend.service.BanService;
+import com.group7.backend.service.SpamDetectionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -30,9 +31,11 @@ import java.util.Map;
 public class AdminController {
 
     private final BanService banService;
+    private final SpamDetectionService spamDetectionService;
 
-    public AdminController(BanService banService) {
+    public AdminController(BanService banService, SpamDetectionService spamDetectionService) {
         this.banService = banService;
+        this.spamDetectionService = spamDetectionService;
     }
 
     @GetMapping("/me")
@@ -82,5 +85,22 @@ public class AdminController {
             Authentication authentication) {
         Long adminId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(BanResponse.from(banService.unbanUser(userId, adminId)));
+    }
+
+    @PostMapping("/users/{userId}/clear-bot-flag")
+    @Operation(summary = "Clear suspected-bot flag and lift the related auto-ban (#345)",
+            description = "Resets isSuspectedBot to false, clears suspectedAt, and idempotently"
+                    + " lifts any active auto-ban so the user can log in again.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Flag cleared", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Not an admin", content = @Content),
+            @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
+    })
+    public ResponseEntity<Void> clearBotFlag(
+            @Parameter(description = "Target user id") @PathVariable Long userId,
+            Authentication authentication) {
+        Long adminId = (Long) authentication.getCredentials();
+        spamDetectionService.clearFlag(userId, adminId);
+        return ResponseEntity.noContent().build();
     }
 }

@@ -167,6 +167,41 @@ public class BanService {
     }
 
     /**
+     * System-initiated ban (#345). Mirrors {@link #imposeAdminBan} but with
+     * no admin attribution — the {@code lifted_by_admin_id} column stays
+     * null for the lifetime of the row, semantically "imposed by the
+     * platform's automated abuse signal rather than by a human admin".
+     *
+     * @throws ResourceNotFoundException 404 — target user not found
+     * @throws IllegalArgumentException 400 — non-positive duration
+     */
+    @Transactional
+    public Ban imposeSystemBan(Long targetUserId, String reason, long durationHours) {
+        if (durationHours <= 0) {
+            throw new IllegalArgumentException("durationHours must be positive");
+        }
+        User target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        long banOrdinal = banRepository.countNonLiftedByUserId(targetUserId) + 1;
+        OffsetDateTime now = OffsetDateTime.now(clock);
+
+        Ban ban = new Ban();
+        ban.setUser(target);
+        ban.setReason(reason);
+        ban.setBanCount((int) banOrdinal);
+        ban.setExpiresAt(now.plusHours(durationHours));
+        Ban saved = banRepository.save(ban);
+
+        notificationEventPublisher.publishUserBanned(
+                targetUserId, saved.getExpiresAt(), reason, saved.getBanCount());
+
+        log.warn("System-imposed ban: targetUserId={}, durationHours={}, expiresAt={}",
+                targetUserId, durationHours, saved.getExpiresAt());
+        return saved;
+    }
+
+    /**
      * Admin unban (#280): lifts the user's currently-active ban. Returns the
      * lifted ban; throws 404 if the user has no active ban so the admin gets
      * a clear signal rather than a silent no-op.

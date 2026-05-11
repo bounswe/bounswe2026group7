@@ -5,6 +5,7 @@ import com.group7.backend.config.ratelimit.MutableClock;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.repository.AvailabilitySlotRepository;
 import com.group7.backend.repository.BanRepository;
+import com.group7.backend.repository.BotSignalRepository;
 import com.group7.backend.repository.MeetingActionItemRepository;
 import com.group7.backend.repository.MeetingRepository;
 import com.group7.backend.repository.MeetingRescheduleRequestRepository;
@@ -82,6 +83,7 @@ public abstract class AbstractE2ETest {
     @Autowired protected MeetingRescheduleRequestRepository meetingRescheduleRequestRepository;
     @Autowired protected NotificationRepository notificationRepository;
     @Autowired protected BanRepository banRepository;
+    @Autowired protected BotSignalRepository botSignalRepository;
     @Autowired protected AvailabilitySlotRepository availabilitySlotRepository;
 
     @MockitoBean protected EmailService emailService;
@@ -100,6 +102,7 @@ public abstract class AbstractE2ETest {
         meetingRescheduleRequestRepository.deleteAll();
         meetingRepository.deleteAll();
         notificationRepository.deleteAll();
+        botSignalRepository.deleteAll();
         banRepository.deleteAll();
         mentorshipRepository.deleteAll();
         mentorshipRequestRepository.deleteAll();

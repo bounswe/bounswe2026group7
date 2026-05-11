@@ -32,4 +32,16 @@ public class RegisterRequest {
 
     @Schema(description = "Whether the user registers as a mentor")
     private Boolean isMentor;
+
+    // Honeypot field (#345): legitimate UIs never render this. Bots that
+    // auto-fill every input populate it and get rejected with a generic 400.
+    // Hidden from Swagger so the public contract doesn't advertise it.
+    @Schema(hidden = true)
+    private String website;
+
+    // Backend-issued HMAC-signed render timestamp round-tripped through a
+    // hidden field. Verified on submit to enforce the minimum human-typing
+    // duration (#345).
+    @Schema(hidden = true)
+    private String formToken;
 }

@@ -39,6 +39,12 @@ public abstract class User {
     @Column(nullable = false, length = 64)
     private String timezone = "UTC";
 
+    @Column(name = "is_suspected_bot", nullable = false)
+    private Boolean isSuspectedBot = false;
+
+    @Column(name = "suspected_at")
+    private OffsetDateTime suspectedAt;
+
     @Version
     @Column(nullable = false)
     private Long version;
