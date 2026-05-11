@@ -32,26 +32,33 @@ export default function LoginScreen() {
     }
 
     try {
-      // 1. Backend'e giriş isteği atıyoruz
+      await Promise.all([
+        SecureStore.deleteItemAsync('userToken'),
+        SecureStore.deleteItemAsync('userId'),
+        SecureStore.deleteItemAsync('userRole'),
+      ]);
+
       const response = await apiClient.post('/auth/login', {
         email: email,
         password: password
       });
 
-
-    // 2. Gelen cevaptan token, rol VE userId'yi çıkarıyoruz
-      const { sessionToken, role, userId } = response.data; // userId'yi de alıyoruz
-      await SecureStore.setItemAsync('userToken', sessionToken);
-      await SecureStore.setItemAsync('userId', userId.toString()); // ID'yi kaydediyoruz
-
-      // 4. Backend'den dönen rolü uygulamamıza set ediyoruz 
-      // (Backend "MENTOR" veya "MENTEE" dönüyorsa bunu küçük harfe çevirip context'e veriyoruz)
+      const { sessionToken, role, userId } = response.data;
+      console.log('[login] backend userId:', userId, 'role:', role);
+      await SecureStore.setItemAsync('userId', String(userId));
+      await SecureStore.setItemAsync('userRole', role);
       setRole(role.toLowerCase());
+      await SecureStore.setItemAsync('userToken', sessionToken);
+      console.log('[login] SecureStore write complete, stored userId:', String(userId));
 
-      // 5. Başarılı giriş, ana sayfaya yönlendir
       router.replace('/(tabs)');
 
     } catch (error) {
+      await Promise.all([
+        SecureStore.deleteItemAsync('userToken'),
+        SecureStore.deleteItemAsync('userId'),
+        SecureStore.deleteItemAsync('userRole'),
+      ]);
       Alert.alert("Login Failed", "Invalid email or password.");
       console.error(error);
     }
