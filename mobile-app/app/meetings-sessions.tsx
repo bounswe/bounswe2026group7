@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
+import { useProtectedSession } from '../components/useProtectedSession';
 
 function parseString(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value ?? '';
@@ -14,7 +15,33 @@ function parseString(value: string | string[] | undefined) {
 
 export default function MeetingsSessionsScreen() {
   const params = useLocalSearchParams();
+  const { session, sessionLoading } = useProtectedSession('meetings-sessions');
   const connectedUserName = parseString(params.connectedUserName) || 'Your Mentor';
+  const mentorshipId = parseString(params.mentorshipId);
+
+  React.useEffect(() => {
+    console.log('[meetings-sessions] route context', {
+      sourceScreen: parseString(params.sourceScreen),
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? null,
+      mentorshipId,
+      connectedUserName,
+      connectedUserType: parseString(params.connectedUserType),
+      targetScreen: 'meetings-sessions',
+    });
+  }, [connectedUserName, mentorshipId, params.connectedUserType, params.sourceScreen, session?.role, session?.userId]);
+
+  if (sessionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text>Loading session…</Text>
+      </View>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
 
   const meetings = [
     {
