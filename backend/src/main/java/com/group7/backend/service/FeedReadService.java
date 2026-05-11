@@ -69,6 +69,7 @@ public class FeedReadService {
     private final FollowRepository followRepository;
     private final HashtagNormalizer hashtagNormalizer;
     private final FeedRanker feedRanker;
+    private final FeedInteractionService feedInteractionService;
     private final int candidateWindow;
 
     public FeedReadService(FeedPostRepository feedPostRepository,
@@ -76,12 +77,14 @@ public class FeedReadService {
                            FollowRepository followRepository,
                            HashtagNormalizer hashtagNormalizer,
                            FeedRanker feedRanker,
+                           FeedInteractionService feedInteractionService,
                            @Value("${app.feed.forYou.candidate-window:200}") int candidateWindow) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.hashtagNormalizer = hashtagNormalizer;
         this.feedRanker = feedRanker;
+        this.feedInteractionService = feedInteractionService;
         this.candidateWindow = candidateWindow;
     }
 
@@ -243,7 +246,10 @@ public class FeedReadService {
             return Page.empty(page.getPageable());
         }
         Map<Long, String> authorNames = resolveAuthorNames(page.getContent());
-        return page.map(p -> toListItem(p, authorNames));
+        Map<Long, FeedInteractionService.PostCounts> counts =
+                feedInteractionService.batchCounts(
+                        page.getContent().stream().map(FeedPost::getId).toList());
+        return page.map(p -> toListItem(p, authorNames, counts));
     }
 
     private Page<FeedPostListItem> slicePage(List<FeedPost> ranked, Pageable pageable) {
@@ -255,8 +261,11 @@ public class FeedReadService {
             return new PageImpl<>(List.of(), pageable, total);
         }
         Map<Long, String> authorNames = resolveAuthorNames(slice);
+        Map<Long, FeedInteractionService.PostCounts> counts =
+                feedInteractionService.batchCounts(
+                        slice.stream().map(FeedPost::getId).toList());
         List<FeedPostListItem> items = slice.stream()
-                .map(p -> toListItem(p, authorNames))
+                .map(p -> toListItem(p, authorNames, counts))
                 .toList();
         return new PageImpl<>(items, pageable, total);
     }
@@ -268,12 +277,15 @@ public class FeedReadService {
         return names;
     }
 
-    private static FeedPostListItem toListItem(FeedPost post, Map<Long, String> authorNames) {
+    private static FeedPostListItem toListItem(FeedPost post,
+                                               Map<Long, String> authorNames,
+                                               Map<Long, FeedInteractionService.PostCounts> counts) {
         List<String> tags = post.getHashtags().stream()
                 .map(FeedPostHashtag::getId)
                 .map(id -> id.getTag())
                 .sorted()
                 .toList();
+        FeedInteractionService.PostCounts c = counts.get(post.getId());
         return new FeedPostListItem(
                 post.getId(),
                 post.getAuthorId(),
@@ -281,8 +293,8 @@ public class FeedReadService {
                 post.getBody(),
                 tags,
                 post.getCreatedAt(),
-                0L,
-                0L
+                c.likeCount(),
+                c.commentCount()
         );
     }
 
