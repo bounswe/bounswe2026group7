@@ -171,7 +171,7 @@ export default function ProfilePage() {
         }),
       }
 
-      const updated = await updateOwnProfile(payload)
+      const updated = await updateOwnProfile(payload, role)
       setProfileData(updated.firstName, updated.lastName, updated.profilePhoto)
       refresh()
       setSaveSuccess(true)
