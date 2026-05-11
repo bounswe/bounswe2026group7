@@ -104,21 +104,22 @@ class MatchNotificationIntegrationTest {
     // ── Tests ────────────────────────────────────────────────────────────────
 
     @Test
-    void firstRun_publishesAndUpsertsForEachEligibleUser() {
+    void firstRun_publishesAndUpsertsForEligibleMentee() {
         Mentee mentee = menteeRepository.save(newMentee("a", "Alice"));
         Mentor mentor = mentorRepository.save(newMentor("a", "Bob"));
 
         scheduler.notifyChangedMatches();
 
-        // Mentee got notified about the only mentor; mentor got notified about
-        // the only mentee. Both state rows are populated with the counterpart's id.
+        // Mentee got notified about the only mentor; the mentee's state row is
+        // populated with the mentor's id. The mentor is not a recipient — the
+        // mentor-side notification branch was removed in #346 — so no state
+        // row exists for the mentor.
         awaitNotificationsFor(mentee.getId(), 1);
-        awaitNotificationsFor(mentor.getId(), 1);
 
         LastMatchNotification menteeState = stateRepository.findById(mentee.getId()).orElseThrow();
         assertThat(menteeState.getNotifiedMatchUserId()).isEqualTo(mentor.getId());
-        LastMatchNotification mentorState = stateRepository.findById(mentor.getId()).orElseThrow();
-        assertThat(mentorState.getNotifiedMatchUserId()).isEqualTo(mentee.getId());
+        assertThat(countMatchFoundFor(mentor.getId())).isZero();
+        assertThat(stateRepository.findById(mentor.getId())).isEmpty();
     }
 
     @Test
@@ -175,25 +176,6 @@ class MatchNotificationIntegrationTest {
                 .untilAsserted(() -> {
                     assertThat(countMatchFoundFor(mentee.getId())).isZero();
                     assertThat(stateRepository.findById(mentee.getId())).isEmpty();
-                });
-    }
-
-    @Test
-    void run_skipsMentorAtFullCapacity() {
-        Mentor mentor = newMentor("e", "Bob");
-        mentor.setMaxMenteeCapacity(1);
-        mentor.setCurrentMenteeCount(1);  // full → ineligible
-        mentorRepository.save(mentor);
-        menteeRepository.save(newMentee("e", "Alice"));
-
-        scheduler.notifyChangedMatches();
-
-        // Mentor is excluded by findIdsWithCapacity; no notification, no state row.
-        Awaitility.await().pollDelay(Duration.ofMillis(500))
-                .atMost(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    assertThat(countMatchFoundFor(mentor.getId())).isZero();
-                    assertThat(stateRepository.findById(mentor.getId())).isEmpty();
                 });
     }
 
