@@ -1078,4 +1078,145 @@ class ProfileIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Not Found"));
     }
+
+    // ═══════════════════════════════════════════════════════
+    //  Location fields (#282 / req 1.1.2.3)
+    // ═══════════════════════════════════════════════════════
+
+    @Test
+    void updateProfile_setLocation_persistsCityAndCoordinates() throws Exception {
+        String token = registerAndLogin("mentor@test.com", true);
+
+        MentorProfileRequest update = new MentorProfileRequest();
+        update.setCity("Istanbul");
+        update.setLatitude(41.01);
+        update.setLongitude(28.98);
+
+        mockMvc.perform(patch("/api/users/me/mentor")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.city").value("Istanbul"))
+                .andExpect(jsonPath("$.latitude").value(41.01))
+                .andExpect(jsonPath("$.longitude").value(28.98));
+
+        // Verify persisted via GET
+        mockMvc.perform(get("/api/users/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(jsonPath("$.city").value("Istanbul"))
+                .andExpect(jsonPath("$.latitude").value(41.01))
+                .andExpect(jsonPath("$.longitude").value(28.98));
+    }
+
+    @Test
+    void updateProfile_setCityOnlyWithoutCoordinates_persists() throws Exception {
+        // Location-fallback case: city without coords. The DB pair-completeness
+        // CHECK constraint accepts NULL+NULL OR both-non-NULL, but city is
+        // independent. So setting city alone (lat+lon NULL) must succeed.
+        String token = registerAndLogin("mentee@test.com", false);
+
+        MenteeProfileRequest update = new MenteeProfileRequest();
+        update.setCity("Berlin");
+
+        mockMvc.perform(patch("/api/users/me/mentee")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.city").value("Berlin"))
+                .andExpect(jsonPath("$.latitude").doesNotExist())
+                .andExpect(jsonPath("$.longitude").doesNotExist());
+    }
+
+    @Test
+    void updateProfile_locationNotSet_returnsNullFields() throws Exception {
+        // Default state: no location set. Response must not include location
+        // values (or include them as null), so the proximity signal treats the
+        // user as "location-unset".
+        String token = registerAndLogin("user@test.com", false);
+
+        mockMvc.perform(get("/api/users/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.city").doesNotExist())
+                .andExpect(jsonPath("$.latitude").doesNotExist())
+                .andExpect(jsonPath("$.longitude").doesNotExist());
+    }
+
+    @Test
+    void updateProfile_latitudeOutOfRange_returns400() throws Exception {
+        String token = registerAndLogin("mentor@test.com", true);
+
+        MentorProfileRequest update = new MentorProfileRequest();
+        update.setLatitude(91.0);   // beyond +90
+
+        mockMvc.perform(patch("/api/users/me/mentor")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages.latitude").exists());
+    }
+
+    @Test
+    void updateProfile_longitudeOutOfRange_returns400() throws Exception {
+        String token = registerAndLogin("mentor@test.com", true);
+
+        MentorProfileRequest update = new MentorProfileRequest();
+        update.setLongitude(-200.0);  // beyond -180
+
+        mockMvc.perform(patch("/api/users/me/mentor")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages.longitude").exists());
+    }
+
+    @Test
+    void updateProfile_cityTooLong_returns400() throws Exception {
+        String token = registerAndLogin("mentee@test.com", false);
+
+        MenteeProfileRequest update = new MenteeProfileRequest();
+        update.setCity("A".repeat(121));
+
+        mockMvc.perform(patch("/api/users/me/mentee")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages.city").exists());
+    }
+
+    @Test
+    void updateProfile_locationNullsDoNotClearExistingValues() throws Exception {
+        // Skip-nulls semantics: partial update with only firstName must keep
+        // the previously-saved location intact.
+        String token = registerAndLogin("mentor@test.com", true);
+
+        // First: set location.
+        MentorProfileRequest setLocation = new MentorProfileRequest();
+        setLocation.setCity("Ankara");
+        setLocation.setLatitude(39.93);
+        setLocation.setLongitude(32.86);
+        mockMvc.perform(patch("/api/users/me/mentor")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(setLocation)))
+                .andExpect(status().isOk());
+
+        // Then: update only firstName — location must survive.
+        MentorProfileRequest changeName = new MentorProfileRequest();
+        changeName.setFirstName("Renamed");
+        mockMvc.perform(patch("/api/users/me/mentor")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(changeName)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstName").value("Renamed"))
+                .andExpect(jsonPath("$.city").value("Ankara"))
+                .andExpect(jsonPath("$.latitude").value(39.93))
+                .andExpect(jsonPath("$.longitude").value(32.86));
+    }
 }
