@@ -339,7 +339,7 @@ export default function HomePage() {
                           <button
                             className="view-profile-btn"
                             style={{ fontSize: '13px', padding: '7px 14px' }}
-                            onClick={() => navigate(`/profile/${req.menteeId}`)}
+                            onClick={() => navigate(`/users/${req.menteeId}`)}
                           >
                             View Profile
                           </button>

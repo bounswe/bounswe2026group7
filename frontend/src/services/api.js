@@ -248,6 +248,263 @@ export async function getMentorshipById(id) {
   return match
 }
 
+// ── Mentorship lifecycle (cancel / end / extend / rate) ──────────────────
+// Backend: MentorshipController endpoints landed via #237/#133. Mentee uses
+// /cancel; mentor uses /end + /extend; rating is mentee-only after end.
+
+export async function cancelMentorship(id, reason) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ reason }),
+  })
+  return handleResponse(res)
+}
+
+// Mentor-only end (graceful close). `reason` is optional per backend
+// EndMentorshipRequest — sending {} is valid.
+export async function endMentorship(id, reason) {
+  const token = localStorage.getItem('auth_token')
+  const body = reason ? { reason } : {}
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/end`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+// ── Mentorship tasks (#125) ───────────────────────────────────────────────
+// Backend: TaskController. Status enum: PENDING, SUBMITTED, REVISION_REQUESTED, COMPLETED.
+
+export async function createTask(mentorshipId, { title, description, dueDate, assignmentAttachmentIds } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { title }
+  if (description !== undefined) body.description = description
+  if (dueDate !== undefined) body.dueDate = dueDate
+  if (Array.isArray(assignmentAttachmentIds) && assignmentAttachmentIds.length > 0) {
+    body.assignmentAttachmentIds = assignmentAttachmentIds
+  }
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+export async function listMentorshipTasks(mentorshipId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/tasks`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getTaskDetail(taskId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/tasks/${taskId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function submitTask(taskId, { submissionText, attachmentIds } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { submissionText }
+  if (Array.isArray(attachmentIds) && attachmentIds.length > 0) body.attachmentIds = attachmentIds
+  const res = await fetch(`${BASE_URL}/tasks/${taskId}/submission`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+export async function reviewTask(taskId, { feedback, status }) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/tasks/${taskId}/feedback`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ feedback, status }),
+  })
+  return handleResponse(res)
+}
+
+export async function deleteTask(taskId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/tasks/${taskId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+// ── Mentorship milestones (#288) ─────────────────────────────────────────
+// Backend: MilestoneController. Status enum: PENDING, IN_PROGRESS, COMPLETED.
+// Mentor-only mutations (1.1.5.12); both parties may toggle action-item completion.
+
+export async function listMilestones(mentorshipId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/milestones`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMilestoneDetail(milestoneId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/milestones/${milestoneId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function createMilestone(mentorshipId, { title, description, targetDate, orderIndex } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { title }
+  if (description !== undefined) body.description = description
+  if (targetDate !== undefined) body.targetDate = targetDate
+  if (orderIndex !== undefined) body.orderIndex = orderIndex
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/milestones`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+// status / title / description / targetDate / orderIndex are all optional;
+// pass only the fields the caller wants to change.
+export async function updateMilestone(milestoneId, payload) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/milestones/${milestoneId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload || {}),
+  })
+  return handleResponse(res)
+}
+
+export async function deleteMilestone(milestoneId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/milestones/${milestoneId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function createMilestoneActionItem(milestoneId, { text, orderIndex } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { text }
+  if (orderIndex !== undefined) body.orderIndex = orderIndex
+  const res = await fetch(`${BASE_URL}/milestones/${milestoneId}/action-items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+// Backend expects `completed` (JSON name), not `isCompleted`. text + orderIndex
+// are mentor-only fields; `completed` is mentee-or-mentor.
+export async function updateMilestoneActionItem(itemId, { text, completed, orderIndex } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = {}
+  if (text !== undefined) body.text = text
+  if (completed !== undefined) body.completed = completed
+  if (orderIndex !== undefined) body.orderIndex = orderIndex
+  const res = await fetch(`${BASE_URL}/milestone-action-items/${itemId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+export async function deleteMilestoneActionItem(itemId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/milestone-action-items/${itemId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+// ── Meetings (#337 / #338) ────────────────────────────────────────────────
+// Backend: MeetingController. Statuses: PENDING_CONFIRMATION, CONFIRMED,
+// DECLINED, EXPIRED, COMPLETED, CANCELLED. ONLINE meetings require
+// `meetingLink`; recurring meetings carry an RFC 5545 RRULE.
+
+export async function listMentorshipMeetings(mentorshipId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/meetings`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMeetingDetail(meetingId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+// Mentor creates a meeting. Returns MeetingCreateResponse { meetings[], warnings[] }
+// because a recurring meeting expands server-side into multiple Meeting rows.
+export async function createMeeting(mentorshipId, payload) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${mentorshipId}/meetings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(res)
+}
+
+export async function confirmMeeting(meetingId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}/confirm`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function declineMeeting(meetingId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}/decline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+// ── Mentorship progress + timeline (#126 + #333) ──────────────────────────
+// Backend: MentorshipController.
+//   /progress  → MentorshipProgressResponse (counts + 0..1 ratio + lastActivityAt)
+//   /timeline  → TimelineResponse (startDate, endDate, currentDate, items[])
+
+export async function getMentorshipProgress(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/progress`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMentorshipTimeline(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/timeline`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 export async function updateSharedGoal(id, sharedGoal) {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${BASE_URL}/mentorships/${id}/goal`, {
@@ -353,6 +610,118 @@ export async function markMentorPairMessagesRead(otherMentorId) {
     `${BASE_URL}/conversations/mentor-pair/${otherMentorId}/messages/read`,
     { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } },
   )
+  return handleResponse(res)
+}
+
+// ── Social feed ───────────────────────────────────────────────────────────
+// Backend: FeedPostController + FeedReadController (+ FeedInteractionController in #340)
+
+export async function createFeedPost({ body, hashtags = [] }) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ body, hashtags }),
+  })
+  return handleResponse(res)
+}
+
+export async function getFeedPostById(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function updateFeedPost(id, { body, hashtags }) {
+  const token = localStorage.getItem('auth_token')
+  const payload = {}
+  if (body !== undefined) payload.body = body
+  if (hashtags !== undefined) payload.hashtags = hashtags
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(res)
+}
+
+export async function deleteFeedPost(id) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getForYouFeed(page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/for-you?page=${page}&size=${size}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getFollowingFeed(page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/following?page=${page}&size=${size}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function searchFeed({ q, hashtag, page = 0, size = 20 }) {
+  const token = localStorage.getItem('auth_token')
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (hashtag) params.set('hashtag', hashtag)
+  params.set('page', String(page))
+  params.set('size', String(size))
+  const res = await fetch(`${BASE_URL}/feed/search?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+// ── Feed interactions (share, bookmark) — #340 ───────────────────────────
+// Backend: FeedInteractionController. Each endpoint returns a
+// FeedPostInteractionState { likeCount, commentCount, shareCount,
+// bookmarkCount, viewerHasLiked, viewerHasBookmarked } the UI uses to
+// render counts + viewer-relative toggle state.
+
+export async function getPostInteractions(postId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/interactions`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function toggleBookmarkOnPost(postId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/bookmark`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function recordShareOnPost(postId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/share`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
+export async function getMyBookmarks(page = 0, size = 20) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/feed/me/bookmarks?page=${page}&size=${size}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
   return handleResponse(res)
 }
 

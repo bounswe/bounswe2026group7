@@ -4,7 +4,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.OffsetDateTime;
 
-@Schema(description = "Aggregated mentorship progress across tasks and milestones (#334).")
+@Schema(description = "Aggregated mentorship progress across tasks and milestones (#334), "
+        + "extended with session attendance and time-remaining for the dashboard view (#253).")
 public record MentorshipProgressResponse(
         @Schema(description = "Mentorship id", example = "42")
         long mentorshipId,
@@ -27,12 +28,22 @@ public record MentorshipProgressResponse(
 
         @Schema(description = "Combined progress as a ratio in [0.0, 1.0]. Equal-weighted across " +
                 "the two surfaces when both have entries; falls back to a single-surface ratio " +
-                "when only one surface has entries; 0.0 when both are empty.",
+                "when only one surface has entries; 0.0 when both are empty. Multiply by 100 for " +
+                "the goal-achievement percentage.",
                 example = "0.325")
         float progressRatio,
 
         @Schema(description = "Latest activity timestamp across task submissions / reviews and " +
                 "milestone completions; null when neither domain has any activity.")
-        OffsetDateTime lastActivityAt
+        OffsetDateTime lastActivityAt,
+
+        @Schema(description = "Meetings of this mentorship in COMPLETED status (#253).",
+                example = "5")
+        long sessionsAttended,
+
+        @Schema(description = "Whole days remaining until the mentorship's endDate, clamped to 0 " +
+                "when the end date is in the past (#253).",
+                example = "27")
+        long daysRemaining
 ) {
 }

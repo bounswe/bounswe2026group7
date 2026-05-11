@@ -71,6 +71,64 @@ public class ConversationCreator {
         return saved;
     }
 
+    /**
+     * Admin DM conversation (#280). Same canonical-pair shape as MENTOR_PAIR;
+     * the role gate (one side must be admin) is enforced upstream in
+     * {@link ConversationService}.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Conversation createForAdminDirectInNewTx(User adminSide, User otherSide,
+                                                    long lower, long higher) {
+        Conversation conversation = new Conversation();
+        conversation.setKind(ConversationKind.ADMIN_DIRECT);
+        conversation.setPairAId(lower);
+        conversation.setPairBId(higher);
+        Conversation saved = conversationRepository.save(conversation);
+        participantRepository.save(participant(saved, adminSide));
+        participantRepository.save(participant(saved, otherSide));
+        log.info("Conversation created: id={}, kind=ADMIN_DIRECT, pair=({}, {})",
+                saved.getId(), lower, higher);
+        return saved;
+    }
+
+    /**
+     * Singleton admin-broadcast conversation (#280). Concurrent first-broadcast
+     * requests collapse to a single row via
+     * {@code uq_conversations_admin_broadcast_singleton}. Initial participants
+     * are seeded from the snapshot {@code admins} the caller passed in;
+     * subsequent broadcasts re-sync the participant set.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Conversation createForAdminBroadcastInNewTx(java.util.List<User> admins) {
+        Conversation conversation = new Conversation();
+        conversation.setKind(ConversationKind.ADMIN_BROADCAST);
+        Conversation saved = conversationRepository.save(conversation);
+        for (User admin : admins) {
+            participantRepository.save(participant(saved, admin));
+        }
+        log.info("Conversation created: id={}, kind=ADMIN_BROADCAST, initialParticipants={}",
+                saved.getId(), admins.size());
+        return saved;
+    }
+
+    /**
+     * Adds a single participant to an existing conversation in a fresh
+     * transaction. Race-tolerant: a concurrent insert of the same
+     * {@code (conversationId, userId)} pair raises a primary-key violation
+     * that the caller can ignore via re-check.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void addParticipantInNewTx(Conversation conversation, User user) {
+        try {
+            participantRepository.save(participant(conversation, user));
+            log.info("Conversation participant added: conversationId={}, userId={}",
+                    conversation.getId(), user.getId());
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.debug("Concurrent participant insert raced — already a member: "
+                    + "conversationId={}, userId={}", conversation.getId(), user.getId());
+        }
+    }
+
     private static ConversationParticipant participant(Conversation conversation, User user) {
         ConversationParticipant cp = new ConversationParticipant();
         cp.setConversation(conversation);

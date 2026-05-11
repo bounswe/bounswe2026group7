@@ -26,6 +26,7 @@ export default function RootLayout() {
           <Stack.Screen name="meetings-sessions" options={{ headerShown: false }} />
           <Stack.Screen name="mentorship-requests" options={{ headerShown: false }} />
           <Stack.Screen name="task-tracker" options={{ headerShown: false }} />
+          <Stack.Screen name="milestones" options={{ headerShown: false }} />
           <Stack.Screen name="connection-profile" options={{ headerShown: false }} />
           <Stack.Screen name="mentor-public-profile" options={{ headerShown: false }} />
           <Stack.Screen name="request-candidate-profile" options={{ headerShown: false }} />

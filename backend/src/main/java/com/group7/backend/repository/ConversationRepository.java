@@ -57,4 +57,12 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
                     + "WHERE cp.conversation = c AND cp.user.id = :userId)")
     Page<Conversation> findMentorPairConversationsForUserOrderedByLastMessage(
             @Param("userId") Long userId, Pageable pageable);
+
+    /**
+     * Lookup the singleton {@link ConversationKind#ADMIN_BROADCAST} row, if it
+     * has been created. Backed by the partial unique index
+     * {@code uq_conversations_admin_broadcast_singleton}, so at most one row
+     * matches and the query is constant-time.
+     */
+    Optional<Conversation> findFirstByKind(ConversationKind kind);
 }

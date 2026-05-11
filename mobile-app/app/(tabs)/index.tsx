@@ -37,10 +37,19 @@ type ConnectionCard = {
   connectedUserId: number;
   connectedUserFirstName: string;
   type: 'mentor' | 'mentee';
+  status: 'ACTIVE' | 'COMPLETED' | 'TERMINATED';
   progress: number;
   startDate: string;
   endDate: string;
   sharedGoal: string;
+};
+
+type MentorshipTab = 'active' | 'past';
+
+const formatMentorshipStatus = (status: ConnectionCard['status']) => {
+  if (status === 'ACTIVE') return 'Active';
+  if (status === 'COMPLETED') return 'Completed';
+  return 'Terminated';
 };
 
 export default function HomeScreen() {
@@ -51,6 +60,7 @@ export default function HomeScreen() {
   const [connections, setConnections] = useState<ConnectionCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [selectedTab, setSelectedTab] = useState<MentorshipTab>('active');
 
   const fetchMentorships = useCallback(async () => {
     if (sessionLoading) return;
@@ -65,7 +75,7 @@ export default function HomeScreen() {
       const mentorships: any[] = res.data;
 
       const cards: ConnectionCard[] = mentorships
-        .filter((m) => m.status === 'ACTIVE')
+        .filter((m) => ['ACTIVE', 'COMPLETED', 'TERMINATED'].includes(m.status))
         .map((m) => {
           const isCurrentUserMentor = Number(m.mentorId) === session.userId;
           const connectedUserId = isCurrentUserMentor ? m.menteeId : m.mentorId;
@@ -77,6 +87,7 @@ export default function HomeScreen() {
             connectedUserId,
             connectedUserFirstName,
             type,
+            status: m.status,
             progress: calcProgress(m.startDate, m.endDate),
             startDate: m.startDate,
             endDate: m.endDate,
@@ -163,7 +174,7 @@ export default function HomeScreen() {
         stat2Label: 'Duration',
         stat2Value: `${Math.round((new Date(item.endDate).getTime() - new Date(item.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))}mo`,
         stat3Label: 'Status',
-        stat3Value: 'Active',
+        stat3Value: formatMentorshipStatus(item.status),
       },
     });
   };
@@ -172,6 +183,12 @@ export default function HomeScreen() {
   const visibleConnections = isMentor
     ? connections.filter((c) => c.type === 'mentee')
     : connections.filter((c) => c.type === 'mentor');
+  const activeConnections = roleScopedConnections.filter((c) => c.status === 'ACTIVE');
+  const pastConnections = roleScopedConnections.filter((c) => c.status !== 'ACTIVE');
+  const visibleConnections = selectedTab === 'active' ? activeConnections : pastConnections;
+  const sectionTitle = selectedTab === 'active'
+    ? (isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS')
+    : (isMentor ? 'PAST MENTEES' : 'PAST MENTORS');
 
   if (sessionLoading) {
     return (
@@ -257,12 +274,32 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+        <View style={styles.tabRow}>
+          <TouchableOpacity
+            style={[styles.tabChip, selectedTab === 'active' && styles.tabChipActive]}
+            onPress={() => setSelectedTab('active')}
+          >
+            <Text style={[styles.tabChipText, selectedTab === 'active' && styles.tabChipTextActive]}>
+              Active ({activeConnections.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabChip, selectedTab === 'past' && styles.tabChipActive]}
+            onPress={() => setSelectedTab('past')}
+          >
+            <Text style={[styles.tabChipText, selectedTab === 'past' && styles.tabChipTextActive]}>
+              Past ({pastConnections.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {loading ? (
           <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 30 }} />
         ) : visibleConnections.length === 0 ? (
           <View style={styles.emptyStateContainer}>
-            <Text style={styles.emptyStateText}>No active connections found.</Text>
+            <Text style={styles.emptyStateText}>
+              {selectedTab === 'active' ? 'No active mentorships found.' : 'No past mentorships found.'}
+            </Text>
           </View>
         ) : (
           visibleConnections.map((item) => {
@@ -285,21 +322,37 @@ export default function HomeScreen() {
                       </Text>
                     </View>
 
-                    <View style={styles.activeBadge}>
-                      <Text style={styles.activeBadgeText}>Active</Text>
+                    <View
+                      style={[
+                        styles.activeBadge,
+                        item.status !== 'ACTIVE' && styles.pastBadge,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.activeBadgeText,
+                          item.status !== 'ACTIVE' && styles.pastBadgeText,
+                        ]}
+                      >
+                        {formatMentorshipStatus(item.status)}
+                      </Text>
                     </View>
                   </View>
 
                   <View style={styles.progressTrack}>
                     <View style={[styles.progressFill, { width: `${item.progress}%` }]} />
                   </View>
-                  <Text style={styles.progressText}>Progress: {item.progress}%</Text>
+                  <Text style={styles.progressText}>
+                    {item.status === 'ACTIVE' ? `Progress: ${item.progress}%` : `Ended ${formatMentorshipStatus(item.status).toLowerCase()}`}
+                  </Text>
 
                   <TouchableOpacity
                     style={styles.viewProfileButton}
                     onPress={() => openConnectionProfile(item)}
                   >
-                    <Text style={styles.viewProfileButtonText}>Open Shared Space</Text>
+                    <Text style={styles.viewProfileButtonText}>
+                      {item.status === 'ACTIVE' ? 'Open Shared Space' : 'View Mentorship'}
+                    </Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
               </View>
@@ -478,7 +531,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 2,
     color: '#8B8176',
+    marginBottom: 12,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 10,
     marginBottom: 18,
+  },
+  tabChip: {
+    backgroundColor: '#E4DDD2',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  tabChipActive: {
+    backgroundColor: '#456B50',
+  },
+  tabChipText: {
+    color: '#6F6459',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tabChipTextActive: {
+    color: '#F7F4EE',
   },
   activeCard: {
     backgroundColor: '#F8F6F2',
@@ -506,6 +581,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   activeBadgeText: { color: '#2F563C', fontSize: 11, fontWeight: '700' },
+  pastBadge: {
+    backgroundColor: '#E9DFD4',
+  },
+  pastBadgeText: {
+    color: '#775E43',
+  },
   progressTrack: {
     height: 9,
     borderRadius: 999,
