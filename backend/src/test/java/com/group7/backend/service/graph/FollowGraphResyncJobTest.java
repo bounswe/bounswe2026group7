@@ -36,12 +36,14 @@ class FollowGraphResyncJobTest {
     @Mock private FollowGraphWriter graphWriter;
     @Mock private FailedGraphSyncRepository failedLog;
     @Mock private FailedGraphSyncWriter failedSyncWriter;
+    @Mock private org.springframework.beans.factory.ObjectProvider<
+            com.group7.backend.service.ranking.graph.FollowGraphProjectionService> projectionServiceProvider;
     private FollowGraphResyncJob job;
 
     @BeforeEach
     void setUp() {
         job = new FollowGraphResyncJob(follows, graphWriter, failedLog, failedSyncWriter,
-                "0 0 3 * * *");
+                projectionServiceProvider, "0 0 3 * * *");
     }
 
     // ── drift threshold ─────────────────────────────────────────────────────

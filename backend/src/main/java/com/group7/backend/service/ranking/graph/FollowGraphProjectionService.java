@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.data.neo4j.core.Neo4jClient;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -56,6 +57,16 @@ public class FollowGraphProjectionService {
         this.client = client;
     }
 
+    /**
+     * Runs after {@code FollowGraphBootstrap.bootstrapOnStartup()}
+     * ({@code @Order(1)}). When bootstrap performed a full rebuild it
+     * already invoked {@link #rebuildProjection()} via the resync job, so
+     * this listener degenerates to a fast idempotent drop+recreate.
+     * When bootstrap was a no-op (Neo4j already populated, or no rows in
+     * Postgres) this is the only place the projection gets built on
+     * startup.
+     */
+    @Order(2)
     @EventListener(ApplicationReadyEvent.class)
     public void initial() {
         rebuildProjection();

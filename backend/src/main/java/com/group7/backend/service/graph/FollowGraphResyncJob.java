@@ -4,8 +4,10 @@ import com.group7.backend.entity.FailedGraphSync;
 import com.group7.backend.entity.Follow;
 import com.group7.backend.repository.FailedGraphSyncRepository;
 import com.group7.backend.repository.FollowRepository;
+import com.group7.backend.service.ranking.graph.FollowGraphProjectionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -48,18 +50,27 @@ public class FollowGraphResyncJob {
     private final FollowGraphWriter graphWriter;
     private final FailedGraphSyncRepository failedLog;
     private final FailedGraphSyncWriter failedSyncWriter;
+    /**
+     * Projection service shares the same sync.enabled condition so it
+     * coexists in the same Spring context. ObjectProvider keeps the
+     * dependency lazy — if a future config split disables one but not
+     * the other, the resync still runs.
+     */
+    private final ObjectProvider<FollowGraphProjectionService> projectionServiceProvider;
     private final String resyncCron;
 
     public FollowGraphResyncJob(FollowRepository follows,
                                 FollowGraphWriter graphWriter,
                                 FailedGraphSyncRepository failedLog,
                                 FailedGraphSyncWriter failedSyncWriter,
+                                ObjectProvider<FollowGraphProjectionService> projectionServiceProvider,
                                 @Value("${app.recommendations.follow.resync-cron:0 0 3 * * *}")
                                 String resyncCron) {
         this.follows = follows;
         this.graphWriter = graphWriter;
         this.failedLog = failedLog;
         this.failedSyncWriter = failedSyncWriter;
+        this.projectionServiceProvider = projectionServiceProvider;
         this.resyncCron = resyncCron;
     }
 
@@ -157,5 +168,15 @@ public class FollowGraphResyncJob {
             graphWriter.mergeFollow(f.getId().getFollowerId(), f.getId().getFolloweeId());
         }
         log.info("Full rebuild complete: {} edges re-emitted", all.size());
+
+        // GDS projection captures a snapshot of the live graph. After
+        // re-emitting every edge we need to drop+recreate the projection
+        // so PPR queries see the fresh state — otherwise the projection
+        // would keep referencing the old node-id mapping the previous
+        // gds.graph.project produced.
+        FollowGraphProjectionService projection = projectionServiceProvider.getIfAvailable();
+        if (projection != null) {
+            projection.rebuildProjection();
+        }
     }
 }
