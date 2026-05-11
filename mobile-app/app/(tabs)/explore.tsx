@@ -95,7 +95,7 @@ function MenteeExploreContent() {
     const fetchMentors = async () => {
       try {
         const [mentorsRes, myId] = await Promise.all([
-          apiClient.get('/users/mentors'),
+          apiClient.get('/users/mentors/all'),
           SecureStore.getItemAsync('userId'),
         ]);
         const data: any[] = mentorsRes.data.content ?? mentorsRes.data;
@@ -380,7 +380,7 @@ function MentorRequestsContent() {
     setDiscoverLoading(true);
     try {
       const [mentorsRes, myId] = await Promise.all([
-        apiClient.get('/users/mentors'),
+        apiClient.get('/users/mentors/all'),
         SecureStore.getItemAsync('userId'),
       ]);
       const data: any[] = mentorsRes.data.content ?? mentorsRes.data;
