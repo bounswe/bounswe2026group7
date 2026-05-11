@@ -108,23 +108,22 @@ class EndToEndWorkflowTest extends AbstractE2ETest {
         assertThat(meetingRepository.findById(meetingId)).isPresent();
 
         // End the mentorship — #237's rating endpoint requires COMPLETED /
-        // CANCELLED status, and MentorshipCleanupService wipes tasks /
-        // meetings / milestones as a side effect.
+        // CANCELLED status.
         api.endMentorship(mentor, mentorshipId, "Goal achieved");
 
         Long ratingId = api.rateMentor(mentee, mentorshipId,
                 5, "Great mentor — supportive and clear.");
 
-        // ── Post-end assertions: status flipped, children cleaned, rating present.
+        // ── Post-end assertions: status flipped, history preserved, rating present.
         assertThat(mentorshipRepository.findById(mentorshipId))
                 .isPresent()
                 .hasValueSatisfying(m -> assertThat(m.getStatus()).isEqualTo(MentorshipStatus.COMPLETED));
         assertThat(taskRepository.findById(taskId))
-                .as("cleanupChildren should remove the task when mentorship ends")
-                .isEmpty();
+                .as("ended mentorship should preserve task history")
+                .isPresent();
         assertThat(meetingRepository.findById(meetingId))
-                .as("cleanupChildren should remove the meeting when mentorship ends")
-                .isEmpty();
+                .as("ended mentorship should preserve meeting history")
+                .isPresent();
         assertThat(mentorRatingRepository.findById(ratingId))
                 .isPresent()
                 .hasValueSatisfying(r -> {

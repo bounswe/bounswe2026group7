@@ -40,8 +40,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * End-to-end coverage for #133 — mentorship cancellation, related-data
- * cleanup, audit trail, and re-match cool-down.
+ * End-to-end coverage for #133/#478 — mentorship cancellation, related-data
+ * retention by default, explicit data deletion, audit trail, and re-match
+ * cool-down.
  *
  * <p>The cool-down property is shrunk to 1 hour for fast tests and the
  * production {@link Clock} is overridden with a {@link MutableClock} so
@@ -188,7 +189,7 @@ class MentorshipCancellationIntegrationTest {
     // ── Tests ───────────────────────────────────────────────────────────────
 
     @Test
-    void cancelMentorshipFlipsStatusAndDeletesChildren() throws Exception {
+    void cancelMentorshipFlipsStatusAndPreservesChildrenByDefault() throws Exception {
         CanceledFixture f = acceptMentorship("c_mentor1@test.com", "c_mentee1@test.com");
         seedTaskAndMilestone(f.mentorshipId());
         assertThat(taskRepository.findByMentorshipIdOrderByCreatedAtDesc(f.mentorshipId())).hasSize(1);
@@ -206,13 +207,42 @@ class MentorshipCancellationIntegrationTest {
         Mentorship after = mentorshipRepository.findById(f.mentorshipId()).orElseThrow();
         assertThat(after.getTerminatedAt()).isNotNull();
         assertThat(after.getTerminatedByUserId()).isEqualTo(f.menteeId());
-        assertThat(taskRepository.findByMentorshipIdOrderByCreatedAtDesc(f.mentorshipId())).isEmpty();
-        assertThat(milestoneRepository.findByMentorshipIdOrderByOrderIndexAsc(f.mentorshipId())).isEmpty();
+        assertThat(taskRepository.findByMentorshipIdOrderByCreatedAtDesc(f.mentorshipId())).hasSize(1);
+        assertThat(milestoneRepository.findByMentorshipIdOrderByOrderIndexAsc(f.mentorshipId())).hasSize(1);
 
         Mentee mentee = menteeRepository.findById(f.menteeId()).orElseThrow();
         assertThat(mentee.getActiveMentorId()).isNull();
         Mentor mentor = mentorRepository.findById(f.mentorId()).orElseThrow();
         assertThat(mentor.getCurrentMenteeCount()).isZero();
+    }
+
+    @Test
+    void deleteMentorshipDataRemovesChildrenForPastMentorship() throws Exception {
+        CanceledFixture f = acceptMentorship("c_mentor_data1@test.com", "c_mentee_data1@test.com");
+        seedTaskAndMilestone(f.mentorshipId());
+
+        mockMvc.perform(post("/api/mentorships/" + f.mentorshipId() + "/cancel")
+                        .header("Authorization", "Bearer " + f.menteeToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("reason", "cleanup later"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/mentorships/" + f.mentorshipId() + "/data")
+                        .header("Authorization", "Bearer " + f.menteeToken()))
+                .andExpect(status().isNoContent());
+
+        assertThat(taskRepository.findByMentorshipIdOrderByCreatedAtDesc(f.mentorshipId())).isEmpty();
+        assertThat(milestoneRepository.findByMentorshipIdOrderByOrderIndexAsc(f.mentorshipId())).isEmpty();
+    }
+
+    @Test
+    void deleteMentorshipDataRejectsActiveMentorship() throws Exception {
+        CanceledFixture f = acceptMentorship("c_mentor_data2@test.com", "c_mentee_data2@test.com");
+        seedTaskAndMilestone(f.mentorshipId());
+
+        mockMvc.perform(delete("/api/mentorships/" + f.mentorshipId() + "/data")
+                        .header("Authorization", "Bearer " + f.menteeToken()))
+                .andExpect(status().isConflict());
     }
 
     @Test
