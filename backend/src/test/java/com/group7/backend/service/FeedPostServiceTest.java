@@ -57,6 +57,7 @@ class FeedPostServiceTest {
         feedPostService = new FeedPostService(
                 feedPostRepository,
                 userRepository,
+                attachmentRepository,
                 hashtagNormalizer,
                 feedPostMapper,
                 feedPostEventPublisher,

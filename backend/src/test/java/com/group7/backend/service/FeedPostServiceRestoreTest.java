@@ -40,6 +40,7 @@ class FeedPostServiceRestoreTest {
 
     @Mock private FeedPostRepository feedPostRepository;
     @Mock private UserRepository userRepository;
+    @Mock private com.group7.backend.repository.AttachmentRepository attachmentRepository;
     @Mock private HashtagNormalizer hashtagNormalizer;
     @Mock private FeedPostMapper feedPostMapper;
     @Mock private FeedPostEventPublisher feedPostEventPublisher;
@@ -52,6 +53,7 @@ class FeedPostServiceRestoreTest {
         service = new FeedPostService(
                 feedPostRepository,
                 userRepository,
+                attachmentRepository,
                 hashtagNormalizer,
                 feedPostMapper,
                 feedPostEventPublisher,
@@ -145,7 +147,7 @@ class FeedPostServiceRestoreTest {
     void restoreWindowDaysClampedTo1_whenConfigured0() {
         // Reconstruct with a misconfigured 0; the constructor clamps to 1.
         FeedPostService clampedService = new FeedPostService(
-                feedPostRepository, userRepository, hashtagNormalizer,
+                feedPostRepository, userRepository, attachmentRepository, hashtagNormalizer,
                 feedPostMapper, feedPostEventPublisher, historyRepository, 0);
 
         FeedPost post = freshPost(7L, 1L, "Body");
@@ -171,6 +173,6 @@ class FeedPostServiceRestoreTest {
 
     private static FeedPostResponse stubResponse(Long id, Long authorId) {
         return new FeedPostResponse(id, authorId, "U" + authorId, "body", List.of(),
-                OffsetDateTime.now(), OffsetDateTime.now(), false, true);
+                OffsetDateTime.now(), OffsetDateTime.now(), false, true, List.of());
     }
 }

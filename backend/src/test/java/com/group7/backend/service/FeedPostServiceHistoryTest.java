@@ -43,6 +43,7 @@ class FeedPostServiceHistoryTest {
 
     @Mock private FeedPostRepository feedPostRepository;
     @Mock private UserRepository userRepository;
+    @Mock private com.group7.backend.repository.AttachmentRepository attachmentRepository;
     @Mock private HashtagNormalizer hashtagNormalizer;
     @Mock private FeedPostMapper feedPostMapper;
     @Mock private FeedPostEventPublisher feedPostEventPublisher;
@@ -59,6 +60,7 @@ class FeedPostServiceHistoryTest {
         feedPostService = new FeedPostService(
                 feedPostRepository,
                 userRepository,
+                attachmentRepository,
                 hashtagNormalizer,
                 feedPostMapper,
                 feedPostEventPublisher,
@@ -77,7 +79,7 @@ class FeedPostServiceHistoryTest {
         when(feedPostRepository.save(post)).thenReturn(post);
         when(feedPostMapper.toResponse(post, 1L)).thenReturn(stubResponse(7L, 1L));
 
-        feedPostService.update(7L, 1L, "New body", null);
+        feedPostService.update(7L, 1L, "New body", null, null);
 
         ArgumentCaptor<FeedPostEditHistory> captor = ArgumentCaptor.forClass(FeedPostEditHistory.class);
         verify(historyRepository).save(captor.capture());
@@ -98,7 +100,7 @@ class FeedPostServiceHistoryTest {
         when(feedPostRepository.save(post)).thenReturn(post);
         when(feedPostMapper.toResponse(post, 1L)).thenReturn(stubResponse(7L, 1L));
 
-        feedPostService.update(7L, 1L, null, List.of("new"));
+        feedPostService.update(7L, 1L, null, List.of("new"), null);
 
         ArgumentCaptor<FeedPostEditHistory> captor = ArgumentCaptor.forClass(FeedPostEditHistory.class);
         verify(historyRepository).save(captor.capture());
@@ -115,7 +117,7 @@ class FeedPostServiceHistoryTest {
         when(feedPostRepository.save(post)).thenReturn(post);
         when(feedPostMapper.toResponse(post, 1L)).thenReturn(stubResponse(7L, 1L));
 
-        feedPostService.update(7L, 1L, "New", List.of("b"));
+        feedPostService.update(7L, 1L, "New", List.of("b"), null);
 
         // Exactly one history row even though both fields changed.
         verify(historyRepository).save(any(FeedPostEditHistory.class));
@@ -129,7 +131,7 @@ class FeedPostServiceHistoryTest {
         when(feedPostRepository.save(post)).thenReturn(post);
         when(feedPostMapper.toResponse(post, 1L)).thenReturn(stubResponse(7L, 1L));
 
-        feedPostService.update(7L, 1L, "Same body", null);
+        feedPostService.update(7L, 1L, "Same body", null, null);
 
         verify(historyRepository, never()).save(any(FeedPostEditHistory.class));
     }
@@ -143,7 +145,7 @@ class FeedPostServiceHistoryTest {
         when(feedPostRepository.save(post)).thenReturn(post);
         when(feedPostMapper.toResponse(post, 1L)).thenReturn(stubResponse(7L, 1L));
 
-        feedPostService.update(7L, 1L, null, List.of("tag"));
+        feedPostService.update(7L, 1L, null, List.of("tag"), null);
 
         verify(historyRepository, never()).save(any(FeedPostEditHistory.class));
     }
@@ -155,7 +157,7 @@ class FeedPostServiceHistoryTest {
         when(feedPostRepository.save(post)).thenReturn(post);
         when(feedPostMapper.toResponse(post, 1L)).thenReturn(stubResponse(7L, 1L));
 
-        feedPostService.update(7L, 1L, null, null);
+        feedPostService.update(7L, 1L, null, null, null);
 
         verify(historyRepository, never()).save(any(FeedPostEditHistory.class));
     }
@@ -291,6 +293,6 @@ class FeedPostServiceHistoryTest {
 
     private static FeedPostResponse stubResponse(Long id, Long authorId) {
         return new FeedPostResponse(id, authorId, "U" + authorId, "body", List.of(),
-                OffsetDateTime.now(), OffsetDateTime.now(), false, true);
+                OffsetDateTime.now(), OffsetDateTime.now(), false, true, List.of());
     }
 }
