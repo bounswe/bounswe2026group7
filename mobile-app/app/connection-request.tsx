@@ -10,11 +10,8 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-<<<<<<< codex/mobile-screen-tests
-import { useProtectedSession } from '../components/useProtectedSession';
-=======
 import apiClient from '../api/client';
->>>>>>> dev
+import { useProtectedSession } from '../components/useProtectedSession';
 
 function parseString(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value ?? '';
@@ -28,12 +25,6 @@ export default function ConnectionRequestScreen() {
   const targetName = parseString(params.targetName);
   const targetType = parseString(params.targetType);
   const mentorshipId = parseString(params.mentorshipId);
-<<<<<<< codex/mobile-screen-tests
-  const mentorId = parseString(params.mentorId);
-  const menteeId = parseString(params.menteeId);
-  const sourceScreen = parseString(params.sourceScreen);
-=======
->>>>>>> dev
 
   const [title, setTitle] = useState('');
   const [startTime, setStartTime] = useState('');
@@ -65,67 +56,6 @@ export default function ConnectionRequestScreen() {
     }
   }, [mode]);
 
-<<<<<<< codex/mobile-screen-tests
-  const handleSubmit = () => {
-    const requestBody = {
-      title: title.trim(),
-      dateOrSlot: dateOrSlot.trim(),
-      details: details.trim(),
-    };
-
-    console.log('[connection-request] submit attempt', {
-      sourceScreen,
-      currentUserId: session?.userId ?? null,
-      currentRole: session?.role ?? null,
-      mentorshipId,
-      mentorId,
-      menteeId,
-      endpoint: null,
-      mode,
-      requestBody,
-    });
-
-    if (mode === 'change') {
-      console.warn('[connection-request] no backend endpoint for change request', {
-        currentUserId: session?.userId ?? null,
-        currentRole: session?.role ?? null,
-        mentorshipId,
-        mentorId,
-        menteeId,
-        requestBody,
-      });
-      Alert.alert(
-        'Unavailable',
-        'Change requests are not supported by the backend yet, so no request was created.'
-      );
-      return;
-    }
-
-    if (mode === 'end') {
-      console.warn('[connection-request] no backend endpoint for end request', {
-        currentUserId: session?.userId ?? null,
-        currentRole: session?.role ?? null,
-        mentorshipId,
-        mentorId,
-        menteeId,
-        requestBody,
-      });
-      Alert.alert(
-        'Unavailable',
-        'End mentorship requests are not supported by the backend yet, so no request was created.'
-      );
-      return;
-    }
-
-    console.warn('[connection-request] meeting request flow is not connected to a backend endpoint', {
-      currentUserId: session?.userId ?? null,
-      currentRole: session?.role ?? null,
-      mentorshipId,
-      mentorId,
-      menteeId,
-      requestBody,
-    });
-=======
   const parseIsoDateTime = (raw: string): string | null => {
     const trimmed = raw.trim();
     if (!trimmed) return null;
@@ -195,12 +125,7 @@ export default function ConnectionRequestScreen() {
       return;
     }
 
-    // Non-meeting modes: no backend endpoint, show confirmation
->>>>>>> dev
-    Alert.alert(
-      'Unavailable',
-      'Meeting requests are not connected to a backend endpoint from this screen yet.'
-    );
+    Alert.alert('Unavailable', 'This request type is not yet supported by the backend.');
   };
 
   if (sessionLoading) {
@@ -383,13 +308,5 @@ const styles = StyleSheet.create({
     minHeight: 58,
     justifyContent: 'center',
   },
-<<<<<<< codex/mobile-screen-tests
-  primaryButtonText: {
-    color: '#F8F6F2',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-=======
   primaryButtonText: { color: '#F8F6F2', fontSize: 16, fontWeight: '700' },
->>>>>>> dev
 });

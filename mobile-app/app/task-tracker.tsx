@@ -125,6 +125,11 @@ export default function TaskTrackerScreen() {
   const [feedbackDraft, setFeedbackDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [taskComposerOpen, setTaskComposerOpen] = useState(false);
+  const [taskTitleDraft, setTaskTitleDraft] = useState('');
+  const [taskDescDraft, setTaskDescDraft] = useState('');
+  const [taskDueDraft, setTaskDueDraft] = useState('');
+  const [taskCreating, setTaskCreating] = useState(false);
 
   useEffect(() => {
     console.log('[tasks] route context', {
@@ -238,6 +243,33 @@ export default function TaskTrackerScreen() {
       Alert.alert('Error', message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const createTask = async () => {
+    if (!mentorshipId || !taskTitleDraft.trim()) return;
+    setTaskCreating(true);
+    try {
+      let dueDate: string | null = null;
+      if (taskDueDraft.trim()) {
+        const d = new Date(taskDueDraft.trim());
+        if (!isNaN(d.getTime())) dueDate = d.toISOString();
+      }
+      await apiClient.post(`/mentorships/${mentorshipId}/tasks`, {
+        title: taskTitleDraft.trim(),
+        description: taskDescDraft.trim() || null,
+        dueDate,
+      });
+      setTaskTitleDraft('');
+      setTaskDescDraft('');
+      setTaskDueDraft('');
+      setTaskComposerOpen(false);
+      await fetchTasks();
+      Alert.alert('Success', 'Task created and assigned to your mentee.');
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.message || 'Could not create task.');
+    } finally {
+      setTaskCreating(false);
     }
   };
 
@@ -482,6 +514,58 @@ export default function TaskTrackerScreen() {
             <Text style={styles.refreshText}>Refresh</Text>
           </TouchableOpacity>
         </View>
+
+        {isMentor && (
+          <>
+            <TouchableOpacity
+              style={styles.createTaskBtn}
+              onPress={() => setTaskComposerOpen((v) => !v)}
+            >
+              <Text style={styles.createTaskBtnText}>
+                {taskComposerOpen ? 'Hide Form' : '+ Create Task'}
+              </Text>
+            </TouchableOpacity>
+
+            {taskComposerOpen && (
+              <View style={styles.composerCard}>
+                <Text style={styles.formTitle}>New Task</Text>
+                <TextInput
+                  style={styles.input}
+                  value={taskTitleDraft}
+                  onChangeText={setTaskTitleDraft}
+                  placeholder="Task title"
+                  placeholderTextColor="#A5A5A5"
+                />
+                <TextInput
+                  style={[styles.input, styles.multiLineInput, { marginTop: 10 }]}
+                  value={taskDescDraft}
+                  onChangeText={setTaskDescDraft}
+                  placeholder="Description (optional)"
+                  placeholderTextColor="#A5A5A5"
+                  multiline
+                  textAlignVertical="top"
+                />
+                <TextInput
+                  style={[styles.input, { marginTop: 10 }]}
+                  value={taskDueDraft}
+                  onChangeText={setTaskDueDraft}
+                  placeholder="Due date (YYYY-MM-DD, optional)"
+                  placeholderTextColor="#A5A5A5"
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  style={[styles.primaryButton, (!taskTitleDraft.trim() || taskCreating) && styles.disabledButton]}
+                  onPress={createTask}
+                  disabled={!taskTitleDraft.trim() || taskCreating}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    {taskCreating ? 'Creating...' : 'Create Task'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
 
         {listLoading ? (
           <View style={styles.centeredState}>
@@ -832,5 +916,25 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  createTaskBtn: {
+    backgroundColor: '#3FA06F',
+    borderRadius: 18,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  createTaskBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  composerCard: {
+    backgroundColor: '#F8F8F7',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
   },
 });
