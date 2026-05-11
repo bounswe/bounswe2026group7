@@ -67,10 +67,18 @@ public record FollowRecommendationProperties(
             @Positive int outputK) {
     }
 
+    /**
+     * Weights apply to the candidate's AUTHORING events (posts written,
+     * comments written, shares posted) — not to who-liked-what.
+     * post:comment:share = 1:3:4 follows the FB Meaningful Social
+     * Interactions ordering: posting is baseline, commenting shows
+     * responsive participation, sharing curates others' content and
+     * carries the strongest signal.
+     */
     public record Engagement(
             @Positive int windowDays,
             @Positive int halfLifeDays,
-            @DecimalMin("0") double likeWeight,
+            @DecimalMin("0") double postWeight,
             @DecimalMin("0") double commentWeight,
             @DecimalMin("0") double shareWeight) {
     }

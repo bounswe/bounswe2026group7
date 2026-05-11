@@ -1,5 +1,6 @@
 package com.group7.backend.service.ranking;
 
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Set;
 
@@ -57,11 +58,18 @@ public record FollowRecommendationContext(
         Set<Long> viewerInteractedAuthorIds,
         Map<Long, Long> popularityByMajor,
         float[] viewerInterestEmbedding,
-        boolean coldStart) {
+        boolean coldStart,
+        /**
+         * Per-request "now" — single timestamp shared across signals so
+         * decay calculations (engagement half-life, ban expiry, etc.) all
+         * see the same instant. Built once by the service, never mutated.
+         */
+        OffsetDateTime now) {
 
     /**
      * Convenience factory used by {@code RuleBasedFollowRanker} and its tests.
-     * Advanced fields default to empty / null / {@code coldStart=followees.isEmpty()}.
+     * Advanced fields default to empty / null / {@code coldStart=followees.isEmpty()};
+     * {@code now} defaults to {@link OffsetDateTime#now()}.
      */
     public static FollowRecommendationContext legacy(
             Long viewerId,
@@ -71,6 +79,7 @@ public record FollowRecommendationContext(
         return new FollowRecommendationContext(
                 viewerId, interestLabels, followeeIds, secondHopCount,
                 Map.of(), Map.of(), Set.of(), Map.of(),
-                null, followeeIds.isEmpty());
+                null, followeeIds.isEmpty(),
+                OffsetDateTime.now());
     }
 }

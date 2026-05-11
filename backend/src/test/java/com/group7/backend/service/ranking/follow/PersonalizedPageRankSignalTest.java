@@ -69,7 +69,7 @@ class PersonalizedPageRankSignalTest {
         return new FollowRecommendationContext(
                 42L, Set.of(), Set.of(), Map.of(),
                 pprScores, Map.of(), Set.of(), Map.of(),
-                null, false);
+                null, false, java.time.OffsetDateTime.now());
     }
 
     /** Context with null pprScores — should fall through unavailable path. */
@@ -77,7 +77,7 @@ class PersonalizedPageRankSignalTest {
         return new FollowRecommendationContext(
                 42L, Set.of(), Set.of(), Map.of(),
                 null, Map.of(), Set.of(), Map.of(),
-                null, false);
+                null, false, java.time.OffsetDateTime.now());
     }
 
     private static User mentor(Long id) {
