@@ -449,6 +449,49 @@ export async function declineMeeting(meetingId) {
   return handleResponse(res)
 }
 
+// ── Meeting reschedule + cancel (#338) ────────────────────────────────────
+// Backend: MeetingController. Either party may request a reschedule;
+// the OTHER party (counterpart) approves or rejects. Cancel is mentor-only (DELETE).
+
+export async function requestMeetingReschedule(meetingId, { proposedStart, proposedEnd, reason } = {}) {
+  const token = localStorage.getItem('auth_token')
+  const body = { proposedStart, proposedEnd }
+  if (reason) body.reason = reason
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}/reschedule-requests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+export async function approveMeetingReschedule(meetingId, rescheduleId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(
+    `${BASE_URL}/meetings/${meetingId}/reschedule-requests/${rescheduleId}/approve`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+  )
+  return handleResponse(res)
+}
+
+export async function rejectMeetingReschedule(meetingId, rescheduleId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(
+    `${BASE_URL}/meetings/${meetingId}/reschedule-requests/${rescheduleId}/reject`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+  )
+  return handleResponse(res)
+}
+
+export async function cancelMeeting(meetingId) {
+  const token = localStorage.getItem('auth_token')
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return handleResponse(res)
+}
+
 // ── Mentorship progress + timeline (#126 + #333) ──────────────────────────
 // Backend: MentorshipController.
 //   /progress  → MentorshipProgressResponse (counts + 0..1 ratio + lastActivityAt)
