@@ -13,9 +13,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,24 +26,22 @@ import static org.mockito.Mockito.when;
 
 /**
  * Unit coverage for the drift-detection + replay logic in
- * {@link FollowGraphResyncJob}. Tests run against a fixed clock so
- * {@code resyncedAt} comparisons are deterministic. Real Neo4j round-trips
- * are exercised in the PR 2 integration test.
+ * {@link FollowGraphResyncJob}. {@link FailedGraphSyncWriter} is mocked —
+ * the writer's own transactional contract is exercised by
+ * {@code FailedGraphSyncSchemaTest} against a real Postgres.
  */
 @ExtendWith(MockitoExtension.class)
 class FollowGraphResyncJobTest {
 
-    private static final Clock FIXED_CLOCK = Clock.fixed(
-            Instant.parse("2026-05-12T03:00:00Z"), ZoneOffset.UTC);
-
     @Mock private FollowRepository follows;
     @Mock private FollowGraphRepository graph;
     @Mock private FailedGraphSyncRepository failedLog;
+    @Mock private FailedGraphSyncWriter failedSyncWriter;
     private FollowGraphResyncJob job;
 
     @BeforeEach
     void setUp() {
-        job = new FollowGraphResyncJob(follows, graph, failedLog, FIXED_CLOCK,
+        job = new FollowGraphResyncJob(follows, graph, failedLog, failedSyncWriter,
                 "0 0 3 * * *");
     }
 
@@ -98,9 +93,27 @@ class FollowGraphResyncJobTest {
         verify(graph).mergeUser(7L);
         verify(graph).mergeUser(9L);
         verify(graph).mergeFollow(7L, 9L);
-        // Save is called to stamp resyncedAt — the row is reused, not duplicated.
-        assertThat(queued.getResyncedAt()).isNotNull();
-        verify(failedLog).save(queued);
+        // Resync stamp is delegated to the writer's REQUIRES_NEW transaction.
+        verify(failedSyncWriter).markResynced(queued);
+    }
+
+    @Test
+    void runResync_replaysUserDeletedEvents_viaDetachDelete() {
+        // Schema-level safety guarantee that USER_DELETED queued rows replay
+        // exactly as their original DETACH DELETE — the writer-side schema
+        // test proves they can be stored; this test proves they're applied.
+        FailedGraphSync queued = FailedGraphSync.from(
+                FollowChangedEvent.userDeleted(11L), "transient");
+        when(failedLog.findAllUnsynced()).thenReturn(List.of(queued));
+        when(follows.count()).thenReturn(0L);
+        when(graph.countAllFollows()).thenReturn(0L);
+
+        job.runResync();
+
+        verify(graph).detachDeleteUser(11L);
+        verify(graph, never()).mergeFollow(anyLong(), anyLong());
+        verify(graph, never()).deleteFollow(anyLong(), anyLong());
+        verify(failedSyncWriter).markResynced(queued);
     }
 
     @Test
@@ -173,8 +186,8 @@ class FollowGraphResyncJobTest {
         verify(graph).mergeFollow(5L, 6L);
         // The bad row did NOT advance.
         verify(graph, never()).mergeFollow(eq(3L), anyLong());
-        // Only the good row's resync stamp was saved.
-        verify(failedLog, times(1)).save(any(FailedGraphSync.class));
+        // Only the good row's resync stamp was saved (via the writer).
+        verify(failedSyncWriter, times(1)).markResynced(any(FailedGraphSync.class));
     }
 
     private static Follow followOf(Long followerId, Long followeeId) {

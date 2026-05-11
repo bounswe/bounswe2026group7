@@ -1,8 +1,6 @@
 package com.group7.backend.service.graph;
 
-import com.group7.backend.entity.FailedGraphSync;
 import com.group7.backend.event.FollowChangedEvent;
-import com.group7.backend.repository.FailedGraphSyncRepository;
 import com.group7.backend.repository.graph.FollowGraphRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,16 +19,18 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * Unit coverage for the FOLLOWED/UNFOLLOWED → Neo4j fan-out (#437). The
- * Neo4j repository is fully mocked; tests assert call shape, retry semantics,
- * and the failed-event queue write path. Real Neo4j is exercised by the
- * Testcontainers integration test in PR 2.
+ * Unit coverage for the FOLLOWED / UNFOLLOWED / USER_DELETED → Neo4j fan-out.
+ * The Neo4j repository and the {@link FailedGraphSyncWriter} are fully mocked;
+ * tests assert call shape, retry semantics, and queue-write delegation. Real
+ * Neo4j is exercised by {@code FollowGraphRepositoryIntegrationTest}; real
+ * queue persistence (DB CHECK + nullable contract) is exercised by
+ * {@code FailedGraphSyncSchemaTest}.
  */
 @ExtendWith(MockitoExtension.class)
 class FollowGraphSyncListenerTest {
 
     @Mock private FollowGraphRepository graph;
-    @Mock private FailedGraphSyncRepository failedLog;
+    @Mock private FailedGraphSyncWriter failedSyncWriter;
     @InjectMocks private FollowGraphSyncListener listener;
 
     private static final Long ALICE = 1L;
@@ -44,7 +44,7 @@ class FollowGraphSyncListenerTest {
         verify(graph).mergeUser(BOB);
         verify(graph).mergeFollow(ALICE, BOB);
         verify(graph, never()).deleteFollow(anyLong(), anyLong());
-        verify(failedLog, never()).save(any());
+        verify(failedSyncWriter, never()).enqueue(any(), any());
     }
 
     @Test
@@ -74,7 +74,7 @@ class FollowGraphSyncListenerTest {
 
     @Test
     void transientFailure_thenSuccess_logsNothing() {
-        // First call throws, retry succeeds — the queue must not be touched.
+        // First call throws, retry succeeds — the queue writer must not be touched.
         doThrow(new RuntimeException("connection flake"))
                 .doNothing()
                 .when(graph).mergeUser(ALICE);
@@ -83,40 +83,37 @@ class FollowGraphSyncListenerTest {
 
         // mergeUser(ALICE) was called twice — once per attempt up to success.
         verify(graph, times(2)).mergeUser(ALICE);
-        verify(failedLog, never()).save(any());
+        verify(failedSyncWriter, never()).enqueue(any(), any());
     }
 
     @Test
-    void persistentFailure_queuesEventAfterMaxRetries() {
-        // Throw on every retry — listener must persist the event so the
-        // resync job can drain it later.
+    void persistentFailure_delegatesEnqueueToWriter() {
+        // Throw on every retry — listener must hand off the event so the
+        // writer can persist it (in its own REQUIRES_NEW transaction).
         doThrow(new RuntimeException("neo4j is down"))
                 .when(graph).mergeUser(ALICE);
+        FollowChangedEvent event = FollowChangedEvent.followed(ALICE, BOB);
 
-        listener.handle(FollowChangedEvent.followed(ALICE, BOB));
+        listener.handle(event);
 
         verify(graph, times(FollowGraphSyncListener.MAX_RETRIES)).mergeUser(ALICE);
 
-        ArgumentCaptor<FailedGraphSync> captor = ArgumentCaptor.forClass(FailedGraphSync.class);
-        verify(failedLog).save(captor.capture());
-        FailedGraphSync row = captor.getValue();
-        assertThat(row.getFollowerId()).isEqualTo(ALICE);
-        assertThat(row.getFolloweeId()).isEqualTo(BOB);
-        assertThat(row.getChangeType()).isEqualTo(FollowChangedEvent.ChangeType.FOLLOWED);
-        assertThat(row.getFailureReason()).contains("neo4j is down");
+        ArgumentCaptor<Exception> failureCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(failedSyncWriter).enqueue(eq(event), failureCaptor.capture());
+        assertThat(failureCaptor.getValue()).hasMessageContaining("neo4j is down");
     }
 
     @Test
-    void failureReason_isTruncatedToFourThousandCharacters() {
-        // Defence against a 50 MB Neo4j stack trace blowing up the TEXT
-        // column and bloating the resync queue.
-        String huge = "x".repeat(10_000);
-        doThrow(new RuntimeException(huge)).when(graph).mergeUser(eq(ALICE));
+    void userDeletedPersistentFailure_isQueueable() {
+        // The migration's CHECK + nullable followee_id contract must let the
+        // queue accept USER_DELETED — verify the listener actually calls the
+        // writer with this event type and the writer-side test guarantees
+        // schema fit. Together they close the bug class.
+        doThrow(new RuntimeException("neo4j is down")).when(graph).detachDeleteUser(ALICE);
+        FollowChangedEvent event = FollowChangedEvent.userDeleted(ALICE);
 
-        listener.handle(FollowChangedEvent.followed(ALICE, BOB));
+        listener.handle(event);
 
-        ArgumentCaptor<FailedGraphSync> captor = ArgumentCaptor.forClass(FailedGraphSync.class);
-        verify(failedLog).save(captor.capture());
-        assertThat(captor.getValue().getFailureReason()).hasSizeLessThanOrEqualTo(4_000);
+        verify(failedSyncWriter).enqueue(eq(event), any(Exception.class));
     }
 }

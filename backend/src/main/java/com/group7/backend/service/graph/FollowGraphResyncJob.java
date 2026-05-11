@@ -12,10 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
-import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -52,19 +49,19 @@ public class FollowGraphResyncJob {
     private final FollowRepository follows;
     private final FollowGraphRepository graph;
     private final FailedGraphSyncRepository failedLog;
-    private final Clock clock;
+    private final FailedGraphSyncWriter failedSyncWriter;
     private final String resyncCron;
 
     public FollowGraphResyncJob(FollowRepository follows,
                                 FollowGraphRepository graph,
                                 FailedGraphSyncRepository failedLog,
-                                Clock clock,
+                                FailedGraphSyncWriter failedSyncWriter,
                                 @Value("${app.recommendations.follow.resync-cron:0 0 3 * * *}")
                                 String resyncCron) {
         this.follows = follows;
         this.graph = graph;
         this.failedLog = failedLog;
-        this.clock = clock;
+        this.failedSyncWriter = failedSyncWriter;
         this.resyncCron = resyncCron;
     }
 
@@ -133,17 +130,28 @@ public class FollowGraphResyncJob {
         return replayed;
     }
 
-    @Transactional
+    /**
+     * Apply one queued event and, if the apply succeeds, stamp it as resynced
+     * via {@link FailedGraphSyncWriter#markResynced} (which opens its own
+     * REQUIRES_NEW transaction so a stamp failure on row N cannot abort the
+     * subsequent rebuild). Not itself {@code @Transactional} — the Neo4j
+     * Cypher calls are not part of any Postgres transaction anyway.
+     */
     void replayOne(FailedGraphSync row) {
-        graph.mergeUser(row.getFollowerId());
-        graph.mergeUser(row.getFolloweeId());
-        if (row.getChangeType() == FollowChangedEvent.ChangeType.FOLLOWED) {
-            graph.mergeFollow(row.getFollowerId(), row.getFolloweeId());
-        } else {
-            graph.deleteFollow(row.getFollowerId(), row.getFolloweeId());
+        switch (row.getChangeType()) {
+            case FOLLOWED -> {
+                graph.mergeUser(row.getFollowerId());
+                graph.mergeUser(row.getFolloweeId());
+                graph.mergeFollow(row.getFollowerId(), row.getFolloweeId());
+            }
+            case UNFOLLOWED -> {
+                graph.mergeUser(row.getFollowerId());
+                graph.mergeUser(row.getFolloweeId());
+                graph.deleteFollow(row.getFollowerId(), row.getFolloweeId());
+            }
+            case USER_DELETED -> graph.detachDeleteUser(row.getFollowerId());
         }
-        row.setResyncedAt(OffsetDateTime.now(clock));
-        failedLog.save(row);
+        failedSyncWriter.markResynced(row);
     }
 
     /**

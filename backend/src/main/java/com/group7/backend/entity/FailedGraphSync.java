@@ -8,14 +8,12 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 /**
  * Queued record of a follow-graph mutation that could not be replayed
@@ -40,7 +38,12 @@ public class FailedGraphSync {
     @Column(name = "follower_id", nullable = false)
     private Long followerId;
 
-    @Column(name = "followee_id", nullable = false)
+    /**
+     * Null when {@link #changeType} is {@code USER_DELETED} — the deleted
+     * user's id is carried in {@link #followerId} only and there is no second
+     * endpoint. A DB-side CHECK constraint enforces the invariant per row.
+     */
+    @Column(name = "followee_id")
     private Long followeeId;
 
     @Enumerated(EnumType.STRING)
@@ -50,18 +53,16 @@ public class FailedGraphSync {
     @Column(name = "failure_reason", columnDefinition = "TEXT")
     private String failureReason;
 
+    /**
+     * Stamped by {@link com.group7.backend.service.graph.FailedGraphSyncWriter}
+     * using the Spring {@code Clock} bean — single source of time for the
+     * codebase, testable via {@code Clock.fixed}.
+     */
     @Column(name = "failed_at", nullable = false, updatable = false)
     private OffsetDateTime failedAt;
 
     @Column(name = "resynced_at")
     private OffsetDateTime resyncedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        if (failedAt == null) {
-            failedAt = OffsetDateTime.now(ZoneOffset.UTC);
-        }
-    }
 
     public static FailedGraphSync from(FollowChangedEvent event, String failureReason) {
         FailedGraphSync row = new FailedGraphSync();
