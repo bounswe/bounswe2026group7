@@ -2,7 +2,6 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.response.FeedPostResponse;
 import com.group7.backend.entity.FeedPost;
-import com.group7.backend.entity.Mentor;
 import com.group7.backend.exception.FeedPostExpiredRestoreException;
 import com.group7.backend.exception.FeedPostNotDeletedException;
 import com.group7.backend.exception.ResourceNotFoundException;
@@ -173,13 +172,5 @@ class FeedPostServiceRestoreTest {
     private static FeedPostResponse stubResponse(Long id, Long authorId) {
         return new FeedPostResponse(id, authorId, "U" + authorId, "body", List.of(),
                 OffsetDateTime.now(), OffsetDateTime.now(), false, true);
-    }
-
-    @SuppressWarnings("unused")
-    private static Mentor mentor(Long id) {
-        Mentor m = new Mentor();
-        m.setId(id);
-        m.setFirstName("U" + id);
-        return m;
     }
 }
