@@ -79,6 +79,17 @@ async function loginViaUi(page, { email, password }) {
       const body = await loginResponse.text().catch(() => '');
       throw new Error(`UI login for ${email} returned ${loginResponse.status()}: ${body}`);
     }
+    const token = await page.evaluate(() => localStorage.getItem('auth_token')).catch(() => null);
+    if (token) {
+      await page.goto('/home');
+      await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
+      return;
+    }
+    const errorBanner = page.getByTestId('login-error');
+    if (await errorBanner.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      const message = await errorBanner.textContent();
+      throw new Error(`UI login for ${email} failed: ${message || 'unknown error'}`);
+    }
     throw navErr;
   }
 }
