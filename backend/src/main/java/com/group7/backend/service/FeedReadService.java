@@ -126,6 +126,15 @@ public class FeedReadService {
     }
 
     /**
+     * Author profile posts feed (#471). Chronological over posts
+     * authored by the given user id.
+     */
+    public Page<FeedPostListItem> postsByAuthor(Long authorId, Pageable pageable) {
+        Page<FeedPost> page = feedPostRepository.findByAuthorIdForFeed(authorId, pageable);
+        return mapPage(page);
+    }
+
+    /**
      * Search (#350, requirement 1.1.7.7). Combined keyword + hashtag
      * filter. Either filter may be blank/null; both being blank returns
      * the full visible feed (paginated by recency).
