@@ -8,8 +8,8 @@ import com.group7.backend.repository.BanRepository;
 import com.group7.backend.repository.MeetingActionItemRepository;
 import com.group7.backend.repository.MeetingRepository;
 import com.group7.backend.repository.MeetingRescheduleRequestRepository;
+import com.group7.backend.repository.MentorRatingRepository;
 import com.group7.backend.repository.MentorRepository;
-import com.group7.backend.repository.MentorshipRatingRepository;
 import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.MentorshipRequestRepository;
 import com.group7.backend.repository.NotificationRepository;
@@ -74,7 +74,7 @@ public abstract class AbstractE2ETest {
     @Autowired protected PasswordResetTokenRepository passwordResetTokenRepository;
     @Autowired protected MentorshipRequestRepository mentorshipRequestRepository;
     @Autowired protected MentorshipRepository mentorshipRepository;
-    @Autowired protected MentorshipRatingRepository mentorshipRatingRepository;
+    @Autowired protected MentorRatingRepository mentorRatingRepository;
     @Autowired protected TaskRepository taskRepository;
     @Autowired protected TaskSubmissionRepository taskSubmissionRepository;
     @Autowired protected MeetingRepository meetingRepository;
@@ -93,7 +93,7 @@ public abstract class AbstractE2ETest {
         // Children → parents (FK direction). Some of these are also covered
         // by ON DELETE CASCADE, but listing them explicitly avoids depending
         // on Hibernate flush order and keeps `clean` ↔ `state` symmetric.
-        mentorshipRatingRepository.deleteAll();
+        mentorRatingRepository.deleteAll();
         taskSubmissionRepository.deleteAll();
         taskRepository.deleteAll();
         meetingActionItemRepository.deleteAll();

@@ -101,25 +101,27 @@ class EndToEndWorkflowTest extends AbstractE2ETest {
         api.submitTask(mentee, taskId, "Done — chapter notes attached.");
         api.reviewTask(mentor, taskId, TaskStatus.COMPLETED, "Solid summary, well done.");
 
-        Long ratingId = api.ratings().in(mentorshipId)
-                .by(mentee)
-                .stars(5)
-                .comment("Great mentor — supportive and clear.")
-                .submit();
+        // End the mentorship first — #237's rating endpoint requires
+        // COMPLETED/CANCELLED status before a mentee can rate.
+        api.endMentorship(mentor, mentorshipId, "Goal achieved");
+
+        Long ratingId = api.rateMentor(mentee, mentorshipId,
+                5, "Great mentor — supportive and clear.");
 
         // ── Persisted side-effect assertions ────────────────────────────
+        // endMentorship transitioned the mentorship from ACTIVE → COMPLETED.
         assertThat(mentorshipRepository.findById(mentorshipId))
                 .isPresent()
-                .hasValueSatisfying(m -> assertThat(m.getStatus()).isEqualTo(MentorshipStatus.ACTIVE));
+                .hasValueSatisfying(m -> assertThat(m.getStatus()).isEqualTo(MentorshipStatus.COMPLETED));
         assertThat(taskRepository.findById(taskId))
                 .isPresent()
                 .hasValueSatisfying(t -> assertThat(t.getStatus()).isEqualTo(TaskStatus.COMPLETED));
-        assertThat(mentorshipRatingRepository.findById(ratingId))
+        assertThat(mentorRatingRepository.findById(ratingId))
                 .isPresent()
                 .hasValueSatisfying(r -> {
-                    assertThat(r.getStars()).isEqualTo(5);
-                    assertThat(r.getRater().getId()).isEqualTo(mentee.id());
-                    assertThat(r.getRated().getId()).isEqualTo(mentor.id());
+                    assertThat(r.getScore()).isEqualTo(5);
+                    assertThat(r.getMenteeId()).isEqualTo(mentee.id());
+                    assertThat(r.getMentorId()).isEqualTo(mentor.id());
                 });
         assertThat(meetingRepository.findById(meetingId)).isPresent();
     }

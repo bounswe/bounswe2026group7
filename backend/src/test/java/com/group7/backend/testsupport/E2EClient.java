@@ -10,13 +10,13 @@ import com.group7.backend.repository.VerificationTokenRepository;
 import com.group7.backend.testsupport.builders.AvailabilityBuilder;
 import com.group7.backend.testsupport.builders.MeetingBuilder;
 import com.group7.backend.testsupport.builders.MentorshipRequestBuilder;
-import com.group7.backend.testsupport.builders.RatingBuilder;
 import com.group7.backend.testsupport.builders.TaskBuilder;
 import com.group7.backend.testsupport.builders.UserBuilder;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -78,10 +78,6 @@ public class E2EClient {
 
     public AvailabilityBuilder availability() {
         return new AvailabilityBuilder(this);
-    }
-
-    public RatingBuilder ratings() {
-        return new RatingBuilder(this);
     }
 
     // ── Auth-flow primitives (used by UserBuilder.registerVerifyAndLogin) ───
@@ -149,6 +145,32 @@ public class E2EClient {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("sharedGoal", goal))))
                 .andExpect(status().isOk());
+    }
+
+    /** Mentor ends an ACTIVE mentorship → status transitions to COMPLETED (#237). */
+    public void endMentorship(UserHandle mentor, Long mentorshipId, String reason) throws Exception {
+        Map<String, Object> body = new HashMap<>();
+        if (reason != null) body.put("reason", reason);
+        mockMvc.perform(patch("/api/mentorships/" + mentorshipId + "/end")
+                        .header("Authorization", "Bearer " + mentor.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk());
+    }
+
+    /** Mentee submits a 1–5 score rating on a COMPLETED/CANCELLED mentorship (#237). */
+    public Long rateMentor(UserHandle mentee, Long mentorshipId, int score, String comment) throws Exception {
+        Map<String, Object> body = new HashMap<>();
+        body.put("score", score);
+        if (comment != null) body.put("comment", comment);
+        MvcResult result = mockMvc.perform(post("/api/mentorships/" + mentorshipId + "/rating")
+                        .header("Authorization", "Bearer " + mentee.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("id").asLong();
     }
 
     // ── One-shot meeting actions ────────────────────────────────────────────
