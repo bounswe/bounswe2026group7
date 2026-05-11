@@ -24,7 +24,6 @@ class AvailabilitySignalTest {
                 new MentorRecommendationProperties.Weights(0, 0, 0, 0, 0, weight, 0),
                 new MentorRecommendationProperties.Signals(false, false, false, false, enabled, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
     }
 
@@ -35,7 +34,7 @@ class AvailabilitySignalTest {
 
     @Test
     void nullSignalsRecord_disabledAndZeroWeight() {
-        var signal = new AvailabilitySignal(new MentorRecommendationProperties(null, null, null, null, null, null));
+        var signal = new AvailabilitySignal(new MentorRecommendationProperties(null, null, null, null, null));
         assertThat(signal.isEnabled()).isFalse();
         assertThat(signal.getWeight()).isZero();
     }

@@ -23,7 +23,6 @@ class SharedSkillsSignalTest {
                 new MentorRecommendationProperties.Weights(0, 0, 0.5, 0, 0, 0, 0),
                 new MentorRecommendationProperties.Signals(false, false, true, false, false, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
     }
 
@@ -34,14 +33,13 @@ class SharedSkillsSignalTest {
                 new MentorRecommendationProperties.Weights(0, 0, 0.5, 0, 0, 0, 0),
                 new MentorRecommendationProperties.Signals(false, false, false, false, false, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
         assertThat(new SharedSkillsSignal(props).isEnabled()).isFalse();
     }
 
     @Test
     void nullRecords_safeDefaults() {
-        var signal = new SharedSkillsSignal(new MentorRecommendationProperties(null, null, null, null, null, null));
+        var signal = new SharedSkillsSignal(new MentorRecommendationProperties(null, null, null, null, null));
         assertThat(signal.isEnabled()).isFalse();
         assertThat(signal.getWeight()).isZero();
     }

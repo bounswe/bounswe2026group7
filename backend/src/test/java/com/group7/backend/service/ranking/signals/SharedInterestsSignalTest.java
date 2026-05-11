@@ -22,7 +22,6 @@ class SharedInterestsSignalTest {
                 new MentorRecommendationProperties.Weights(0, weight, 0, 0, 0, 0, 0),
                 new MentorRecommendationProperties.Signals(false, true, false, false, false, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
     }
 
@@ -33,14 +32,13 @@ class SharedInterestsSignalTest {
                 new MentorRecommendationProperties.Weights(0, 1, 0, 0, 0, 0, 0),
                 new MentorRecommendationProperties.Signals(false, false, false, false, false, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
         assertThat(new SharedInterestsSignal(props).isEnabled()).isFalse();
     }
 
     @Test
     void nullSignalsRecord_reportsDisabled() {
-        var props = new MentorRecommendationProperties(null, null, null, null, null, null);
+        var props = new MentorRecommendationProperties(null, null, null, null, null);
         var signal = new SharedInterestsSignal(props);
         assertThat(signal.isEnabled()).isFalse();
         assertThat(signal.getWeight()).isZero();

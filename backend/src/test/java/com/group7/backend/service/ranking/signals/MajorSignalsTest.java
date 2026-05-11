@@ -27,7 +27,6 @@ class MajorSignalsTest {
                 new MentorRecommendationProperties.Weights(0, 0, 0, majorExactW, majorFieldW, 0, 0),
                 new MentorRecommendationProperties.Signals(false, false, false, majorEnabled, false, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
     }
 
@@ -41,7 +40,7 @@ class MajorSignalsTest {
 
     @Test
     void exact_nullSignalsRecord_disabled() {
-        var p = new MentorRecommendationProperties(null, null, null, null, null, null);
+        var p = new MentorRecommendationProperties(null, null, null, null, null);
         assertThat(new MajorExactSignal(p).isEnabled()).isFalse();
         assertThat(new MajorExactSignal(p).getWeight()).isZero();
     }
@@ -89,7 +88,7 @@ class MajorSignalsTest {
 
     @Test
     void field_nullSignalsRecord_disabled() {
-        var p = new MentorRecommendationProperties(null, null, null, null, null, null);
+        var p = new MentorRecommendationProperties(null, null, null, null, null);
         assertThat(new MajorFieldSignal(p).isEnabled()).isFalse();
         assertThat(new MajorFieldSignal(p).getWeight()).isZero();
     }

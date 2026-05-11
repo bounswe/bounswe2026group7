@@ -22,7 +22,6 @@ class LocationProximitySignalTest {
                 new MentorRecommendationProperties.Weights(0, 0, 0, 0, 0, 0, 0.2),
                 new MentorRecommendationProperties.Signals(false, false, false, false, false, enabled),
                 new MentorRecommendationProperties.Proximity(decayKm, cityBonus),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
     }
 
@@ -33,7 +32,7 @@ class LocationProximitySignalTest {
 
     @Test
     void nullSignalsRecord_disabledAndZeroWeight() {
-        var signal = new LocationProximitySignal(new MentorRecommendationProperties(null, null, null, null, null, null));
+        var signal = new LocationProximitySignal(new MentorRecommendationProperties(null, null, null, null, null));
         assertThat(signal.isEnabled()).isFalse();
         assertThat(signal.getWeight()).isZero();
     }
@@ -183,7 +182,6 @@ class LocationProximitySignalTest {
                 new MentorRecommendationProperties.Weights(0, 0, 0, 0, 0, 0, 0.2),
                 new MentorRecommendationProperties.Signals(false, false, false, false, false, true),
                 null,                                   // proximity record missing
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
         var signal = new LocationProximitySignal(props);
 

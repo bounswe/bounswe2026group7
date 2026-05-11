@@ -88,7 +88,6 @@ class MatchingServiceTest {
                 new MentorRecommendationProperties.Weights(0, 0, 0, 0, 0, 0, 0),
                 new MentorRecommendationProperties.Signals(false, false, false, false, false, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
         var simProps = new SemanticSimilarityProperties(
                 "text-embedding-3-small",
@@ -108,7 +107,7 @@ class MatchingServiceTest {
                 new RuleBasedMentorRanker(),
                 recProps,
                 sim,
-                noCentroidStats);
+                java.util.Optional.of(noCentroidStats));
 
         @SuppressWarnings("unchecked")
         ObjectProvider<org.springframework.ai.chat.model.ChatModel> noChatModel =

@@ -33,7 +33,6 @@ class MatchExplanationServiceTest {
                 new MentorRecommendationProperties.Weights(0, 0, 0, 0, 0, 0, 0),
                 new MentorRecommendationProperties.Signals(false, false, false, false, false, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 new MentorRecommendationProperties.Explanation(
                         enabled, "gpt-4o-mini", 3000,
                         new MentorRecommendationProperties.ExplanationCache(64, 30),
@@ -104,7 +103,6 @@ class MatchExplanationServiceTest {
                 new MentorRecommendationProperties.Weights(0, 0, 0, 0, 0, 0, 0),
                 new MentorRecommendationProperties.Signals(false, false, false, false, false, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
         var svc = new MatchExplanationService(
                 provider(() -> mock(ChatModel.class)),

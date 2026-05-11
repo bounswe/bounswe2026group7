@@ -29,7 +29,6 @@ public record MentorRecommendationProperties(
         @Valid Weights weights,
         @Valid Signals signals,
         @Valid Proximity proximity,
-        @Valid Mmr mmr,
         @Valid Explanation explanation
 ) {
 
@@ -66,8 +65,6 @@ public record MentorRecommendationProperties(
             @Positive int decayKm,
             @DecimalMin("0.0") @DecimalMax("1.0") double cityMatchBonus
     ) {}
-
-    public record Mmr(boolean enabled, @DecimalMin("0.0") @DecimalMax("1.0") double lambda) {}
 
     /**
      * LLM prose-explanation knobs (spec 1.1.2.5). The deterministic

@@ -25,7 +25,6 @@ class SemanticMatchSignalTest {
                 new MentorRecommendationProperties.Weights(weight, 0, 0, 0, 0, 0, 0),
                 new MentorRecommendationProperties.Signals(enabled, false, false, false, false, false),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
     }
 
@@ -38,7 +37,7 @@ class SemanticMatchSignalTest {
     @Test
     void nullSignalsRecord_disabledAndZeroWeight() {
         var sim = mock(SemanticSimilarityService.class);
-        var p = new MentorRecommendationProperties(null, null, null, null, null, null);
+        var p = new MentorRecommendationProperties(null, null, null, null, null);
         var signal = new SemanticMatchSignal(sim, p);
         assertThat(signal.isEnabled()).isFalse();
         assertThat(signal.getWeight()).isZero();

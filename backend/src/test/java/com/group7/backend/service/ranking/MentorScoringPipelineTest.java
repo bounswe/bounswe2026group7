@@ -30,7 +30,6 @@ class MentorScoringPipelineTest {
                 new MentorRecommendationProperties.Weights(0.5, 0.1, 0.1, 0.1, 0.05, 0.05, 0.1),
                 new MentorRecommendationProperties.Signals(true, true, true, true, true, true),
                 new MentorRecommendationProperties.Proximity(100, 0.0),
-                new MentorRecommendationProperties.Mmr(false, 0.7),
                 null);
     }
 
@@ -58,17 +57,17 @@ class MentorScoringPipelineTest {
      * the pairwise-diversity fallback path, which is the behaviour the
      * majority of these tests were written against.
      */
-    private static com.group7.backend.service.embedding.MentorPopulationStats noCentroidStats() {
+    private static java.util.Optional<com.group7.backend.service.embedding.MentorPopulationStats> noCentroidStats() {
         var stats = mock(com.group7.backend.service.embedding.MentorPopulationStats.class);
         when(stats.centroid()).thenReturn(java.util.Optional.empty());
-        return stats;
+        return java.util.Optional.of(stats);
     }
 
     /** Population stats with an explicit centroid for outlier-strategy tests. */
-    private static com.group7.backend.service.embedding.MentorPopulationStats statsWithCentroid(float[] centroid) {
+    private static java.util.Optional<com.group7.backend.service.embedding.MentorPopulationStats> statsWithCentroid(float[] centroid) {
         var stats = mock(com.group7.backend.service.embedding.MentorPopulationStats.class);
         when(stats.centroid()).thenReturn(java.util.Optional.of(centroid));
-        return stats;
+        return java.util.Optional.of(stats);
     }
 
     // ── Edge cases ──────────────────────────────────────────────────────

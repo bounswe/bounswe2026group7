@@ -4,6 +4,7 @@ import com.group7.backend.entity.Mentor;
 import com.group7.backend.repository.MentorRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -40,6 +41,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * pairwise diversity rule in that window.
  */
 @Service
+@ConditionalOnProperty(name = "app.recommendations.mentor.advanced.enabled", havingValue = "true")
 public class MentorPopulationStats {
 
     private static final Logger log = LoggerFactory.getLogger(MentorPopulationStats.class);

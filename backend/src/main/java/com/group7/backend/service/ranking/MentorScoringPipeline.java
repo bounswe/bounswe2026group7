@@ -68,12 +68,18 @@ public class MentorScoringPipeline {
     private final MentorRanker mentorRanker;
     private final MentorRecommendationProperties recProps;
     private final SemanticSimilarityService similarity;
-    private final MentorPopulationStats populationStats;
+    /**
+     * Optional so the pipeline still wires when the advanced ranker is
+     * off — {@link MentorPopulationStats} is itself conditional on the
+     * same flag, and the diverse-pick path already degrades to the
+     * pairwise rule when the centroid isn't available.
+     */
+    private final java.util.Optional<MentorPopulationStats> populationStats;
 
     public MentorScoringPipeline(MentorRanker mentorRanker,
                                  MentorRecommendationProperties recProps,
                                  SemanticSimilarityService similarity,
-                                 MentorPopulationStats populationStats) {
+                                 java.util.Optional<MentorPopulationStats> populationStats) {
         this.mentorRanker = mentorRanker;
         this.recProps = recProps;
         this.similarity = similarity;
@@ -228,7 +234,7 @@ public class MentorScoringPipeline {
                                                       Set<Long> used,
                                                       List<MentorMatchResponse> alreadyPicked,
                                                       Map<Long, Mentor> mentorById) {
-        Optional<float[]> centroid = populationStats.centroid();
+        Optional<float[]> centroid = populationStats.flatMap(MentorPopulationStats::centroid);
         if (centroid.isPresent()) {
             return pickDiverseOutlier(sortedByScore, used, mentorById, centroid.get());
         }
