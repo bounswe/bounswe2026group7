@@ -1,6 +1,7 @@
 package com.group7.backend.service;
 
 import com.group7.backend.dto.response.MentorshipProgressResponse;
+import com.group7.backend.entity.MeetingStatus;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.Mentorship;
@@ -8,6 +9,7 @@ import com.group7.backend.entity.MentorshipStatus;
 import com.group7.backend.entity.MilestoneStatus;
 import com.group7.backend.entity.TaskStatus;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.MeetingRepository;
 import com.group7.backend.repository.MilestoneRepository;
 import com.group7.backend.repository.TaskRepository;
 import com.group7.backend.repository.TaskSubmissionRepository;
@@ -34,6 +36,7 @@ class MentorshipProgressServiceTest {
     @Mock private TaskRepository taskRepository;
     @Mock private TaskSubmissionRepository taskSubmissionRepository;
     @Mock private MilestoneRepository milestoneRepository;
+    @Mock private MeetingRepository meetingRepository;
 
     @InjectMocks
     private MentorshipProgressService progressService;
@@ -82,6 +85,11 @@ class MentorshipProgressServiceTest {
         lenient().when(taskSubmissionRepository.findMaxSubmittedAtForMentorship(MID)).thenReturn(sub);
         lenient().when(taskSubmissionRepository.findMaxReviewedAtForMentorship(MID)).thenReturn(rev);
         lenient().when(milestoneRepository.findMaxCompletedAtForMentorship(MID)).thenReturn(mile);
+    }
+
+    private void stubSessionsAttended(long count) {
+        lenient().when(meetingRepository.countByMentorshipIdAndStatus(MID, MeetingStatus.COMPLETED))
+                .thenReturn(count);
     }
 
     // ── Authorization (delegated to MentorshipService.findForParticipant) ──
@@ -271,5 +279,57 @@ class MentorshipProgressServiceTest {
         MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
 
         assertThat(r.lastActivityAt()).isNull();
+    }
+
+    // ── #253 dashboard extensions: sessionsAttended + daysRemaining ─────────
+
+    @Test
+    void sessionsAttended_reflectsCompletedMeetingCount() {
+        stubFound(MENTOR_ID);
+        stubCounts(0, 0, 0, 0, 0);
+        stubTimestamps(null, null, null);
+        stubSessionsAttended(7L);
+
+        MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
+
+        assertThat(r.sessionsAttended()).isEqualTo(7L);
+    }
+
+    @Test
+    void daysRemaining_isZeroWhenEndDateNull() {
+        stubFound(MENTOR_ID);
+        stubCounts(0, 0, 0, 0, 0);
+        stubTimestamps(null, null, null);
+        // mentorship.endDate left null in the @BeforeEach builder.
+
+        MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
+
+        assertThat(r.daysRemaining()).isEqualTo(0L);
+    }
+
+    @Test
+    void daysRemaining_isClampedToZeroWhenEndDateInPast() {
+        mentorship.setEndDate(OffsetDateTime.now(ZoneOffset.UTC).minusDays(5));
+        stubFound(MENTOR_ID);
+        stubCounts(0, 0, 0, 0, 0);
+        stubTimestamps(null, null, null);
+
+        MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
+
+        assertThat(r.daysRemaining()).isEqualTo(0L);
+    }
+
+    @Test
+    void daysRemaining_countsWholeDaysUntilFutureEndDate() {
+        mentorship.setEndDate(OffsetDateTime.now(ZoneOffset.UTC).plusDays(30).plusHours(2));
+        stubFound(MENTOR_ID);
+        stubCounts(0, 0, 0, 0, 0);
+        stubTimestamps(null, null, null);
+
+        MentorshipProgressResponse r = progressService.getProgress(MENTOR_ID, MID);
+
+        // ChronoUnit.DAYS.between truncates: 30d2h ≈ 30 whole days. Allow 29-30 to absorb
+        // the millisecond drift between OffsetDateTime.now() in test vs in service.
+        assertThat(r.daysRemaining()).isBetween(29L, 30L);
     }
 }

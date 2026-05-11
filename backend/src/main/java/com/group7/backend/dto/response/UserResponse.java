@@ -27,4 +27,24 @@ public class UserResponse {
     private OffsetDateTime createdAt;
     @Schema(description = "Role", example = "MENTEE")
     private String role;
+    @Schema(description = "Average mentor rating (1.0–5.0). Populated only on profile-detail "
+                        + "endpoints (#237); null on list / search responses and for non-mentor "
+                        + "users.", example = "4.6")
+    private Double averageRating;
+    @Schema(description = "Number of ratings the mentor has received (#237). 0 when "
+                        + "averageRating is null.", example = "12")
+    private Long ratingCount;
+
+    @Schema(description = "Optional city (free-form). NULL when the user hasn't set it. "
+                        + "Used by the proximity signal for the 'same city' fallback when "
+                        + "coordinates are absent on either side.", example = "Istanbul")
+    private String city;
+
+    @Schema(description = "Optional latitude in decimal degrees. NULL when unset.",
+            example = "41.01")
+    private Double latitude;
+
+    @Schema(description = "Optional longitude in decimal degrees. NULL when unset.",
+            example = "28.98")
+    private Double longitude;
 }

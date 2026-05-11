@@ -8,6 +8,8 @@ import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
 import com.group7.backend.dto.response.UserProfileResponse;
+import com.group7.backend.dto.response.UserRatingSummary;
+import com.group7.backend.dto.response.UserResponse;
 import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
@@ -42,13 +44,15 @@ public class UserService {
     private final MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository;
     private final FollowRepository followRepository;
     private final FileStorageService fileStorageService;
+    private final MentorRatingService mentorRatingService;
 
     public UserService(UserRepository userRepository, MentorRepository mentorRepository,
                        MenteeRepository menteeRepository,
                        AvailabilitySlotRepository availabilitySlotRepository,
                        MenteeAvailabilitySlotRepository menteeAvailabilitySlotRepository,
                        FollowRepository followRepository,
-                       FileStorageService fileStorageService) {
+                       FileStorageService fileStorageService,
+                       MentorRatingService mentorRatingService) {
         this.userRepository = userRepository;
         this.mentorRepository = mentorRepository;
         this.menteeRepository = menteeRepository;
@@ -56,6 +60,7 @@ public class UserService {
         this.menteeAvailabilitySlotRepository = menteeAvailabilitySlotRepository;
         this.followRepository = followRepository;
         this.fileStorageService = fileStorageService;
+        this.mentorRatingService = mentorRatingService;
     }
 
     // ── Existing methods ────────────────────────────────────
@@ -230,6 +235,14 @@ public class UserService {
     private UserProfileResponse wrapWithCounts(ProfileResponse profile, Long userId) {
         long followers = followRepository.countByIdFolloweeId(userId);
         long following = followRepository.countByIdFollowerId(userId);
+        // Mentor rating summary (#237). Mentees never accumulate rows in
+        // mentor_ratings, so the aggregate returns (null, 0) for them; we
+        // still set the fields uniformly so the response shape is stable.
+        UserRatingSummary rating = mentorRatingService.aggregateForMentor(userId);
+        if (profile instanceof UserResponse base) {
+            base.setAverageRating(rating.averageRating());
+            base.setRatingCount(rating.ratingCount());
+        }
         return new UserProfileResponse(profile, followers, following);
     }
 
@@ -266,6 +279,7 @@ public class UserService {
         if (request.getLastName() != null) {
             user.setLastName(request.getLastName());
         }
+        applyLocationFields(user, request);
 
         // Apply role-specific fields
         if (user instanceof Mentor mentor && request instanceof MentorProfileRequest mentorReq) {
@@ -327,6 +341,32 @@ public class UserService {
     }
 
     // ── Private helpers ─────────────────────────────────────
+
+    /**
+     * Applies optional location fields from the request (#282 / req 1.1.2.3).
+     *
+     * <p>Skip-nulls semantics: a null field means "no change", matching the rest
+     * of {@code updateProfile}. To clear all location fields, the client would
+     * need to submit empty strings for {@code city} and explicit zeros for the
+     * coords (or call a dedicated clear endpoint, which is a future follow-up).
+     *
+     * <p>The hybrid auto-fill UX on the clients (#461 web, #462 mobile) always
+     * submits all three together, so partial-update edge cases are unlikely in
+     * normal use. Bean Validation on {@link EditProfileRequest} keeps individual
+     * coordinate ranges in bounds; the DB-level pair-completeness CHECK
+     * constraint (V34 migration) is the final safety net.
+     */
+    private static void applyLocationFields(User user, EditProfileRequest request) {
+        if (request.getCity() != null) {
+            user.setCity(request.getCity());
+        }
+        if (request.getLatitude() != null) {
+            user.setLatitude(request.getLatitude());
+        }
+        if (request.getLongitude() != null) {
+            user.setLongitude(request.getLongitude());
+        }
+    }
 
     private ProfileResponse mapToResponse(User user) {
         if (user instanceof Mentor mentor) {

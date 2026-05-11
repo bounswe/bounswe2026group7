@@ -155,7 +155,8 @@ export default function HomeScreen() {
     });
   };
 
-  const roleScopedConnections = isMentor
+  const sectionTitle = isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS';
+  const visibleConnections = isMentor
     ? connections.filter((c) => c.type === 'mentee')
     : connections.filter((c) => c.type === 'mentor');
   const activeConnections = roleScopedConnections.filter((c) => c.status === 'ACTIVE');

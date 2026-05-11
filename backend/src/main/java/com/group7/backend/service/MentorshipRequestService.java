@@ -30,17 +30,20 @@ public class MentorshipRequestService {
     private final MentorRepository mentorRepository;
     private final NotificationEventPublisher notificationEventPublisher;
     private final BanService banService;
+    private final MentorshipCooldownPolicy mentorshipCooldownPolicy;
 
     public MentorshipRequestService(MentorshipRequestRepository mentorshipRequestRepository,
                                     MenteeRepository menteeRepository,
                                     MentorRepository mentorRepository,
                                     NotificationEventPublisher notificationEventPublisher,
-                                    BanService banService) {
+                                    BanService banService,
+                                    MentorshipCooldownPolicy mentorshipCooldownPolicy) {
         this.mentorshipRequestRepository = mentorshipRequestRepository;
         this.menteeRepository = menteeRepository;
         this.mentorRepository = mentorRepository;
         this.notificationEventPublisher = notificationEventPublisher;
         this.banService = banService;
+        this.mentorshipCooldownPolicy = mentorshipCooldownPolicy;
     }
 
     @Transactional
@@ -69,6 +72,9 @@ public class MentorshipRequestService {
             log.warn("Mentorship request rejected: mentorId={} is at capacity", dto.getMentorId());
             throw new MentorshipRequestException("Mentor has reached maximum mentee capacity");
         }
+
+        // Cool-down (#133): block re-requests if this pair just terminated a mentorship.
+        mentorshipCooldownPolicy.assertNotInCooldown(dto.getMentorId(), menteeId);
 
         if (mentorshipRequestRepository.existsByMentee_IdAndMentor_IdAndStatus(
                 menteeId, dto.getMentorId(), MentorshipRequestStatus.PENDING)) {

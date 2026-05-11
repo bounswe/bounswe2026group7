@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
-import { getMentorshipById, getUserById, updateSharedGoal } from '../services/api'
-import { endMentorship, getNextUpcomingMeeting } from '../services/mentorshipMocks'
+import MentorshipMilestones from '../components/MentorshipMilestones'
+import MentorshipProgressTimeline from '../components/MentorshipProgressTimeline'
+import MentorMenteesProgress from '../components/MentorMenteesProgress'
+import { getMentorshipById, getUserById, updateSharedGoal, cancelMentorship, endMentorship } from '../services/api'
+import { getNextUpcomingMeeting } from '../services/mentorshipMocks'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
@@ -43,19 +46,25 @@ function Field({ label, value, chips = false }) {
 
 function EndMentorshipModal({ open, onClose, onConfirm, loading, otherName }) {
   const overlayRef = useRef(null)
+  const [reason, setReason] = useState('')
+
   useEffect(() => {
-    if (!open) return
-    const onKey = e => { if (e.key === 'Escape') onClose() }
+    if (!open) setReason('')
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, onClose, loading])
 
   if (!open) return null
   return (
     <div
       className="modal-overlay"
       ref={overlayRef}
-      onMouseDown={e => { if (e.target === overlayRef.current) onClose() }}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
     >
       <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="endMentorshipTitle">
         <div className="modal-header">
@@ -68,15 +77,205 @@ function EndMentorshipModal({ open, onClose, onConfirm, loading, otherName }) {
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
         </div>
-        <div className="modal-actions">
+
+        <label className="section-label" style={{ marginTop: '12px', display: 'block' }} htmlFor="endReason">
+          Wrap-up note (optional)
+        </label>
+        <textarea
+          id="endReason"
+          className="modal-textarea"
+          rows={3}
+          maxLength={500}
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Optional note shared with the mentee — e.g. 'Goal achieved — congrats!'"
+          disabled={loading}
+        />
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+          {reason.length}/500
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
           <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
           <button
             type="button"
             className="modal-btn-primary md-danger-btn"
-            onClick={onConfirm}
+            onClick={() => onConfirm(reason.trim() || undefined)}
             disabled={loading}
           >
             {loading ? 'Ending…' : 'End Mentorship'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Mentee-side cancellation modal (#127). Reason is required by the backend
+ * (CancelMentorshipRequest @NotBlank); the warning copy is intentionally
+ * loud because frequent cancellations escalate into a temporary ban via
+ * the auto-ban system (#134) and that fact isn't surfaced in the cancel
+ * response — the user needs to be informed up front.
+ */
+function CancelMentorshipModal({ open, onClose, onConfirm, otherName, loading }) {
+  const overlayRef = useRef(null)
+  const [reason, setReason] = useState('')
+  const [localError, setLocalError] = useState(null)
+
+  useEffect(() => {
+    if (!open) { setReason(''); setLocalError(null) }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose, loading])
+
+  if (!open) return null
+
+  function handleConfirm() {
+    const trimmed = reason.trim()
+    if (!trimmed) {
+      setLocalError('Please provide a reason for cancellation.')
+      return
+    }
+    setLocalError(null)
+    onConfirm(trimmed)
+  }
+
+  return (
+    <div
+      className="modal-overlay"
+      ref={overlayRef}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
+    >
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="cancelMentorshipTitle">
+        <div className="modal-header">
+          <div>
+            <h2 id="cancelMentorshipTitle">Cancel mentorship?</h2>
+            <p className="modal-subtitle">
+              This will end your mentorship with {otherName || 'this user'} immediately. Meetings,
+              tasks, and messages associated with this mentorship will be removed.
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        <div className="md-cancel-warning" role="alert">
+          <strong>Heads up:</strong> the platform tracks mentee cancellations of active mentorships
+          (per requirement 2.2.4). Frequent cancellations can result in a temporary ban from sending
+          new mentorship requests.
+        </div>
+
+        <label className="section-label" style={{ marginTop: '12px', display: 'block' }} htmlFor="cancelReason">
+          Reason (required)
+        </label>
+        <textarea
+          id="cancelReason"
+          className="modal-textarea"
+          rows={4}
+          maxLength={500}
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Tell your mentor why you're ending the mentorship. Visible to the mentor and platform admins."
+          disabled={loading}
+        />
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+          {reason.length}/500
+        </div>
+        {localError && (
+          <div className="md-composer-error" style={{ marginTop: '8px' }}>{localError}</div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>
+            Keep mentorship
+          </button>
+          <button
+            type="button"
+            className="modal-btn-primary md-danger-btn"
+            onClick={handleConfirm}
+            disabled={loading || !reason.trim()}
+          >
+            {loading ? 'Cancelling…' : 'Cancel mentorship'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Shared goal definition modal (#277). Either party can edit while ACTIVE.
+ * Validates non-empty input and shares the single text field via backend.
+ */
+function SharedGoalModal({ open, initial, onClose, onSubmit, loading, error }) {
+  const overlayRef = useRef(null)
+  const [text, setText] = useState(initial || '')
+
+  useEffect(() => {
+    if (open) setText(initial || '')
+  }, [open, initial])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose, loading])
+
+  if (!open) return null
+
+  return (
+    <div
+      className="modal-overlay"
+      ref={overlayRef}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
+    >
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="goalModalTitle">
+        <div className="modal-header">
+          <div>
+            <h2 id="goalModalTitle">Shared Goal</h2>
+            <p className="modal-subtitle">
+              Define a single overarching goal for this mentorship. Work together
+              to keep it focused and achievable.
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        <textarea
+          className="modal-textarea"
+          rows={5}
+          maxLength={500}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="E.g. Help the mentee secure a software internship by August."
+          disabled={loading}
+          autoFocus
+          style={{ marginTop: '16px' }}
+        />
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+          {text.length}/500
+        </div>
+        {error && (
+          <div className="md-composer-error" style={{ marginTop: '8px' }}>{error}</div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="modal-btn-primary"
+            onClick={() => onSubmit(text.trim())}
+            disabled={loading || !text.trim()}
+          >
+            {loading ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
@@ -103,6 +302,11 @@ export default function MentorshipDetailPage() {
 
   const [endOpen, setEndOpen] = useState(false)
   const [endLoading, setEndLoading] = useState(false)
+  const [endError, setEndError] = useState(null)
+
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelLoading, setCancelLoading] = useState(false)
+  const [cancelError, setCancelError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -136,11 +340,11 @@ export default function MentorshipDetailPage() {
     return () => { cancelled = true }
   }, [id, userId])
 
-  async function handleSaveGoal() {
+  async function handleSaveGoal(newText) {
     setGoalSaving(true)
     setGoalError('')
     try {
-      const updated = await updateSharedGoal(mentorship.id, goalDraft.trim())
+      const updated = await updateSharedGoal(mentorship.id, newText)
       setMentorship(updated)
       setEditingGoal(false)
     } catch (err) {
@@ -150,16 +354,40 @@ export default function MentorshipDetailPage() {
     }
   }
 
-  async function handleEndConfirm() {
+  async function handleEndConfirm(reason) {
     setEndLoading(true)
+    setEndError(null)
     try {
-      await endMentorship(mentorship.id)
+      // Real backend now (PATCH /api/mentorships/{id}/end). Replace local
+      // state with the response so the page collapses into the #341
+      // read-only banner (status=COMPLETED, endDate=now). Mirror the
+      // cancel UX rather than bouncing the user to /home.
+      const updated = await endMentorship(mentorship.id, reason)
+      setMentorship(updated)
       setEndOpen(false)
-      // Re-fetch mentorship counts so navbar dropdown / sidebar / dashboard reflect the ended state
       refresh()
-      navigate('/home')
-    } catch {
+    } catch (err) {
+      setEndError(err?.message || 'Failed to end mentorship')
+    } finally {
       setEndLoading(false)
+    }
+  }
+
+  async function handleCancelConfirm(reason) {
+    setCancelLoading(true)
+    setCancelError(null)
+    try {
+      const updated = await cancelMentorship(mentorship.id, reason)
+      // Replace local state with the canonical updated mentorship; the #341
+      // banner picks up the non-ACTIVE status and re-renders read-only.
+      setMentorship(updated)
+      setCancelOpen(false)
+      // Sync sidebar / navbar / dashboard counts with the now-cancelled state.
+      refresh()
+    } catch (err) {
+      setCancelError(err?.message || 'Failed to cancel mentorship')
+    } finally {
+      setCancelLoading(false)
     }
   }
 
@@ -209,6 +437,18 @@ export default function MentorshipDetailPage() {
   const status = mentorship.status || 'ACTIVE'
   const isActive = status === 'ACTIVE'
   const daysLeft = daysRemaining(mentorship.endDate)
+  // 1.1.4.10 — auto-termination at duration end. Backend marks the
+  // mentorship as COMPLETED / TERMINATED / CANCELLED depending on the cause;
+  // from the UI perspective they all collapse to "this mentorship has ended".
+  const endedLabel = (() => {
+    if (isActive) return null
+    switch (status) {
+      case 'COMPLETED': return 'Ended'           // duration reached or mentor early-end
+      case 'TERMINATED': return 'Terminated'     // admin / system termination
+      case 'CANCELLED': return 'Cancelled'       // mentee cancellation
+      default: return 'Ended'
+    }
+  })()
 
   return (
     <MainLayout>
@@ -221,9 +461,25 @@ export default function MentorshipDetailPage() {
             ← Back
           </button>
           <div className="page-title">Mentorship</div>
-          <div className="page-sub">Your active mentorship with {otherFirstName}</div>
+          <div className="page-sub">
+            {isActive
+              ? `Your active mentorship with ${otherFirstName}`
+              : `Your past mentorship with ${otherFirstName}`}
+          </div>
         </div>
       </div>
+
+      {!isActive && (
+        <div className="md-ended-banner" role="status">
+          <strong>{endedLabel}</strong>
+          {mentorship.endDate && (
+            <> · {endedLabel === 'Cancelled' ? 'Cancelled on' : 'Ended on'} {formatDate(mentorship.endDate)}</>
+          )}
+          <span className="md-ended-banner-sub">
+            This mentorship is read-only. Messages, tasks, and meetings remain accessible for history.
+          </span>
+        </div>
+      )}
 
       {/* Header hero */}
       <section className="md-hero">
@@ -258,60 +514,69 @@ export default function MentorshipDetailPage() {
         </div>
       </div>
 
-      {/* Shared goal */}
-      <section className="card md-goal">
-        <div className="md-section-header">
-          <div className="section-label" style={{ marginBottom: 0 }}>Shared Goal</div>
-          {isActive && !editingGoal && (
-            <button
-              className="md-link-btn"
-              onClick={() => { setGoalDraft(mentorship.sharedGoal || ''); setEditingGoal(true); setGoalError('') }}
-            >
-              {mentorship.sharedGoal ? 'Edit' : 'Add goal'}
-            </button>
-          )}
-        </div>
-
-        {!editingGoal && (
-          mentorship.sharedGoal
-            ? <div className="md-goal-text">"{mentorship.sharedGoal}"</div>
-            : <div className="md-goal-empty">No shared goal yet. Define a goal together to keep your mentorship focused.</div>
-        )}
-
-        {editingGoal && (
-          <div className="md-goal-edit">
-            <textarea
-              className="md-textarea"
-              maxLength={500}
-              rows={4}
-              value={goalDraft}
-              onChange={e => setGoalDraft(e.target.value)}
-              placeholder="E.g. Help the mentee secure a software internship by August."
-              autoFocus
-            />
-            <div className="md-goal-edit-footer">
-              <span className="md-char-count">{goalDraft.length}/500</span>
-              <div className="md-goal-actions">
-                <button
-                  className="modal-btn-secondary"
-                  onClick={() => { setEditingGoal(false); setGoalError('') }}
-                  disabled={goalSaving}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="modal-btn-primary md-primary-btn"
-                  onClick={handleSaveGoal}
-                  disabled={goalSaving || goalDraft.trim().length === 0}
-                >
-                  {goalSaving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
+      {/* Shared goal CTA for active mentorships without a goal (#277) */}
+      {!mentorship.sharedGoal && isActive && (
+        <section className="card md-goal-cta" style={{ border: '1px solid var(--primary-color)', backgroundColor: 'rgba(59, 130, 246, 0.05)' }}>
+          <div className="md-section-header" style={{ marginBottom: '8px' }}>
+            <div className="section-label" style={{ marginBottom: 0, color: 'var(--primary-color)' }}>
+              Define a shared goal
             </div>
-            {goalError && <div className="modal-api-error" style={{ marginTop: '12px' }}>{goalError}</div>}
           </div>
-        )}
-      </section>
+          <p style={{ margin: '0 0 16px', color: 'var(--text-color)', fontSize: '14px', lineHeight: '1.5' }}>
+            Your mentorship is active! Work together to define a shared goal. Setting a goal
+            unlocks milestones and progress tracking features.
+          </p>
+          <button
+            className="md-action-btn md-action-primary"
+            style={{ width: 'auto', padding: '8px 16px', fontSize: '13px' }}
+            onClick={() => { setGoalDraft(''); setEditingGoal(true); setGoalError('') }}
+          >
+            Add Goal
+          </button>
+        </section>
+      )}
+
+      {/* Shared goal */}
+      {(mentorship.sharedGoal || !isActive) && (
+        <section className="card md-goal">
+          <div className="md-section-header">
+            <div className="section-label" style={{ marginBottom: 0 }}>Shared Goal</div>
+            {isActive && (
+              <button
+                className="md-link-btn"
+                onClick={() => { setGoalDraft(mentorship.sharedGoal || ''); setEditingGoal(true); setGoalError('') }}
+              >
+                {mentorship.sharedGoal ? 'Edit' : 'Add goal'}
+              </button>
+            )}
+          </div>
+
+          {mentorship.sharedGoal ? (
+            <div className="md-goal-text">"{mentorship.sharedGoal}"</div>
+          ) : (
+            <div className="md-goal-empty">No shared goal was set during this mentorship.</div>
+          )}
+        </section>
+      )}
+
+      {/* Progress + Timeline (#126 + #333, gated in #277) */}
+      {mentorship.sharedGoal && (
+        <MentorshipProgressTimeline mentorshipId={mentorship.id} />
+      )}
+
+      {/* Milestones (#288, gated by goal in #277) */}
+      <MentorshipMilestones
+        mentorshipId={mentorship.id}
+        isMentor={viewerIsMentor}
+        isActive={isActive}
+        hasSharedGoal={!!mentorship.sharedGoal}
+      />
+
+      {/* Mentor cross-mentee comparison (#126). Self-hides when viewer is a
+          mentee or when no other active mentees exist. */}
+      {viewerIsMentor && (
+        <MentorMenteesProgress currentMentorshipId={mentorship.id} />
+      )}
 
       {/* Profile */}
       <section className="card md-profile">
@@ -403,14 +668,40 @@ export default function MentorshipDetailPage() {
         >
           My Tasks
         </button>
-        <button
-          className="md-action-btn md-action-danger"
-          onClick={() => setEndOpen(true)}
-          disabled={!isActive}
-        >
-          End Mentorship
-        </button>
+        {viewerIsMentor ? (
+          <button
+            className="md-action-btn md-action-danger"
+            onClick={() => setEndOpen(true)}
+            disabled={!isActive}
+          >
+            End Mentorship
+          </button>
+        ) : (
+          // Mentee uses /cancel (#127); backend rejects POST /end from a mentee.
+          <button
+            className="md-action-btn md-action-danger"
+            onClick={() => setCancelOpen(true)}
+            disabled={!isActive}
+            title={isActive ? 'Cancel this mentorship' : 'This mentorship has already ended'}
+          >
+            Cancel Mentorship
+          </button>
+        )}
       </div>
+
+      {cancelError && (
+        <div className="md-error-card" style={{ marginTop: '12px' }}>
+          <div className="md-error-title">Couldn’t cancel mentorship</div>
+          <div className="md-error-sub">{cancelError}</div>
+        </div>
+      )}
+
+      {endError && (
+        <div className="md-error-card" style={{ marginTop: '12px' }}>
+          <div className="md-error-title">Couldn’t end mentorship</div>
+          <div className="md-error-sub">{endError}</div>
+        </div>
+      )}
 
       <EndMentorshipModal
         open={endOpen}
@@ -418,6 +709,23 @@ export default function MentorshipDetailPage() {
         onConfirm={handleEndConfirm}
         loading={endLoading}
         otherName={displayName || otherFirstName}
+      />
+
+      <CancelMentorshipModal
+        open={cancelOpen}
+        onClose={() => !cancelLoading && setCancelOpen(false)}
+        onConfirm={handleCancelConfirm}
+        loading={cancelLoading}
+        otherName={displayName || otherFirstName}
+      />
+
+      <SharedGoalModal
+        open={editingGoal}
+        initial={goalDraft}
+        onClose={() => !goalSaving && setEditingGoal(false)}
+        onSubmit={handleSaveGoal}
+        loading={goalSaving}
+        error={goalError}
       />
     </MainLayout>
   )

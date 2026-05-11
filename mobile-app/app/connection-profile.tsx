@@ -76,31 +76,20 @@ function parseJsonList(value: string | string[] | undefined): string[] {
   }
 }
 
-function toIsoDateOrNull(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
-
-  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString();
+function formatDateLabel(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function formatStatusLabel(status: MilestoneStatus) {
-  if (status === 'IN_PROGRESS') return 'In Progress';
-  if (status === 'COMPLETED') return 'Completed';
-  return 'Pending';
+function formatStatusLabel(status: MilestoneStatus): string {
+  return status === 'IN_PROGRESS' ? 'In Progress' : status.charAt(0) + status.slice(1).toLowerCase();
 }
 
-function formatDateLabel(value: string | null) {
-  if (!value) return 'No target date';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+function toIsoDateOrNull(dateStr: string): string | null {
+  if (!dateStr.trim()) return null;
+  const d = new Date(dateStr.trim());
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
 }
 
 export default function ConnectionProfileScreen() {
@@ -284,6 +273,7 @@ export default function ConnectionProfileScreen() {
         mode,
         targetName: name,
         targetType: type,
+        mentorshipId,
       },
     });
   };
