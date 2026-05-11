@@ -1,7 +1,6 @@
 package com.group7.backend.scheduler;
 
 import com.group7.backend.repository.MenteeRepository;
-import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.scheduler.MatchNotificationScheduler.BatchResult;
 import com.group7.backend.service.MatchNotificationProcessor;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,15 +19,16 @@ import static org.mockito.Mockito.when;
 
 /**
  * Unit coverage for {@link MatchNotificationScheduler}'s loop semantics.
- * Asserts: (a) every eligible id from the repos reaches the processor;
+ * Asserts: (a) every eligible mentee id from the repo reaches the processor;
  * (b) per-user exceptions are caught + logged + the loop continues;
- * (c) per-side eligibility-query failures don't skip the other side;
- * (d) the {@link BatchResult} surfaced for the run-summary log carries the
- * eligibility-list size alongside the publish count.
+ * (c) an eligibility-query failure is logged once and doesn't propagate
+ * out of the @Scheduled method; (d) the {@link BatchResult} surfaced for
+ * the run-summary log carries the eligibility-list size alongside the
+ * publish count.
  *
  * <p>We don't try to assert that the cron fires on time — that's Spring's
  * responsibility. Tests invoke the package-private {@code notifyMentees()}
- * / {@code notifyMentors()} directly, matching the
+ * directly, matching the
  * {@link com.group7.backend.scheduler.AttachmentOrphanCleanupScheduler}
  * test idiom.
  */
@@ -37,14 +37,13 @@ class MatchNotificationSchedulerTest {
 
     @Mock private MatchNotificationProcessor processor;
     @Mock private MenteeRepository menteeRepository;
-    @Mock private MentorRepository mentorRepository;
 
     private MatchNotificationScheduler scheduler;
 
     @BeforeEach
     void setUp() {
         scheduler = new MatchNotificationScheduler(
-                processor, menteeRepository, mentorRepository,
+                processor, menteeRepository,
                 "0 0 9 * * *", "UTC");
     }
 
@@ -62,20 +61,6 @@ class MatchNotificationSchedulerTest {
         verify(processor).processMentee(1L);
         verify(processor).processMentee(2L);
         verify(processor).processMentee(3L);
-    }
-
-    @Test
-    void notifyMentors_iteratesAllEligibleIds() {
-        when(mentorRepository.findIdsWithCapacity()).thenReturn(List.of(10L, 20L));
-        when(processor.processMentor(10L)).thenReturn(true);
-        when(processor.processMentor(20L)).thenReturn(true);
-
-        BatchResult result = scheduler.notifyMentors();
-
-        assertThat(result.eligible()).isEqualTo(2);
-        assertThat(result.published()).isEqualTo(2);
-        verify(processor).processMentor(10L);
-        verify(processor).processMentor(20L);
     }
 
     @Test
@@ -113,32 +98,6 @@ class MatchNotificationSchedulerTest {
     }
 
     @Test
-    void notifyChangedMatches_isolatesMenteeSideFailureFromMentorSide() {
-        // findUnattachedIds throws — without runSafely, notifyMentors would
-        // never run. With runSafely, we still process the mentor side.
-        when(menteeRepository.findUnattachedIds()).thenThrow(new RuntimeException("DB outage"));
-        when(mentorRepository.findIdsWithCapacity()).thenReturn(List.of(10L));
-        when(processor.processMentor(10L)).thenReturn(true);
-
-        scheduler.notifyChangedMatches();
-
-        verify(processor, never()).processMentee(anyLong());
-        verify(processor).processMentor(10L);
-    }
-
-    @Test
-    void notifyChangedMatches_isolatesMentorSideFailureFromMenteeSide() {
-        when(menteeRepository.findUnattachedIds()).thenReturn(List.of(1L));
-        when(processor.processMentee(1L)).thenReturn(true);
-        when(mentorRepository.findIdsWithCapacity()).thenThrow(new RuntimeException("DB outage"));
-
-        scheduler.notifyChangedMatches();
-
-        verify(processor).processMentee(1L);
-        verify(processor, never()).processMentor(anyLong());
-    }
-
-    @Test
     void notifyMentees_emptyEligibilityListIsNoOp() {
         when(menteeRepository.findUnattachedIds()).thenReturn(List.of());
 
@@ -149,62 +108,28 @@ class MatchNotificationSchedulerTest {
         verify(processor, never()).processMentee(anyLong());
     }
 
-    // ── Symmetric mentor-side coverage ───────────────────────────────────────
-
-    @Test
-    void notifyMentors_swallowsPerUserExceptionsAndContinues() {
-        when(mentorRepository.findIdsWithCapacity()).thenReturn(List.of(10L, 20L, 30L));
-        when(processor.processMentor(10L)).thenReturn(true);
-        when(processor.processMentor(20L)).thenThrow(new RuntimeException("transient DB error"));
-        when(processor.processMentor(30L)).thenReturn(true);
-
-        BatchResult result = scheduler.notifyMentors();
-
-        assertThat(result.eligible()).isEqualTo(3);
-        assertThat(result.published()).isEqualTo(2);
-        verify(processor).processMentor(10L);
-        verify(processor).processMentor(20L);
-        verify(processor).processMentor(30L);
-    }
-
-    @Test
-    void notifyMentors_logsIllegalStateAtErrorButContinues() {
-        when(mentorRepository.findIdsWithCapacity()).thenReturn(List.of(10L, 20L));
-        when(processor.processMentor(10L)).thenThrow(new IllegalStateException("precondition broken"));
-        when(processor.processMentor(20L)).thenReturn(true);
-
-        BatchResult result = scheduler.notifyMentors();
-
-        assertThat(result.eligible()).isEqualTo(2);
-        assertThat(result.published()).isEqualTo(1);
-        verify(processor).processMentor(20L);
-    }
-
-    @Test
-    void notifyMentors_emptyEligibilityListIsNoOp() {
-        when(mentorRepository.findIdsWithCapacity()).thenReturn(List.of());
-
-        BatchResult result = scheduler.notifyMentors();
-
-        assertThat(result.eligible()).isZero();
-        assertThat(result.published()).isZero();
-        verify(processor, never()).processMentor(anyLong());
-    }
-
     // ── Run-summary semantics ────────────────────────────────────────────────
 
     @Test
-    void notifyChangedMatches_sumsBothSidesAndCompletesEvenWithZeroPublishes() {
+    void notifyChangedMatches_runsMenteeBatchAndCompletesEvenWithZeroPublishes() {
         when(menteeRepository.findUnattachedIds()).thenReturn(List.of());
-        when(mentorRepository.findIdsWithCapacity()).thenReturn(List.of());
 
         scheduler.notifyChangedMatches();
 
-        // Both eligibility queries ran exactly once; processor never invoked.
+        // Eligibility query ran exactly once; processor never invoked.
         verify(menteeRepository).findUnattachedIds();
-        verify(mentorRepository).findIdsWithCapacity();
         verify(processor, never()).processMentee(anyLong());
-        verify(processor, never()).processMentor(anyLong());
+    }
+
+    @Test
+    void notifyChangedMatches_swallowsEligibilityQueryFailure() {
+        // runSafely wraps the batch so a DB outage on findUnattachedIds
+        // is logged once and the @Scheduled method returns cleanly.
+        when(menteeRepository.findUnattachedIds()).thenThrow(new RuntimeException("DB outage"));
+
+        scheduler.notifyChangedMatches();   // must not throw
+
+        verify(processor, never()).processMentee(anyLong());
     }
 
     // ── Startup config log ───────────────────────────────────────────────────

@@ -1,237 +1,225 @@
 package com.group7.backend.service.embedding;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.config.SemanticSimilarityProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.web.client.RestClient;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.ObjectProvider;
 
-import java.util.Map;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.data.Offset.offset;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.assertj.core.api.Assertions.offset;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
- * Coverage for the OpenAI embedding client. Uses {@link MockRestServiceServer}
- * bound to a {@link RestClient.Builder} (the verified pattern from
- * {@code TaxonomyServiceTest} in this codebase) so we never hit a real
- * OpenAI endpoint and the test stays a sub-second unit test.
+ * Coverage targets for {@link SemanticSimilarityService} — every branch
+ * in the graceful-degradation contract:
  *
- * <p>Covers the documented contract:
- * <ol>
- *   <li>happy path returns the vector from the response payload;</li>
- *   <li>{@code Authorization: Bearer …} header is sent;</li>
- *   <li>request body carries {@code model} + {@code input}, JSON-encoded;</li>
- *   <li>blank / null input short-circuits and never calls OpenAI;</li>
- *   <li>blank API key short-circuits (env unset case);</li>
- *   <li>4xx response fails-open to {@code float[0]};</li>
- *   <li>5xx response fails-open to {@code float[0]};</li>
- *   <li>second call for the same text hits the cache (one HTTP call total);</li>
- *   <li>different texts each hit OpenAI;</li>
- *   <li>cache key is stable across whitespace differences in the input;</li>
- *   <li>cosineSimilarity over identical / orthogonal / different-length /
- *       all-zero vectors returns the expected values.</li>
- * </ol>
+ * <ul>
+ *   <li>null / blank input → empty vector, no model call, no cache write</li>
+ *   <li>cold cache → model called, vector cached, success counter bumped</li>
+ *   <li>warm cache → model not called, hit counter bumped</li>
+ *   <li>missing model bean → empty vector, no throw, single WARN log</li>
+ *   <li>model throws → empty vector, failure counter bumped, no rethrow</li>
+ *   <li>cosineSimilarity edges: null, empty, mismatched length, zero-norm,
+ *       orthogonal vectors, identical vectors, opposite vectors</li>
+ *   <li>cache key includes model name (upgrade-safety invariant)</li>
+ * </ul>
  */
 class SemanticSimilarityServiceTest {
 
-    private static final String API_KEY = "sk-test-key";
-    private static final String MODEL = "text-embedding-3-small";
-
-    private MockRestServiceServer server;
+    private EmbeddingModel embeddingModel;
+    private SimpleMeterRegistry meterRegistry;
+    private SemanticSimilarityProperties props;
     private SemanticSimilarityService service;
 
     @BeforeEach
     void setUp() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://openai.test");
-        server = MockRestServiceServer.bindTo(builder).build();
-        service = new SemanticSimilarityService(builder.build(), props(API_KEY));
-        service.initCache();
+        embeddingModel = mock(EmbeddingModel.class);
+        meterRegistry = new SimpleMeterRegistry();
+        props = new SemanticSimilarityProperties(
+                "text-embedding-3-small",
+                new SemanticSimilarityProperties.Cache(128, 1),
+                true);
+        service = new SemanticSimilarityService(providerOf(() -> embeddingModel), props, meterRegistry);
     }
 
-    @Test
-    void happyPath_returnsEmbeddingFromResponseBody() throws Exception {
-        server.expect(requestTo("http://openai.test/v1/embeddings"))
-                .andExpect(method(org.springframework.http.HttpMethod.POST))
-                .andExpect(header("Authorization", "Bearer " + API_KEY))
-                .andExpect(header("Content-Type", MediaType.APPLICATION_JSON_VALUE))
-                .andExpect(jsonPath("$.model").value(MODEL))
-                .andExpect(jsonPath("$.input").value("hello world"))
-                .andRespond(withSuccess(jsonPayload(new float[]{0.1f, 0.2f, 0.3f}),
-                        MediaType.APPLICATION_JSON));
-
-        float[] vec = service.embed("hello world");
-        assertThat(vec).hasSize(3).containsExactly(0.1f, 0.2f, 0.3f);
-        server.verify();
-    }
+    // ── embed(): input handling ─────────────────────────────────────────
 
     @Test
-    void blankInput_returnsEmpty_andSkipsHttpCall() {
+    void embed_returnsEmptyForNullInput() {
         assertThat(service.embed(null)).isEmpty();
+        verify(embeddingModel, never()).embed(anyString());
+        assertThat(meterRegistry.counter("embedding.cache.misses").count()).isZero();
+    }
+
+    @Test
+    void embed_returnsEmptyForBlankInput() {
         assertThat(service.embed("")).isEmpty();
-        assertThat(service.embed("   \t\n")).isEmpty();
-        // server.verify() with no expectations = no calls were made
-        server.verify();
+        assertThat(service.embed("   ")).isEmpty();
+        verify(embeddingModel, never()).embed(anyString());
+    }
+
+    // ── embed(): cache hit/miss + counter wiring ────────────────────────
+
+    @Test
+    void embed_coldCache_callsModelAndCachesResult() {
+        float[] vec = new float[]{0.1f, 0.2f, 0.3f};
+        when(embeddingModel.embed("hello")).thenReturn(vec);
+
+        float[] result = service.embed("hello");
+        assertThat(result).containsExactly(0.1f, 0.2f, 0.3f);
+        verify(embeddingModel, times(1)).embed("hello");
+        assertThat(meterRegistry.counter("embedding.cache.misses").count()).isEqualTo(1.0);
+        assertThat(meterRegistry.counter("openai.embedding.calls", "outcome", "success").count()).isEqualTo(1.0);
+        assertThat(service.cacheSize()).isEqualTo(1);
     }
 
     @Test
-    void blankApiKey_returnsEmpty_andSkipsHttpCall() {
-        // Re-construct with blank api key
-        RestClient.Builder b = RestClient.builder().baseUrl("http://openai.test");
-        MockRestServiceServer s = MockRestServiceServer.bindTo(b).build();
-        SemanticSimilarityService svc = new SemanticSimilarityService(b.build(), props(""));
-        svc.initCache();
+    void embed_warmCache_skipsModelCallAndBumpsHitCounter() {
+        float[] vec = new float[]{0.4f, 0.5f};
+        when(embeddingModel.embed("hello")).thenReturn(vec);
 
-        assertThat(svc.embed("some text")).isEmpty();
-        s.verify();
+        service.embed("hello");                                  // miss + populate
+        float[] second = service.embed("hello");                 // hit
+        float[] third = service.embed("  hello  ");              // hit (input stripped before key)
+
+        assertThat(second).isSameAs(third); // same cached reference
+        verify(embeddingModel, times(1)).embed("hello");
+        assertThat(meterRegistry.counter("embedding.cache.hits").count()).isEqualTo(2.0);
+        assertThat(meterRegistry.counter("embedding.cache.misses").count()).isEqualTo(1.0);
     }
 
     @Test
-    void openai4xx_failsOpen_toEmptyVector() {
-        server.expect(requestTo("http://openai.test/v1/embeddings"))
-                .andRespond(withStatus(org.springframework.http.HttpStatus.UNAUTHORIZED));
+    void embed_differentInputs_keyedSeparately() {
+        when(embeddingModel.embed("foo")).thenReturn(new float[]{1f});
+        when(embeddingModel.embed("bar")).thenReturn(new float[]{2f});
 
-        assertThat(service.embed("hi")).isEmpty();
-        server.verify();
+        service.embed("foo");
+        service.embed("bar");
+        assertThat(service.cacheSize()).isEqualTo(2);
+        verify(embeddingModel, times(1)).embed("foo");
+        verify(embeddingModel, times(1)).embed("bar");
+    }
+
+    // ── embed(): graceful degradation ───────────────────────────────────
+
+    @Test
+    void embed_noModelBean_returnsEmptyAndDoesNotThrow() {
+        var serviceWithoutModel = new SemanticSimilarityService(
+                providerOf(() -> null), props, meterRegistry);
+        assertThat(serviceWithoutModel.embed("anything")).isEmpty();
+        // Repeated calls still degrade safely (the once-only log path).
+        assertThat(serviceWithoutModel.embed("anything else")).isEmpty();
     }
 
     @Test
-    void openai5xx_failsOpen_toEmptyVector() {
-        server.expect(requestTo("http://openai.test/v1/embeddings"))
-                .andRespond(withServerError());
+    void embed_modelThrows_returnsEmptyAndBumpsFailureCounter() {
+        when(embeddingModel.embed(anyString())).thenThrow(new RuntimeException("OpenAI 503"));
 
-        assertThat(service.embed("hi")).isEmpty();
-        server.verify();
+        assertThat(service.embed("hello")).isEmpty();
+        assertThat(service.embed("world")).isEmpty();
+        assertThat(meterRegistry.counter("openai.embedding.calls", "outcome", "failure").count()).isEqualTo(2.0);
+        // Failure path must NOT cache an empty vector — the next call with the same
+        // input should retry the model, not serve a stale empty from cache.
+        assertThat(service.cacheSize()).isZero();
+        verify(embeddingModel, atLeastOnce()).embed(anyString());
+    }
+
+    // ── cosineSimilarity(): all branches ────────────────────────────────
+
+    @Test
+    void cosine_nullOrEmpty_returnsZero() {
+        assertThat(service.cosineSimilarity(null, new float[]{1f})).isZero();
+        assertThat(service.cosineSimilarity(new float[]{1f}, null)).isZero();
+        assertThat(service.cosineSimilarity(new float[0], new float[]{1f})).isZero();
+        assertThat(service.cosineSimilarity(new float[]{1f}, new float[0])).isZero();
     }
 
     @Test
-    void emptyDataArray_failsOpen() throws Exception {
-        String payload = new ObjectMapper().writeValueAsString(Map.of("data", java.util.List.of()));
-        server.expect(requestTo("http://openai.test/v1/embeddings"))
-                .andRespond(withSuccess(payload, MediaType.APPLICATION_JSON));
-
-        assertThat(service.embed("hi")).isEmpty();
-        server.verify();
+    void cosine_lengthMismatch_returnsZero() {
+        assertThat(service.cosineSimilarity(new float[]{1f, 2f}, new float[]{1f, 2f, 3f})).isZero();
     }
 
     @Test
-    void secondCallForSameText_hitsCache_oneHttpCallTotal() throws Exception {
-        server.expect(requestTo("http://openai.test/v1/embeddings"))
-                .andRespond(withSuccess(jsonPayload(new float[]{0.5f}),
-                        MediaType.APPLICATION_JSON));
-
-        float[] first = service.embed("same text");
-        float[] second = service.embed("same text");
-
-        assertThat(first).containsExactly(0.5f);
-        assertThat(second).containsExactly(0.5f);
-        // Only one expectation registered → cache hit on the second call.
-        server.verify();
+    void cosine_zeroNorm_returnsZero() {
+        assertThat(service.cosineSimilarity(new float[]{0f, 0f, 0f}, new float[]{1f, 2f, 3f})).isZero();
+        assertThat(service.cosineSimilarity(new float[]{1f, 2f, 3f}, new float[]{0f, 0f, 0f})).isZero();
     }
 
     @Test
-    void cacheKey_isStableAcrossWhitespace() throws Exception {
-        // We only set up ONE expectation; if cache keys differ between
-        // "hello" and "  hello  ", the second call will fail mock-verify
-        // with "no further expectations".
-        server.expect(requestTo("http://openai.test/v1/embeddings"))
-                .andRespond(withSuccess(jsonPayload(new float[]{0.42f}),
-                        MediaType.APPLICATION_JSON));
-
-        float[] first = service.embed("hello");
-        float[] second = service.embed("  hello  ");
-
-        assertThat(first).containsExactly(0.42f);
-        assertThat(second).containsExactly(0.42f);
-        server.verify();
+    void cosine_identicalVectors_isOne() {
+        var v = new float[]{0.6f, 0.8f};
+        assertThat(service.cosineSimilarity(v, v)).isCloseTo(1.0, offset(1e-9));
     }
 
     @Test
-    void differentTexts_eachHitOpenAi() throws Exception {
-        server.expect(requestTo("http://openai.test/v1/embeddings"))
-                .andRespond(withSuccess(jsonPayload(new float[]{0.1f}),
-                        MediaType.APPLICATION_JSON));
-        server.expect(requestTo("http://openai.test/v1/embeddings"))
-                .andRespond(withSuccess(jsonPayload(new float[]{0.2f}),
-                        MediaType.APPLICATION_JSON));
-
-        assertThat(service.embed("first")).containsExactly(0.1f);
-        assertThat(service.embed("second")).containsExactly(0.2f);
-        server.verify();
-    }
-
-    // ── cosineSimilarity helper ────────────────────────────────────────────
-
-    @Test
-    void cosine_identicalVectors_returnsOne() {
-        float[] v = {0.6f, 0.8f};
-        assertThat(SemanticSimilarityService.cosineSimilarity(v, v))
-                .isCloseTo(1.0, offset(1e-6));
+    void cosine_orthogonalVectors_isZero() {
+        assertThat(service.cosineSimilarity(new float[]{1f, 0f}, new float[]{0f, 1f}))
+                .isCloseTo(0.0, offset(1e-9));
     }
 
     @Test
-    void cosine_orthogonalVectors_returnsZero() {
-        assertThat(SemanticSimilarityService.cosineSimilarity(
-                new float[]{1f, 0f}, new float[]{0f, 1f}))
-                .isEqualTo(0.0);
+    void cosine_oppositeVectors_isMinusOne() {
+        assertThat(service.cosineSimilarity(new float[]{1f, 0f}, new float[]{-1f, 0f}))
+                .isCloseTo(-1.0, offset(1e-9));
+    }
+
+    // ── Cache invariants ────────────────────────────────────────────────
+
+    @Test
+    void cacheKey_includesModelName_soUpgradeRepartitionsCleanly() {
+        when(embeddingModel.embed("hi")).thenReturn(new float[]{1f});
+
+        // First service uses 3-small
+        service.embed("hi");
+        assertThat(service.cacheSize()).isEqualTo(1);
+
+        // A second service backed by a *different* model name (simulating a
+        // future upgrade) starts cold for the same input — confirming the
+        // model name partitions the keyspace.
+        var upgradedProps = new SemanticSimilarityProperties(
+                "text-embedding-3-large",
+                new SemanticSimilarityProperties.Cache(128, 1),
+                true);
+        var upgraded = new SemanticSimilarityService(providerOf(() -> embeddingModel), upgradedProps, meterRegistry);
+        assertThat(upgraded.cacheSize()).isZero();
+        upgraded.embed("hi");
+        assertThat(upgraded.cacheSize()).isEqualTo(1);
     }
 
     @Test
-    void cosine_emptyVector_returnsZero() {
-        assertThat(SemanticSimilarityService.cosineSimilarity(
-                new float[0], new float[]{1f})).isEqualTo(0.0);
-        assertThat(SemanticSimilarityService.cosineSimilarity(
-                new float[]{1f}, new float[0])).isEqualTo(0.0);
+    void invalidateAll_clearsCache() {
+        when(embeddingModel.embed("hi")).thenReturn(new float[]{1f});
+        service.embed("hi");
+        assertThat(service.cacheSize()).isEqualTo(1);
+        service.invalidateAll();
+        assertThat(service.cacheSize()).isZero();
     }
 
     @Test
-    void cosine_nullVector_returnsZero() {
-        assertThat(SemanticSimilarityService.cosineSimilarity(null, new float[]{1f}))
-                .isEqualTo(0.0);
-        assertThat(SemanticSimilarityService.cosineSimilarity(new float[]{1f}, null))
-                .isEqualTo(0.0);
+    void nullCacheConfig_fallsBackToDefaults() {
+        var propsNoCache = new SemanticSimilarityProperties("text-embedding-3-small", null, true);
+        var svc = new SemanticSimilarityService(providerOf(() -> embeddingModel), propsNoCache, meterRegistry);
+        when(embeddingModel.embed("x")).thenReturn(new float[]{1f});
+        svc.embed("x");
+        assertThat(svc.cacheSize()).isEqualTo(1);
     }
 
-    @Test
-    void cosine_differentLengths_returnsZero() {
-        assertThat(SemanticSimilarityService.cosineSimilarity(
-                new float[]{1f, 0f}, new float[]{1f, 0f, 0f})).isEqualTo(0.0);
-    }
+    // ── Helpers ─────────────────────────────────────────────────────────
 
-    @Test
-    void cosine_zeroMagnitudeVector_returnsZero() {
-        assertThat(SemanticSimilarityService.cosineSimilarity(
-                new float[]{0f, 0f}, new float[]{1f, 0f})).isEqualTo(0.0);
-    }
-
-    @Test
-    void cosine_partialSimilarity_returnsCorrectValue() {
-        // (3,4)·(4,3) = 24; |(3,4)| = 5; |(4,3)| = 5; cosine = 24/25 = 0.96
-        assertThat(SemanticSimilarityService.cosineSimilarity(
-                new float[]{3f, 4f}, new float[]{4f, 3f}))
-                .isCloseTo(0.96, offset(1e-6));
-    }
-
-    // ── helpers ────────────────────────────────────────────────────────────
-
-    private static String jsonPayload(float[] vector) throws Exception {
-        return new ObjectMapper().writeValueAsString(
-                Map.of("data", java.util.List.of(Map.of("embedding", vector))));
-    }
-
-    private static SemanticSimilarityProperties props(String apiKey) {
-        return new SemanticSimilarityProperties(
-                new SemanticSimilarityProperties.Openai(apiKey, "http://openai.test", MODEL),
-                new SemanticSimilarityProperties.Cache(10_000, 24L),
-                new SemanticSimilarityProperties.Request(5_000L));
+    @SuppressWarnings("unchecked")
+    private static <T> ObjectProvider<T> providerOf(Supplier<T> supplier) {
+        ObjectProvider<T> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenAnswer(inv -> supplier.get());
+        return provider;
     }
 }

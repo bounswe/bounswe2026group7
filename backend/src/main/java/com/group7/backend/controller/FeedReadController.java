@@ -14,6 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -86,6 +87,22 @@ public class FeedReadController {
         Long viewerId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(feedReadService.followingFeed(viewerId, pageable));
+    }
+
+    @GetMapping("/users/{authorId}/posts")
+    @Operation(summary = "Author posts feed",
+            description = "Returns non-deleted posts authored by the given user id, "
+                    + "ordered by creation time descending.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paged author posts"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
+    })
+    public ResponseEntity<Page<FeedPostListItem>> postsByAuthor(
+            @Parameter(description = "Author user id") @PathVariable Long authorId,
+            @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageableSupport.clampPageable(page, size);
+        return ResponseEntity.ok(feedReadService.postsByAuthor(authorId, pageable));
     }
 
     @GetMapping("/search")

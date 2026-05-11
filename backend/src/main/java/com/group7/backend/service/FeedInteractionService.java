@@ -16,6 +16,7 @@ import com.group7.backend.repository.FeedPostLikeRepository;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.FeedPostShareRepository;
 import com.group7.backend.repository.UserRepository;
+import com.group7.backend.repository.projection.PostCountTuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -26,7 +27,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -53,6 +56,15 @@ import java.util.stream.Collectors;
 @Service
 @Transactional(readOnly = true)
 public class FeedInteractionService {
+
+    /**
+     * Per-post like/comment counts assembled by {@link #batchCounts}.
+     * Tightly scoped to the read fan-out path; not a wire DTO. The two
+     * fields mirror {@code FeedPostListItem.likeCount} /
+     * {@code commentCount} positions so the caller can splat them
+     * straight into the record constructor.
+     */
+    public record PostCounts(long likeCount, long commentCount) {}
 
     private static final Logger log = LoggerFactory.getLogger(FeedInteractionService.class);
 
@@ -156,21 +168,58 @@ public class FeedInteractionService {
                 .map(byId::get)
                 .filter(p -> p != null && p.getDeletedAt() == null)
                 .toList();
-        Map<Long, String> authorNames = new java.util.HashMap<>();
+        Map<Long, String> authorNames = new HashMap<>();
         userRepository.findAllById(ordered.stream().map(FeedPost::getAuthorId)
-                .collect(java.util.stream.Collectors.toSet()))
+                .collect(Collectors.toSet()))
                 .forEach(u -> authorNames.put(u.getId(), u.getFirstName()));
-        List<FeedPostListItem> items = ordered.stream().map(p -> new FeedPostListItem(
-                p.getId(),
-                p.getAuthorId(),
-                authorNames.getOrDefault(p.getAuthorId(), null),
-                p.getBody(),
-                p.getHashtags().stream().map(h -> h.getId().getTag()).sorted().toList(),
-                p.getCreatedAt(),
-                0L,
-                0L
-        )).toList();
+        Map<Long, PostCounts> counts = batchCounts(
+                ordered.stream().map(FeedPost::getId).toList());
+        List<FeedPostListItem> items = ordered.stream().map(p -> {
+            PostCounts c = counts.get(p.getId());
+            return new FeedPostListItem(
+                    p.getId(),
+                    p.getAuthorId(),
+                    authorNames.getOrDefault(p.getAuthorId(), null),
+                    p.getBody(),
+                    p.getHashtags().stream().map(h -> h.getId().getTag()).sorted().toList(),
+                    p.getCreatedAt(),
+                    c.likeCount(),
+                    c.commentCount()
+            );
+        }).toList();
         return new PageImpl<>(items, pageable, postIds.getTotalElements());
+    }
+
+    /**
+     * Aggregate like / visible-comment counts across many posts in a
+     * single round-trip per interaction type. Used by the feed list
+     * endpoints to avoid an N+1 fan-out when populating
+     * {@code FeedPostListItem.likeCount} / {@code commentCount}.
+     *
+     * <p>Contract: the returned map contains an entry for <b>every</b>
+     * postId supplied — posts with zero likes / zero visible comments
+     * surface as {@code new PostCounts(0L, 0L)} rather than being absent.
+     * Callers can therefore index directly without {@code getOrDefault}.
+     *
+     * <p>Short-circuits on an empty input: Postgres rejects
+     * {@code WHERE id IN ()}, so an empty {@code postIds} returns
+     * {@code Map.of()} before any SQL is issued.
+     */
+    public Map<Long, PostCounts> batchCounts(Collection<Long> postIds) {
+        if (postIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Long> likeCounts = likeRepository.countByPostIdIn(postIds).stream()
+                .collect(Collectors.toMap(PostCountTuple::postId, PostCountTuple::count));
+        Map<Long, Long> commentCounts = commentRepository.countVisibleByPostIdIn(postIds).stream()
+                .collect(Collectors.toMap(PostCountTuple::postId, PostCountTuple::count));
+        Map<Long, PostCounts> result = new LinkedHashMap<>(postIds.size());
+        for (Long id : postIds) {
+            result.put(id, new PostCounts(
+                    likeCounts.getOrDefault(id, 0L),
+                    commentCounts.getOrDefault(id, 0L)));
+        }
+        return result;
     }
 
     // ── Shares ─────────────────────────────────────────────────────────────

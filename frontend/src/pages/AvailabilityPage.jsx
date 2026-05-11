@@ -147,7 +147,7 @@ export default function AvailabilityPage() {
           border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
           padding: '12px 16px', marginBottom: '24px', fontSize: '14px', fontWeight: 500,
         }}>
-          ✓ Availability saved successfully.
+          Availability saved successfully.
         </div>
       )}
       {status && status !== 'success' && (

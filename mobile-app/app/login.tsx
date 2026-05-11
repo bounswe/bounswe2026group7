@@ -52,12 +52,10 @@ export default function LoginScreen() {
       });
 
       const { sessionToken, role, userId } = response.data;
-      console.log('[login] backend userId:', userId, 'role:', role);
       await SecureStore.setItemAsync('userId', String(userId));
       await SecureStore.setItemAsync('userRole', role);
       setRole(role.toLowerCase());
       await SecureStore.setItemAsync('userToken', sessionToken);
-      console.log('[login] SecureStore write complete, stored userId:', String(userId));
 
       router.replace('/(tabs)');
 

@@ -183,6 +183,51 @@ class FeedInteractionIntegrationTest {
                 .andExpect(jsonPath("$.totalElements").value(0));
     }
 
+    @Test
+    void listBookmarks_surfacesLikeAndVisibleCommentCounts() throws Exception {
+        String authorToken = registerAndLogin("bm_counts_author@test.com");
+        String viewerToken = registerAndLogin("bm_counts_viewer@test.com");
+        long pid = createPost(authorToken, "post that gets bookmarked", List.of());
+
+        // Two likes + one visible comment + one deleted comment on the post.
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/like")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/like")
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/comments")
+                        .header("Authorization", "Bearer " + viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"kept\"}"))
+                .andExpect(status().isCreated());
+        MvcResult dRes = mockMvc.perform(post("/api/feed/posts/" + pid + "/comments")
+                        .header("Authorization", "Bearer " + viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"to delete\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long doomed = objectMapper.readTree(dRes.getResponse().getContentAsString())
+                .get("id").asLong();
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/feed/comments/" + doomed)
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isNoContent());
+
+        // Viewer bookmarks the post and fetches their bookmark list.
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/bookmark")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/feed/me/bookmarks")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(pid))
+                .andExpect(jsonPath("$.content[0].likeCount").value(2))
+                .andExpect(jsonPath("$.content[0].commentCount").value(1));
+    }
+
     // ── Shares ─────────────────────────────────────────────────────────────
 
     @Test

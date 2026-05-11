@@ -8,6 +8,7 @@ import {
   getActiveMentorships,
   getUserById,
 } from '../services/api'
+import Avatar from '../components/Avatar'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
@@ -44,6 +45,8 @@ export default function HomePage() {
 
   const [acceptingId, setAcceptingId] = useState(null)   // request being accepted
   const [selectedDuration, setSelectedDuration] = useState(3)
+  const [menteeProfiles, setMenteeProfiles] = useState({})
+  const [activeMenteePhotos, setActiveMenteePhotos] = useState({})
   const [actionLoading, setActionLoading] = useState(false)
 
   // ── Load mentee data ───────────────────────────────────────────────────────
@@ -58,7 +61,11 @@ export default function HomePage() {
         ])
         if (mentorshipsData.status === 'fulfilled') {
           const active = (mentorshipsData.value || []).find(m => m.status === 'ACTIVE')
-          if (active) { setActiveMentorship(active); setHasActiveMentor(true) }
+          if (active) {
+            setActiveMentorship(active)
+            setHasActiveMentor(true)
+            getUserById(active.mentorId).then(p => setActiveMentorPhoto(p?.profilePhoto || null)).catch(() => {})
+          }
         }
         if (matchData.status === 'rejected') {
           const msg = matchData.reason?.message || ''
@@ -374,7 +381,11 @@ export default function HomePage() {
                     >
                       <div className="am-header">
                         <div className="am-info">
-                          <div className="req-avatar">{m.menteeFirstName?.[0] ?? '?'}</div>
+                          <Avatar
+                            src={activeMenteePhotos[m.menteeId] || null}
+                            initials={m.menteeFirstName?.[0]?.toUpperCase() ?? '?'}
+                            size="md"
+                          />
                           <div>
                             <div className="req-name">{m.menteeFirstName}</div>
                             <div className="req-time">

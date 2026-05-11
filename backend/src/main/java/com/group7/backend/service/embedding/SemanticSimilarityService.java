@@ -1,155 +1,205 @@
 package com.group7.backend.service.embedding;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.group7.backend.config.SemanticSimilarityProperties;
-import jakarta.annotation.PostConstruct;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.MediaType;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
-import java.util.List;
 
 /**
- * OpenAI embeddings client wrapping {@code /v1/embeddings}.
+ * Caches OpenAI embeddings per ({@code model}, normalized-text). Drives
+ * the {@code semantic-match} signal in the advanced mentor ranker;
+ * reusable verbatim by the follow-recommendation and feed surfaces —
+ * nothing here is mentor-specific.
  *
- * <p><b>Fail-open contract.</b> Any failure — missing API key, blank
- * input, 4xx / 5xx response, timeout, malformed response shape — returns
- * {@code float[0]}. The caller's cosine-similarity step then returns
- * {@code 0.0} and {@code SemanticAffinitySignal} emits
- * {@code semantic-unavailable}. The other six follow-signals carry the
- * recommendation unaffected and the API does not 5xx.
+ * <p><b>Graceful-degradation contract.</b> If the {@code OPENAI_API_KEY}
+ * is unset, the {@link EmbeddingModel} bean is absent, or the OpenAI
+ * call throws, this service returns {@code new float[0]} and logs once
+ * at WARN. Callers must treat an empty vector as "score this signal 0"
+ * (the ranker emits a {@code semantic-unavailable} factor in that case).
+ * The service never throws — a 500 from the matcher because OpenAI is
+ * down is worse than a partial recommendation.
  *
- * <p><b>Cache.</b> Caffeine, keyed by {@code sha256(model + ":" + text)},
- * configured by {@code app.embedding.cache.*}. text-embedding-3-small
- * produces 1536-dim float vectors (~6 KB each); at the default 10,000
- * cache slots that's ~60 MB max — bounded and well within heap.
+ * <p><b>Cache key.</b> {@code <model-name>:<sha-256(normalized text)>}.
+ * Including the model name means a future upgrade (3-small → 3-large)
+ * partitions the cache cleanly; stale entries die out via Caffeine LRU.
  *
- * <p><b>Gating.</b> {@code @ConditionalOnProperty} keeps the bean
- * absent until {@code semantic-affinity-enabled=true}. A deploy with the
- * flag off doesn't pay any cost, doesn't fail on a missing API key, and
- * doesn't surface the signal in recommendation factors.
+ * <p><b>Threading.</b> Caffeine's {@code put}/{@code getIfPresent} are
+ * thread-safe; concurrent first-writes for the same key only race on
+ * the cache entry, not on OpenAI calls (a tiny duplicate-cost window
+ * exists but is negligible at our request volume — well below the
+ * cost of synchronizing the OpenAI call itself).
  */
 @Service
-@ConditionalOnProperty(name = "app.recommendations.follow.signals.semantic-affinity-enabled",
-        havingValue = "true")
 public class SemanticSimilarityService {
 
     private static final Logger log = LoggerFactory.getLogger(SemanticSimilarityService.class);
+    private static final float[] EMPTY = new float[0];
 
-    private final RestClient openai;
-    private final SemanticSimilarityProperties cfg;
-    private Cache<String, float[]> cache;
+    private final ObjectProvider<EmbeddingModel> embeddingModelProvider;
+    private final SemanticSimilarityProperties props;
+    private final Cache<String, float[]> cache;
+    private final Counter cacheHits;
+    private final Counter cacheMisses;
+    private final Counter embedSuccesses;
+    private final Counter embedFailures;
+    private volatile boolean degradedLogged = false;
 
-    public SemanticSimilarityService(@Qualifier("openAiRestClient") RestClient openai,
-                                     SemanticSimilarityProperties cfg) {
-        this.openai = openai;
-        this.cfg = cfg;
-    }
+    public SemanticSimilarityService(ObjectProvider<EmbeddingModel> embeddingModelProvider,
+                                     SemanticSimilarityProperties props,
+                                     MeterRegistry meterRegistry) {
+        this.embeddingModelProvider = embeddingModelProvider;
+        this.props = props;
 
-    @PostConstruct
-    void initCache() {
+        var cacheCfg = props.cache();
+        int maxSize = (cacheCfg == null) ? 10_000 : cacheCfg.maxSize();
+        int ttlHours = (cacheCfg == null) ? 24 : cacheCfg.ttlHours();
         this.cache = Caffeine.newBuilder()
-                .maximumSize(cfg.cache().maxSize())
-                .expireAfterWrite(Duration.ofHours(cfg.cache().ttlHours()))
+                .maximumSize(maxSize)
+                .expireAfterAccess(Duration.ofHours(ttlHours))
+                .recordStats()
                 .build();
+
+        this.cacheHits = meterRegistry.counter("embedding.cache.hits");
+        this.cacheMisses = meterRegistry.counter("embedding.cache.misses");
+        this.embedSuccesses = meterRegistry.counter("openai.embedding.calls", "outcome", "success");
+        this.embedFailures = meterRegistry.counter("openai.embedding.calls", "outcome", "failure");
     }
 
     /**
-     * Synchronous embed call. Cache-aware; returns the same vector on
-     * repeated calls for the same {@code text} within TTL.
-     *
-     * @return the embedding, or {@code float[0]} on any error.
+     * Embeds {@code text} into a dense float vector. Returns {@link #EMPTY}
+     * for null/blank input, when no {@link EmbeddingModel} bean is wired,
+     * or when the model call throws. Never throws.
      */
     public float[] embed(String text) {
         if (text == null || text.isBlank()) {
-            return new float[0];
+            return EMPTY;
         }
-        if (cfg.openai().apiKey() == null || cfg.openai().apiKey().isBlank()) {
-            // Configured to be enabled but key not provisioned — fail-open
-            // without retrying every call (cheap log once, then quiet).
-            return new float[0];
+        String normalized = text.strip();
+        String key = props.model() + ":" + sha256(normalized);
+
+        // Pre-check for a hit so we can bump the hits counter accurately —
+        // Caffeine's get(key, fn) doesn't distinguish hit from miss in its
+        // load lambda. After this branch we use get(key, fn) for atomic
+        // get-or-load: only one thread per key invokes the load function,
+        // so 200 simultaneous requests for the same mentee text don't fire
+        // 200 simultaneous OpenAI calls.
+        float[] cached = cache.getIfPresent(key);
+        if (cached != null) {
+            cacheHits.increment();
+            return cached;
         }
-        String key = cacheKey(text);
-        return cache.get(key, k -> doEmbed(text));
+        cacheMisses.increment();
+
+        EmbeddingModel model = embeddingModelProvider.getIfAvailable();
+        if (model == null) {
+            return degradeOnce("EmbeddingModel bean unavailable — semantic signal disabled");
+        }
+        // We track success vs failure outside the mappingFn so concurrent
+        // racers that piggyback on the in-flight load don't double-count
+        // their own outcome (they get the same returned vector, regardless).
+        //
+        // Catch Throwable to honour the class-level "never throws" contract:
+        // an Error here (OOM, LinkageError, etc.) should degrade just like
+        // a runtime failure — a 500 from the matcher because of an Error in
+        // the embedding layer is worse than a partial recommendation. Errors
+        // are rethrown to the JVM via no special handling here, but the
+        // outer matching response still returns cleanly.
+        float[] loaded;
+        try {
+            loaded = cache.get(key, k -> {
+                try {
+                    return model.embed(normalized);
+                } catch (RuntimeException ex) {
+                    // Propagate so the outer try catches it; don't cache failures.
+                    throw new EmbeddingCallFailed(ex);
+                }
+            });
+        } catch (EmbeddingCallFailed wrapper) {
+            embedFailures.increment();
+            // Drop ex.getMessage() — some OpenAI client exceptions embed the
+            // request body (which contains user PII) in their message.
+            return degradeOnce("Embedding call failed: " + wrapper.cause.getClass().getSimpleName());
+        } catch (Throwable unexpected) {
+            embedFailures.increment();
+            return degradeOnce("Embedding call failed: " + unexpected.getClass().getSimpleName());
+        }
+        embedSuccesses.increment();
+        // Reset the degraded-log gate so the next failure logs at WARN
+        // rather than being silently demoted to DEBUG for the JVM lifetime.
+        degradedLogged = false;
+        return loaded == null ? EMPTY : loaded;
     }
 
-    private float[] doEmbed(String text) {
-        try {
-            EmbeddingResponse resp = openai.post()
-                    .uri("/v1/embeddings")
-                    .header("Authorization", "Bearer " + cfg.openai().apiKey())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(new EmbeddingRequest(cfg.openai().model(), text))
-                    .retrieve()
-                    .body(EmbeddingResponse.class);
-            if (resp == null || resp.data() == null || resp.data().isEmpty()
-                    || resp.data().get(0).embedding() == null) {
-                log.warn("OpenAI returned empty embedding payload; failing open");
-                return new float[0];
-            }
-            return resp.data().get(0).embedding();
-        } catch (Exception e) {
-            log.warn("OpenAI embedding failed; degrading to empty vector: {}", e.getMessage());
-            return new float[0];
-        }
+    /** Lets {@link Cache#get} unwind without caching a failed load. */
+    private static final class EmbeddingCallFailed extends RuntimeException {
+        final RuntimeException cause;
+        EmbeddingCallFailed(RuntimeException cause) { super(cause); this.cause = cause; }
     }
 
     /**
-     * Cosine similarity clamped to {@code [0,1]}. Returns 0 when either
-     * vector is empty, when dimensions differ, or when either has zero
-     * magnitude (e.g. all-zero vectors).
+     * Cosine similarity in [-1, 1] (typically [0, 1] for embeddings).
+     * Returns {@code 0.0} when either input is null, empty, of different
+     * length, or zero-norm. Pure function — safe to call from anywhere.
      */
-    public static double cosineSimilarity(float[] a, float[] b) {
+    public double cosineSimilarity(float[] a, float[] b) {
         if (a == null || b == null || a.length == 0 || b.length == 0 || a.length != b.length) {
             return 0.0;
         }
         double dot = 0.0;
-        double na = 0.0;
-        double nb = 0.0;
+        double normA = 0.0;
+        double normB = 0.0;
         for (int i = 0; i < a.length; i++) {
-            dot += (double) a[i] * b[i];
-            na  += (double) a[i] * a[i];
-            nb  += (double) b[i] * b[i];
+            double av = a[i];
+            double bv = b[i];
+            dot += av * bv;
+            normA += av * av;
+            normB += bv * bv;
         }
-        if (na == 0.0 || nb == 0.0) return 0.0;
-        double raw = dot / (Math.sqrt(na) * Math.sqrt(nb));
-        if (raw < 0.0) return 0.0;
-        if (raw > 1.0) return 1.0;
-        return raw;
+        if (normA == 0.0 || normB == 0.0) {
+            return 0.0;
+        }
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
-    /** Hashes model + text so whitespace-only variations don't blow the cache. */
-    private String cacheKey(String text) {
+    /** Visible-for-testing / monitoring hook — current cache size. */
+    public long cacheSize() {
+        return cache.estimatedSize();
+    }
+
+    /** Drops every cached entry. Used by tests; not wired to any endpoint. */
+    public void invalidateAll() {
+        cache.invalidateAll();
+    }
+
+    private float[] degradeOnce(String reason) {
+        if (!degradedLogged) {
+            log.warn("SemanticSimilarityService degraded: {}", reason);
+            degradedLogged = true;
+        } else {
+            log.debug("SemanticSimilarityService degraded: {}", reason);
+        }
+        return EMPTY;
+    }
+
+    private static String sha256(String s) {
         try {
-            MessageDigest sha = MessageDigest.getInstance("SHA-256");
-            sha.update(cfg.openai().model().getBytes(StandardCharsets.UTF_8));
-            sha.update((byte) ':');
-            sha.update(text.trim().getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(sha.digest());
-        } catch (NoSuchAlgorithmException e) {
-            // SHA-256 is required by the JDK contract; if it's missing,
-            // fall through to a degraded (but still correct) cache key.
-            return cfg.openai().model() + ':' + text.trim();
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(s.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 unavailable on JVM", impossible);
         }
     }
-
-    // ── DTOs (private records, only Jackson sees them) ─────────────────────
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record EmbeddingRequest(String model, String input) {}
-
-    public record EmbeddingResponse(List<EmbeddingDatum> data) {}
-
-    public record EmbeddingDatum(float[] embedding) {}
 }

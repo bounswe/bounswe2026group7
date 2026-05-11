@@ -12,16 +12,6 @@ import java.util.List;
 public interface MentorRepository extends JpaRepository<Mentor, Long> {
 
     /**
-     * IDs of all mentors with spare capacity, ordered for test determinism.
-     * Used by {@code MatchNotificationScheduler} as the eligibility list —
-     * only mentors who can accept new mentees are candidates for a "match
-     * found" notification. Returns just IDs to keep the per-tick memory
-     * bounded; the processor re-loads each mentor in its own transaction.
-     */
-    @Query("SELECT m.id FROM Mentor m WHERE m.currentMenteeCount < m.maxMenteeCapacity ORDER BY m.id")
-    List<Long> findIdsWithCapacity();
-
-    /**
      * Shared JPQL for {@link #searchByFilters} (Page, with count) and
      * {@link #findRankingCandidates} (List, without count). One source of
      * truth for the filter shape; the only difference between the two

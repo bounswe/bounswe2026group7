@@ -713,26 +713,32 @@
 }
 .req-name { font-weight: 600; font-size: 15px; }
 .req-time { font-size: 12px; color: var(--text-muted); }
-.req-msg { font-size: 14px; color: var(--text-mid); margin-bottom: 14px; line-height: 1.5; }
-.req-actions { display: flex; gap: 10px; }
+.req-msg { font-size: 13px; color: var(--text-mid); margin-bottom: 14px; line-height: 1.5; font-style: italic; }
+.req-actions { display: flex; gap: 8px; }
+.req-profile-info { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 12px; background: var(--bg); border-radius: 10px; }
+.req-profile-field { display: flex; flex-direction: column; gap: 3px; }
+.req-profile-label { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); }
+.req-profile-value { font-size: 13px; color: var(--text-mid); line-height: 1.5; }
+.req-profile-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.req-chip { font-size: 12px; padding: 2px 9px; border-radius: 20px; background: var(--green-pale); color: var(--green-dark); font-weight: 500; }
 .btn-accept {
-  flex: 1; padding: 10px;
+  flex: 1; padding: 9px 16px;
   background: var(--green-pale);
   color: var(--green-dark);
   border: 1px solid var(--border);
   border-radius: 10px;
-  font-size: 14px; font-weight: 600;
+  font-size: 13px; font-weight: 600;
   font-family: 'DM Sans', sans-serif;
   cursor: pointer; transition: background 0.2s;
 }
 .btn-accept:hover { background: #c5e0ca; }
 .btn-decline {
-  flex: 1; padding: 10px;
+  flex: 1; padding: 9px 16px;
   background: var(--red-soft);
   color: var(--red-text);
   border: 1px solid #f0d0d0;
   border-radius: 10px;
-  font-size: 14px; font-weight: 600;
+  font-size: 13px; font-weight: 600;
   font-family: 'DM Sans', sans-serif;
   cursor: pointer;
 }

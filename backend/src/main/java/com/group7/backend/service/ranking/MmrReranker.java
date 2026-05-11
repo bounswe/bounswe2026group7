@@ -9,10 +9,12 @@ import java.util.function.ToDoubleBiFunction;
 
 /**
  * Maximal Marginal Relevance reranker (Carbonell &amp; Goldstein, 1998).
+ * Diversifies a relevance-sorted list so the top-N isn't dominated by
+ * near-duplicates — closes spec 1.1.2.4 for mentor matching:
+ * "Occasionally surface mentors outside the mentee's primary goal for
+ * diversity."
  *
- * <p>Diversifies a relevance-sorted list so the top-N isn't dominated by
- * near-duplicates. Greedy algorithm:
- *
+ * <p>Greedy algorithm:
  * <pre>
  * selected ← {}
  * pool ← items sorted by relevance, descending
@@ -25,31 +27,27 @@ import java.util.function.ToDoubleBiFunction;
  * </pre>
  *
  * <p>{@code λ ∈ [0, 1]}: 1.0 = pure relevance (a no-op), 0.0 = pure
- * diversity (ignore relevance entirely). For our follow ranker, 0.65 —
- * production follow-rec systems lean slightly more diverse than the
- * 0.7 canonical default (FAccT 2024 + Elastic search-labs guidance).
+ * diversity (ignore the relevance score entirely). The plan calls for
+ * 0.7 — a strong relevance bias with a measurable diversity nudge.
  *
  * <p><b>diverse-pick semantics.</b> A reranked item is marked
  * {@code diversePick} when its position in the MMR output is
  * <em>better</em> (lower index) than its position in the original
  * relevance ordering. The UI surfaces a "Diverse pick" pill when this
- * is true, so the user understands why an off-goal candidate appeared.
+ * is true, so the user understands why an off-goal mentor appeared.
  *
- * <p>Pure, side-effect-free, stateless. Pass {@code lambda} per call
+ * <p>Pure, side-effect-free. Stateless. Pass {@code lambda} per call
  * rather than via constructor so the same instance is reusable across
- * different signal surfaces (mentor / follow / feed) and trivially
- * mockable.
+ * different configurations (and trivially mockable).
  */
 @Component
 public final class MmrReranker {
 
     /** A scored item along with the dense vector used as its diversity feature. */
-    public record Item<T>(T value, double relevance, float[] diversityFeatures) {
-    }
+    public record Item<T>(T value, double relevance, float[] embedding) {}
 
     /** Output entry — the same {@code T}, plus the {@code diversePick} flag. */
-    public record Reranked<T>(T value, double relevance, boolean diversePick) {
-    }
+    public record Reranked<T>(T value, double relevance, boolean diversePick) {}
 
     /**
      * Rerank {@code items} with MMR and return the top {@code targetSize}
@@ -67,13 +65,17 @@ public final class MmrReranker {
         if (items == null || items.isEmpty() || targetSize <= 0) {
             return List.of();
         }
-        double l = clamp01(lambda);
+        double l = clamp(lambda);
 
         // 1. Sort once by relevance (descending) — this is also the
         //    "original ordering" we compare against for diverse-pick.
         List<Item<T>> sortedByRelevance = new ArrayList<>(items);
         sortedByRelevance.sort(Comparator.comparingDouble(Item<T>::relevance).reversed());
 
+        // Identity-based rank map: relevanceRank.get(item) = its index in
+        // the raw-score order. We use System.identityHashCode-equivalent
+        // semantics by referencing the same object across both lists, so
+        // an index-array lookup is sufficient.
         int n = sortedByRelevance.size();
         int outSize = Math.min(targetSize, n);
 
@@ -92,7 +94,7 @@ public final class MmrReranker {
                 double maxSimToSelected = 0.0;
                 for (int s = 0; s < slot; s++) {
                     Item<T> sel = sortedByRelevance.get(selectionOrder[s]);
-                    double sim = similarity.applyAsDouble(cand.diversityFeatures(), sel.diversityFeatures());
+                    double sim = similarity.applyAsDouble(cand.embedding(), sel.embedding());
                     if (sim > maxSimToSelected) {
                         maxSimToSelected = sim;
                     }
@@ -113,14 +115,14 @@ public final class MmrReranker {
         List<Reranked<T>> output = new ArrayList<>(outSize);
         for (int outRank = 0; outRank < outSize; outRank++) {
             int relevanceRank = selectionOrder[outRank];
-            Item<T> chosen = sortedByRelevance.get(relevanceRank);
+            Item<T> picked2 = sortedByRelevance.get(relevanceRank);
             boolean diverse = outRank < relevanceRank;
-            output.add(new Reranked<>(chosen.value(), chosen.relevance(), diverse));
+            output.add(new Reranked<>(picked2.value(), picked2.relevance(), diverse));
         }
         return output;
     }
 
-    private static double clamp01(double x) {
+    private static double clamp(double x) {
         if (x < 0.0) return 0.0;
         if (x > 1.0) return 1.0;
         return x;

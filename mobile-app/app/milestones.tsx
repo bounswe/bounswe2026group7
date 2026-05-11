@@ -138,7 +138,7 @@ export default function MilestonesScreen() {
       )
     );
     try {
-      await apiClient.patch(`/milestone-action-items/${item.id}`, { isCompleted: newVal });
+      await apiClient.patch(`/milestone-action-items/${item.id}`, { completed: newVal });
     } catch {
       setMilestones((prev) =>
         prev.map((m) =>

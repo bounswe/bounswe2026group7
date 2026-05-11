@@ -69,7 +69,7 @@ public class SemanticAffinitySignal implements FollowScoringSignal {
         if (candVec.length == 0) {
             return SignalContribution.of(0.0, "semantic-unavailable");
         }
-        double sim = SemanticSimilarityService.cosineSimilarity(viewerVec, candVec);
+        double sim = semantic.cosineSimilarity(viewerVec, candVec);
         if (sim <= 0.0) {
             return SignalContribution.NONE;
         }

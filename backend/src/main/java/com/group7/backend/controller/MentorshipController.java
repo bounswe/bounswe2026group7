@@ -281,4 +281,26 @@ public class MentorshipController {
         Long userId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(mentorshipService.getAuditTrail(userId, id));
     }
+
+    @DeleteMapping("/{id}/data")
+    @Operation(
+            summary = "Delete mentorship timeline/progress data for a past mentorship (#478)",
+            description = "Deletes mentorship-scoped timeline/progress artifacts (tasks, milestones, meetings and "
+                    + "their children). Only participants may call this endpoint, and only after the mentorship is "
+                    + "no longer ACTIVE."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Mentorship data deleted"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentorship not found or caller is not a participant",
+                    content = @Content),
+            @ApiResponse(responseCode = "409", description = "Mentorship is still ACTIVE", content = @Content)
+    })
+    public ResponseEntity<Void> deleteMentorshipData(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        mentorshipService.deleteMentorshipData(userId, id);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -57,6 +57,10 @@ class FeedReadIntegrationTest {
 
     @BeforeEach
     void cleanDb() {
+        jdbcTemplate.update("DELETE FROM feed_post_comments");
+        jdbcTemplate.update("DELETE FROM feed_post_shares");
+        jdbcTemplate.update("DELETE FROM feed_post_bookmarks");
+        jdbcTemplate.update("DELETE FROM feed_post_likes");
         jdbcTemplate.update("DELETE FROM feed_post_hashtags");
         jdbcTemplate.update("DELETE FROM feed_posts");
         jdbcTemplate.update("DELETE FROM follows");
@@ -110,6 +114,73 @@ class FeedReadIntegrationTest {
 
         mockMvc.perform(get("/api/feed/following")
                         .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    @Test
+    void authorPostsFeed_returnsOnlyThatAuthorsPosts_chronologically() throws Exception {
+        String viewerToken = registerAndLogin("author_viewer@test.com", true);
+        String tokenA = registerAndLogin("author_a@test.com", true);
+        String tokenB = registerAndLogin("author_b@test.com", true);
+        Long authorAId = userRepository.findByEmail("author_a@test.com").orElseThrow().getId();
+
+        long a1 = createPost(tokenA, "A post 1", List.of());
+        Thread.sleep(20);
+        long b1 = createPost(tokenB, "B post 1", List.of());
+        Thread.sleep(20);
+        long a2 = createPost(tokenA, "A post 2", List.of());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/users/" + authorAId + "/posts")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andReturn();
+
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        List<Long> ids = StreamSupport.stream(body.get("content").spliterator(), false)
+                .map(n -> n.get("id").asLong())
+                .toList();
+        assertThat(ids).containsExactly(a2, a1);
+        assertThat(ids).doesNotContain(b1);
+    }
+
+    @Test
+    void authorPostsFeed_excludesSoftDeletedPosts() throws Exception {
+        String viewerToken = registerAndLogin("author_del_viewer@test.com", true);
+        String authorToken = registerAndLogin("author_del@test.com", true);
+        Long authorId = userRepository.findByEmail("author_del@test.com").orElseThrow().getId();
+
+        long live = createPost(authorToken, "live", List.of());
+        long deleted = createPost(authorToken, "deleted", List.of());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/feed/posts/" + deleted)
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isNoContent());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/users/" + authorId + "/posts")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andReturn();
+
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        List<Long> ids = StreamSupport.stream(body.get("content").spliterator(), false)
+                .map(n -> n.get("id").asLong())
+                .toList();
+        assertThat(ids).containsExactly(live);
+    }
+
+    @Test
+    void authorPostsFeed_whenAuthorHasNoPosts_returnsEmpty() throws Exception {
+        String viewerToken = registerAndLogin("author_empty_viewer@test.com", true);
+        registerAndLogin("author_empty@test.com", true);
+        Long authorId = userRepository.findByEmail("author_empty@test.com").orElseThrow().getId();
+
+        mockMvc.perform(get("/api/feed/users/" + authorId + "/posts")
+                        .header("Authorization", "Bearer " + viewerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(0))
                 .andExpect(jsonPath("$.content.length()").value(0));
@@ -349,6 +420,7 @@ class FeedReadIntegrationTest {
         mockMvc.perform(get("/api/feed/for-you")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/following")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/search")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/feed/users/1/posts")).andExpect(status().isForbidden());
     }
 
     // ── Page-size clamp ─────────────────────────────────────────────────────
@@ -415,5 +487,120 @@ class FeedReadIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
         return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asLong();
+    }
+
+    private void likePost(String token, long postId) throws Exception {
+        mockMvc.perform(post("/api/feed/posts/" + postId + "/like")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    private long addComment(String token, long postId, String body) throws Exception {
+        MvcResult res = mockMvc.perform(post("/api/feed/posts/" + postId + "/comments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("body", body))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asLong();
+    }
+
+    private void softDeleteComment(String token, long commentId) throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+    }
+
+    private JsonNode postFromPage(JsonNode pageBody, long postId) {
+        return StreamSupport.stream(pageBody.get("content").spliterator(), false)
+                .filter(n -> n.get("id").asLong() == postId)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Post " + postId + " not found in page"));
+    }
+
+    // ── Interaction counts surfaced in list responses ───────────────────────
+
+    @Test
+    void forYouFeed_surfacesLikeAndVisibleCommentCounts() throws Exception {
+        String viewerToken = registerAndLogin("counts_viewer@test.com", true);
+        String authorToken = registerAndLogin("counts_author@test.com", true);
+        String likerToken = registerAndLogin("counts_liker@test.com", true);
+
+        long pidA = createPost(authorToken, "post A with engagement", List.of());
+        long pidB = createPost(authorToken, "post B no engagement", List.of());
+
+        // Post A: 3 likes (3 distinct users), 2 visible comments + 1 soft-deleted comment
+        likePost(viewerToken, pidA);
+        likePost(authorToken, pidA);
+        likePost(likerToken, pidA);
+        addComment(viewerToken, pidA, "kept 1");
+        addComment(likerToken, pidA, "kept 2");
+        long deletedComment = addComment(likerToken, pidA, "to be deleted");
+        softDeleteComment(likerToken, deletedComment);
+
+        // Post B: 1 like, 0 comments
+        likePost(viewerToken, pidB);
+
+        MvcResult result = mockMvc.perform(get("/api/feed/for-you").param("size", "20")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+
+        JsonNode a = postFromPage(body, pidA);
+        assertThat(a.get("likeCount").asLong()).isEqualTo(3L);
+        assertThat(a.get("commentCount").asLong()).isEqualTo(2L);
+
+        JsonNode b = postFromPage(body, pidB);
+        assertThat(b.get("likeCount").asLong()).isEqualTo(1L);
+        assertThat(b.get("commentCount").asLong()).isEqualTo(0L);
+    }
+
+    @Test
+    void followingFeed_surfacesLikeAndVisibleCommentCounts() throws Exception {
+        String viewerToken = registerAndLogin("counts_follow_viewer@test.com", true);
+        String authorToken = registerAndLogin("counts_follow_author@test.com", true);
+
+        long authorId = userRepository.findByEmail("counts_follow_author@test.com").orElseThrow().getId();
+        mockMvc.perform(post("/api/users/" + authorId + "/follow")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().is2xxSuccessful());
+
+        long pid = createPost(authorToken, "followed-feed body", List.of());
+        likePost(viewerToken, pid);
+        addComment(viewerToken, pid, "follower comment");
+        addComment(authorToken, pid, "author own comment");
+
+        MvcResult result = mockMvc.perform(get("/api/feed/following").param("size", "20")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+
+        JsonNode post = postFromPage(body, pid);
+        assertThat(post.get("likeCount").asLong()).isEqualTo(1L);
+        assertThat(post.get("commentCount").asLong()).isEqualTo(2L);
+    }
+
+    @Test
+    void searchFeed_surfacesLikeAndVisibleCommentCounts() throws Exception {
+        String viewerToken = registerAndLogin("counts_search_viewer@test.com", true);
+        String authorToken = registerAndLogin("counts_search_author@test.com", true);
+
+        long pid = createPost(authorToken, "uniquekeyword in body", List.of());
+        likePost(viewerToken, pid);
+        likePost(authorToken, pid);
+        addComment(viewerToken, pid, "search comment");
+
+        MvcResult result = mockMvc.perform(get("/api/feed/search").param("q", "uniquekeyword")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+
+        JsonNode post = postFromPage(body, pid);
+        assertThat(post.get("likeCount").asLong()).isEqualTo(2L);
+        assertThat(post.get("commentCount").asLong()).isEqualTo(1L);
     }
 }

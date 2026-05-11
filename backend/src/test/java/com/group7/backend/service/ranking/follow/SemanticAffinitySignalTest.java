@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -75,6 +76,7 @@ class SemanticAffinitySignalTest {
     void zeroSimilarity_returnsNone() {
         // viewer = (1,0), candidate = (0,1) → cosine = 0 → NONE
         when(semantic.embed(anyString())).thenReturn(new float[]{0f, 1f});
+        when(semantic.cosineSimilarity(any(float[].class), any(float[].class))).thenReturn(0.0);
         SignalContribution out = signal().compute(mentorWithBio(7L, "ml expert"),
                 ctx(new float[]{1f, 0f}));
         assertThat(out).isSameAs(SignalContribution.NONE);
@@ -82,8 +84,14 @@ class SemanticAffinitySignalTest {
 
     @Test
     void positiveSimilarity_emitsScoreFactor_withRoundedValue() {
-        // viewer = (3,4), candidate = (4,3) → cosine ≈ 0.96
+        // viewer = (3,4), candidate = (4,3) → cosine ≈ 0.96. Stub
+        // cosineSimilarity explicitly because Mockito @Mock returns 0.0
+        // by default for double-returning methods; the static cosine call
+        // in our previous codepath ran the real algorithm regardless of
+        // mocking, but the instance call we adopted from dev's API
+        // requires us to wire the expected return.
         when(semantic.embed(anyString())).thenReturn(new float[]{4f, 3f});
+        when(semantic.cosineSimilarity(any(float[].class), any(float[].class))).thenReturn(0.96);
         SignalContribution out = signal().compute(mentorWithBio(7L, "ml expert"),
                 ctx(new float[]{3f, 4f}));
         assertThat(out.normalizedScore()).isGreaterThan(0.95);
@@ -94,6 +102,7 @@ class SemanticAffinitySignalTest {
     void perfectMatch_emitsFullScore() {
         float[] v = {0.6f, 0.8f};
         when(semantic.embed(anyString())).thenReturn(v);
+        when(semantic.cosineSimilarity(any(float[].class), any(float[].class))).thenReturn(1.0);
         SignalContribution out = signal().compute(mentorWithBio(7L, "ml"), ctx(v));
         assertThat(out.normalizedScore()).isGreaterThan(0.99);
         assertThat(out.factors().get(0)).startsWith("semantic-affinity:1.00");

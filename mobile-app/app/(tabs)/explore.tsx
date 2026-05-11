@@ -88,6 +88,7 @@ function MenteeExploreContent() {
   const [currentPage, setCurrentPage] = useState(0);
   const [isMatchMode, setIsMatchMode] = useState(false);
   const [matchLoading, setMatchLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const scrollRef = React.useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -168,8 +169,18 @@ function MenteeExploreContent() {
     }
   };
 
-  const totalPages = Math.ceil(mentors.length / PAGE_SIZE);
-  const pagedMentors = mentors.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const filteredMentors = searchQuery.trim()
+    ? mentors.filter((m) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          m.name.toLowerCase().includes(q) ||
+          m.role.toLowerCase().includes(q) ||
+          m.tags.some((t) => t.toLowerCase().includes(q))
+        );
+      })
+    : mentors;
+  const totalPages = Math.ceil(filteredMentors.length / PAGE_SIZE);
+  const pagedMentors = filteredMentors.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const goToPage = (page: number) => {
     setCurrentPage(page);
@@ -201,7 +212,15 @@ function MenteeExploreContent() {
         <Text style={styles.title}>Find a{'\n'}<Text style={styles.titleItalic}>Mentor.</Text></Text>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput placeholder="Search topics or mentors..." placeholderTextColor="rgba(255,255,255,0.45)" style={styles.searchInput} />
+          <TextInput
+            placeholder="Search topics or mentors..."
+            placeholderTextColor="rgba(255,255,255,0.45)"
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={(q) => { setSearchQuery(q); setCurrentPage(0); }}
+            returnKeyType="search"
+            autoCapitalize="none"
+          />
         </View>
         <TouchableOpacity style={[styles.matchButton, isMatchMode && styles.matchButtonActive]} onPress={toggleMatchMode} disabled={matchLoading}>
           {matchLoading
@@ -323,12 +342,16 @@ const formatTime = (isoString: string) => {
 };
 
 function MentorRequestsContent() {
-  const [view, setView] = useState<'requests' | 'discover'>('requests');
+  const [view, setView] = useState<'requests' | 'discover' | 'settings'>('requests');
   const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [discoverMentors, setDiscoverMentors] = useState<MentorCard[]>([]);
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverLoaded, setDiscoverLoaded] = useState(false);
+  const [capacityValue, setCapacityValue] = useState('');
+  const [capacitySaving, setCapacitySaving] = useState(false);
+  const [capacityLoaded, setCapacityLoaded] = useState(false);
 
   useEffect(() => {
     apiClient.get('/mentorship-requests/received')
@@ -343,6 +366,13 @@ function MentorRequestsContent() {
   useEffect(() => {
     if (view === 'discover' && !discoverLoaded) {
       loadDiscover();
+    }
+    if (view === 'settings' && !capacityLoaded) {
+      apiClient.get('/users/me').then((res) => {
+        const cap = res.data?.maxMenteeCapacity;
+        if (cap != null) setCapacityValue(String(cap));
+        setCapacityLoaded(true);
+      }).catch(() => setCapacityLoaded(true));
     }
   }, [view]);
 
@@ -373,6 +403,70 @@ function MentorRequestsContent() {
       // ignore
     } finally {
       setDiscoverLoading(false);
+    }
+  };
+
+  const saveCapacity = async () => {
+    const num = parseInt(capacityValue, 10);
+    if (isNaN(num) || num < 1) {
+      Alert.alert('Invalid', 'Please enter a number ≥ 1.');
+      return;
+    }
+    setCapacitySaving(true);
+    try {
+      await apiClient.patch('/users/me/mentor', { maxMenteeCapacity: num });
+      Alert.alert('Saved', `Max mentee capacity set to ${num}.`);
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Could not save capacity.');
+    } finally {
+      setCapacitySaving(false);
+    }
+  };
+
+  const handleRequest = async (requestId: string, action: 'accept' | 'reject') => {
+    if (actionLoading[requestId]) return;
+    if (action === 'accept') {
+      Alert.prompt(
+        'Accept Request',
+        'Enter mentorship duration (1, 3, or 6 months):',
+        async (input) => {
+          const duration = parseInt(input ?? '3', 10);
+          if (![1, 3, 6].includes(duration)) {
+            Alert.alert('Invalid', 'Please enter 1, 3, or 6.');
+            return;
+          }
+          setActionLoading((prev) => ({ ...prev, [requestId]: true }));
+          try {
+            await apiClient.put(`/mentorship-requests/${requestId}/accept`, { duration });
+            setIncomingRequests((prev) => prev.filter((r) => String(r.id) !== requestId));
+          } catch (err: any) {
+            Alert.alert('Error', err?.response?.data?.message || 'Could not accept request.');
+          } finally {
+            setActionLoading((prev) => ({ ...prev, [requestId]: false }));
+          }
+        },
+        'plain-text',
+        '3'
+      );
+    } else {
+      Alert.alert('Reject Request', 'Are you sure?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            setActionLoading((prev) => ({ ...prev, [requestId]: true }));
+            try {
+              await apiClient.put(`/mentorship-requests/${requestId}/reject`);
+              setIncomingRequests((prev) => prev.filter((r) => String(r.id) !== requestId));
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.message || 'Could not reject request.');
+            } finally {
+              setActionLoading((prev) => ({ ...prev, [requestId]: false }));
+            }
+          },
+        },
+      ]);
     }
   };
 
@@ -434,6 +528,12 @@ function MentorRequestsContent() {
           >
             <Text style={[styles.matchButtonText, view === 'discover' && styles.matchButtonTextActive]}>🔍 Discover</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.matchButton, { flex: 1 }, view === 'settings' && styles.matchButtonActive]}
+            onPress={() => setView('settings')}
+          >
+            <Text style={[styles.matchButtonText, view === 'settings' && styles.matchButtonTextActive]}>⚙️ Settings</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -479,11 +579,55 @@ function MentorRequestsContent() {
                   >
                     <Text style={styles.viewButtonText}>View Profile</Text>
                   </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: '#456B50', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+                      onPress={() => handleRequest(String(item.id), 'accept')}
+                      disabled={!!actionLoading[String(item.id)]}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                        {actionLoading[String(item.id)] ? '...' : 'Accept'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: '#F5D9D6', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+                      onPress={() => handleRequest(String(item.id), 'reject')}
+                      disabled={!!actionLoading[String(item.id)]}
+                    >
+                      <Text style={{ color: '#9B3A35', fontWeight: '700', fontSize: 14 }}>Reject</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               );
             })}
           </ScrollView>
         )
+      ) : view === 'settings' ? (
+        <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.card}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#1D1D38', marginBottom: 8 }}>Max Mentee Capacity</Text>
+            <Text style={{ fontSize: 14, color: '#7E7368', marginBottom: 14, lineHeight: 20 }}>
+              Set the maximum number of mentees you can mentor at the same time.
+            </Text>
+            <TextInput
+              style={{ borderWidth: 1.5, borderColor: '#C8D9CA', borderRadius: 14, padding: 14, fontSize: 16, color: '#2B2B2B', backgroundColor: '#FCFBF8', marginBottom: 14 }}
+              value={capacityValue}
+              onChangeText={setCapacityValue}
+              placeholder="e.g. 5"
+              placeholderTextColor="#B0A89E"
+              keyboardType="number-pad"
+            />
+            <TouchableOpacity
+              style={{ backgroundColor: '#456B50', borderRadius: 14, paddingVertical: 14, alignItems: 'center', opacity: capacitySaving ? 0.6 : 1 }}
+              onPress={saveCapacity}
+              disabled={capacitySaving}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
+                {capacitySaving ? 'Saving...' : 'Save Capacity'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       ) : (
         discoverLoading ? (
           <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />

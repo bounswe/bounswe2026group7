@@ -208,8 +208,6 @@ public class MentorshipService {
             mentor.setCurrentMenteeCount(mentor.getCurrentMenteeCount() - 1);
         }
 
-        mentorshipCleanupService.cleanupChildren(mentorshipId);
-
         Mentorship saved = mentorshipRepository.save(mentorship);
 
         mentorshipAuditLogRepository.save(MentorshipAuditLog.of(
@@ -268,8 +266,6 @@ public class MentorshipService {
         if (mentor.getCurrentMenteeCount() > 0) {
             mentor.setCurrentMenteeCount(mentor.getCurrentMenteeCount() - 1);
         }
-
-        mentorshipCleanupService.cleanupChildren(mentorshipId);
 
         Mentorship saved = mentorshipRepository.save(mentorship);
 
@@ -333,6 +329,21 @@ public class MentorshipService {
         log.info("Mentorship extended: mentorshipId={}, mentorId={}, additionalMonths={}, newEndDate={}",
                 mentorshipId, mentorUserId, additional, newEndDate);
         return MentorshipResponse.from(saved);
+    }
+
+    /**
+     * Explicitly deletes mentorship timeline/progress artifacts for a past
+     * mentorship (#478). Only participants may invoke this method, and only
+     * when the mentorship is no longer ACTIVE.
+     */
+    @Transactional
+    public void deleteMentorshipData(Long actorUserId, Long mentorshipId) {
+        Mentorship mentorship = findForParticipant(actorUserId, mentorshipId);
+        if (mentorship.getStatus() == MentorshipStatus.ACTIVE) {
+            throw new MentorshipRequestException(
+                    "Mentorship data can only be deleted after the mentorship is no longer active");
+        }
+        mentorshipCleanupService.cleanupChildren(mentorshipId);
     }
 
     @Transactional(readOnly = true)

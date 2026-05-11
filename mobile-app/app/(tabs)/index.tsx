@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { router } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -37,7 +37,7 @@ type ConnectionCard = {
   connectedUserId: number;
   connectedUserFirstName: string;
   type: 'mentor' | 'mentee';
-  status: 'ACTIVE' | 'COMPLETED' | 'TERMINATED';
+  status: 'ACTIVE' | 'COMPLETED' | 'TERMINATED' | 'CANCELLED';
   progress: number;
   startDate: string;
   endDate: string;
@@ -49,6 +49,7 @@ type MentorshipTab = 'active' | 'past';
 const formatMentorshipStatus = (status: ConnectionCard['status']) => {
   if (status === 'ACTIVE') return 'Active';
   if (status === 'COMPLETED') return 'Completed';
+  if (status === 'CANCELLED') return 'Cancelled';
   return 'Terminated';
 };
 
@@ -75,7 +76,7 @@ export default function HomeScreen() {
       const mentorships: any[] = res.data;
 
       const cards: ConnectionCard[] = mentorships
-        .filter((m) => ['ACTIVE', 'COMPLETED', 'TERMINATED'].includes(m.status))
+        .filter((m) => ['ACTIVE', 'COMPLETED', 'TERMINATED', 'CANCELLED'].includes(m.status))
         .map((m) => {
           const isCurrentUserMentor = Number(m.mentorId) === session.userId;
           const connectedUserId = isCurrentUserMentor ? m.menteeId : m.mentorId;
@@ -103,18 +104,16 @@ export default function HomeScreen() {
     }
   }, [session, sessionLoading]);
 
-  useEffect(() => {
-    if (sessionLoading) return;
-    if (!session) {
-      console.log('[dashboard] skipping notifications fetch because session is missing');
-      return;
-    }
-
-    fetchMentorships();
-    apiClient.get('/notifications?unreadOnly=true')
-      .then((res) => setUnreadCount(res.data.length))
-      .catch(() => {});
-  }, [fetchMentorships, session, sessionLoading]);
+  useFocusEffect(
+    useCallback(() => {
+      if (sessionLoading) return;
+      if (!session) return;
+      fetchMentorships();
+      apiClient.get('/notifications?unreadOnly=true')
+        .then((res) => setUnreadCount(res.data.length))
+        .catch(() => {});
+    }, [fetchMentorships, session, sessionLoading])
+  );
 
   const openNotifications = async () => {
     router.push('/notifications' as any);
@@ -179,8 +178,7 @@ export default function HomeScreen() {
     });
   };
 
-  const sectionTitle = isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS';
-  const visibleConnections = isMentor
+  const roleScopedConnections = isMentor
     ? connections.filter((c) => c.type === 'mentee')
     : connections.filter((c) => c.type === 'mentor');
   const activeConnections = roleScopedConnections.filter((c) => c.status === 'ACTIVE');
@@ -291,6 +289,26 @@ export default function HomeScreen() {
               Past ({pastConnections.length})
             </Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+          {(['active', 'past'] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setSelectedTab(tab)}
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                borderRadius: 14,
+                alignItems: 'center',
+                backgroundColor: selectedTab === tab ? '#456B50' : '#EEE9E3',
+              }}
+            >
+              <Text style={{ fontWeight: '700', fontSize: 14, color: selectedTab === tab ? '#fff' : '#7E7368' }}>
+                {tab === 'active' ? `Active (${activeConnections.length})` : `Past (${pastConnections.length})`}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {loading ? (

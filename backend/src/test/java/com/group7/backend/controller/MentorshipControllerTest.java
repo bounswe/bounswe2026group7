@@ -36,6 +36,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -528,5 +529,26 @@ class MentorshipControllerTest {
                         .param("from", "banana")
                         .header("Authorization", "Bearer mentor-token"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void deleteMentorshipDataReturns204ForParticipant() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        doNothing().when(mentorshipService).deleteMentorshipData(1L, 100L);
+
+        mockMvc.perform(delete("/api/mentorships/100/data")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void deleteMentorshipDataReturns409WhenActive() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        doThrow(new MentorshipRequestException("Mentorship data can only be deleted after the mentorship is no longer active"))
+                .when(mentorshipService).deleteMentorshipData(1L, 100L);
+
+        mockMvc.perform(delete("/api/mentorships/100/data")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isConflict());
     }
 }

@@ -3,43 +3,35 @@ package com.group7.backend.config;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.PositiveOrZero;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Typed configuration for the OpenAI embedding client that backs the
- * {@code semantic-affinity} follow-recommendation signal.
+ * Typed configuration for {@link com.group7.backend.service.embedding.SemanticSimilarityService}.
  *
- * <p>Bound to {@code app.embedding.*}. The signal is disabled by default
- * via {@code app.recommendations.follow.signals.semantic-affinity-enabled}
- * — flip that flag on only once {@code OPENAI_API_KEY} is present in the
- * deploy env. With the flag off, this whole config block is unused.
+ * <p>Auto-discovered via {@code @ConfigurationPropertiesScan} on
+ * {@code BackendApplication}; binds {@code app.embedding.*} from
+ * application.properties. Lives in its own record (separate from the
+ * upcoming {@code MentorRecommendationProperties}) so the embedding
+ * service can be reused by follow-recommendation and feed surfaces
+ * without dragging mentor-specific weights along.
  *
- * <p>{@code apiKey} is allowed to be blank because Spring binds the
- * {@code ${OPENAI_API_KEY:}} placeholder to {@code ""} when the env var
- * is unset; the service short-circuits on blank-key, returning a
- * fail-open empty vector so the signal degrades gracefully.
+ * @param model    OpenAI embedding model name; also baked into the cache
+ *                 key so an upgrade (e.g. 3-small → 3-large) partitions
+ *                 cleanly without manual eviction
+ * @param cache    Caffeine cache sizing
+ * @param failOpen when true, embedding failures degrade gracefully
+ *                 (signal scored 0, factor {@code semantic-unavailable})
+ *                 instead of bubbling up. Strongly recommended to leave
+ *                 on — a partial recommendation is better than a 500.
  */
 @ConfigurationProperties(prefix = "app.embedding")
 @Validated
 public record SemanticSimilarityProperties(
-        @Valid Openai openai,
+        @NotBlank String model,
         @Valid Cache cache,
-        @Valid Request request) {
+        boolean failOpen
+) {
 
-    public record Openai(
-            String apiKey,
-            @NotBlank String baseUrl,
-            @NotBlank String model) {
-    }
-
-    public record Cache(
-            @Positive int maxSize,
-            @Positive long ttlHours) {
-    }
-
-    public record Request(
-            @PositiveOrZero long timeoutMs) {
-    }
+    public record Cache(@Positive int maxSize, @Positive int ttlHours) {}
 }

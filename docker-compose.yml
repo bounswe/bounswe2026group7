@@ -62,6 +62,14 @@ services:
       APP_ADMIN_BOOTSTRAP_PASSWORD: ${APP_ADMIN_BOOTSTRAP_PASSWORD:-}
       APP_ADMIN_BOOTSTRAP_FIRST_NAME: ${APP_ADMIN_BOOTSTRAP_FIRST_NAME:-System}
       APP_ADMIN_BOOTSTRAP_LAST_NAME: ${APP_ADMIN_BOOTSTRAP_LAST_NAME:-Admin}
+      # Advanced mentor ranker (#436). Defaults keep the LLM/embedding paths
+      # off; flip the flags in .env to enable.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      MENTOR_ADVANCED_RANKER: ${MENTOR_ADVANCED_RANKER:-false}
+      MENTOR_EXPLANATION_ENABLED: ${MENTOR_EXPLANATION_ENABLED:-false}
+      MENTOR_EXPLANATION_TIMEOUT_MS: ${MENTOR_EXPLANATION_TIMEOUT_MS:-3000}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
