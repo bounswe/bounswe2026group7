@@ -153,4 +153,58 @@ describe('ExplorePage Component', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument()
     expect(screen.queryByText('Bob')).not.toBeInTheDocument()
   })
+
+  it('AI matches render factor chips and a diverse-pick pill (spec 1.1.2.5)', async () => {
+    api.getMatchingMentors.mockResolvedValue([
+      {
+        id: 1, firstName: 'Bob', expertise: 'React',
+        interests: ['Frontend'], matchScore: 42,
+        factors: [
+          'interest-match:Frontend',
+          'skill-match:Java',
+          'major-exact',
+          'availability:6h',
+          'nearby:23km',
+          'diverse-pick',
+        ],
+      },
+    ])
+    renderComponent()
+    await waitFor(() => expect(screen.getByText('Bob')).toBeInTheDocument())
+
+    const aiBtn = screen.getByRole('button', { name: /find my best matches/i })
+    fireEvent.click(aiBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/your top 1 match/i)).toBeInTheDocument()
+    })
+
+    // diverse-pick rendered as a labelled pill (not as a chip)
+    expect(screen.getByText('Diverse pick')).toBeInTheDocument()
+
+    // human-readable factor chips
+    expect(screen.getByText('Same major')).toBeInTheDocument()
+    expect(screen.getByText('6h overlap')).toBeInTheDocument()
+    expect(screen.getByText('23km away')).toBeInTheDocument()
+
+    // 'diverse-pick' itself never renders as a raw code
+    expect(screen.queryByText('diverse-pick')).not.toBeInTheDocument()
+  })
+
+  it('AI matches with no factors render no factor strip and no diverse pill', async () => {
+    api.getMatchingMentors.mockResolvedValue([
+      { id: 2, firstName: 'Alice', expertise: 'Python', interests: ['AI/ML'], matchScore: 18, factors: [] },
+    ])
+    renderComponent()
+    await waitFor(() => expect(screen.getByText('Bob')).toBeInTheDocument())
+
+    const aiBtn = screen.getByRole('button', { name: /find my best matches/i })
+    fireEvent.click(aiBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/your top 1 match/i)).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Diverse pick')).not.toBeInTheDocument()
+    expect(document.querySelector('.match-factors')).toBeNull()
+  })
 })

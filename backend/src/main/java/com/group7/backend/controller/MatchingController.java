@@ -48,12 +48,15 @@ public class MatchingController {
     })
     public ResponseEntity<Page<MentorMatchResponse>> getTopMentors(
             @Parameter(description = "Optional keyword to filter mentors") @RequestParam(required = false) String keyword,
+            @Parameter(description = "Optional ceiling on great-circle distance (km) between mentor and mentee. "
+                    + "Mentors without coordinates are never excluded by this filter (spec 1.1.2.3).")
+            @RequestParam(required = false) Double maxDistanceKm,
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Long menteeId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        return ResponseEntity.ok(matchingService.getTopMentors(menteeId, keyword, pageable));
+        return ResponseEntity.ok(matchingService.getTopMentors(menteeId, keyword, maxDistanceKm, pageable));
     }
 
     @GetMapping("/mentors/all")

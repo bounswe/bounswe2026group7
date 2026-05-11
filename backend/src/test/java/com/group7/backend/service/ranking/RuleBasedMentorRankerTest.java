@@ -53,7 +53,7 @@ class RuleBasedMentorRankerTest {
     @Test
     void scoreOverlappingInterests() {
         // Mentee has AI and Databases; mentor has AI and Systems → 1 overlap = +3.
-        int score = ranker.score(mentor, mentee, List.of(), List.of());
+        int score = ranker.score(mentor, mentee, List.of(), List.of()).score();
         assertThat(score).isGreaterThanOrEqualTo(3);
     }
 
@@ -64,7 +64,7 @@ class RuleBasedMentorRankerTest {
         Mentee me = new Mentee();
         me.setSkills(List.of("Java"));
 
-        assertThat(ranker.score(m, me, List.of(), List.of())).isEqualTo(3);
+        assertThat(ranker.score(m, me, List.of(), List.of()).score()).isEqualTo(3);
     }
 
     @Test
@@ -74,7 +74,7 @@ class RuleBasedMentorRankerTest {
         Mentee me = new Mentee();
         me.setMajor("Computer Science");
 
-        assertThat(ranker.score(m, me, List.of(), List.of())).isEqualTo(5);
+        assertThat(ranker.score(m, me, List.of(), List.of()).score()).isEqualTo(5);
     }
 
     @Test
@@ -84,7 +84,7 @@ class RuleBasedMentorRankerTest {
         Mentee me = new Mentee();
         me.setMajor("Computer Science");
 
-        assertThat(ranker.score(m, me, List.of(), List.of())).isEqualTo(3);
+        assertThat(ranker.score(m, me, List.of(), List.of()).score()).isEqualTo(3);
     }
 
     @Test
@@ -95,7 +95,7 @@ class RuleBasedMentorRankerTest {
         Mentee me = new Mentee();
         me.setGoals("machine learning");
 
-        assertThat(ranker.score(m, me, List.of(), List.of())).isEqualTo(4);
+        assertThat(ranker.score(m, me, List.of(), List.of()).score()).isEqualTo(4);
     }
 
     @Test
@@ -103,7 +103,7 @@ class RuleBasedMentorRankerTest {
         Mentor m = new Mentor();
         Mentee me = new Mentee();
 
-        assertThat(ranker.score(m, me, List.of(), List.of())).isEqualTo(0);
+        assertThat(ranker.score(m, me, List.of(), List.of()).score()).isEqualTo(0);
     }
 
     // ── Availability scoring (formerly calculateAvailabilityScore) ─────────
@@ -118,13 +118,13 @@ class RuleBasedMentorRankerTest {
 
         // Use blank entities so profile score is 0; the assertion isolates
         // the availability portion at exactly the cap.
-        int score = ranker.score(new Mentor(), new Mentee(), mentorSlots, menteeSlots);
+        int score = ranker.score(new Mentor(), new Mentee(), mentorSlots, menteeSlots).score();
         assertThat(score).isEqualTo(12);
     }
 
     @Test
     void availabilityScoreReturnsZeroWithoutSlots() {
-        int score = ranker.score(new Mentor(), new Mentee(), List.of(), List.of());
+        int score = ranker.score(new Mentor(), new Mentee(), List.of(), List.of()).score();
         assertThat(score).isZero();
     }
 
@@ -136,7 +136,7 @@ class RuleBasedMentorRankerTest {
         List<MenteeAvailabilitySlot> menteeSlots = List.of(
                 menteeSlot(DayOfWeek.TUESDAY, "09:00", "10:00"));
 
-        int score = ranker.score(new Mentor(), new Mentee(), mentorSlots, menteeSlots);
+        int score = ranker.score(new Mentor(), new Mentee(), mentorSlots, menteeSlots).score();
         assertThat(score).isZero();
     }
 
@@ -148,7 +148,7 @@ class RuleBasedMentorRankerTest {
         List<MenteeAvailabilitySlot> menteeSlots = List.of(
                 menteeSlot(DayOfWeek.MONDAY, "10:00", "11:00"));
 
-        int score = ranker.score(new Mentor(), new Mentee(), mentorSlots, menteeSlots);
+        int score = ranker.score(new Mentor(), new Mentee(), mentorSlots, menteeSlots).score();
         assertThat(score).isZero();
     }
 
@@ -171,15 +171,15 @@ class RuleBasedMentorRankerTest {
         List<MenteeAvailabilitySlot> menteeSlots = List.of(
                 menteeSlot(DayOfWeek.MONDAY, "09:30", "10:30"));
 
-        int score = ranker.score(mentor, mentee, mentorSlots, menteeSlots);
+        int score = ranker.score(mentor, mentee, mentorSlots, menteeSlots).score();
         assertThat(score).isEqualTo(26);
     }
 
     @Test
     void rankerIsStateless_consecutiveCallsReturnSameScore() {
         // Sanity check that the ranker doesn't accumulate state between calls.
-        int first = ranker.score(mentor, mentee, List.of(), List.of());
-        int second = ranker.score(mentor, mentee, List.of(), List.of());
+        int first = ranker.score(mentor, mentee, List.of(), List.of()).score();
+        int second = ranker.score(mentor, mentee, List.of(), List.of()).score();
         assertThat(second).isEqualTo(first);
     }
 
