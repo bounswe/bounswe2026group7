@@ -236,4 +236,23 @@ public class FeedInteractionController {
         interactionService.deleteComment(id, requesterId);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/comments/{id:\\d+}/like")
+    @Operation(summary = "Toggle like on a comment",
+            description = "Idempotent toggle (#483). Returns the updated comment with "
+                    + "likeCount and viewerHasLiked reflecting the new state. Liking a "
+                    + "soft-deleted comment returns 404; self-like is allowed (matches "
+                    + "post-like semantics).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Toggle applied; updated comment returned"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Comment not found, soft-deleted, or its parent post is gone",
+                         content = @Content)
+    })
+    public ResponseEntity<FeedCommentResponse> toggleCommentLike(
+            @Parameter(description = "Comment id") @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(interactionService.toggleCommentLike(id, userId));
+    }
 }
