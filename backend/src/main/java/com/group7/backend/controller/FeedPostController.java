@@ -3,6 +3,7 @@ package com.group7.backend.controller;
 import com.group7.backend.docs.feed.FeedApiExamples;
 import com.group7.backend.dto.request.CreateFeedPostRequest;
 import com.group7.backend.dto.request.UpdateFeedPostRequest;
+import com.group7.backend.dto.response.FeedPostEditEntry;
 import com.group7.backend.dto.response.FeedPostResponse;
 import com.group7.backend.service.FeedPostService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,9 +14,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -23,10 +27,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.WebRequest;
 
 import java.time.OffsetDateTime;
+
+import java.util.List;
 
 /**
  * REST surface for the social-feed posts core (#348).
@@ -55,6 +62,7 @@ import java.time.OffsetDateTime;
  */
 @RestController
 @RequestMapping("/api/feed/posts")
+@Validated  // enables MethodValidationPostProcessor for @Min/@Max on @RequestParam
 @Tag(name = "Feed Posts",
         description = "Author-owned social-feed posts (text + hashtags). Soft-delete preserves "
                 + "referential integrity for downstream interactions and feed reads (#348).")
@@ -175,5 +183,26 @@ public class FeedPostController {
         Long requesterId = (Long) authentication.getCredentials();
         feedPostService.delete(id, requesterId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id:\\d+}/history")
+    @Operation(summary = "Get edit history for a feed post (author or admin)",
+            description = "Returns the post's edit history newest-first, capped at 50 entries. "
+                    + "editorId is the snapshot editor's user id at edit time; the client "
+                    + "resolves display names via the existing user-summary endpoint when needed. "
+                    + "Visible to the post author and to any admin; everyone else gets 403.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "History entries (newest first)"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Not the post author and not an admin", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post never existed", content = @Content)
+    })
+    public ResponseEntity<List<FeedPostEditEntry>> history(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            @Parameter(description = "Maximum number of entries (1..50)")
+            @RequestParam(defaultValue = "50") @Min(1) @Max(50) int limit,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(feedPostService.getPostHistory(id, requesterId, limit));
     }
 }

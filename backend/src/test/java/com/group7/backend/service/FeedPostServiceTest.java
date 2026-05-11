@@ -7,6 +7,7 @@ import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.AttachmentRepository;
+import com.group7.backend.repository.FeedPostEditHistoryRepository;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,7 @@ class FeedPostServiceTest {
     @Mock private HashtagNormalizer hashtagNormalizer;
     @Mock private FeedPostMapper feedPostMapper;
     @Mock private FeedPostEventPublisher feedPostEventPublisher;
+    @Mock private FeedPostEditHistoryRepository historyRepository;
     @InjectMocks private FeedPostService feedPostService;
 
     // ── create ─────────────────────────────────────────────────────────────

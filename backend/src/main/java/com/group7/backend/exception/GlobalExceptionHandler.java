@@ -242,6 +242,23 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", "Access denied");
     }
 
+    /**
+     * Handles {@code @Min}/{@code @Max}/{@code @Pattern} (and similar)
+     * violations on controller method parameters guarded by
+     * {@code @Validated}. Without this entry, the violation propagates
+     * as an unhandled 500. The cousin handler
+     * {@link #handleValidationErrors} covers {@code @Valid} on
+     * {@code @RequestBody}; this handler covers the corresponding
+     * shape for {@code @RequestParam} / {@code @PathVariable}.
+     */
+    @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
+    public ResponseEntity<Map<String, String>> handleConstraintViolation(
+            jakarta.validation.ConstraintViolationException ex, HttpServletRequest request) {
+        log.warn("Constraint violation: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
     private ResponseEntity<Map<String, String>> buildErrorResponse(HttpStatus status, String error, String message) {
         Map<String, String> body = Map.of("error", error, "message", message);
         return ResponseEntity.status(status).body(body);

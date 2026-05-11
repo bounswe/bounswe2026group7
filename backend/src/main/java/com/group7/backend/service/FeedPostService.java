@@ -1,17 +1,21 @@
 package com.group7.backend.service;
 
+import com.group7.backend.dto.response.FeedPostEditEntry;
 import com.group7.backend.dto.response.FeedPostResponse;
 import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Attachment;
 import com.group7.backend.entity.FeedPost;
+import com.group7.backend.entity.FeedPostEditHistory;
 import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.entity.User;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.AttachmentRepository;
+import com.group7.backend.repository.FeedPostEditHistoryRepository;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +26,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /**
@@ -75,7 +80,7 @@ public class FeedPostService {
     private static final Logger log = LoggerFactory.getLogger(FeedPostService.class);
 
     /**
-     * Hard cap on attachments per post (#485). Mirrored at the request DTO
+     * Hard cap on attachments per post. Mirrored at the request DTO
      * layer ({@code @Size(max = 4)}) and at the DB layer (junction CHECK
      * {@code position BETWEEN 0 AND 3}). Defense in depth: the DTO bound
      * fails fast on user input; the service constant catches programmatic
@@ -92,25 +97,36 @@ public class FeedPostService {
     private static final Set<String> ALLOWED_IMAGE_CONTENT_TYPES = Set.of(
             "image/jpeg", "image/png", "image/gif", "image/webp");
 
+    /**
+     * Hard cap on the {@code limit} accepted by {@link #getPostHistory}.
+     * Mirrored by an {@code @Max} on the controller {@code @RequestParam}
+     * so abusive callers get a 400 long before the service is reached;
+     * the service-side clamp is defence-in-depth.
+     */
+    static final int HISTORY_PAGE_CAP = 50;
+
     private final FeedPostRepository feedPostRepository;
     private final UserRepository userRepository;
     private final AttachmentRepository attachmentRepository;
     private final HashtagNormalizer hashtagNormalizer;
     private final FeedPostMapper feedPostMapper;
     private final FeedPostEventPublisher feedPostEventPublisher;
+    private final FeedPostEditHistoryRepository historyRepository;
 
     public FeedPostService(FeedPostRepository feedPostRepository,
                            UserRepository userRepository,
                            AttachmentRepository attachmentRepository,
                            HashtagNormalizer hashtagNormalizer,
                            FeedPostMapper feedPostMapper,
-                           FeedPostEventPublisher feedPostEventPublisher) {
+                           FeedPostEventPublisher feedPostEventPublisher,
+                           FeedPostEditHistoryRepository historyRepository) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
         this.attachmentRepository = attachmentRepository;
         this.hashtagNormalizer = hashtagNormalizer;
         this.feedPostMapper = feedPostMapper;
         this.feedPostEventPublisher = feedPostEventPublisher;
+        this.historyRepository = historyRepository;
     }
 
     /**
@@ -212,6 +228,37 @@ public class FeedPostService {
             throw new ResourceNotFoundException("Feed post not found with id: " + postId);
         }
 
+        // Pre-compute the normalised target hashtag set (if supplied)
+        // up front so the snapshot decision can compare set membership
+        // against what we are actually about to write — not the raw
+        // unparsed input the caller sent.
+        Set<String> normalisedTags = rawHashtags == null
+                ? null
+                : hashtagNormalizer.normalize(rawHashtags);
+        Set<String> currentTags = post.getHashtags().stream()
+                .map(h -> h.getId().getTag())
+                .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+
+        boolean bodyChanges = body != null && !body.isBlank() && !body.equals(post.getBody());
+        boolean hashtagsChange = normalisedTags != null
+                && !currentTags.equals(new TreeSet<>(normalisedTags));
+
+        // Snapshot the prior state BEFORE mutating (#487). The history row
+        // is written inside the same @Transactional boundary as the post
+        // mutation; if the UPDATE later rolls back (optimistic-lock 409,
+        // FK cascade race, etc.) the INSERT rolls back with it. A no-op
+        // PATCH (caller sent the existing values, or both fields null)
+        // produces no history row.
+        if (bodyChanges || hashtagsChange) {
+            FeedPostEditHistory snapshot = new FeedPostEditHistory();
+            snapshot.setPostId(post.getId());
+            snapshot.setEditorId(requesterId);
+            snapshot.setPreviousBody(post.getBody());
+            snapshot.setPreviousHashtags(List.copyOf(currentTags));
+            snapshot.setEditedAt(OffsetDateTime.now());
+            historyRepository.save(snapshot);
+        }
+
         boolean modified = false;
         if (body != null) {
             if (body.isBlank()) {
@@ -220,8 +267,7 @@ public class FeedPostService {
             post.setBody(body);
             modified = true;
         }
-        if (rawHashtags != null) {
-            Set<String> normalisedTags = hashtagNormalizer.normalize(rawHashtags);
+        if (normalisedTags != null) {
             post.getHashtags().clear();
             for (String tag : normalisedTags) {
                 post.getHashtags().add(new FeedPostHashtag(post, tag));
@@ -244,9 +290,44 @@ public class FeedPostService {
             post.setUpdatedAt(OffsetDateTime.now());
         }
         FeedPost saved = feedPostRepository.save(post);
-        log.info("Updated feed post: id={}, authorId={}, bodyTouched={}, hashtagsTouched={}, attachmentsTouched={}",
-                postId, requesterId, body != null, rawHashtags != null, attachmentIds != null);
+        log.info("Updated feed post: id={}, authorId={}, bodyTouched={}, hashtagsTouched={}, attachmentsTouched={}, historySaved={}",
+                postId, requesterId, body != null, rawHashtags != null, attachmentIds != null,
+                bodyChanges || hashtagsChange);
         return feedPostMapper.toResponse(saved, requesterId);
+    }
+
+    /**
+     * Returns the edit history of a feed post (#487), newest first.
+     * Visible to the post author and to any {@link Admin}; everyone
+     * else gets {@code 403}. Operates regardless of the post's
+     * {@code deletedAt} state — a soft-deleted post still has a
+     * history that the author or an admin can audit before the
+     * cleanup scheduler hard-deletes it.
+     *
+     * <p>The {@code limit} is clamped to {@link #HISTORY_PAGE_CAP}
+     * inside the service so any caller bypassing the controller's
+     * {@code @Max} cannot flood the response.
+     */
+    public List<FeedPostEditEntry> getPostHistory(Long postId, Long actorId, int limit) {
+        FeedPost post = feedPostRepository.findById(postId)
+                .orElseThrow(() -> new ResourceNotFoundException("Feed post not found with id: " + postId));
+        if (!post.getAuthorId().equals(actorId)) {
+            User actor = userRepository.findById(actorId)
+                    .orElseThrow(() -> new AccessDeniedException("Only the post author or an admin can view history"));
+            if (!(actor instanceof Admin)) {
+                log.warn("Non-author non-admin attempted to read feed-post history: postId={}, actorId={}",
+                        postId, actorId);
+                throw new AccessDeniedException("Only the post author or an admin can view history");
+            }
+        }
+        int clampedLimit = Math.min(Math.max(limit, 1), HISTORY_PAGE_CAP);
+        return historyRepository
+                .findByPostIdOrderByEditedAtDesc(postId, PageRequest.of(0, clampedLimit))
+                .stream()
+                .map(h -> new FeedPostEditEntry(
+                        h.getId(), h.getEditorId(), h.getPreviousBody(),
+                        h.getPreviousHashtags(), h.getEditedAt()))
+                .toList();
     }
 
     /**
