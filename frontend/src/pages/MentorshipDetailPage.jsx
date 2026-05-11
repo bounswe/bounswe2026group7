@@ -5,12 +5,64 @@ import Avatar from '../components/Avatar'
 import MentorshipMilestones from '../components/MentorshipMilestones'
 import MentorshipProgressTimeline from '../components/MentorshipProgressTimeline'
 import MentorMenteesProgress from '../components/MentorMenteesProgress'
-import { getMentorshipById, getUserById, updateSharedGoal, cancelMentorship, endMentorship } from '../services/api'
-import { getNextUpcomingMeeting } from '../services/mentorshipMocks'
+import {
+  getMentorshipById,
+  getUserById,
+  updateSharedGoal,
+  cancelMentorship,
+  endMentorship,
+  listMentorshipMeetings,
+} from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
 import '../styles/modal.css'
+
+/**
+ * Derive the "next upcoming meeting" card payload from the real meetings
+ * list — replaces the legacy `getNextUpcomingMeeting` mock (#506).
+ *
+ * Picks the meeting with the smallest startTime ≥ now whose status is
+ * PENDING_CONFIRMATION or CONFIRMED. Returns the meeting with two derived
+ * fields the existing card markup expects:
+ *   - `date`: alias of startTime so existing JSX keeps working
+ *   - `durationMin`: computed from (endTime − startTime)
+ *   - `status`: passes through; the badge renderer normalises display
+ */
+function deriveNextUpcomingMeeting(meetings) {
+  if (!Array.isArray(meetings) || meetings.length === 0) return null
+  const now = Date.now()
+  const upcoming = meetings.filter(m => {
+    if (m?.status !== 'PENDING_CONFIRMATION' && m?.status !== 'CONFIRMED') return false
+    const start = new Date(m.startTime).getTime()
+    return Number.isFinite(start) && start >= now
+  })
+  if (upcoming.length === 0) return null
+  upcoming.sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
+  const next = upcoming[0]
+  const start = new Date(next.startTime).getTime()
+  const end = new Date(next.endTime).getTime()
+  const durationMin = Number.isFinite(start) && Number.isFinite(end) && end > start
+    ? Math.round((end - start) / 60000)
+    : null
+  return { ...next, date: next.startTime, durationMin }
+}
+
+// Map a backend MeetingStatus to the existing CSS class suffix + display label.
+// Existing classes: confirmed, pending, completed. PENDING_CONFIRMATION
+// collapses to `pending`; declined/expired/cancelled won't appear in the
+// upcoming bucket but are rendered defensively.
+function meetingStatusUi(status) {
+  switch (status) {
+    case 'CONFIRMED':            return { cls: 'confirmed', label: 'Confirmed' }
+    case 'PENDING_CONFIRMATION': return { cls: 'pending', label: 'Pending' }
+    case 'COMPLETED':            return { cls: 'completed', label: 'Completed' }
+    case 'DECLINED':             return { cls: 'pending', label: 'Declined' }
+    case 'EXPIRED':              return { cls: 'pending', label: 'Expired' }
+    case 'CANCELLED':            return { cls: 'pending', label: 'Cancelled' }
+    default:                     return { cls: 'pending', label: status || '—' }
+  }
+}
 
 function formatDate(iso, opts = { day: 'numeric', month: 'short', year: 'numeric' }) {
   if (!iso) return '—'
@@ -321,14 +373,14 @@ export default function MentorshipDetailPage() {
         const otherId = viewerIsMentor ? m.menteeId : m.mentorId
         return Promise.all([
           getUserById(otherId).catch(() => null),
-          getNextUpcomingMeeting(m.id).catch(() => null),
+          listMentorshipMeetings(m.id).catch(() => []),
         ])
       })
       .then(pair => {
         if (cancelled || !pair) return
-        const [user, meeting] = pair
+        const [user, meetings] = pair
         setOtherUser(user)
-        setUpcoming(meeting)
+        setUpcoming(deriveNextUpcomingMeeting(meetings))
         setLoading(false)
       })
       .catch(err => {
@@ -639,9 +691,14 @@ export default function MentorshipDetailPage() {
                 {upcoming.durationMin} min
               </div>
             </div>
-            <span className={`md-meeting-status md-meeting-status-${upcoming.status.toLowerCase()}`}>
-              {upcoming.status.charAt(0) + upcoming.status.slice(1).toLowerCase()}
-            </span>
+            {(() => {
+              const ui = meetingStatusUi(upcoming.status)
+              return (
+                <span className={`md-meeting-status md-meeting-status-${ui.cls}`}>
+                  {ui.label}
+                </span>
+              )
+            })()}
           </div>
         ) : (
           <div className="md-goal-empty">No upcoming meetings. Schedule one from the Schedule page.</div>
