@@ -33,6 +33,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -180,6 +182,69 @@ class FeedPostControllerTest {
     void getById_unauthenticated_returns403() throws Exception {
         mockMvc.perform(get("/api/feed/posts/42"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getById_setsETagLastModifiedAndCacheControlHeaders() throws Exception {
+        mockMenteeJwt(TOKEN, 1L);
+        // Fixed timestamps so the assertion is deterministic.
+        OffsetDateTime t0 = OffsetDateTime.parse("2026-05-09T10:15:00Z");
+        FeedPostResponse fixed = new FeedPostResponse(42L, 1L, "Alice", "Hello",
+                List.of("data"), t0, t0, false, true);
+        when(feedPostService.getById(42L, 1L)).thenReturn(fixed);
+
+        mockMvc.perform(get("/api/feed/posts/42").header("Authorization", "Bearer " + TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("ETag"))
+                .andExpect(header().exists("Last-Modified"))
+                .andExpect(header().string("Cache-Control", "private, max-age=30"));
+    }
+
+    @Test
+    void getById_returns304WhenIfNoneMatchMatches() throws Exception {
+        mockMenteeJwt(TOKEN, 1L);
+        OffsetDateTime t0 = OffsetDateTime.parse("2026-05-09T10:15:00Z");
+        FeedPostResponse fixed = new FeedPostResponse(42L, 1L, "Alice", "Hello",
+                List.of("data"), t0, t0, false, true);
+        when(feedPostService.getById(42L, 1L)).thenReturn(fixed);
+
+        // First fetch — capture the ETag.
+        String etag = mockMvc.perform(get("/api/feed/posts/42")
+                        .header("Authorization", "Bearer " + TOKEN))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getHeader("ETag");
+
+        // Conditional GET with the same ETag — server short-circuits to 304
+        // with no body (controller returns null after checkNotModified).
+        mockMvc.perform(get("/api/feed/posts/42")
+                        .header("Authorization", "Bearer " + TOKEN)
+                        .header("If-None-Match", etag))
+                .andExpect(status().isNotModified())
+                .andExpect(content().bytes(new byte[0]));
+    }
+
+    @Test
+    void getById_etagChangesAfterEdit() throws Exception {
+        mockMenteeJwt(TOKEN, 1L);
+        OffsetDateTime created = OffsetDateTime.parse("2026-05-09T10:15:00Z");
+        OffsetDateTime edited = OffsetDateTime.parse("2026-05-09T11:02:34Z");
+        FeedPostResponse before = new FeedPostResponse(42L, 1L, "Alice", "Hello",
+                List.of("data"), created, created, false, true);
+        FeedPostResponse after = new FeedPostResponse(42L, 1L, "Alice", "Hello edited",
+                List.of("data"), created, edited, true, true);
+        when(feedPostService.getById(42L, 1L)).thenReturn(before, after);
+
+        String etagBefore = mockMvc.perform(get("/api/feed/posts/42")
+                        .header("Authorization", "Bearer " + TOKEN))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getHeader("ETag");
+        String etagAfter = mockMvc.perform(get("/api/feed/posts/42")
+                        .header("Authorization", "Bearer " + TOKEN))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getHeader("ETag");
+
+        org.junit.jupiter.api.Assertions.assertNotEquals(etagBefore, etagAfter,
+                "ETag must change after an edit bumps updatedAt");
     }
 
     @Test
