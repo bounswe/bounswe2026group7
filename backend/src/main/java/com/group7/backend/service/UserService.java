@@ -279,6 +279,7 @@ public class UserService {
         if (request.getLastName() != null) {
             user.setLastName(request.getLastName());
         }
+        applyLocationFields(user, request);
 
         // Apply role-specific fields
         if (user instanceof Mentor mentor && request instanceof MentorProfileRequest mentorReq) {
@@ -340,6 +341,32 @@ public class UserService {
     }
 
     // ── Private helpers ─────────────────────────────────────
+
+    /**
+     * Applies optional location fields from the request (#282 / req 1.1.2.3).
+     *
+     * <p>Skip-nulls semantics: a null field means "no change", matching the rest
+     * of {@code updateProfile}. To clear all location fields, the client would
+     * need to submit empty strings for {@code city} and explicit zeros for the
+     * coords (or call a dedicated clear endpoint, which is a future follow-up).
+     *
+     * <p>The hybrid auto-fill UX on the clients (#461 web, #462 mobile) always
+     * submits all three together, so partial-update edge cases are unlikely in
+     * normal use. Bean Validation on {@link EditProfileRequest} keeps individual
+     * coordinate ranges in bounds; the DB-level pair-completeness CHECK
+     * constraint (V34 migration) is the final safety net.
+     */
+    private static void applyLocationFields(User user, EditProfileRequest request) {
+        if (request.getCity() != null) {
+            user.setCity(request.getCity());
+        }
+        if (request.getLatitude() != null) {
+            user.setLatitude(request.getLatitude());
+        }
+        if (request.getLongitude() != null) {
+            user.setLongitude(request.getLongitude());
+        }
+    }
 
     private ProfileResponse mapToResponse(User user) {
         if (user instanceof Mentor mentor) {
