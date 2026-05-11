@@ -5,7 +5,7 @@ import {
   getReceivedMentorshipRequests,
   getSentMentorshipRequests,
 } from '../services/api'
-import { getMeetingsAcrossMentorships, getTasksAcrossMentorships } from '../services/mentorshipMocks'
+import { getMeetingsAcrossMentorships, getTasksAcrossMentorships } from '../services/mentorshipService'
 import { useAuth } from './AuthContext'
 
 const MentorshipContext = createContext(null)
@@ -35,6 +35,7 @@ export function MentorshipProvider({ children }) {
   const [menteeLoading, setMenteeLoading] = useState(emptyMenteeState.menteeLoading)
   const [tasksCount, setTasksCount] = useState(0)
   const [sessionsCount, setSessionsCount] = useState(0)
+  const [statsLoading, setStatsLoading] = useState(false)
 
   const resetMentorState = useCallback(() => {
     setReceivedRequests(emptyMentorState.receivedRequests)
@@ -135,8 +136,11 @@ export function MentorshipProvider({ children }) {
     if (!activeMentorships || activeMentorships.length === 0) {
       setTasksCount(0)
       setSessionsCount(0)
+      setStatsLoading(false)
       return () => { cancelled = true }
     }
+    
+    setStatsLoading(true)
     Promise.all([
       getTasksAcrossMentorships(activeMentorships),
       getMeetingsAcrossMentorships(activeMentorships),
@@ -148,6 +152,9 @@ export function MentorshipProvider({ children }) {
       if (cancelled) return
       setTasksCount(0)
       setSessionsCount(0)
+    }).finally(() => {
+      if (cancelled) return
+      setStatsLoading(false)
     })
     return () => { cancelled = true }
   }, [activeMentorships])
@@ -188,6 +195,7 @@ export function MentorshipProvider({ children }) {
     sentPendingCount,
     tasksCount,
     sessionsCount,
+    statsLoading,
     activeMenteeCount,
     activeMentorshipCount,
     maxCapacity,

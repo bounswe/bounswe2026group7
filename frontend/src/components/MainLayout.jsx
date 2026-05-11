@@ -41,7 +41,10 @@ export default function MainLayout({ children }) {
 
 
   const { role, logout, firstName, lastName, profilePhoto } = useAuth()
-  const { pendingCount, activeMenteeCount, activeMentorshipCount, tasksCount, sessionsCount } = useMentorship()
+  const {
+    pendingCount, activeMenteeCount, activeMentorshipCount,
+    tasksCount, sessionsCount, statsLoading
+  } = useMentorship()
   const presence = usePresence()
   const currentPath = location.pathname
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -128,7 +131,7 @@ export default function MainLayout({ children }) {
                   { num: sessionsCount, label: 'Sessions' },
                 ]).map((s, i) => (
                   <div key={s.label} className={`ud-stat${i > 0 ? ' ud-stat--sep' : ''}`}>
-                    <span className="ud-stat-num">{s.num}</span>
+                    <span className="ud-stat-num">{statsLoading ? '...' : s.num}</span>
                     <span className="ud-stat-lbl">{s.label}</span>
                   </div>
                 ))}
