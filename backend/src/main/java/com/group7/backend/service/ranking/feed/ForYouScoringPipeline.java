@@ -11,6 +11,7 @@ import com.group7.backend.service.embedding.SemanticSimilarityService;
 import com.group7.backend.service.ranking.AdvancedForYouFeedRanker;
 import com.group7.backend.service.ranking.FeedScoreResult;
 import com.group7.backend.service.ranking.MmrReranker;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -35,6 +36,7 @@ import java.util.Set;
  * stochastic bandit picks across pages.
  */
 @Service
+@ConditionalOnProperty(name = "app.recommendations.feed.advanced.enabled", havingValue = "true")
 public class ForYouScoringPipeline {
 
     private final AdvancedForYouFeedRanker ranker;
