@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  * it returns {@link SignalContribution#NONE} with no factor — distinct
  * from runtime failure, which still emits {@code semantic-unavailable}.
  */
-@Component
+@Component("feedSemanticMatchSignal")
 public class SemanticMatchSignal implements FeedScoringSignal {
 
     private final ForYouRecommendationProperties props;

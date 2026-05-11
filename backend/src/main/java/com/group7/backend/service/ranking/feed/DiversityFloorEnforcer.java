@@ -2,6 +2,7 @@ package com.group7.backend.service.ranking.feed;
 
 import com.group7.backend.entity.FeedPost;
 import com.group7.backend.entity.FeedPostHashtag;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
  * with the {@code feed:outside-primary-goal} factor appended to its
  * factor list.
  */
+@Component
 public final class DiversityFloorEnforcer {
 
     /** Input/output shape: post + score + accumulated factors. */

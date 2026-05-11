@@ -27,7 +27,7 @@ import java.util.List;
  * {@code time-decay.fresh-hours} (default 6h). The chip is informational —
  * a non-fresh post still scores per the decay formula.
  */
-@Component
+@Component("feedTimeDecaySignal")
 public class TimeDecaySignal implements FeedScoringSignal {
 
     private static final double LN_2 = Math.log(2);

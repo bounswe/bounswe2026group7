@@ -2,7 +2,6 @@ package com.group7.backend.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -36,7 +35,7 @@ public class ViewerHashtagEngagement {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Id
+    @jakarta.persistence.Id
     @Column(name = "hashtag", nullable = false, length = 50)
     private String hashtag;
 

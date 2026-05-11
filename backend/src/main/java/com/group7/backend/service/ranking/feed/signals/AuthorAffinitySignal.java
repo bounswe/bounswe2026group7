@@ -27,7 +27,7 @@ import java.util.List;
  * on the same post — they explain orthogonal aspects of why the author
  * is being surfaced.
  */
-@Component
+@Component("feedAuthorAffinitySignal")
 public class AuthorAffinitySignal implements FeedScoringSignal {
 
     private final ForYouRecommendationProperties props;
