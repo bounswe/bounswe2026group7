@@ -31,6 +31,21 @@ public interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
                                           @Param("userId") Long userId);
 
     /**
+     * Resolves the read-time gate for the feed-scoped download path: returns
+     * true iff the attachment is referenced from any row in
+     * {@code feed_post_attachments}. Lets {@code FeedMediaDownloadController}
+     * reject chat-only uploads with a uniform 404 — no per-user ACL because
+     * feed images are public to any authenticated viewer.
+     */
+    @Query(value =
+            "SELECT EXISTS ("
+            + "  SELECT 1 FROM feed_post_attachments fpa "
+            + "  WHERE fpa.attachment_id = :attachmentId"
+            + ")",
+            nativeQuery = true)
+    boolean existsAsFeedAttachment(@Param("attachmentId") UUID attachmentId);
+
+    /**
      * Counts uploads by {@code uploaderId} created strictly after {@code since}.
      * Backs the per-user hourly upload quota.
      */
@@ -40,33 +55,58 @@ public interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
                               @Param("since") OffsetDateTime since);
 
     /**
-     * Returns attachments older than {@code cutoff} that are not referenced by
-     * any persisted {@link com.group7.backend.entity.Message}. Used by the
-     * orphan-cleanup scheduler to reclaim disk and DB space for uploads that
-     * were never sent.
+     * Returns attachments older than {@code cutoff} that are not referenced
+     * by any persisted message <i>or</i> feed post. Used by the orphan-cleanup
+     * scheduler to reclaim disk and DB space for uploads that were never
+     * referenced.
      *
      * <p>The 24-hour cutoff (set at the call site) is the fairness window: a
      * client may legitimately upload, then take some time to compose the
-     * outgoing message before referencing the id. Sweeping immediately would
-     * race the user-visible flow.
+     * outgoing message or feed post before referencing the id. Sweeping
+     * immediately would race the user-visible flow.
+     *
+     * <p>Native query because the {@code feed_post_attachments} junction is
+     * not exposed as a JPA entity (the link is materialised through the
+     * {@code @ManyToMany} on {@link com.group7.backend.entity.FeedPost}). The
+     * column names ({@code messages.attachment_id}, V15;
+     * {@code feed_post_attachments.attachment_id}, V41) are the source of
+     * truth — keep them in sync with the migrations if the schema evolves.
      */
-    @Query("SELECT a FROM Attachment a "
-            + "WHERE a.createdAt < :cutoff "
-            + "AND NOT EXISTS (SELECT 1 FROM Message m WHERE m.attachment.id = a.id)")
+    @Query(value =
+            "SELECT * FROM attachments a "
+            + "WHERE a.created_at < :cutoff "
+            + "  AND NOT EXISTS ("
+            + "    SELECT 1 FROM messages m WHERE m.attachment_id = a.id"
+            + "  ) "
+            + "  AND NOT EXISTS ("
+            + "    SELECT 1 FROM feed_post_attachments fpa WHERE fpa.attachment_id = a.id"
+            + "  )",
+            nativeQuery = true)
     List<Attachment> findOrphansOlderThan(@Param("cutoff") OffsetDateTime cutoff);
 
     /**
-     * Deletes the attachment row only if no message has come to reference it
-     * since the last orphan scan. Returns the number of rows deleted (0 or 1).
+     * Deletes the attachment row only if no message or feed post has come to
+     * reference it since the last orphan scan. Returns the number of rows
+     * deleted (0 or 1).
      *
      * <p>This closes the race between {@link #findOrphansOlderThan} and the
-     * scheduler's deletion: if a {@code POST /messages} lands in the gap and
-     * persists a message with this attachment, the {@code NOT EXISTS} clause
-     * rejects the delete and the just-attached message keeps its FK intact.
+     * scheduler's deletion: if a {@code POST /messages} or feed-post create
+     * lands in the gap and references this attachment, the {@code NOT EXISTS}
+     * clauses reject the delete and the new owner keeps its FK intact.
+     *
+     * <p>Native for the same reason as {@link #findOrphansOlderThan} — the
+     * junction has no JPA entity.
      */
     @Modifying
-    @Query("DELETE FROM Attachment a "
+    @Query(value =
+            "DELETE FROM attachments a "
             + "WHERE a.id = :id "
-            + "AND NOT EXISTS (SELECT 1 FROM Message m WHERE m.attachment.id = a.id)")
+            + "  AND NOT EXISTS ("
+            + "    SELECT 1 FROM messages m WHERE m.attachment_id = a.id"
+            + "  ) "
+            + "  AND NOT EXISTS ("
+            + "    SELECT 1 FROM feed_post_attachments fpa WHERE fpa.attachment_id = a.id"
+            + "  )",
+            nativeQuery = true)
     int deleteIfStillOrphan(@Param("id") UUID id);
 }

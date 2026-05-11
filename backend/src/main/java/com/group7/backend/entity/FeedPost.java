@@ -7,8 +7,12 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Getter;
@@ -17,7 +21,9 @@ import lombok.Setter;
 import org.hibernate.annotations.BatchSize;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -167,6 +173,42 @@ public class FeedPost {
     @OrderBy("id.tag ASC")
     @BatchSize(size = 100)
     private Set<FeedPostHashtag> hashtags = new LinkedHashSet<>();
+
+    /**
+     * Image attachments attached to this post. Owns the
+     * {@code feed_post_attachments} junction; the {@link Attachment} entity
+     * itself is uploaded and lifecycle-managed by
+     * {@code AttachmentStorageService}, so there is deliberately no cascade
+     * here — saving the post must not create or merge an attachment row, it
+     * must only manage the junction rows.
+     *
+     * <p>Position is written by Hibernate via {@code @OrderColumn}. Only
+     * {@code clear() + addAll()} mutations preserve the column's invariants;
+     * partial mutations ({@code list.set(int, x)}, {@code list.remove(int)})
+     * desynchronise the position. The service paths in
+     * {@code FeedPostService.create / update} use only that pattern.
+     *
+     * <p>{@code @BatchSize(100)} collapses the otherwise-N-queries lazy fetch
+     * across the For-You / Following / search list endpoints — for a page of
+     * 20 posts Hibernate issues a single junction-join query instead of one
+     * per post. Mirrors {@link #hashtags}.
+     *
+     * <p>Soft-delete leaves this collection untouched; the junction rows
+     * survive a {@code DELETE /api/feed/posts/{id}} so a future restore
+     * would recover the images. Hard-delete (cascade from user delete or
+     * the planned 30-day purge in {@code #487}) drops the junction rows via
+     * the DB-level {@code ON DELETE CASCADE} on {@code post_id}, and the
+     * orphan-cleanup scheduler then reclaims the now-unreferenced
+     * {@link Attachment} rows.
+     */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "feed_post_attachments",
+            joinColumns = @JoinColumn(name = "post_id"),
+            inverseJoinColumns = @JoinColumn(name = "attachment_id"))
+    @OrderColumn(name = "position")
+    @BatchSize(size = 100)
+    private List<Attachment> attachments = new ArrayList<>();
 
     /**
      * Convenience constructor for the create flow. Sets identity fields

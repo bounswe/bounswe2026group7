@@ -2,7 +2,6 @@ package com.group7.backend.service;
 
 import com.group7.backend.dto.response.FeedPostListItem;
 import com.group7.backend.entity.FeedPost;
-import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.User;
@@ -24,13 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Read service for the social-feed surfaces in #350 — For-You,
@@ -74,6 +71,7 @@ public class FeedReadService {
     private final FeedRanker feedRanker;
     private final FeedInteractionService feedInteractionService;
     private final Optional<ForYouScoringPipeline> forYouPipeline;
+    private final FeedPostMapper feedPostMapper;
     private final int candidateWindow;
 
     public FeedReadService(FeedPostRepository feedPostRepository,
@@ -83,6 +81,7 @@ public class FeedReadService {
                            FeedRanker feedRanker,
                            FeedInteractionService feedInteractionService,
                            Optional<ForYouScoringPipeline> forYouPipeline,
+                           FeedPostMapper feedPostMapper,
                            @Value("${app.feed.forYou.candidate-window:200}") int candidateWindow) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
@@ -91,6 +90,7 @@ public class FeedReadService {
         this.feedRanker = feedRanker;
         this.feedInteractionService = feedInteractionService;
         this.forYouPipeline = forYouPipeline;
+        this.feedPostMapper = feedPostMapper;
         this.candidateWindow = candidateWindow;
     }
 
@@ -131,7 +131,7 @@ public class FeedReadService {
                 .map(p -> new Scored(feedRanker.score(p, context), p))
                 .sorted(Comparator.comparingInt((Scored s) -> s.result().score()).reversed())
                 .toList();
-        return slicePage(ranked, pageable);
+        return slicePage(ranked, pageable, viewerId);
     }
 
     /**
@@ -162,39 +162,16 @@ public class FeedReadService {
         }
         List<FeedPost> rankedPosts = ranked.stream()
                 .map(ForYouScoringPipeline.RankedFeedPost::post).toList();
-        Map<Long, String> authorNames = resolveAuthorNames(rankedPosts);
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(
                         rankedPosts.stream().map(FeedPost::getId).toList());
-        List<FeedPostListItem> items = ranked.stream()
-                .map(r -> toListItemFromRanked(r, authorNames, counts))
-                .toList();
+        Map<Long, List<String>> factorsByPostId = ranked.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        r -> r.post().getId(),
+                        ForYouScoringPipeline.RankedFeedPost::factors));
+        List<FeedPostListItem> items = feedPostMapper.toListItems(
+                rankedPosts, viewerId, counts, factorsByPostId);
         return new PageImpl<>(items, pageable, candidates.size());
-    }
-
-    private static FeedPostListItem toListItemFromRanked(ForYouScoringPipeline.RankedFeedPost ranked,
-                                                        Map<Long, String> authorNames,
-                                                        Map<Long, FeedInteractionService.PostCounts> counts) {
-        FeedPost post = ranked.post();
-        List<String> tags = post.getHashtags().stream()
-                .map(FeedPostHashtag::getId)
-                .map(id -> id.getTag())
-                .sorted()
-                .toList();
-        FeedInteractionService.PostCounts c = counts.get(post.getId());
-        long likeCount = (c == null) ? 0L : c.likeCount();
-        long commentCount = (c == null) ? 0L : c.commentCount();
-        return new FeedPostListItem(
-                post.getId(),
-                post.getAuthorId(),
-                authorNames.getOrDefault(post.getAuthorId(), null),
-                post.getBody(),
-                tags,
-                post.getCreatedAt(),
-                likeCount,
-                commentCount,
-                ranked.factors()
-        );
     }
 
     /**
@@ -203,7 +180,7 @@ public class FeedReadService {
      */
     public Page<FeedPostListItem> followingFeed(Long viewerId, Pageable pageable) {
         Page<FeedPost> page = feedPostRepository.findFollowingFeed(viewerId, pageable);
-        return mapPage(page);
+        return mapPage(page, viewerId);
     }
 
     /**
@@ -212,7 +189,7 @@ public class FeedReadService {
      */
     public Page<FeedPostListItem> postsByAuthor(Long authorId, Pageable pageable) {
         Page<FeedPost> page = feedPostRepository.findByAuthorIdForFeed(authorId, pageable);
-        return mapPage(page);
+        return mapPage(page, null);
     }
 
     /**
@@ -249,7 +226,7 @@ public class FeedReadService {
                     "Search requires at least one of 'q' or 'hashtag' — use /api/feed/for-you or /api/feed/following for the full feed");
         }
         Page<FeedPost> page = feedPostRepository.searchPosts(normalisedKeyword, normalisedHashtag, pageable);
-        return mapPage(page);
+        return mapPage(page, null);
     }
 
     /**
@@ -319,18 +296,25 @@ public class FeedReadService {
         return hashtagNormalizer.normalize(labels);
     }
 
-    private Page<FeedPostListItem> mapPage(Page<FeedPost> page) {
+    /**
+     * Maps a JPA {@link Page} of posts into list-item DTOs while preserving
+     * pagination metadata. Delegates DTO assembly to {@link FeedPostMapper}
+     * so the single source of truth for author-name batching and attachment
+     * URL construction stays in one place.
+     */
+    private Page<FeedPostListItem> mapPage(Page<FeedPost> page, Long viewerId) {
         if (page.isEmpty()) {
             return Page.empty(page.getPageable());
         }
-        Map<Long, String> authorNames = resolveAuthorNames(page.getContent());
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(
                         page.getContent().stream().map(FeedPost::getId).toList());
-        return page.map(p -> toListItem(p, authorNames, counts, List.of()));
+        List<FeedPostListItem> items = feedPostMapper.toListItems(
+                page.getContent(), viewerId, counts);
+        return new PageImpl<>(items, page.getPageable(), page.getTotalElements());
     }
 
-    private Page<FeedPostListItem> slicePage(List<Scored> ranked, Pageable pageable) {
+    private Page<FeedPostListItem> slicePage(List<Scored> ranked, Pageable pageable, Long viewerId) {
         int total = ranked.size();
         int from = Math.min((int) pageable.getOffset(), total);
         int to = Math.min(from + pageable.getPageSize(), total);
@@ -339,46 +323,16 @@ public class FeedReadService {
             return new PageImpl<>(List.of(), pageable, total);
         }
         List<FeedPost> posts = slice.stream().map(Scored::post).toList();
-        Map<Long, String> authorNames = resolveAuthorNames(posts);
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(
                         posts.stream().map(FeedPost::getId).toList());
-        List<FeedPostListItem> items = slice.stream()
-                .map(s -> toListItem(s.post(), authorNames, counts, s.result().factors()))
-                .toList();
+        Map<Long, List<String>> factorsByPostId = slice.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        s -> s.post().getId(),
+                        s -> s.result().factors()));
+        List<FeedPostListItem> items = feedPostMapper.toListItems(
+                posts, viewerId, counts, factorsByPostId);
         return new PageImpl<>(items, pageable, total);
-    }
-
-    private Map<Long, String> resolveAuthorNames(List<FeedPost> posts) {
-        Set<Long> ids = posts.stream().map(FeedPost::getAuthorId).collect(Collectors.toSet());
-        Map<Long, String> names = new HashMap<>();
-        userRepository.findAllById(ids).forEach(u -> names.put(u.getId(), u.getFirstName()));
-        return names;
-    }
-
-    private static FeedPostListItem toListItem(FeedPost post,
-                                               Map<Long, String> authorNames,
-                                               Map<Long, FeedInteractionService.PostCounts> counts,
-                                               List<String> factors) {
-        List<String> tags = post.getHashtags().stream()
-                .map(FeedPostHashtag::getId)
-                .map(id -> id.getTag())
-                .sorted()
-                .toList();
-        FeedInteractionService.PostCounts c = counts.get(post.getId());
-        long likeCount = (c == null) ? 0L : c.likeCount();
-        long commentCount = (c == null) ? 0L : c.commentCount();
-        return new FeedPostListItem(
-                post.getId(),
-                post.getAuthorId(),
-                authorNames.getOrDefault(post.getAuthorId(), null),
-                post.getBody(),
-                tags,
-                post.getCreatedAt(),
-                likeCount,
-                commentCount,
-                factors
-        );
     }
 
     /** Holds a feed post alongside its scoring result so the sort key is
