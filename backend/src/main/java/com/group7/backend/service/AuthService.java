@@ -4,6 +4,7 @@ import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.dto.response.AuthResponse;
 import com.group7.backend.dto.response.UserResponse;
+import com.group7.backend.entity.Admin;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.User;
@@ -20,11 +21,13 @@ import com.group7.backend.exception.DuplicateEmailException;
 import com.group7.backend.exception.InvalidTokenException;
 import com.group7.backend.exception.RateLimitExceededException;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.exception.UserBannedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Service
@@ -38,6 +41,8 @@ public class AuthService {
     private final VerificationTokenRepository verificationTokenRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailService emailService;
+    private final BanService banService;
+    private final Clock clock;
 
     @Value("${app.verification.token-expiry-hours}")
     private int tokenExpiryHours;
@@ -56,13 +61,17 @@ public class AuthService {
                        JwtService jwtService,
                        VerificationTokenRepository verificationTokenRepository,
                        PasswordResetTokenRepository passwordResetTokenRepository,
-                       EmailService emailService) {
+                       EmailService emailService,
+                       BanService banService,
+                       Clock clock) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.verificationTokenRepository = verificationTokenRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.emailService = emailService;
+        this.banService = banService;
+        this.clock = clock;
     }
 
     @Transactional
@@ -131,7 +140,17 @@ public class AuthService {
             throw new AuthenticationFailedException("Email not verified. Please check your inbox.");
         }
 
-        String role = (user instanceof Mentor) ? "MENTOR" : "MENTEE";
+        // Ban gate (#280): a banned user must not receive a JWT. Throwing
+        // UserBannedException here surfaces 403 with reason + expiresAt + the
+        // BANNED_UNTIL code via GlobalExceptionHandler; the client can render
+        // the unban time without a follow-up request.
+        banService.getActiveBan(user.getId()).ifPresent(ban -> {
+            log.warn("Authentication blocked: user banned, userId={}, expiresAt={}",
+                    user.getId(), ban.getExpiresAt());
+            throw new UserBannedException(ban);
+        });
+
+        String role = roleNameOf(user);
         String token = jwtService.generateToken(user.getId(), user.getEmail(), role);
         log.info("Authentication succeeded: userId={}, role={}", user.getId(), role);
 
@@ -147,7 +166,7 @@ public class AuthService {
             throw new InvalidTokenException("Verification token already used");
         }
 
-        if (verificationToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (verificationToken.getExpiresAt().isBefore(OffsetDateTime.now(clock))) {
             throw new InvalidTokenException("Verification token has expired. Please request a new one.");
         }
 
@@ -170,7 +189,7 @@ public class AuthService {
         }
 
         long recentCount = verificationTokenRepository.countByUserIdAndCreatedAtAfter(
-                user.getId(), LocalDateTime.now().minusHours(1));
+                user.getId(), OffsetDateTime.now(clock).minusHours(1));
 
         if (recentCount >= resendMaxPerHour) {
             throw new RateLimitExceededException("Too many resend requests. Please try again later.");
@@ -185,7 +204,7 @@ public class AuthService {
     public void requestPasswordReset(String email) {
         userRepository.findByEmail(email).ifPresent(user -> {
             long recentCount = passwordResetTokenRepository.countByUserIdAndCreatedAtAfter(
-                    user.getId(), LocalDateTime.now().minusHours(1));
+                    user.getId(), OffsetDateTime.now(clock).minusHours(1));
 
             if (recentCount >= resetMaxRequestsPerHour) {
                 throw new RateLimitExceededException("Too many password reset requests. Please try again later.");
@@ -197,7 +216,7 @@ public class AuthService {
             PasswordResetToken resetToken = new PasswordResetToken();
             resetToken.setUser(user);
             resetToken.setToken(token);
-            resetToken.setExpiresAt(LocalDateTime.now().plusHours(resetTokenExpiryHours));
+            resetToken.setExpiresAt(OffsetDateTime.now(clock).plusHours(resetTokenExpiryHours));
             resetToken.setUsed(false);
             passwordResetTokenRepository.save(resetToken);
 
@@ -215,7 +234,7 @@ public class AuthService {
             throw new InvalidTokenException("Reset token already used");
         }
 
-        if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (resetToken.getExpiresAt().isBefore(OffsetDateTime.now(clock))) {
             throw new InvalidTokenException("Reset token has expired. Please request a new one.");
         }
 
@@ -236,9 +255,16 @@ public class AuthService {
             throw new InvalidTokenException("Reset token already used");
         }
 
-        if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (resetToken.getExpiresAt().isBefore(OffsetDateTime.now(clock))) {
             throw new InvalidTokenException("Reset token has expired. Please request a new one.");
         }
+    }
+
+    private static String roleNameOf(User user) {
+        if (user instanceof Mentor) return "MENTOR";
+        if (user instanceof Mentee) return "MENTEE";
+        if (user instanceof Admin)  return "ADMIN";
+        throw new IllegalStateException("Unknown user subtype: " + user.getClass().getSimpleName());
     }
 
     private String createVerificationToken(User user) {
@@ -246,7 +272,7 @@ public class AuthService {
         VerificationToken verificationToken = new VerificationToken();
         verificationToken.setUser(user);
         verificationToken.setToken(token);
-        verificationToken.setExpiresAt(LocalDateTime.now().plusHours(tokenExpiryHours));
+        verificationToken.setExpiresAt(OffsetDateTime.now(clock).plusHours(tokenExpiryHours));
         verificationToken.setUsed(false);
         verificationTokenRepository.save(verificationToken);
         return token;

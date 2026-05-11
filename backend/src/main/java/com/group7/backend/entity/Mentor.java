@@ -17,16 +17,20 @@ public class Mentor extends User {
     private String bio;
 
     private String field;
+    private String fieldUri;
 
     private String expertise;
+    private String expertiseUri;
 
     private String affiliation;
 
     @ElementCollection
     @CollectionTable(name = "mentor_interests", joinColumns = @JoinColumn(name = "mentor_id"))
-    @Column(name = "interest")
+    @AttributeOverride(name = "label", column = @Column(name = "interest", nullable = false))
     @Fetch(FetchMode.SUBSELECT)
-    private List<String> interests;
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private List<TaggedTerm> interests;
 
     @Column(nullable = false)
     private Integer maxMenteeCapacity = 0;
@@ -36,13 +40,70 @@ public class Mentor extends User {
 
     @ElementCollection
     @CollectionTable(name = "mentor_preferred_mentee_skills", joinColumns = @JoinColumn(name = "mentor_id"))
-    @Column(name = "skill")
+    @AttributeOverride(name = "label", column = @Column(name = "skill", nullable = false))
     @Fetch(FetchMode.SUBSELECT)
-    private List<String> preferredMenteeSkills;
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private List<TaggedTerm> preferredMenteeSkills;
 
     private String preferredMenteeMajor;
+    private String preferredMenteeMajorUri;
 
     private String mentoringGoals;
 
     private Integer mentorshipDuration;
+
+    // Element-collection accessors. The underlying storage is List<TaggedTerm>
+    // (label + optional canonical URI). Two access shapes are exposed:
+    //   getXxxEntries() — full TaggedTerm list, used by URI-aware code paths.
+    //   getXxx()        — labels only, kept for legacy callers and BeanUtils
+    //                     property-name copying into label-only response DTOs.
+
+    public List<TaggedTerm> getInterestEntries() {
+        return interests;
+    }
+
+    public void setInterestEntries(List<TaggedTerm> entries) {
+        this.interests = entries;
+    }
+
+    public List<String> getInterests() {
+        return interests == null
+                ? null
+                : interests.stream().map(TaggedTerm::getLabel).toList();
+    }
+
+    public void setInterests(List<String> labels) {
+        this.interests = TaggedTermLists.combine(labels, null);
+    }
+
+    public List<String> getInterestUris() {
+        return interests == null
+                ? null
+                : interests.stream().map(TaggedTerm::getIdentifierUri).toList();
+    }
+
+    public List<TaggedTerm> getPreferredMenteeSkillEntries() {
+        return preferredMenteeSkills;
+    }
+
+    public void setPreferredMenteeSkillEntries(List<TaggedTerm> entries) {
+        this.preferredMenteeSkills = entries;
+    }
+
+    public List<String> getPreferredMenteeSkills() {
+        return preferredMenteeSkills == null
+                ? null
+                : preferredMenteeSkills.stream().map(TaggedTerm::getLabel).toList();
+    }
+
+    public void setPreferredMenteeSkills(List<String> labels) {
+        this.preferredMenteeSkills = TaggedTermLists.combine(labels, null);
+    }
+
+    public List<String> getPreferredMenteeSkillUris() {
+        return preferredMenteeSkills == null
+                ? null
+                : preferredMenteeSkills.stream().map(TaggedTerm::getIdentifierUri).toList();
+    }
 }

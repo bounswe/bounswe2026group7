@@ -8,9 +8,13 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest --passWithNoTests --run"
+    "test": "vitest --passWithNoTests --run",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install --with-deps"
   },
   "dependencies": {
+    "@stomp/stompjs": "^7.3.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.7.0",
     "react": "^19.2.4",
@@ -19,6 +23,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@faker-js/faker": "^9.5.0",
+    "@playwright/test": "^1.49.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -31,6 +37,7 @@
     "globals": "^17.4.0",
     "jsdom": "^29.0.1",
     "vite": "^8.0.1",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.2",
+    "wait-on": "^8.0.1"
   }
 }

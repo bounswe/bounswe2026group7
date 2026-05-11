@@ -1,10 +1,13 @@
 package com.group7.backend.controller;
 
+import com.group7.backend.controller.support.PageableSupport;
 import com.group7.backend.dto.request.MenteeProfileRequest;
 import com.group7.backend.dto.request.MentorProfileRequest;
+import com.group7.backend.dto.request.SearchRole;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
+import com.group7.backend.dto.response.UserProfileResponse;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,7 +19,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -49,9 +51,9 @@ public class UserController {
             @ApiResponse(responseCode = "401", description = "Not authenticated", content = @Content),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
-    public ResponseEntity<ProfileResponse> getOwnProfile(Authentication authentication) {
+    public ResponseEntity<UserProfileResponse> getOwnProfile(Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
-        return ResponseEntity.ok(userService.getOwnProfile(userId));
+        return ResponseEntity.ok(userService.getOwnUserProfile(userId));
     }
 
     // ── Update profile (role-specific endpoints) ────────────
@@ -139,7 +141,7 @@ public class UserController {
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
-        Pageable pageable = clampPageable(page, size);
+        Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(userService.getAllUsersFiltered(requesterId, pageable));
     }
 
@@ -152,11 +154,11 @@ public class UserController {
             @ApiResponse(responseCode = "403", description = "Profile not visible", content = @Content),
             @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
-    public ResponseEntity<ProfileResponse> getUserById(
+    public ResponseEntity<UserProfileResponse> getUserById(
             @Parameter(description = "User ID") @PathVariable Long id,
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
-        return ResponseEntity.ok(userService.getProfileById(id, requesterId));
+        return ResponseEntity.ok(userService.getUserProfile(id, requesterId));
     }
 
     @GetMapping("/mentors")
@@ -166,7 +168,7 @@ public class UserController {
     public ResponseEntity<Page<MentorResponse>> getAllMentors(
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = clampPageable(page, size);
+        Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(userService.getAllMentors(pageable));
     }
 
@@ -178,6 +180,50 @@ public class UserController {
         return ResponseEntity.ok(userService.getAllMentorsList());
     }
 
+    @GetMapping("/search")
+    @Operation(summary = "Search users by keyword and filters",
+            description = "DB-level search across the user directory with composable filters "
+                    + "(#262). Mentees may search MENTOR only; mentors may search MENTEE only; "
+                    + "admins may search either role. Same-role search returns 403. "
+                    + "Short keyword (length < 3 after trim) is treated as no-keyword "
+                    + "(pg_trgm requires ≥3 alphanumerics for index acceleration). "
+                    + "hasAvailability=true requires the requester to have at least one "
+                    + "availability slot of their own; admins cannot use this filter.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paginated search results"),
+            @ApiResponse(responseCode = "400",
+                    description = "Invalid filter combination "
+                            + "(admin + hasAvailability=true, or requester missing slots)",
+                    content = @Content),
+            @ApiResponse(responseCode = "403",
+                    description = "Same-role search not permitted",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "Requester not found", content = @Content)
+    })
+    public ResponseEntity<Page<ProfileResponse>> searchUsers(
+            @Parameter(description = "Search target role")
+            @RequestParam SearchRole role,
+            @Parameter(description = "Optional keyword; ignored if length < 3 after trim")
+            @RequestParam(required = false) String q,
+            @Parameter(description = "Filter by interest labels (OR semantics)")
+            @RequestParam(required = false) List<String> interests,
+            @Parameter(description = "Filter by skill labels (OR semantics)")
+            @RequestParam(required = false) List<String> skills,
+            @Parameter(description = "Filter by major (matches preferred_mentee_major OR field)")
+            @RequestParam(required = false) String major,
+            @Parameter(description = "Restrict to candidates whose availability overlaps the requester's slots")
+            @RequestParam(defaultValue = "false") boolean hasAvailability,
+            @Parameter(description = "Page number (0-based)")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size; clamped to [1, 100]")
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        Pageable pageable = PageableSupport.clampPageable(page, size);
+        return ResponseEntity.ok(userService.searchUsers(
+                role, q, interests, skills, major, hasAvailability, requesterId, pageable));
+    }
+
     @GetMapping("/mentees")
     @PreAuthorize("hasRole('MENTOR')")
     @Operation(summary = "List mentees",
@@ -186,7 +232,7 @@ public class UserController {
     public ResponseEntity<Page<MenteeResponse>> getAllMentees(
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = clampPageable(page, size);
+        Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(userService.getAllMentees(pageable));
     }
 
@@ -207,10 +253,5 @@ public class UserController {
         }
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
-    }
-
-    private Pageable clampPageable(int page, int size) {
-        int clampedSize = Math.min(Math.max(size, 1), 100);
-        return PageRequest.of(Math.max(page, 0), clampedSize);
     }
 }

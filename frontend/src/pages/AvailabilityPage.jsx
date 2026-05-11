@@ -1,174 +1,143 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import MainLayout from '../components/MainLayout'
+import AvailabilityGrid, { slotsToCellSet, cellSetToSlots } from '../components/AvailabilityGrid'
+import useUnsavedChangesGuard from '../hooks/useUnsavedChangesGuard'
 import { useAuth } from '../context/AuthContext'
-import {
-  getMentorAvailability,
-  saveMentorAvailability,
-  getMenteeAvailability,
-  saveMenteeAvailability,
-} from '../services/api'
+import { getMentorAvailability, saveMentorAvailability } from '../services/api'
 import '../styles/main.css'
 
-const DAYS = [
-  { key: 'MONDAY',    label: 'Mon' },
-  { key: 'TUESDAY',   label: 'Tue' },
-  { key: 'WEDNESDAY', label: 'Wed' },
-  { key: 'THURSDAY',  label: 'Thu' },
-  { key: 'FRIDAY',    label: 'Fri' },
-  { key: 'SATURDAY',  label: 'Sat' },
-  { key: 'SUNDAY',    label: 'Sun' },
+const BROWSER_TZ = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }
+  catch { return 'UTC' }
+})()
+
+// Commonly-used IANA zones surfaced first in the picker; "Browser default"
+// shows the browser-resolved value. The backend stores availability as
+// timezone-naive LocalTime — the picker is informational so the mentor knows
+// which zone the hour numbers represent. We do not convert hours when the
+// picker changes; doing so would silently corrupt previously-saved slots.
+const TIMEZONE_OPTIONS = [
+  'Europe/Istanbul',
+  'Europe/London',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Los_Angeles',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'UTC',
 ]
-
-// API returns LocalTime as { hour, minute, second, nano } — convert to "HH:mm"
-function timeObjToStr(t) {
-  if (!t) return '09:00'
-  if (typeof t === 'string') return t.slice(0, 5)
-  return `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`
-}
-
-function makeDefaultSlots() {
-  return DAYS.map(({ key, label }) => ({
-    key, label,
-    start: '09:00',
-    end: '18:00',
-    on: key !== 'SATURDAY' && key !== 'SUNDAY',
-  }))
-}
-
-function DayRow({ day, onToggle, onTimeChange }) {
-  return (
-    <div className={`day-row${day.on ? '' : ' off'}`}>
-      <div className={`day-chip${day.on ? '' : ' off'}`}>{day.label}</div>
-      <div className="time-range">
-        {day.on ? (
-          <>
-            <input
-              type="time"
-              className="time-input"
-              value={day.start}
-              onChange={e => onTimeChange(day.key, 'start', e.target.value)}
-            />
-            <span className="time-sep">–</span>
-            <input
-              type="time"
-              className="time-input"
-              value={day.end}
-              onChange={e => onTimeChange(day.key, 'end', e.target.value)}
-            />
-          </>
-        ) : (
-          <span className="time-pill off">Not available</span>
-        )}
-      </div>
-      <button
-        className={`toggle${day.on ? '' : ' off'}`}
-        onClick={() => onToggle(day.key)}
-        aria-label={`${day.on ? 'Disable' : 'Enable'} ${day.label}`}
-      />
-    </div>
-  )
-}
 
 export default function AvailabilityPage() {
   const { role, userId } = useAuth()
   const isMentor = role === 'MENTOR'
 
-  const [slots, setSlots] = useState(makeDefaultSlots())
+  const [selected, setSelected] = useState(() => new Set())
+  const [originalKey, setOriginalKey] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [status, setStatus] = useState(null)
+  const [status, setStatus] = useState(null) // null | 'success' | string error
+  const [timezone, setTimezone] = useState(BROWSER_TZ)
 
+  // ── Load existing slots and seed the grid ─────────────────────────────
   useEffect(() => {
-    if (!userId) return
-    setLoading(true)
-    const fetch = isMentor ? getMentorAvailability(userId) : getMenteeAvailability()
-    fetch
-      .then(data => {
-        if (!data || data.length === 0) return
-        // Build map: dayOfWeek → first slot (UI supports one slot per day)
-        const map = {}
-        for (const slot of data) {
-          if (!map[slot.dayOfWeek]) map[slot.dayOfWeek] = slot
-        }
-        setSlots(DAYS.map(({ key, label }) => {
-          const s = map[key]
-          return {
-            key, label,
-            start: s ? timeObjToStr(s.startTime) : '09:00',
-            end:   s ? timeObjToStr(s.endTime)   : '18:00',
-            on: !!s,
-          }
-        }))
-      })
-      .catch(() => {}) // keep defaults on error
-      .finally(() => setLoading(false))
-  }, [isMentor, userId])
-
-  function toggleDay(key) {
-    setSlots(prev => prev.map(d => d.key === key ? { ...d, on: !d.on } : d))
-    setStatus(null)
-  }
-
-  function updateTime(key, field, value) {
-    setSlots(prev => prev.map(d => d.key === key ? { ...d, [field]: value } : d))
-    setStatus(null)
-  }
-
-  function validate() {
-    if (!slots.some(d => d.on)) return 'Please enable at least one day.'
-    for (const d of slots) {
-      if (!d.on) continue
-      if (!d.start || !d.end) return `${d.label}: start and end time are required.`
-      if (d.start >= d.end) return `${d.label}: end time must be after start time.`
+    if (!userId || !isMentor) {
+      setLoading(false)
+      return undefined
     }
-    return null
-  }
+    let cancelled = false
+    setLoading(true)
+    getMentorAvailability(userId)
+      .then(data => {
+        if (cancelled) return
+        const slots = Array.isArray(data) ? data : data?.slots ?? []
+        const cellSet = slotsToCellSet(slots)
+        setSelected(cellSet)
+        setOriginalKey(setToKey(cellSet))
+      })
+      .catch(() => { /* keep empty grid on error */ })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [userId, isMentor])
 
+  const dirty = useMemo(() => setToKey(selected) !== originalKey, [selected, originalKey])
+  useUnsavedChangesGuard(dirty)
+
+  // ── Save handler ──────────────────────────────────────────────────────
   async function handleSave() {
-    const error = validate()
-    if (error) { setStatus(error); return }
-
-    setSaving(true)
     setStatus(null)
+    const slots = cellSetToSlots(selected)
+    if (slots.length === 0) {
+      setStatus('Please select at least one available hour before saving.')
+      return
+    }
+    if (slots.length > 50) {
+      setStatus('Too many separate ranges (max 50). Try painting larger contiguous blocks.')
+      return
+    }
+    setSaving(true)
     try {
-      const payload = {
-        slots: slots
-          .filter(d => d.on)
-          .map(({ key, start, end }) => ({
-            dayOfWeek: key,
-            startTime: start,
-            endTime: end,
-            recurring: true,
-          })),
-      }
-      if (isMentor) {
-        await saveMentorAvailability(payload)
-      } else {
-        await saveMenteeAvailability(payload)
-      }
+      await saveMentorAvailability({ slots })
+      setOriginalKey(setToKey(selected))
       setStatus('success')
-      setTimeout(() => setStatus(null), 3000)
     } catch (err) {
-      const msg = err.message || ''
+      const msg = err?.message || 'Failed to save availability.'
       if (msg.includes('409') || msg.toLowerCase().includes('overlap')) {
         setStatus('Overlapping slots or invalid time range.')
       } else {
-        setStatus(msg || 'Failed to save availability.')
+        setStatus(msg)
       }
     } finally {
       setSaving(false)
     }
   }
 
+  // ── Mentee gate (1.1.4.1 mentor-only feature) ─────────────────────────
+  if (!isMentor) {
+    return (
+      <MainLayout>
+        <div className="page-header">
+          <div>
+            <div className="page-title">Availability</div>
+          </div>
+        </div>
+        <div className="md-error-card">
+          <div className="md-error-title">Mentors only</div>
+          <div className="md-error-sub">Setting weekly availability is a mentor capability.</div>
+        </div>
+      </MainLayout>
+    )
+  }
+
   return (
     <MainLayout>
       <div className="page-header">
         <div>
-          <div className="page-title">Availability</div>
-          <div className="page-sub">Set your weekly recurring availability</div>
+          <div className="page-title">Edit Availability</div>
+          <div className="page-sub" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span>Timezone:</span>
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="avail-tz-select"
+              aria-label="Display timezone"
+            >
+              <option value={BROWSER_TZ}>{BROWSER_TZ} (browser default)</option>
+              {TIMEZONE_OPTIONS.filter(tz => tz !== BROWSER_TZ).map(tz => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              (display label only — hours are saved as-is)
+            </span>
+          </div>
         </div>
-        <button className="action-btn" onClick={handleSave} disabled={saving || loading}>
-          {saving ? 'Saving...' : 'Save'}
+        <button
+          className="action-btn"
+          onClick={handleSave}
+          disabled={saving || loading || !dirty}
+          title={!dirty ? 'No unsaved changes' : 'Save availability'}
+        >
+          {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
 
@@ -193,24 +162,26 @@ export default function AvailabilityPage() {
 
       {loading ? (
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          Loading availability...
+          Loading availability…
         </div>
       ) : (
-        <div className="card" style={{ maxWidth: '560px' }}>
-          <div className="section-label">Weekly Schedule</div>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-            Toggle days on or off and set your available hours. All slots repeat weekly.
+        <div className="card">
+          <div className="section-label" style={{ marginBottom: '6px' }}>Weekly schedule</div>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+            Click an hour cell to toggle availability. Adjacent cells on the same day are merged into one time range when saved.
           </p>
-          {slots.map(d => (
-            <DayRow
-              key={d.key}
-              day={d}
-              onToggle={toggleDay}
-              onTimeChange={updateTime}
-            />
-          ))}
+          <AvailabilityGrid
+            selected={selected}
+            onChange={(next) => { setSelected(next); setStatus(null) }}
+            disabled={saving}
+          />
         </div>
       )}
     </MainLayout>
   )
+}
+
+// Stable string identity for a Set, used to detect dirty state
+function setToKey(set) {
+  return Array.from(set).sort().join('|')
 }

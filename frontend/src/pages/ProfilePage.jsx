@@ -3,6 +3,7 @@ import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import usePresence from '../hooks/usePresence'
 import { useAuth } from '../context/AuthContext'
+import { useMentorship } from '../context/MentorshipContext'
 import { getOwnProfile, updateOwnProfile, uploadProfilePhoto, deleteProfilePhoto } from '../services/api'
 import '../styles/main.css'
 
@@ -21,6 +22,7 @@ function mapResponseToForm(data) {
       expertise: data.expertise || '',
       affiliation: data.affiliation || '',
       maxMenteeCapacity: data.maxMenteeCapacity != null ? String(data.maxMenteeCapacity) : '',
+      currentMenteeCount: data.currentMenteeCount ?? 0,
       preferredMenteeMajor: data.preferredMenteeMajor || '',
       mentoringGoals: data.mentoringGoals || '',
       mentorshipDuration: data.mentorshipDuration != null ? String(data.mentorshipDuration) : '',
@@ -81,6 +83,7 @@ function ViewField({ label, value, visible, chips = false }) {
 
 export default function ProfilePage() {
   const { role, setProfileData } = useAuth()
+  const { refresh } = useMentorship()
   const isMentor = role === 'MENTOR'
   const presence = usePresence()
 
@@ -111,6 +114,16 @@ export default function ProfilePage() {
     const e = {}
     if (!form.name?.trim()) e.name = 'Name is required.'
     if (form.name?.trim().length > 100) e.name = 'Name must be under 100 characters.'
+    if (isMentor) {
+      const capacity = form.maxMenteeCapacity === '' ? NaN : parseInt(form.maxMenteeCapacity, 10)
+      if (Number.isNaN(capacity)) {
+        e.maxMenteeCapacity = 'Max mentee capacity is required.'
+      } else if (capacity < 1) {
+        e.maxMenteeCapacity = 'Max mentee capacity must be at least 1.'
+      } else if (typeof form.currentMenteeCount === 'number' && capacity < form.currentMenteeCount) {
+        e.maxMenteeCapacity = `Max mentee capacity cannot be below current mentee count (${form.currentMenteeCount}).`
+      }
+    }
     return e
   }
 
@@ -160,6 +173,7 @@ export default function ProfilePage() {
 
       const updated = await updateOwnProfile(payload, role)
       setProfileData(updated.firstName, updated.lastName, updated.profilePhoto)
+      refresh()
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (err) {
@@ -317,7 +331,7 @@ export default function ProfilePage() {
         <div className="card">
           <div className="section-label">Edit Information</div>
 
-          <form onSubmit={handleSave} noValidate>
+          <form onSubmit={handleSave} noValidate data-testid="profile-form">
             <div className="form-field">
               <label className="form-label">Full Name</label>
               <input
@@ -326,6 +340,7 @@ export default function ProfilePage() {
                 maxLength={100}
                 value={form.name}
                 onChange={e => handleChange('name', e.target.value)}
+                data-testid="profile-name"
               />
               {errors.name && <div style={{ color: 'var(--red-text)', fontSize: '13px', marginTop: '4px' }}>{errors.name}</div>}
             </div>
@@ -338,6 +353,7 @@ export default function ProfilePage() {
                 value={form.interests}
                 onChange={e => handleChange('interests', e.target.value)}
                 placeholder="e.g. Mobile Development, AI/ML"
+                data-testid="profile-interests"
               />
             </div>
 
@@ -424,11 +440,17 @@ export default function ProfilePage() {
                   <input
                     className="form-input"
                     type="number"
-                    min={0}
+                    min={1}
+                    step={1}
                     value={form.maxMenteeCapacity}
                     onChange={e => handleChange('maxMenteeCapacity', e.target.value)}
                     placeholder="e.g. 3"
                   />
+                  {errors.maxMenteeCapacity && (
+                    <div style={{ color: 'var(--red-text)', fontSize: '13px', marginTop: '4px' }}>
+                      {errors.maxMenteeCapacity}
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-field">
@@ -533,17 +555,17 @@ export default function ProfilePage() {
             )}
 
             {saveSuccess && (
-              <div style={{ color: 'var(--green-dark)', fontSize: '13px', marginBottom: '8px' }}>
+              <div data-testid="profile-save-success" style={{ color: 'var(--green-dark)', fontSize: '13px', marginBottom: '8px' }}>
                 Profile saved successfully.
               </div>
             )}
             {saveError && (
-              <div style={{ color: 'var(--red-text)', fontSize: '13px', marginBottom: '8px' }}>
+              <div data-testid="profile-save-error" style={{ color: 'var(--red-text)', fontSize: '13px', marginBottom: '8px' }}>
                 {saveError}
               </div>
             )}
 
-            <button type="submit" className="save-btn" style={{ marginTop: '16px' }} disabled={saving}>
+            <button type="submit" className="save-btn" style={{ marginTop: '16px' }} disabled={saving} data-testid="profile-save">
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </form>

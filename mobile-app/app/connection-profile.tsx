@@ -1,23 +1,69 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRole } from '../components/RoleContext';
+import { useProtectedSession } from '../components/useProtectedSession';
 import apiClient from '../api/client';
+import ActionModal from '../components/ActionModal';
 
-type MeetingItem = {
-  id: string;
-  day: string;
-  date: string;
-  time: string;
-  title: string;
-  status: 'confirmed' | 'pending';
+type AvailabilitySlot = {
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
 };
+
+type MilestoneStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+
+type MilestoneSummary = {
+  id: number;
+  title: string;
+  targetDate: string | null;
+  status: MilestoneStatus;
+  orderIndex: number;
+};
+
+type MilestoneActionItem = {
+  id: number;
+  text: string;
+  isCompleted: boolean;
+  orderIndex: number;
+  completedAt: string | null;
+  completedById: number | null;
+  createdById: number | null;
+  createdAt: string | null;
+};
+
+type MilestoneDetail = {
+  id: number;
+  mentorshipId: number;
+  title: string;
+  description: string;
+  targetDate: string | null;
+  status: MilestoneStatus;
+  orderIndex: number;
+  completedAt: string | null;
+  createdAt: string | null;
+  actionItems: MilestoneActionItem[];
+};
+
+const DAY_LIST = [
+  { api: 'MONDAY',    short: 'Mon' },
+  { api: 'TUESDAY',   short: 'Tue' },
+  { api: 'WEDNESDAY', short: 'Wed' },
+  { api: 'THURSDAY',  short: 'Thu' },
+  { api: 'FRIDAY',    short: 'Fri' },
+  { api: 'SATURDAY',  short: 'Sat' },
+  { api: 'SUNDAY',    short: 'Sun' },
+];
 
 function parseString(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value ?? '';
@@ -32,28 +78,37 @@ function parseJsonList(value: string | string[] | undefined): string[] {
   }
 }
 
-function parseMeetings(value: string | string[] | undefined): MeetingItem[] {
-  try {
-    const raw = parseString(value);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+function formatDateLabel(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatStatusLabel(status: MilestoneStatus): string {
+  return status === 'IN_PROGRESS' ? 'In Progress' : status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function toIsoDateOrNull(dateStr: string): string | null {
+  if (!dateStr.trim()) return null;
+  const d = new Date(dateStr.trim());
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
 }
 
 export default function ConnectionProfileScreen() {
   const { role } = useRole();
+  const { session, sessionLoading } = useProtectedSession('connection-profile');
   const isMentorViewer = role === 'mentor';
   const params = useLocalSearchParams();
 
   const id = parseString(params.id);
+  const mentorshipId = parseString(params.mentorshipId);
   const type = parseString(params.type);
   const name = parseString(params.name);
   const initials = parseString(params.initials);
   const avatarBg = parseString(params.avatarBg) || '#D7E8DA';
   const avatarText = parseString(params.avatarText) || '#2F563C';
   const subtitle = parseString(params.subtitle);
-  const meetings = parseMeetings(params.meetings);
+  const sourceScreen = parseString(params.sourceScreen);
 
   const [about, setAbout] = useState(parseString(params.about));
   const [department, setDepartment] = useState(parseString(params.department));
@@ -63,7 +118,51 @@ export default function ConnectionProfileScreen() {
   const mentoringGoals = parseJsonList(params.mentoringGoals);
   const preferences = parseJsonList(params.preferences);
 
+  const [mentorSlots, setMentorSlots] = useState<AvailabilitySlot[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+
+  const [sharedGoal, setSharedGoal] = useState(parseString(params.subtitle));
+  const [goalDraft, setGoalDraft] = useState('');
+  const [goalEditing, setGoalEditing] = useState(false);
+  const [goalSaving, setGoalSaving] = useState(false);
+  const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
+  const [milestoneDetails, setMilestoneDetails] = useState<Record<number, MilestoneDetail>>({});
+  const [milestonesLoading, setMilestonesLoading] = useState(false);
+  const [milestonesRefreshing, setMilestonesRefreshing] = useState(false);
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<number | null>(null);
+  const [selectedMilestoneLoading, setSelectedMilestoneLoading] = useState(false);
+  const [actionItemSavingId, setActionItemSavingId] = useState<number | null>(null);
+  const [milestoneComposerOpen, setMilestoneComposerOpen] = useState(false);
+  const [milestoneTitleDraft, setMilestoneTitleDraft] = useState('');
+  const [milestoneDescriptionDraft, setMilestoneDescriptionDraft] = useState('');
+  const [milestoneDateDraft, setMilestoneDateDraft] = useState('');
+  const [milestoneCreating, setMilestoneCreating] = useState(false);
+  const [actionItemDraft, setActionItemDraft] = useState('');
+  const [actionItemCreating, setActionItemCreating] = useState(false);
+  const [mentorshipActionLoading, setMentorshipActionLoading] = useState(false);
+  const [endModalVisible, setEndModalVisible] = useState(false);
+  const [endReason, setEndReason] = useState('');
+
   useEffect(() => {
+    console.log('[connection-profile] route context', {
+      id,
+      mentorshipId,
+      sourceScreen,
+      type,
+      name,
+      role,
+      isMentorViewer,
+      sessionUserId: session?.userId ?? null,
+      sessionRole: session?.role ?? null,
+    });
+  }, [id, mentorshipId, sourceScreen, type, name, role, isMentorViewer, session?.role, session?.userId]);
+
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[connection-profile] skipping protected profile fetch because session is missing');
+      return;
+    }
     if (!id) return;
     apiClient.get(`/users/${id}`).then((res) => {
       const d = res.data;
@@ -74,7 +173,109 @@ export default function ConnectionProfileScreen() {
       if (d.interests?.length) setInterests(d.interests);
       if (d.goals) setGoals([d.goals]);
     }).catch(() => {});
-  }, [id]);
+  }, [id, session, sessionLoading]);
+
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[connection-profile] skipping mentorship fetch because session is missing');
+      return;
+    }
+    if (!mentorshipId) return;
+    apiClient.get(`/mentorships/${mentorshipId}`).then((res) => {
+      if (res.data.sharedGoal) setSharedGoal(res.data.sharedGoal);
+    }).catch(() => {});
+  }, [mentorshipId, session, sessionLoading]);
+
+  const fetchMilestoneDetail = async (milestoneId: number) => {
+    const res = await apiClient.get(`/milestones/${milestoneId}`);
+    return res.data as MilestoneDetail;
+  };
+
+  const loadMilestones = useCallback(async (keepSelection = true) => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[connection-profile] skipping milestone fetch because session is missing');
+      setMilestonesLoading(false);
+      setMilestonesRefreshing(false);
+      return;
+    }
+    if (!mentorshipId) return;
+
+    setMilestonesLoading(true);
+    try {
+      console.log('[connection-profile] loading milestones', {
+        mentorshipId,
+        keepSelection,
+      });
+      const res = await apiClient.get(`/mentorships/${mentorshipId}/milestones`);
+      const summaryItems = ((res.data ?? []) as MilestoneSummary[]).sort(
+        (a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)
+      );
+      setMilestones(summaryItems);
+
+      if (summaryItems.length === 0) {
+        setMilestoneDetails({});
+        setSelectedMilestoneId(null);
+        return;
+      }
+
+      const details = await Promise.all(
+        summaryItems.map(async (item) => [item.id, await fetchMilestoneDetail(item.id)] as const)
+      );
+
+      const detailMap = Object.fromEntries(details);
+      setMilestoneDetails(detailMap);
+      setSelectedMilestoneId((current) => {
+        if (keepSelection && current && detailMap[current]) return current;
+        return summaryItems[0].id;
+      });
+    } catch (error: any) {
+      console.error('[connection-profile] failed to load milestones', {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        mentorshipId,
+        id,
+        role,
+      });
+      Alert.alert('Error', 'Could not load milestones right now.');
+    } finally {
+      setMilestonesLoading(false);
+      setMilestonesRefreshing(false);
+    }
+  }, [id, mentorshipId, role, session, sessionLoading]);
+
+  useEffect(() => {
+    if (sessionLoading || !session) return;
+    if (!mentorshipId) return;
+    loadMilestones(false);
+  }, [mentorshipId, loadMilestones, session, sessionLoading]);
+
+  const refreshSelectedMilestone = async (milestoneId: number) => {
+    setSelectedMilestoneLoading(true);
+    try {
+      const detail = await fetchMilestoneDetail(milestoneId);
+      setMilestoneDetails((prev) => ({ ...prev, [milestoneId]: detail }));
+    } catch {
+      Alert.alert('Error', 'Could not refresh the milestone details.');
+    } finally {
+      setSelectedMilestoneLoading(false);
+    }
+  };
+
+  const saveSharedGoal = async () => {
+    if (!mentorshipId || !goalDraft.trim()) return;
+    setGoalSaving(true);
+    try {
+      await apiClient.put(`/mentorships/${mentorshipId}/goal`, { sharedGoal: goalDraft.trim() });
+      setSharedGoal(goalDraft.trim());
+      setGoalEditing(false);
+    } catch {
+      Alert.alert('Error', 'Could not save the shared goal. Please try again.');
+    } finally {
+      setGoalSaving(false);
+    }
+  };
 
   const stat1Label = parseString(params.stat1Label);
   const stat1Value = parseString(params.stat1Value);
@@ -84,34 +285,239 @@ export default function ConnectionProfileScreen() {
   const stat3Value = parseString(params.stat3Value);
 
   const isViewingMentor = type === 'mentor';
+  const selectedMilestone = selectedMilestoneId ? milestoneDetails[selectedMilestoneId] : null;
+  const totalActionItems = Object.values(milestoneDetails).reduce(
+    (sum, milestone) => sum + milestone.actionItems.length,
+    0
+  );
+  const completedActionItems = Object.values(milestoneDetails).reduce(
+    (sum, milestone) => sum + milestone.actionItems.filter((item) => item.isCompleted).length,
+    0
+  );
+  const overallProgressPercent = totalActionItems
+    ? Math.round((completedActionItems / totalActionItems) * 100)
+    : 0;
+  const selectedMilestoneCompletedCount = selectedMilestone?.actionItems.filter((item) => item.isCompleted).length ?? 0;
+  const selectedMilestoneProgressPercent = selectedMilestone?.actionItems.length
+    ? Math.round((selectedMilestoneCompletedCount / selectedMilestone.actionItems.length) * 100)
+    : 0;
+  const getStatusChipStyle = (status: MilestoneStatus) => {
+    if (status === 'COMPLETED') return styles.statusCompleted;
+    if (status === 'IN_PROGRESS') return styles.statusInProgress;
+    return styles.statusPending;
+  };
+
+  useEffect(() => {
+    if (!isViewingMentor || !id) return;
+    setAvailabilityLoading(true);
+    apiClient.get(`/availability/${id}`)
+      .then((res) => setMentorSlots(res.data ?? []))
+      .catch(() => {})
+      .finally(() => setAvailabilityLoading(false));
+  }, [isViewingMentor, id]);
+
+  const handleEndMentorship = () => {
+    setEndReason('');
+    setEndModalVisible(true);
+  };
+
+  const confirmEndMentorship = async () => {
+    if (!isMentorViewer && !endReason.trim()) {
+      Alert.alert('Required', 'Please enter a reason for cancellation.');
+      return;
+    }
+    setMentorshipActionLoading(true);
+    try {
+      if (isMentorViewer) {
+        await apiClient.patch(`/mentorships/${mentorshipId}/end`, { reason: endReason.trim() });
+      } else {
+        await apiClient.post(`/mentorships/${mentorshipId}/cancel`, { reason: endReason.trim() });
+      }
+      setEndModalVisible(false);
+      Alert.alert('Done', `Mentorship ${isMentorViewer ? 'ended' : 'cancelled'} successfully.`, [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Could not complete the action.');
+    } finally {
+      setMentorshipActionLoading(false);
+    }
+  };
 
   const openRequest = (mode: 'meeting' | 'change' | 'end') => {
+    const mentorId = session?.role === 'mentor' ? session.userId : Number(id);
+    const menteeId = session?.role === 'mentee' ? session.userId : Number(id);
+    console.log('[navigation] opening connection-request', {
+      sourceScreen: 'connection-profile',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId,
+      mentorId,
+      menteeId,
+      mode,
+      targetScreen: 'connection-request',
+    });
     router.push({
       pathname: '/connection-request',
       params: {
         mode,
         targetName: name,
         targetType: type,
+        mentorshipId,
       },
     });
   };
 
   const openMeetings = () => {
+    console.log('[navigation] opening meetings-sessions', {
+      sourceScreen: 'connection-profile',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId,
+      targetScreen: 'meetings-sessions',
+    });
     router.push({
       pathname: '/meetings-sessions',
-      params: { connectedUserName: name, connectedUserType: type },
+      params: { connectedUserName: name, connectedUserType: type, mentorshipId, sourceScreen: 'connection-profile' },
     });
   };
 
   const openTasks = () => {
+    console.log('[navigation] opening task-tracker', {
+      sourceScreen: 'connection-profile',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId,
+      targetScreen: 'task-tracker',
+    });
     router.push({
       pathname: '/task-tracker',
-      params: { connectedUserName: name, connectedUserType: type },
+      params: {
+        connectedUserName: name,
+        connectedUserType: type,
+        mentorshipId,
+        sourceScreen: 'connection-profile',
+      },
     });
   };
 
+  const openMessages = () => {
+    console.log('[navigation] opening messages', {
+      sourceScreen: 'connection-profile',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId,
+      targetScreen: 'messages',
+      openWith: name,
+    });
+    router.navigate({
+      pathname: '/messages',
+      params: { openWith: name, mentorshipId, sourceScreen: 'connection-profile' },
+    });
+  };
+
+  const createMilestone = async () => {
+    if (!mentorshipId || !milestoneTitleDraft.trim()) return;
+    setMilestoneCreating(true);
+    try {
+      await apiClient.post(`/mentorships/${mentorshipId}/milestones`, {
+        title: milestoneTitleDraft.trim(),
+        description: milestoneDescriptionDraft.trim() || null,
+        targetDate: toIsoDateOrNull(milestoneDateDraft),
+      });
+      setMilestoneTitleDraft('');
+      setMilestoneDescriptionDraft('');
+      setMilestoneDateDraft('');
+      setMilestoneComposerOpen(false);
+      await loadMilestones(false);
+    } catch {
+      Alert.alert('Error', 'Could not create the milestone.');
+    } finally {
+      setMilestoneCreating(false);
+    }
+  };
+
+  const addActionItem = async () => {
+    if (!selectedMilestone || !actionItemDraft.trim()) return;
+    setActionItemCreating(true);
+    try {
+      await apiClient.post(`/milestones/${selectedMilestone.id}/action-items`, {
+        text: actionItemDraft.trim(),
+      });
+      setActionItemDraft('');
+      await refreshSelectedMilestone(selectedMilestone.id);
+      await loadMilestones();
+    } catch {
+      Alert.alert('Error', 'Could not add the action item.');
+    } finally {
+      setActionItemCreating(false);
+    }
+  };
+
+  const updateMilestoneStatus = async (status: MilestoneStatus) => {
+    if (!selectedMilestone || selectedMilestone.status === status) return;
+    setSelectedMilestoneLoading(true);
+    try {
+      await apiClient.patch(`/milestones/${selectedMilestone.id}`, { status });
+      await loadMilestones();
+    } catch {
+      Alert.alert('Error', 'Could not update the milestone status.');
+    } finally {
+      setSelectedMilestoneLoading(false);
+    }
+  };
+
+  const toggleActionItem = async (item: MilestoneActionItem) => {
+    setActionItemSavingId(item.id);
+    try {
+      await apiClient.patch(`/milestone-action-items/${item.id}`, {
+        completed: !item.isCompleted,
+      });
+      if (selectedMilestoneId) {
+        await refreshSelectedMilestone(selectedMilestoneId);
+      }
+      await loadMilestones();
+    } catch {
+      Alert.alert('Error', 'Could not update the action item.');
+    } finally {
+      setActionItemSavingId(null);
+    }
+  };
+
+  if (sessionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#456B50" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
+      <ActionModal
+        visible={endModalVisible}
+        title={isMentorViewer ? 'End Mentorship' : 'Cancel Mentorship'}
+        message={isMentorViewer
+          ? 'Add a wrap-up note for your mentee (optional).'
+          : 'Please provide a reason for cancelling this mentorship.'}
+        fields={[{
+          label: isMentorViewer ? 'Wrap-up note' : 'Reason',
+          placeholder: isMentorViewer ? 'e.g. Goal achieved — great work!' : 'e.g. Schedules no longer align',
+          value: endReason,
+          onChange: setEndReason,
+          multiline: true,
+          required: !isMentorViewer,
+        }]}
+        confirmLabel={isMentorViewer ? 'End Mentorship' : 'Cancel Mentorship'}
+        danger
+        loading={mentorshipActionLoading}
+        onConfirm={confirmEndMentorship}
+        onCancel={() => setEndModalVisible(false)}
+      />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.topCircle} />
@@ -227,91 +633,344 @@ export default function ConnectionProfileScreen() {
             )}
           </View>
 
-          <Text style={styles.sectionTitle}>SHARED CALENDAR</Text>
+          <Text style={styles.sectionTitle}>SHARED GOAL</Text>
 
           <View style={styles.card}>
-            <View style={styles.calendarHeader}>
-              <Text style={styles.calendarMonth}>April 2026</Text>
-              <TouchableOpacity>
-                <Text style={styles.calendarLink}>View Full</Text>
+            {goalEditing ? (
+              <>
+                <TextInput
+                  style={styles.goalInput}
+                  value={goalDraft}
+                  onChangeText={setGoalDraft}
+                  placeholder="Describe your shared mentorship goal..."
+                  placeholderTextColor="#B0A89E"
+                  multiline
+                  maxLength={500}
+                  autoFocus
+                />
+                <Text style={styles.goalCharCount}>{goalDraft.length}/500</Text>
+                <View style={styles.goalButtonRow}>
+                  <TouchableOpacity
+                    style={styles.goalCancelButton}
+                    onPress={() => setGoalEditing(false)}
+                    disabled={goalSaving}
+                  >
+                    <Text style={styles.goalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.goalSaveButton, (!goalDraft.trim() || goalSaving) && { opacity: 0.5 }]}
+                    onPress={saveSharedGoal}
+                    disabled={!goalDraft.trim() || goalSaving}
+                  >
+                    {goalSaving
+                      ? <ActivityIndicator size="small" color="#F8F6F2" />
+                      : <Text style={styles.goalSaveText}>Save Goal</Text>}
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardText}>
+                  {sharedGoal || 'No shared goal set yet. Tap Edit to define one together.'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.goalEditButton}
+                  onPress={() => { setGoalDraft(sharedGoal); setGoalEditing(true); }}
+                >
+                  <Text style={styles.goalEditText}>Edit Goal</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+
+          <Text style={styles.sectionTitle}>MILESTONES</Text>
+
+          <View style={styles.card}>
+            <View style={styles.goalSummaryHeader}>
+              <View>
+                <Text style={styles.cardLabel}>Overall progress</Text>
+                <Text style={styles.progressHeadline}>{overallProgressPercent}% complete</Text>
+                <Text style={styles.progressSubtext}>
+                  {completedActionItems}/{totalActionItems} action items completed
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.goalEditButton}
+                onPress={() => {
+                  setMilestonesRefreshing(true);
+                  loadMilestones();
+                }}
+                disabled={milestonesRefreshing}
+              >
+                <Text style={styles.goalEditText}>{milestonesRefreshing ? 'Refreshing...' : 'Refresh'}</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.weekRow}>
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                <Text key={day} style={styles.weekDay}>
-                  {day}
-                </Text>
-              ))}
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${overallProgressPercent}%` }]} />
             </View>
 
-            <View style={styles.daysGrid}>
-              {['7', '8', '9', '10', '11', '12', '13'].map((day, index) => {
-                const highlighted = index === 1 || index === 4;
-                return (
-                  <View
-                    key={day}
-                    style={[
-                      styles.dayCell,
-                      highlighted && styles.dayCellActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.dayCellText,
-                        highlighted && styles.dayCellTextActive,
-                      ]}
-                    >
-                      {day}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            <Text style={styles.cardLabel}>Upcoming Shared Meetings</Text>
-
-            {meetings.map((meeting) => (
-              <View key={meeting.id} style={styles.meetingRow}>
-                <View style={styles.meetingTimeBox}>
-                  <Text style={styles.meetingDay}>{meeting.day}</Text>
-                  <Text style={styles.meetingTime}>{meeting.time}</Text>
-                </View>
-
-                <View style={styles.meetingInfo}>
-                  <Text style={styles.meetingTitle}>{meeting.title}</Text>
-                  <Text style={styles.meetingDate}>{meeting.date}</Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.meetingBadge,
-                    meeting.status === 'confirmed'
-                      ? styles.meetingBadgeConfirmed
-                      : styles.meetingBadgePending,
-                  ]}
+            {isMentorViewer && (
+              <>
+                <TouchableOpacity
+                  style={styles.actionButtonSecondary}
+                  onPress={() => setMilestoneComposerOpen((current) => !current)}
                 >
-                  <Text
-                    style={[
-                      styles.meetingBadgeText,
-                      meeting.status === 'confirmed'
-                        ? styles.meetingBadgeTextConfirmed
-                        : styles.meetingBadgeTextPending,
-                    ]}
-                  >
-                    {meeting.status === 'confirmed' ? 'Confirmed' : 'Pending'}
+                  <Text style={styles.actionButtonSecondaryText}>
+                    {milestoneComposerOpen ? 'Hide Milestone Form' : '+ Add Milestone'}
                   </Text>
-                </View>
-              </View>
-            ))}
+                </TouchableOpacity>
+
+                {milestoneComposerOpen && (
+                  <View style={styles.milestoneComposer}>
+                    <TextInput
+                      style={styles.milestoneInput}
+                      value={milestoneTitleDraft}
+                      onChangeText={setMilestoneTitleDraft}
+                      placeholder="Milestone title"
+                      placeholderTextColor="#B0A89E"
+                    />
+                    <TextInput
+                      style={styles.goalInput}
+                      value={milestoneDescriptionDraft}
+                      onChangeText={setMilestoneDescriptionDraft}
+                      placeholder="Description (optional)"
+                      placeholderTextColor="#B0A89E"
+                      multiline
+                    />
+                    <TextInput
+                      style={styles.milestoneInput}
+                      value={milestoneDateDraft}
+                      onChangeText={setMilestoneDateDraft}
+                      placeholder="Target date (YYYY-MM-DD)"
+                      placeholderTextColor="#B0A89E"
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity
+                      style={[styles.goalSaveButton, (!milestoneTitleDraft.trim() || milestoneCreating) && { opacity: 0.5 }]}
+                      onPress={createMilestone}
+                      disabled={!milestoneTitleDraft.trim() || milestoneCreating}
+                    >
+                      {milestoneCreating
+                        ? <ActivityIndicator size="small" color="#F8F6F2" />
+                        : <Text style={styles.goalSaveText}>Create Milestone</Text>}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+
+            {milestonesLoading ? (
+              <ActivityIndicator size="small" color="#456B50" style={styles.inlineLoader} />
+            ) : milestones.length === 0 ? (
+              <Text style={styles.cardText}>No milestones added yet.</Text>
+            ) : (
+              <>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.milestoneList}
+                >
+                  {milestones.map((milestone) => {
+                    const detail = milestoneDetails[milestone.id];
+                    const completedCount = detail?.actionItems.filter((item) => item.isCompleted).length ?? 0;
+                    const progressPercent = detail?.actionItems.length
+                      ? Math.round((completedCount / detail.actionItems.length) * 100)
+                      : 0;
+
+                    return (
+                      <TouchableOpacity
+                        key={milestone.id}
+                        style={[
+                          styles.milestoneCard,
+                          selectedMilestoneId === milestone.id && styles.milestoneCardActive,
+                        ]}
+                        onPress={() => setSelectedMilestoneId(milestone.id)}
+                      >
+                        <View style={styles.milestoneCardHeader}>
+                          <Text style={styles.milestoneCardTitle}>{milestone.title}</Text>
+                          <View style={[styles.statusChip, getStatusChipStyle(milestone.status)]}>
+                            <Text style={styles.statusChipText}>{formatStatusLabel(milestone.status)}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.milestoneMeta}>{formatDateLabel(milestone.targetDate)}</Text>
+                        <Text style={styles.milestoneMeta}>{progressPercent}% complete</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {selectedMilestone ? (
+                  <View style={styles.milestoneDetailCard}>
+                    <View style={styles.milestoneDetailHeader}>
+                      <View style={styles.flexOne}>
+                        <Text style={styles.cardLabel}>Selected objective</Text>
+                        <Text style={styles.milestoneDetailTitle}>{selectedMilestone.title}</Text>
+                        <Text style={styles.milestoneMeta}>{formatDateLabel(selectedMilestone.targetDate)}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.goalEditButton}
+                        onPress={() => refreshSelectedMilestone(selectedMilestone.id)}
+                      >
+                        <Text style={styles.goalEditText}>Refresh</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {!!selectedMilestone.description && (
+                      <Text style={styles.cardText}>{selectedMilestone.description}</Text>
+                    )}
+
+                    <Text style={styles.progressSubtext}>
+                      {selectedMilestoneCompletedCount}/{selectedMilestone.actionItems.length} action items complete
+                    </Text>
+                    <View style={styles.progressTrack}>
+                      <View style={[styles.progressFill, { width: `${selectedMilestoneProgressPercent}%` }]} />
+                    </View>
+
+                    {isMentorViewer && (
+                      <View style={styles.statusFilterRow}>
+                        {(['PENDING', 'IN_PROGRESS', 'COMPLETED'] as MilestoneStatus[]).map((status) => (
+                          <TouchableOpacity
+                            key={status}
+                            style={[
+                              styles.statusFilterChip,
+                              selectedMilestone.status === status && styles.statusFilterChipActive,
+                            ]}
+                            onPress={() => updateMilestoneStatus(status)}
+                          >
+                            <Text
+                              style={[
+                                styles.statusFilterText,
+                                selectedMilestone.status === status && styles.statusFilterTextActive,
+                              ]}
+                            >
+                              {formatStatusLabel(status)}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+
+                    {selectedMilestoneLoading && (
+                      <ActivityIndicator size="small" color="#456B50" style={styles.inlineLoader} />
+                    )}
+
+                    {selectedMilestone.actionItems.length === 0 ? (
+                      <Text style={styles.cardText}>No action items defined for this milestone yet.</Text>
+                    ) : (
+                      selectedMilestone.actionItems
+                        .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+                        .map((item) => (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={styles.actionItemRow}
+                            onPress={() => toggleActionItem(item)}
+                            disabled={actionItemSavingId === item.id}
+                          >
+                            <View style={[styles.actionItemCheckbox, item.isCompleted && styles.actionItemCheckboxActive]}>
+                              {actionItemSavingId === item.id ? (
+                                <ActivityIndicator size="small" color={item.isCompleted ? '#F8F6F2' : '#456B50'} />
+                              ) : item.isCompleted ? (
+                                <Text style={styles.actionItemCheckmark}>✓</Text>
+                              ) : null}
+                            </View>
+                            <View style={styles.actionItemContent}>
+                              <Text style={[styles.actionItemText, item.isCompleted && styles.actionItemTextDone]}>
+                                {item.text}
+                              </Text>
+                              <Text style={styles.actionItemMeta}>
+                                {item.isCompleted
+                                  ? `Completed ${formatDateLabel(item.completedAt)}`
+                                  : 'Tap to mark complete'}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))
+                    )}
+
+                    {isMentorViewer && (
+                      <View style={styles.actionItemComposer}>
+                        <TextInput
+                          style={styles.milestoneInput}
+                          value={actionItemDraft}
+                          onChangeText={setActionItemDraft}
+                          placeholder="Add an action item"
+                          placeholderTextColor="#B0A89E"
+                        />
+                        <TouchableOpacity
+                          style={[styles.goalSaveButton, (!actionItemDraft.trim() || actionItemCreating) && { opacity: 0.5 }]}
+                          onPress={addActionItem}
+                          disabled={!actionItemDraft.trim() || actionItemCreating}
+                        >
+                          {actionItemCreating
+                            ? <ActivityIndicator size="small" color="#F8F6F2" />
+                            : <Text style={styles.goalSaveText}>Add Action Item</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+              </>
+            )}
           </View>
+
+          {isViewingMentor && (
+            <>
+              <Text style={styles.sectionTitle}>MENTOR AVAILABILITY</Text>
+
+              <View style={styles.card}>
+                {availabilityLoading ? (
+                  <ActivityIndicator size="small" color="#456B50" />
+                ) : (
+                  <>
+                    <View style={styles.daysGrid}>
+                      {DAY_LIST.map(({ api, short }) => {
+                        const available = mentorSlots.some((s) => s.dayOfWeek === api);
+                        return (
+                          <View key={api} style={[styles.dayCell, available && styles.dayCellActive]}>
+                            <Text style={[styles.dayCellText, available && styles.dayCellTextActive]}>
+                              {short}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+
+                    {mentorSlots.length === 0 ? (
+                      <Text style={styles.cardText}>No availability set by mentor yet.</Text>
+                    ) : (
+                      DAY_LIST
+                        .filter(({ api }) => mentorSlots.some((s) => s.dayOfWeek === api))
+                        .map(({ api, short }) => {
+                          const slots = mentorSlots.filter((s) => s.dayOfWeek === api);
+                          return (
+                            <View key={api} style={styles.availabilityRow}>
+                              <Text style={styles.availabilityDay}>{short}</Text>
+                              <View style={styles.availabilitySlots}>
+                                {slots.map((s, i) => (
+                                  <View key={i} style={styles.availabilityBadge}>
+                                    <Text style={styles.availabilityBadgeText}>
+                                      {s.startTime.substring(0, 5)} – {s.endTime.substring(0, 5)}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            </View>
+                          );
+                        })
+                    )}
+                  </>
+                )}
+              </View>
+            </>
+          )}
 
           <Text style={styles.sectionTitle}>ACTIONS</Text>
 
           <View style={styles.actionsGrid}>
             <TouchableOpacity
               style={styles.actionButtonPrimary}
-              onPress={() => router.navigate({ pathname: '/messages', params: { openWith: name } })}
+              onPress={openMessages}
             >
               <Text style={styles.actionButtonPrimaryText}>Open Messages</Text>
             </TouchableOpacity>
@@ -333,8 +992,18 @@ export default function ConnectionProfileScreen() {
               <Text style={styles.actionButtonSecondaryText}>Change Request</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButtonDanger} onPress={() => openRequest('end')}>
-              <Text style={styles.actionButtonDangerText}>End Mentorship</Text>
+            <TouchableOpacity
+              style={[styles.actionButtonDanger, mentorshipActionLoading && { opacity: 0.6 }]}
+              onPress={handleEndMentorship}
+              disabled={mentorshipActionLoading}
+            >
+              <Text style={styles.actionButtonDangerText}>
+                {mentorshipActionLoading
+                  ? 'Please wait...'
+                  : isMentorViewer
+                  ? 'End Mentorship'
+                  : 'Cancel Mentorship'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -528,32 +1197,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  calendarHeader: {
+  availabilityRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 10,
+    gap: 10,
   },
-  calendarMonth: {
-    color: '#23372B',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  calendarLink: {
-    color: '#4B7B57',
+  availabilityDay: {
+    width: 36,
+    color: '#2F563C',
     fontSize: 13,
     fontWeight: '700',
   },
-  weekRow: {
+  availabilitySlots: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  weekDay: {
-    width: '13%',
-    textAlign: 'center',
-    color: '#9A8F82',
-    fontSize: 11,
+  availabilityBadge: {
+    backgroundColor: '#D7E8DA',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  availabilityBadgeText: {
+    color: '#2F563C',
+    fontSize: 13,
     fontWeight: '600',
   },
   daysGrid: {
@@ -691,5 +1360,253 @@ const styles = StyleSheet.create({
   actionButtonHalf: {
     flex: 1,
     marginBottom: 0,
+  },
+  goalInput: {
+    backgroundColor: '#FCFBF8',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#C8D9CA',
+    padding: 14,
+    fontSize: 15,
+    color: '#23372B',
+    minHeight: 90,
+    textAlignVertical: 'top',
+    marginBottom: 6,
+  },
+  goalCharCount: {
+    color: '#B0A89E',
+    fontSize: 12,
+    textAlign: 'right',
+    marginBottom: 14,
+  },
+  goalButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  goalCancelButton: {
+    flex: 1,
+    backgroundColor: '#EDE8E1',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  goalCancelText: {
+    color: '#6B6158',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  goalSaveButton: {
+    flex: 2,
+    backgroundColor: '#4B7B57',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  goalSaveText: {
+    color: '#F8F6F2',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  goalEditButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EEF3EE',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 6,
+  },
+  goalEditText: {
+    color: '#2F563C',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  goalSummaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  progressHeadline: {
+    color: '#2E2A24',
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  progressSubtext: {
+    color: '#6E655A',
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  progressTrack: {
+    height: 10,
+    backgroundColor: '#E1D9CF',
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginTop: 14,
+    marginBottom: 18,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#456B50',
+    borderRadius: 999,
+  },
+  milestoneComposer: {
+    marginBottom: 18,
+  },
+  milestoneInput: {
+    backgroundColor: '#FCFBF8',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#C8D9CA',
+    padding: 14,
+    fontSize: 15,
+    color: '#23372B',
+    marginBottom: 10,
+  },
+  inlineLoader: {
+    marginVertical: 12,
+  },
+  milestoneList: {
+    paddingBottom: 6,
+    gap: 12,
+  },
+  milestoneCard: {
+    width: 210,
+    backgroundColor: '#F3EEE7',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E3DACE',
+  },
+  milestoneCardActive: {
+    borderColor: '#456B50',
+    backgroundColor: '#EDF4EF',
+  },
+  milestoneCardHeader: {
+    gap: 10,
+  },
+  milestoneCardTitle: {
+    color: '#2E2A24',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  milestoneMeta: {
+    color: '#6E655A',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  statusChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  statusPending: {
+    backgroundColor: '#EEE4D0',
+  },
+  statusInProgress: {
+    backgroundColor: '#DDE7F6',
+  },
+  statusCompleted: {
+    backgroundColor: '#DCEBDF',
+  },
+  statusChipText: {
+    color: '#2E2A24',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  milestoneDetailCard: {
+    marginTop: 18,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: '#E4DBD0',
+  },
+  milestoneDetailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  flexOne: {
+    flex: 1,
+  },
+  milestoneDetailTitle: {
+    color: '#2E2A24',
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  statusFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
+  },
+  statusFilterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D5CABC',
+    backgroundColor: '#F7F3EC',
+  },
+  statusFilterChipActive: {
+    backgroundColor: '#456B50',
+    borderColor: '#456B50',
+  },
+  statusFilterText: {
+    color: '#5E5348',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statusFilterTextActive: {
+    color: '#F8F6F2',
+  },
+  actionItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ECE4DA',
+  },
+  actionItemCheckbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#456B50',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8F6F2',
+  },
+  actionItemCheckboxActive: {
+    backgroundColor: '#456B50',
+  },
+  actionItemCheckmark: {
+    color: '#F8F6F2',
+    fontWeight: '800',
+  },
+  actionItemContent: {
+    flex: 1,
+  },
+  actionItemText: {
+    color: '#2E2A24',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  actionItemTextDone: {
+    textDecorationLine: 'line-through',
+    color: '#6E655A',
+  },
+  actionItemMeta: {
+    color: '#84796C',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  actionItemComposer: {
+    marginTop: 16,
   },
 });

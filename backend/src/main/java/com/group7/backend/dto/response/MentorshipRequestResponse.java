@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Getter
 @Setter
@@ -36,7 +36,7 @@ public class MentorshipRequestResponse {
     private String status;
 
     @Schema(description = "When the request was created")
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 
     public static MentorshipRequestResponse from(MentorshipRequest request) {
         MentorshipRequestResponse r = new MentorshipRequestResponse();

@@ -34,8 +34,10 @@ function ProfileField({ label, value, chips = false }) {
 export default function UserProfilePage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { role } = useAuth()
+  const { role, userId } = useAuth()
   const isMentee = role === 'MENTEE'
+  const isMentor = role === 'MENTOR'
+  const isOwnProfile = String(id) === String(userId)
 
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -43,6 +45,7 @@ export default function UserProfilePage() {
 
   const [canSeePhoto, setCanSeePhoto] = useState(false)
   const [availability, setAvailability] = useState([])
+
   const [modalVisible, setModalVisible] = useState(false)
   const [requestLoading, setRequestLoading] = useState(false)
   const [requestError, setRequestError] = useState('')
@@ -60,7 +63,10 @@ export default function UserProfilePage() {
       })
 
     getMentorAvailability(id)
-      .then(data => { if (Array.isArray(data) && data.length > 0) setAvailability(data) })
+      .then(data => {
+        const slots = Array.isArray(data) ? data : data?.slots ?? []
+        if (slots.length > 0) setAvailability(slots)
+      })
       .catch(() => {})
 
     if (isMentee) {
@@ -73,7 +79,7 @@ export default function UserProfilePage() {
     }
 
     if (!isMentee) {
-      // Mentor viewing a mentee: only show photo if there's an active mentorship
+      // Mentor viewing a mentee: only show photo if there's an active mentorship between them.
       getActiveMentorships()
         .then(data => {
           const active = (data || []).some(m => m.status === 'ACTIVE' && String(m.menteeId) === String(id))
@@ -131,7 +137,9 @@ export default function UserProfilePage() {
     ? [profile.firstName, profile.lastName].filter(Boolean).join(' ')
     : profile.firstName
 
-  const avatarSrc = isMentorProfile ? profile.profilePhoto : (canSeePhoto ? profile.profilePhoto : null)
+  const avatarSrc = isMentorProfile
+    ? profile.profilePhoto
+    : (canSeePhoto ? profile.profilePhoto : null)
 
   return (
     <MainLayout>
@@ -190,6 +198,20 @@ export default function UserProfilePage() {
               </button>
             </div>
           )}
+
+          {/* Mentor-to-mentor messaging entry point — only when viewer and target are
+              both mentors AND the viewer isn't looking at their own profile. */}
+          {isMentor && isMentorProfile && !isOwnProfile && (
+            <div style={{ textAlign: 'center' }}>
+              <button
+                className="send-request-btn"
+                onClick={() => navigate(`/messages?peerId=${id}`)}
+                style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
+              >
+                Send Message
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right — profile details */}
@@ -220,7 +242,9 @@ export default function UserProfilePage() {
                           if (typeof t === 'string') return t.slice(0, 5)
                           return `${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}`
                         }
-                        const day = slot.dayOfWeek.charAt(0) + slot.dayOfWeek.slice(1).toLowerCase()
+                        const day = slot.dayOfWeek
+                          ? slot.dayOfWeek.charAt(0) + slot.dayOfWeek.slice(1).toLowerCase()
+                          : ''
                         return (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: 'var(--text-mid)' }}>
                             <span style={{ width: '90px', fontWeight: 500, color: 'var(--text-main)' }}>{day}</span>

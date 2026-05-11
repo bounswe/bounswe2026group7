@@ -5,7 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "mentorships")
@@ -31,10 +32,10 @@ public class Mentorship {
     private MentorshipRequest request;
 
     @Column(name = "start_date", nullable = false)
-    private LocalDateTime startDate;
+    private OffsetDateTime startDate;
 
     @Column(name = "end_date", nullable = false)
-    private LocalDateTime endDate;
+    private OffsetDateTime endDate;
 
     @Column(nullable = false)
     private int duration;
@@ -47,10 +48,33 @@ public class Mentorship {
     private String sharedGoal;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @Column(name = "terminated_at")
+    private OffsetDateTime terminatedAt;
+
+    @Column(name = "terminated_by_user_id")
+    private Long terminatedByUserId;
+
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
 
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
+    }
+
+    public boolean hasSharedGoal() {
+        return sharedGoal != null && !sharedGoal.isBlank();
     }
 }

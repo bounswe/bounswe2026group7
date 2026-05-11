@@ -140,4 +140,29 @@ public class MentorshipRequestController {
         mentorshipService.rejectRequest(mentorId, id);
         return ResponseEntity.ok().build();
     }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('MENTEE')")
+    @Operation(
+            summary = "Cancel an own pending request",
+            description = "Mentee cancels their own pending mentorship request (#134). "
+                    + "Increments the cancellation counter; once the configured threshold "
+                    + "is crossed an automatic temporary ban is imposed with escalating duration."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Request cancelled"),
+            @ApiResponse(responseCode = "403", description = "Not the request owner",
+                    content = @Content),
+            @ApiResponse(responseCode = "404", description = "Request not found",
+                    content = @Content),
+            @ApiResponse(responseCode = "409", description = "Request is not pending",
+                    content = @Content)
+    })
+    public ResponseEntity<Void> cancelOwnRequest(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long menteeId = (Long) authentication.getCredentials();
+        mentorshipRequestService.cancelOwnPendingRequest(menteeId, id);
+        return ResponseEntity.noContent().build();
+    }
 }

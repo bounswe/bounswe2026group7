@@ -5,6 +5,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -18,6 +20,8 @@ import java.util.UUID;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private static final String REQUEST_ID_HEADER = "X-Request-ID";
     private static final String REQUEST_ID_MDC_KEY = "requestId";
@@ -56,14 +60,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String role = jwtService.extractRole(token);
                 Long userId = jwtService.extractUserId(token);
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                email,
-                                userId,
-                                List.of(new SimpleGrantedAuthority("ROLE_" + role))
-                        );
+                if (email == null || email.isBlank()
+                        || role == null || role.isBlank()
+                        || userId == null) {
+                    // Defensive: isTokenValid already rejects this, but guard
+                    // against future callers reordering the checks. Log only
+                    // claim presence (booleans), never values, to keep PII out
+                    // of logs.
+                    log.warn("Rejecting JWT with missing claims: email={}, role={}, userId={}",
+                            email != null && !email.isBlank(),
+                            role != null && !role.isBlank(),
+                            userId != null);
+                } else {
+                    // Project convention: principal = email, credentials = userId (Long),
+                    // authorities = single ROLE_<role>. The userId-in-credentials slot
+                    // is read by controllers and the rate-limit filter via
+                    // {@link AuthenticatedUserId#fromAuthentication(Authentication)} —
+                    // if the layout here ever changes, update that helper too.
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    email,
+                                    userId,
+                                    List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                            );
 
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             }
 
             filterChain.doFilter(request, response);

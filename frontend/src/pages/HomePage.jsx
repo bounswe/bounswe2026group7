@@ -3,15 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import {
   getMatchingMentors,
-  getReceivedMentorshipRequests,
   acceptMentorshipRequest,
   rejectMentorshipRequest,
   getActiveMentorships,
-  getOwnProfile,
   getUserById,
 } from '../services/api'
 import Avatar from '../components/Avatar'
 import { useAuth } from '../context/AuthContext'
+import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
 
 function timeAgo(iso) {
@@ -25,6 +24,17 @@ function timeAgo(iso) {
 export default function HomePage() {
   const navigate = useNavigate()
   const { role } = useAuth()
+  const {
+    pendingRequests,
+    pendingCount,
+    activeMentorships,
+    activeMenteeCount,
+    maxCapacity,
+    availableSlots,
+    mentorLoading,
+    handleMentorRequestRejected,
+    handleMentorRequestAccepted,
+  } = useMentorship()
   const isMentee = role === 'MENTEE'
 
   // ── Mentee state ──────────────────────────────────────────────────────────
@@ -33,16 +43,11 @@ export default function HomePage() {
   const [activeMentorPhoto, setActiveMentorPhoto] = useState(null)
   const [menteeLoading, setMenteeLoading] = useState(true)
 
-  // ── Mentor state ──────────────────────────────────────────────────────────
-  const [receivedRequests, setReceivedRequests] = useState([])
-  const [activeMentorships, setActiveMentorships] = useState([])
-  const [mentorStats, setMentorStats] = useState(null)
   const [acceptingId, setAcceptingId] = useState(null)   // request being accepted
   const [selectedDuration, setSelectedDuration] = useState(3)
   const [menteeProfiles, setMenteeProfiles] = useState({})
   const [activeMenteePhotos, setActiveMenteePhotos] = useState({})
   const [actionLoading, setActionLoading] = useState(false)
-  const [mentorLoading, setMentorLoading] = useState(false)
 
   // ── Load mentee data ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -75,48 +80,15 @@ export default function HomePage() {
     loadMenteeData()
   }, [isMentee])
 
-  // ── Load mentor data ───────────────────────────────────────────────────────
+  // ── Load active mentor's profile photo ────────────────────────────────────
   useEffect(() => {
-    if (isMentee) return
-    setMentorLoading(true)
-    Promise.allSettled([
-      getReceivedMentorshipRequests(),
-      getActiveMentorships(),
-      getOwnProfile(),
-    ]).then(([reqs, mentorships, profile]) => {
-      if (reqs.status === 'fulfilled') {
-        const requests = reqs.value.content || []
-        setReceivedRequests(requests)
-        const pending = requests.filter(r => r.status === 'PENDING')
-        if (pending.length > 0) {
-          Promise.allSettled(pending.map(r => getUserById(r.menteeId))).then(results => {
-            const profiles = {}
-            results.forEach((res, i) => {
-              if (res.status === 'fulfilled') profiles[pending[i].menteeId] = res.value
-            })
-            setMenteeProfiles(profiles)
-          })
-        }
-      }
-      if (mentorships.status === 'fulfilled') {
-        const ms = mentorships.value || []
-        setActiveMentorships(ms)
-        const active = ms.filter(m => m.status === 'ACTIVE')
-        if (active.length > 0) {
-          Promise.allSettled(active.map(m => getUserById(m.menteeId))).then(results => {
-            const photos = {}
-            results.forEach((res, i) => {
-              if (res.status === 'fulfilled') photos[active[i].menteeId] = res.value?.profilePhoto || null
-            })
-            setActiveMenteePhotos(photos)
-          })
-        }
-      }
-      if (profile.status === 'fulfilled') {
-        setMentorStats(profile.value)
-      }
-    }).finally(() => setMentorLoading(false))
-  }, [isMentee])
+    if (!activeMentorship?.mentorId) { setActiveMentorPhoto(null); return }
+    let cancelled = false
+    getUserById(activeMentorship.mentorId)
+      .then(user => { if (!cancelled) setActiveMentorPhoto(user?.profilePhoto || null) })
+      .catch(() => { if (!cancelled) setActiveMentorPhoto(null) })
+    return () => { cancelled = true }
+  }, [activeMentorship?.mentorId])
 
   // ── Toast helper ───────────────────────────────────────────────────────────
   const showToast = (message, type = 'success') => {
@@ -132,7 +104,7 @@ export default function HomePage() {
     setActionLoading(true)
     try {
       await rejectMentorshipRequest(id)
-      setReceivedRequests(prev => prev.filter(r => r.id !== id))
+      handleMentorRequestRejected(id)
       showToast('Request declined.', 'success')
     } catch {
       showToast('Failed to decline request.', 'error')
@@ -146,9 +118,7 @@ export default function HomePage() {
     setActionLoading(true)
     try {
       const newMentorship = await acceptMentorshipRequest(acceptingId, selectedDuration)
-      setReceivedRequests(prev => prev.filter(r => r.id !== acceptingId))
-      setActiveMentorships(prev => [newMentorship, ...prev])
-      setMentorStats(prev => prev ? { ...prev, currentMenteeCount: (prev.currentMenteeCount || 0) + 1 } : prev)
+      handleMentorRequestAccepted(acceptingId, newMentorship)
       setAcceptingId(null)
       setSelectedDuration(3)
       showToast('Request accepted! Mentorship started.', 'success')
@@ -166,14 +136,6 @@ export default function HomePage() {
       setActionLoading(false)
     }
   }
-
-  // ── Derived mentor stats ───────────────────────────────────────────────────
-  const pendingCount = receivedRequests.filter(r => r.status === 'PENDING').length
-  const pendingRequests = receivedRequests.filter(r => r.status === 'PENDING')
-  const activeMenteeCount = mentorStats?.currentMenteeCount ?? '-'
-  const maxCapacity = mentorStats?.maxMenteeCapacity ?? '-'
-  const availableSlots = typeof activeMenteeCount === 'number' && typeof maxCapacity === 'number'
-    ? maxCapacity - activeMenteeCount : '-'
 
   // ──────────────────────────────────────────────────────────────────────────
   return (
@@ -209,9 +171,8 @@ export default function HomePage() {
                 <div className="amh-top">
                   <div className="amh-avatar">
                     {activeMentorPhoto
-                      ? <img src={activeMentorPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-                      : activeMentorship.mentorFirstName?.[0] ?? '?'
-                    }
+                      ? <img src={activeMentorPhoto} alt={activeMentorship.mentorFirstName || 'Mentor'} />
+                      : (activeMentorship.mentorFirstName?.[0] ?? '?')}
                   </div>
                   <div className="amh-info">
                     <div className="amh-label">Your Mentor</div>
@@ -242,7 +203,16 @@ export default function HomePage() {
                 </div>
 
                 <div className="amh-actions">
-                  <button className="amh-btn-primary" onClick={() => navigate(`/users/${activeMentorship.mentorId}`)}>
+                  <button
+                    className="amh-btn-primary"
+                    onClick={() => navigate(`/mentorships/${activeMentorship.id}`)}
+                  >
+                    View Mentorship
+                  </button>
+                  <button
+                    className="amh-btn-secondary"
+                    onClick={() => navigate(`/users/${activeMentorship.mentorId}`)}
+                  >
                     View Mentor Profile
                   </button>
                 </div>
@@ -300,98 +270,90 @@ export default function HomePage() {
           ) : (
             <div className="home-grid">
               {/* Incoming Requests */}
-              <div>
+              <div data-testid="mentor-inbox">
                 <div className="section-label">Incoming Requests</div>
                 {pendingRequests.length === 0 ? (
-                  <div className="empty-state" style={{ padding: '24px', fontSize: '14px' }}>
+                  <div className="empty-state" style={{ padding: '24px', fontSize: '14px' }} data-testid="mentor-inbox-empty">
                     No pending requests
                   </div>
                 ) : (
-                  pendingRequests.map(req => {
-                    const profile = menteeProfiles[req.menteeId]
-                    return (
-                      <div className="request-card" key={req.id}>
-                        <div className="req-header">
-                          <div className="req-avatar">{req.menteeFirstName?.[0] ?? '?'}</div>
-                          <div>
-                            <div className="req-name">{req.menteeFirstName}</div>
-                            <div className="req-time">{timeAgo(req.createdAt)}</div>
-                          </div>
+                  pendingRequests.map(req => (
+                    <div className="request-card" key={req.id} data-testid={`mentor-inbox-request-${req.id}`}>
+                      <div className="req-header">
+                        <div className="req-avatar">
+                          {req.menteeFirstName?.[0] ?? '?'}
                         </div>
+                        <div>
+                          {/* Privacy: first name only per req 1.1.2.6 */}
+                          <div className="req-name">{req.menteeFirstName}</div>
+                          <div className="req-time">{timeAgo(req.createdAt)}</div>
+                        </div>
+                      </div>
+                      {req.message && <div className="req-msg">{req.message}</div>}
 
-                        {profile && (profile.goals || profile.interests?.length > 0 || profile.backgroundInfo) && (
-                          <div className="req-profile-info">
-                            {profile.goals && (
-                              <div className="req-profile-field">
-                                <span className="req-profile-label">Goals</span>
-                                <span className="req-profile-value">{profile.goals}</span>
-                              </div>
-                            )}
-                            {profile.interests?.length > 0 && (
-                              <div className="req-profile-field">
-                                <span className="req-profile-label">Interests</span>
-                                <div className="req-profile-chips">
-                                  {profile.interests.map(i => <span className="req-chip" key={i}>{i}</span>)}
-                                </div>
-                              </div>
-                            )}
-                            {profile.backgroundInfo && (
-                              <div className="req-profile-field">
-                                <span className="req-profile-label">Background</span>
-                                <span className="req-profile-value">{profile.backgroundInfo}</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {req.message && (
-                          <div className="req-msg">"{req.message}"</div>
-                        )}
-
-                        {acceptingId === req.id ? (
-                          <div className="duration-picker">
-                            <p className="duration-label">Select mentorship duration:</p>
-                            <div className="duration-options">
-                              {[1, 3, 6].map(d => (
-                                <button
-                                  key={d}
-                                  className={`duration-btn${selectedDuration === d ? ' duration-btn--active' : ''}`}
-                                  onClick={() => setSelectedDuration(d)}
-                                >
-                                  {d} {d === 1 ? 'month' : 'months'}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="req-actions">
-                              <button className="btn-accept" onClick={handleAcceptConfirm} disabled={actionLoading}>
-                                {actionLoading ? 'Confirming…' : 'Confirm'}
+                      {/* Duration picker shown when accepting this request */}
+                      {acceptingId === req.id ? (
+                        <div className="duration-picker" data-testid={`mentor-inbox-duration-${req.id}`}>
+                          <p className="duration-label">Select mentorship duration:</p>
+                          <div className="duration-options">
+                            {[1, 3, 6].map(d => (
+                              <button
+                                key={d}
+                                className={`duration-btn${selectedDuration === d ? ' duration-btn--active' : ''}`}
+                                onClick={() => setSelectedDuration(d)}
+                                data-testid={`mentor-inbox-duration-${d}`}
+                              >
+                                {d} {d === 1 ? 'month' : 'months'}
                               </button>
-                              <button className="btn-decline" onClick={() => setAcceptingId(null)} disabled={actionLoading}>
-                                Cancel
-                              </button>
-                            </div>
+                            ))}
                           </div>
-                        ) : (
                           <div className="req-actions">
                             <button
                               className="btn-accept"
-                              onClick={() => { setAcceptingId(req.id); setSelectedDuration(3) }}
+                              onClick={handleAcceptConfirm}
                               disabled={actionLoading}
+                              data-testid={`mentor-inbox-confirm-${req.id}`}
                             >
-                              Accept
+                              {actionLoading ? 'Confirming…' : 'Confirm'}
                             </button>
                             <button
                               className="btn-decline"
-                              onClick={() => handleReject(req.id)}
+                              onClick={() => setAcceptingId(null)}
                               disabled={actionLoading}
                             >
-                              Decline
+                              Cancel
                             </button>
                           </div>
-                        )}
-                      </div>
-                    )
-                  })
+                        </div>
+                      ) : (
+                        <div className="req-actions">
+                          <button
+                            className="btn-accept"
+                            onClick={() => { setAcceptingId(req.id); setSelectedDuration(3) }}
+                            disabled={actionLoading}
+                            data-testid={`mentor-inbox-accept-${req.id}`}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            className="btn-decline"
+                            onClick={() => handleReject(req.id)}
+                            disabled={actionLoading}
+                            data-testid={`mentor-inbox-decline-${req.id}`}
+                          >
+                            Decline
+                          </button>
+                          <button
+                            className="view-profile-btn"
+                            style={{ fontSize: '13px', padding: '7px 14px' }}
+                            onClick={() => navigate(`/users/${req.menteeId}`)}
+                          >
+                            View Profile
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
                 )}
               </div>
 
@@ -404,7 +366,19 @@ export default function HomePage() {
                   </div>
                 ) : (
                   activeMentorships.map(m => (
-                    <div className="active-mentorship" key={m.id}>
+                    <div
+                      className="active-mentorship clickable-card"
+                      key={m.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/mentorships/${m.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/mentorships/${m.id}`)
+                        }
+                      }}
+                    >
                       <div className="am-header">
                         <div className="am-info">
                           <Avatar

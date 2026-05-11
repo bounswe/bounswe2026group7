@@ -1,11 +1,31 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
-import { Text } from 'react-native';
+import { Tabs, router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Text, View, ActivityIndicator } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
 
 export default function TabLayout() {
   const { role } = useRole();
   const isMentor = role === 'mentor';
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    SecureStore.getItemAsync('userToken').then((token) => {
+      if (!token) {
+        router.replace('/onboarding');
+      } else {
+        setReady(true);
+      }
+    });
+  }, []);
+
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#ECE8E1', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#456B50" />
+      </View>
+    );
+  }
 
   return (
     <Tabs
@@ -31,6 +51,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🏠</Text>,
+          tabBarAccessibilityLabel: 'Home tab',
         }}
       />
 
@@ -39,6 +60,16 @@ export default function TabLayout() {
         options={{
           title: isMentor ? 'Requests' : 'Explore',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>{isMentor ? '📋' : '🔍'}</Text>,
+          tabBarAccessibilityLabel: isMentor ? 'Requests tab' : 'Explore tab',
+        }}
+      />
+
+      <Tabs.Screen
+        name="feed"
+        options={{
+          title: 'Feed',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>📰</Text>,
+          tabBarAccessibilityLabel: 'Feed tab',
         }}
       />
 
@@ -47,6 +78,7 @@ export default function TabLayout() {
         options={{
           title: 'Messages',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>💬</Text>,
+          tabBarAccessibilityLabel: 'Messages tab',
         }}
       />
 
@@ -55,6 +87,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>👤</Text>,
+          tabBarAccessibilityLabel: 'Profile tab',
         }}
       />
     </Tabs>

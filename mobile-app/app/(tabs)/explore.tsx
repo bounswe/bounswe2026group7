@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { router } from 'expo-router';
 import { useRole } from '../../components/RoleContext';
 import apiClient from '../../api/client';
+import * as SecureStore from 'expo-secure-store';
 import {
   View,
   Text,
@@ -10,6 +11,7 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 
 // Yardımcı Fonksiyon: Baş harfleri hesaplar
@@ -37,6 +39,8 @@ type MentorCard = {
   mentoringGoals: string[];
   preferredMenteeCriteria: string[];
   availability: string[];
+  following: boolean;
+  followLoading: boolean;
 };
 
 export default function ExploreScreen() {
@@ -52,55 +56,131 @@ export default function ExploreScreen() {
 
 const PAGE_SIZE = 5;
 
+function mapMentor(m: any, isMatch = false): MentorCard {
+  const fullName = m.lastName ? `${m.firstName} ${m.lastName}` : m.firstName;
+  const hasCapacity =
+    m.maxMenteeCapacity == null
+      ? true
+      : (m.currentMenteeCount ?? 0) < m.maxMenteeCapacity;
+  return {
+    id: String(m.id),
+    name: fullName,
+    initials: getInitials(fullName),
+    role: m.field || m.expertise || 'Mentor',
+    avatarBg: isMatch ? '#D8E5F1' : '#D6E8DC',
+    avatarText: isMatch ? '#315A7A' : '#2F563C',
+    available: hasCapacity,
+    tags: m.interests || [],
+    rating: '5.0',
+    reviews: '0',
+    about: m.bio || 'No bio provided.',
+    mentoringGoals: [],
+    preferredMenteeCriteria: [],
+    availability: [],
+    following: false,
+    followLoading: false,
+  };
+}
+
 function MenteeExploreContent() {
   const [mentors, setMentors] = useState<MentorCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
+  const [isMatchMode, setIsMatchMode] = useState(false);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const scrollRef = React.useRef<ScrollView>(null);
 
   useEffect(() => {
     const fetchMentors = async () => {
       try {
-        const res = await apiClient.get('/users/mentors');
-        const data: any[] = res.data.content ?? res.data;
-
-        const mappedMentors = data.map((m: any) => {
-          const fullName = m.lastName ? `${m.firstName} ${m.lastName}` : m.firstName;
-          const hasCapacity =
-            m.maxMenteeCapacity == null
-              ? true
-              : (m.currentMenteeCount ?? 0) < m.maxMenteeCapacity;
-          return {
-            id: String(m.id),
-            name: fullName,
-            initials: getInitials(fullName),
-            role: m.field || m.expertise || 'Mentor',
-            avatarBg: '#D6E8DC',
-            avatarText: '#2F563C',
-            available: hasCapacity,
-            tags: m.interests || [],
-            rating: '5.0',
-            reviews: '0',
-            about: m.bio || 'No bio provided.',
-            mentoringGoals: [],
-            preferredMenteeCriteria: [],
-            availability: [],
-          };
-        });
-
-        setMentors(mappedMentors);
+        const [mentorsRes, myId] = await Promise.all([
+          apiClient.get('/users/mentors'),
+          SecureStore.getItemAsync('userId'),
+        ]);
+        const data: any[] = mentorsRes.data.content ?? mentorsRes.data;
+        const mapped = data.map((m) => mapMentor(m, false));
+        if (myId) {
+          try {
+            const followRes = await apiClient.get(`/users/${myId}/following?size=100`);
+            const followingIds = new Set(
+              (followRes.data.content ?? followRes.data).map((u: any) => String(u.id))
+            );
+            setMentors(mapped.map((m) => ({ ...m, following: followingIds.has(m.id) })));
+          } catch {
+            setMentors(mapped);
+          }
+        } else {
+          setMentors(mapped);
+        }
       } catch (error) {
         console.error('Mentorları çekerken hata oluştu:', error);
       } finally {
         setLoading(false);
       }
     };
-
     fetchMentors();
   }, []);
 
-  const totalPages = Math.ceil(mentors.length / PAGE_SIZE);
-  const pagedMentors = mentors.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const handleFollow = async (mentorId: string) => {
+    const mentor = mentors.find((m) => m.id === mentorId);
+    if (!mentor || mentor.followLoading) return;
+    setMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, followLoading: true } : m));
+    try {
+      if (mentor.following) {
+        await apiClient.delete(`/users/${mentorId}/follow`);
+        setMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, following: false, followLoading: false } : m));
+      } else {
+        await apiClient.post(`/users/${mentorId}/follow`, {});
+        setMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, following: true, followLoading: false } : m));
+      }
+    } catch (err: any) {
+      setMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, followLoading: false } : m));
+      const status = err?.response?.status ? ` (${err.response.status})` : '';
+      const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Could not update follow status.';
+      Alert.alert('Follow Error' + status, msg);
+    }
+  };
+
+  const toggleMatchMode = async () => {
+    if (isMatchMode) {
+      setIsMatchMode(false);
+      setCurrentPage(0);
+      return;
+    }
+    setMatchLoading(true);
+    try {
+      const res = await apiClient.get('/matching/mentors/all');
+      setMentors((res.data as any[]).map((m) => mapMentor(m, true)));
+      setIsMatchMode(true);
+      setCurrentPage(0);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    } catch (err: any) {
+      if (err?.response?.status === 403) {
+        Alert.alert(
+          'Matching Unavailable',
+          'You already have an active mentor. End your current mentorship first to find new matches.'
+        );
+      } else {
+        console.error('Matching error:', err);
+      }
+    } finally {
+      setMatchLoading(false);
+    }
+  };
+
+  const filteredMentors = searchQuery.trim()
+    ? mentors.filter((m) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          m.name.toLowerCase().includes(q) ||
+          m.role.toLowerCase().includes(q) ||
+          m.tags.some((t) => t.toLowerCase().includes(q))
+        );
+      })
+    : mentors;
+  const totalPages = Math.ceil(filteredMentors.length / PAGE_SIZE);
+  const pagedMentors = filteredMentors.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   const goToPage = (page: number) => {
     setCurrentPage(page);
@@ -132,8 +212,23 @@ function MenteeExploreContent() {
         <Text style={styles.title}>Find a{'\n'}<Text style={styles.titleItalic}>Mentor.</Text></Text>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput placeholder="Search topics or mentors..." placeholderTextColor="rgba(255,255,255,0.45)" style={styles.searchInput} />
+          <TextInput
+            placeholder="Search topics or mentors..."
+            placeholderTextColor="rgba(255,255,255,0.45)"
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={(q) => { setSearchQuery(q); setCurrentPage(0); }}
+            returnKeyType="search"
+            autoCapitalize="none"
+          />
         </View>
+        <TouchableOpacity style={[styles.matchButton, isMatchMode && styles.matchButtonActive]} onPress={toggleMatchMode} disabled={matchLoading}>
+          {matchLoading
+            ? <ActivityIndicator size="small" color="#F8F6F2" />
+            : <Text style={[styles.matchButtonText, isMatchMode && styles.matchButtonTextActive]}>
+                {isMatchMode ? '✕  Show All Mentors' : '✦  Find Best Matches'}
+              </Text>}
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -150,10 +245,17 @@ function MenteeExploreContent() {
                   <Text style={styles.cardName}>{mentor.name}</Text>
                   <Text style={styles.cardRole}>{mentor.role}</Text>
                 </View>
-                <View style={[styles.statusBadge, mentor.available ? styles.availableBadge : styles.fullBadge]}>
-                  <Text style={[styles.statusBadgeText, mentor.available ? styles.availableBadgeText : styles.fullBadgeText]}>
-                    {mentor.available ? 'Available' : 'Full'}
-                  </Text>
+                <View style={styles.badgeColumn}>
+                  {isMatchMode && (
+                    <View style={styles.matchBadge}>
+                      <Text style={styles.matchBadgeText}>✦ Match</Text>
+                    </View>
+                  )}
+                  <View style={[styles.statusBadge, mentor.available ? styles.availableBadge : styles.fullBadge]}>
+                    <Text style={[styles.statusBadgeText, mentor.available ? styles.availableBadgeText : styles.fullBadgeText]}>
+                      {mentor.available ? 'Available' : 'Full'}
+                    </Text>
+                  </View>
                 </View>
               </View>
               <View style={styles.tagsRow}>
@@ -167,9 +269,22 @@ function MenteeExploreContent() {
                   <Text style={styles.stars}>★★★★★</Text>
                   <Text style={styles.ratingText}>{mentor.rating} ({mentor.reviews})</Text>
                 </View>
-                <TouchableOpacity style={styles.viewButton} onPress={() => openMentorProfile(mentor)}>
-                  <Text style={styles.viewButtonText}>View Profile</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.followButton, mentor.following && styles.followButtonActive]}
+                    onPress={() => handleFollow(mentor.id)}
+                    disabled={mentor.followLoading}
+                  >
+                    {mentor.followLoading
+                      ? <ActivityIndicator size="small" color="#456B50" />
+                      : <Text style={[styles.followButtonText, mentor.following && styles.followButtonTextActive]}>
+                          {mentor.following ? '✓' : '+ Follow'}
+                        </Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.viewButton} onPress={() => openMentorProfile(mentor)}>
+                    <Text style={styles.viewButtonText}>View</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           ))}
@@ -227,8 +342,16 @@ const formatTime = (isoString: string) => {
 };
 
 function MentorRequestsContent() {
+  const [view, setView] = useState<'requests' | 'discover' | 'settings'>('requests');
   const [incomingRequests, setIncomingRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [discoverMentors, setDiscoverMentors] = useState<MentorCard[]>([]);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverLoaded, setDiscoverLoaded] = useState(false);
+  const [capacityValue, setCapacityValue] = useState('');
+  const [capacitySaving, setCapacitySaving] = useState(false);
+  const [capacityLoaded, setCapacityLoaded] = useState(false);
 
   useEffect(() => {
     apiClient.get('/mentorship-requests/received')
@@ -239,6 +362,133 @@ function MentorRequestsContent() {
       .catch((err) => console.error('Requests fetch error:', err))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (view === 'discover' && !discoverLoaded) {
+      loadDiscover();
+    }
+    if (view === 'settings' && !capacityLoaded) {
+      apiClient.get('/users/me').then((res) => {
+        const cap = res.data?.maxMenteeCapacity;
+        if (cap != null) setCapacityValue(String(cap));
+        setCapacityLoaded(true);
+      }).catch(() => setCapacityLoaded(true));
+    }
+  }, [view]);
+
+  const loadDiscover = async () => {
+    setDiscoverLoading(true);
+    try {
+      const [mentorsRes, myId] = await Promise.all([
+        apiClient.get('/users/mentors'),
+        SecureStore.getItemAsync('userId'),
+      ]);
+      const data: any[] = mentorsRes.data.content ?? mentorsRes.data;
+      const mapped = data.map((m) => mapMentor(m, false));
+      if (myId) {
+        try {
+          const followRes = await apiClient.get(`/users/${myId}/following?size=100`);
+          const followingIds = new Set(
+            (followRes.data.content ?? followRes.data).map((u: any) => String(u.id))
+          );
+          setDiscoverMentors(mapped.map((m) => ({ ...m, following: followingIds.has(m.id) })));
+        } catch {
+          setDiscoverMentors(mapped);
+        }
+      } else {
+        setDiscoverMentors(mapped);
+      }
+      setDiscoverLoaded(true);
+    } catch {
+      // ignore
+    } finally {
+      setDiscoverLoading(false);
+    }
+  };
+
+  const saveCapacity = async () => {
+    const num = parseInt(capacityValue, 10);
+    if (isNaN(num) || num < 1) {
+      Alert.alert('Invalid', 'Please enter a number ≥ 1.');
+      return;
+    }
+    setCapacitySaving(true);
+    try {
+      await apiClient.patch('/users/me/mentor', { maxMenteeCapacity: num });
+      Alert.alert('Saved', `Max mentee capacity set to ${num}.`);
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Could not save capacity.');
+    } finally {
+      setCapacitySaving(false);
+    }
+  };
+
+  const handleRequest = async (requestId: string, action: 'accept' | 'reject') => {
+    if (actionLoading[requestId]) return;
+    if (action === 'accept') {
+      Alert.prompt(
+        'Accept Request',
+        'Enter mentorship duration (1, 3, or 6 months):',
+        async (input) => {
+          const duration = parseInt(input ?? '3', 10);
+          if (![1, 3, 6].includes(duration)) {
+            Alert.alert('Invalid', 'Please enter 1, 3, or 6.');
+            return;
+          }
+          setActionLoading((prev) => ({ ...prev, [requestId]: true }));
+          try {
+            await apiClient.put(`/mentorship-requests/${requestId}/accept`, { duration });
+            setIncomingRequests((prev) => prev.filter((r) => String(r.id) !== requestId));
+          } catch (err: any) {
+            Alert.alert('Error', err?.response?.data?.message || 'Could not accept request.');
+          } finally {
+            setActionLoading((prev) => ({ ...prev, [requestId]: false }));
+          }
+        },
+        'plain-text',
+        '3'
+      );
+    } else {
+      Alert.alert('Reject Request', 'Are you sure?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            setActionLoading((prev) => ({ ...prev, [requestId]: true }));
+            try {
+              await apiClient.put(`/mentorship-requests/${requestId}/reject`);
+              setIncomingRequests((prev) => prev.filter((r) => String(r.id) !== requestId));
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.message || 'Could not reject request.');
+            } finally {
+              setActionLoading((prev) => ({ ...prev, [requestId]: false }));
+            }
+          },
+        },
+      ]);
+    }
+  };
+
+  const handleDiscoverFollow = async (mentorId: string) => {
+    const mentor = discoverMentors.find((m) => m.id === mentorId);
+    if (!mentor || mentor.followLoading) return;
+    setDiscoverMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, followLoading: true } : m));
+    try {
+      if (mentor.following) {
+        await apiClient.delete(`/users/${mentorId}/follow`);
+        setDiscoverMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, following: false, followLoading: false } : m));
+      } else {
+        await apiClient.post(`/users/${mentorId}/follow`, {});
+        setDiscoverMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, following: true, followLoading: false } : m));
+      }
+    } catch (err: any) {
+      setDiscoverMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, followLoading: false } : m));
+      const status = err?.response?.status ? ` (${err.response.status})` : '';
+      const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Could not update follow status.';
+      Alert.alert('Follow Error' + status, msg);
+    }
+  };
 
   const openCandidateProfile = (item: any) => {
     const colors = AVATAR_COLORS_LIST[item.menteeId % AVATAR_COLORS_LIST.length];
@@ -261,54 +511,171 @@ function MentorRequestsContent() {
     <View style={styles.container}>
       <View style={styles.fixedHeader}>
         <View style={styles.topCircle} />
-        <Text style={styles.title}>Mentee{'\n'}<Text style={styles.titleItalic}>Requests.</Text></Text>
+        <Text style={styles.title}>
+          {view === 'requests' ? 'Mentee\n' : 'Discover\n'}
+          <Text style={styles.titleItalic}>{view === 'requests' ? 'Requests.' : 'People.'}</Text>
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 4 }}>
+          <TouchableOpacity
+            style={[styles.matchButton, { flex: 1 }, view === 'requests' && styles.matchButtonActive]}
+            onPress={() => setView('requests')}
+          >
+            <Text style={[styles.matchButtonText, view === 'requests' && styles.matchButtonTextActive]}>📋 Requests</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.matchButton, { flex: 1 }, view === 'discover' && styles.matchButtonActive]}
+            onPress={() => setView('discover')}
+          >
+            <Text style={[styles.matchButtonText, view === 'discover' && styles.matchButtonTextActive]}>🔍 Discover</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.matchButton, { flex: 1 }, view === 'settings' && styles.matchButtonActive]}
+            onPress={() => setView('settings')}
+          >
+            <Text style={[styles.matchButtonText, view === 'settings' && styles.matchButtonTextActive]}>⚙️ Settings</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
-      ) : (
-        <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-          {incomingRequests.length === 0 && (
-            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <Text style={{ color: '#9A8F82', fontSize: 15 }}>No pending requests.</Text>
-            </View>
-          )}
-          {incomingRequests.map((item, idx) => {
-            const colors = AVATAR_COLORS_LIST[idx % AVATAR_COLORS_LIST.length];
-            return (
-              <View key={item.id} style={styles.card}>
-                <View style={styles.cardTopRow}>
-                  <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
-                    <Text style={[styles.avatarText, { color: colors.text }]}>
-                      {item.menteeFirstName?.substring(0, 2).toUpperCase()}
-                    </Text>
+      {view === 'requests' ? (
+        loading ? (
+          <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
+        ) : (
+          <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+            {incomingRequests.length === 0 && (
+              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                <Text style={{ color: '#9A8F82', fontSize: 15 }}>No pending requests.</Text>
+              </View>
+            )}
+            {incomingRequests.map((item, idx) => {
+              const colors = AVATAR_COLORS_LIST[idx % AVATAR_COLORS_LIST.length];
+              return (
+                <View key={item.id} style={styles.card}>
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
+                      <Text style={[styles.avatarText, { color: colors.text }]}>
+                        {item.menteeFirstName?.substring(0, 2).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.cardInfo}>
+                      <Text style={styles.cardName}>{item.menteeFirstName}</Text>
+                      <Text style={styles.cardRole}>{formatTime(item.createdAt)}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: '#F1E1BB' }]}>
+                      <Text style={[styles.statusBadgeText, { color: '#8A5D12' }]}>Pending</Text>
+                    </View>
                   </View>
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardName}>{item.menteeFirstName}</Text>
-                    <Text style={styles.cardRole}>{formatTime(item.createdAt)}</Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: '#F1E1BB' }]}>
-                    <Text style={[styles.statusBadgeText, { color: '#8A5D12' }]}>Pending</Text>
+                  {!!item.message && (
+                    <>
+                      <View style={styles.divider} />
+                      <Text style={{ color: '#7E7368', fontSize: 13, lineHeight: 18 }} numberOfLines={2}>
+                        {item.message}
+                      </Text>
+                    </>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.viewButton, { marginTop: 14 }]}
+                    onPress={() => openCandidateProfile(item)}
+                  >
+                    <Text style={styles.viewButtonText}>View Profile</Text>
+                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: '#456B50', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+                      onPress={() => handleRequest(String(item.id), 'accept')}
+                      disabled={!!actionLoading[String(item.id)]}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                        {actionLoading[String(item.id)] ? '...' : 'Accept'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{ flex: 1, backgroundColor: '#F5D9D6', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+                      onPress={() => handleRequest(String(item.id), 'reject')}
+                      disabled={!!actionLoading[String(item.id)]}
+                    >
+                      <Text style={{ color: '#9B3A35', fontWeight: '700', fontSize: 14 }}>Reject</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-                {!!item.message && (
-                  <>
-                    <View style={styles.divider} />
-                    <Text style={{ color: '#7E7368', fontSize: 13, lineHeight: 18 }} numberOfLines={2}>
-                      {item.message}
-                    </Text>
-                  </>
-                )}
-                <TouchableOpacity
-                  style={[styles.viewButton, { marginTop: 14 }]}
-                  onPress={() => openCandidateProfile(item)}
-                >
-                  <Text style={styles.viewButtonText}>View Profile</Text>
-                </TouchableOpacity>
-              </View>
-            );
-          })}
+              );
+            })}
+          </ScrollView>
+        )
+      ) : view === 'settings' ? (
+        <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.card}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#1D1D38', marginBottom: 8 }}>Max Mentee Capacity</Text>
+            <Text style={{ fontSize: 14, color: '#7E7368', marginBottom: 14, lineHeight: 20 }}>
+              Set the maximum number of mentees you can mentor at the same time.
+            </Text>
+            <TextInput
+              style={{ borderWidth: 1.5, borderColor: '#C8D9CA', borderRadius: 14, padding: 14, fontSize: 16, color: '#2B2B2B', backgroundColor: '#FCFBF8', marginBottom: 14 }}
+              value={capacityValue}
+              onChangeText={setCapacityValue}
+              placeholder="e.g. 5"
+              placeholderTextColor="#B0A89E"
+              keyboardType="number-pad"
+            />
+            <TouchableOpacity
+              style={{ backgroundColor: '#456B50', borderRadius: 14, paddingVertical: 14, alignItems: 'center', opacity: capacitySaving ? 0.6 : 1 }}
+              onPress={saveCapacity}
+              disabled={capacitySaving}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
+                {capacitySaving ? 'Saving...' : 'Save Capacity'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
+      ) : (
+        discoverLoading ? (
+          <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
+        ) : (
+          <ScrollView style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+            {discoverMentors.map((mentor) => (
+              <View key={mentor.id} style={styles.card}>
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.avatar, { backgroundColor: mentor.avatarBg }]}>
+                    <Text style={[styles.avatarText, { color: mentor.avatarText }]}>{mentor.initials}</Text>
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardName}>{mentor.name}</Text>
+                    <Text style={styles.cardRole}>{mentor.role}</Text>
+                  </View>
+                  <View style={[styles.statusBadge, mentor.available ? styles.availableBadge : styles.fullBadge]}>
+                    <Text style={[styles.statusBadgeText, mentor.available ? styles.availableBadgeText : styles.fullBadgeText]}>
+                      {mentor.available ? 'Available' : 'Full'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.tagsRow}>
+                  {mentor.tags.map((tag, idx) => (
+                    <View key={idx} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>
+                  ))}
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.cardBottomRow}>
+                  <View style={styles.ratingRow}>
+                    <Text style={styles.stars}>★★★★★</Text>
+                    <Text style={styles.ratingText}>{mentor.rating}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.followButton, mentor.following && styles.followButtonActive]}
+                    onPress={() => handleDiscoverFollow(mentor.id)}
+                    disabled={mentor.followLoading}
+                  >
+                    {mentor.followLoading
+                      ? <ActivityIndicator size="small" color="#456B50" />
+                      : <Text style={[styles.followButtonText, mentor.following && styles.followButtonTextActive]}>
+                          {mentor.following ? '✓ Following' : '+ Follow'}
+                        </Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        )
       )}
     </View>
   );
@@ -895,5 +1262,64 @@ const styles = StyleSheet.create({
 
   pageButtonTextActive: {
     color: '#F8F6F2',
+  },
+  matchButton: {
+    height: 50,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  matchButtonActive: {
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    borderColor: 'rgba(255,255,255,0.50)',
+  },
+  matchButtonText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  matchButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  badgeColumn: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  matchBadge: {
+    backgroundColor: '#D8E5F1',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  matchBadgeText: {
+    color: '#315A7A',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  followButton: {
+    backgroundColor: '#F0EDE8',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  followButtonActive: {
+    backgroundColor: '#D7E8DA',
+    borderColor: '#456B50',
+  },
+  followButtonText: {
+    color: '#7E7368',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  followButtonTextActive: {
+    color: '#2F563C',
   },
 });

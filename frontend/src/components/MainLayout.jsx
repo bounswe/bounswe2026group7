@@ -3,27 +3,31 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Avatar from './Avatar'
 import NotificationBell from './NotificationBell'
+import { useMentorship } from '../context/MentorshipContext'
 import usePresence from '../hooks/usePresence'
 import {
   Home, Compass, MessageCircle, CheckSquare, CalendarDays,
-  Clock, User,
+  Clock, User, Newspaper,
 } from 'lucide-react'
 import '../styles/main.css'
 
-const SOON = new Set(['/messages', '/tasks', '/schedule'])
+const SOON = new Set()
 
 const NAV_TABS = [
   { label: 'Home', path: '/home' },
   { label: 'Explore', path: '/explore' },
+  { label: 'Feed', path: '/feed' },
   { label: 'Messages', path: '/messages' },
   { label: 'Tasks', path: '/tasks' },
   { label: 'Schedule', path: '/schedule' },
+  { label: 'Availability', path: '/availability' },
   { label: 'Profile', path: '/profile' },
 ]
 
 const SIDEBAR_LINKS = [
   { label: 'Home', path: '/home', icon: Home },
   { label: 'Explore', path: '/explore', icon: Compass },
+  { label: 'Feed', path: '/feed', icon: Newspaper },
   { label: 'Messages', path: '/messages', icon: MessageCircle },
   { label: 'My Tasks', path: '/tasks', icon: CheckSquare },
   { label: 'Schedule', path: '/schedule', icon: CalendarDays },
@@ -37,6 +41,7 @@ export default function MainLayout({ children }) {
 
 
   const { role, logout, firstName, lastName, profilePhoto } = useAuth()
+  const { pendingCount, activeMenteeCount, activeMentorshipCount, tasksCount, sessionsCount } = useMentorship()
   const presence = usePresence()
   const currentPath = location.pathname
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -115,13 +120,12 @@ export default function MainLayout({ children }) {
               {/* Stats */}
               <div className="ud-stats">
                 {(role === 'MENTOR' ? [
-                  { num: 2, label: 'Mentees' },
-                  { num: 5, label: 'Sessions' },
-                  { num: 4, label: 'Requests' },
+                  { num: activeMenteeCount, label: 'Mentees' },
+                  { num: sessionsCount, label: 'Sessions' },
+                  { num: pendingCount, label: 'Requests' },
                 ] : [
-                  { num: 5, label: 'Tasks' },
-                  { num: 3, label: 'Sessions' },
-                  { num: 2, label: 'Requests' },
+                  { num: tasksCount, label: 'Tasks' },
+                  { num: sessionsCount, label: 'Sessions' },
                 ]).map((s, i) => (
                   <div key={s.label} className={`ud-stat${i > 0 ? ' ud-stat--sep' : ''}`}>
                     <span className="ud-stat-num">{s.num}</span>
@@ -167,7 +171,7 @@ export default function MainLayout({ children }) {
             <Avatar src={profilePhoto} initials={initials} size="md" status={presence} className="sidebar-avatar" />
             <div className="sidebar-name">{displayName}</div>
             <div className="sidebar-role">{roleLabel}</div>
-            <div className="sidebar-badge">Active Mentorship: 1</div>
+            <div className="sidebar-badge">Active Mentorship: {activeMentorshipCount}</div>
           </div>
           <nav className="sidebar-nav">
             {SIDEBAR_LINKS.map(link => {

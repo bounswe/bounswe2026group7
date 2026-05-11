@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { router } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -8,8 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
+import { useProtectedSession } from '../../components/useProtectedSession';
 import apiClient from '../../api/client';
 
 const AVATAR_COLORS = [
@@ -37,31 +37,48 @@ type ConnectionCard = {
   connectedUserId: number;
   connectedUserFirstName: string;
   type: 'mentor' | 'mentee';
+  status: 'ACTIVE' | 'COMPLETED' | 'TERMINATED' | 'CANCELLED';
   progress: number;
   startDate: string;
   endDate: string;
   sharedGoal: string;
 };
 
+type MentorshipTab = 'active' | 'past';
+
+const formatMentorshipStatus = (status: ConnectionCard['status']) => {
+  if (status === 'ACTIVE') return 'Active';
+  if (status === 'COMPLETED') return 'Completed';
+  if (status === 'CANCELLED') return 'Cancelled';
+  return 'Terminated';
+};
+
 export default function HomeScreen() {
   const { role } = useRole();
+  const { session, sessionLoading } = useProtectedSession('dashboard');
   const isMentor = role === 'mentor';
 
   const [connections, setConnections] = useState<ConnectionCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [selectedTab, setSelectedTab] = useState<MentorshipTab>('active');
 
   const fetchMentorships = useCallback(async () => {
+    if (sessionLoading) return;
+    if (!session) {
+      console.log('[dashboard] skipping mentorship fetch because session is missing');
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const userId = await SecureStore.getItemAsync('userId');
       const res = await apiClient.get('/mentorships');
       const mentorships: any[] = res.data;
 
       const cards: ConnectionCard[] = mentorships
-        .filter((m) => m.status === 'ACTIVE')
+        .filter((m) => ['ACTIVE', 'COMPLETED', 'TERMINATED', 'CANCELLED'].includes(m.status))
         .map((m) => {
-          const isCurrentUserMentor = String(m.mentorId) === userId;
+          const isCurrentUserMentor = Number(m.mentorId) === session.userId;
           const connectedUserId = isCurrentUserMentor ? m.menteeId : m.mentorId;
           const connectedUserFirstName = isCurrentUserMentor ? m.menteeFirstName : m.mentorFirstName;
           const type: 'mentor' | 'mentee' = isCurrentUserMentor ? 'mentee' : 'mentor';
@@ -71,6 +88,7 @@ export default function HomeScreen() {
             connectedUserId,
             connectedUserFirstName,
             type,
+            status: m.status,
             progress: calcProgress(m.startDate, m.endDate),
             startDate: m.startDate,
             endDate: m.endDate,
@@ -84,14 +102,18 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session, sessionLoading]);
 
-  useEffect(() => {
-    fetchMentorships();
-    apiClient.get('/notifications?unreadOnly=true')
-      .then((res) => setUnreadCount(res.data.length))
-      .catch(() => {});
-  }, [fetchMentorships]);
+  useFocusEffect(
+    useCallback(() => {
+      if (sessionLoading) return;
+      if (!session) return;
+      fetchMentorships();
+      apiClient.get('/notifications?unreadOnly=true')
+        .then((res) => setUnreadCount(res.data.length))
+        .catch(() => {});
+    }, [fetchMentorships, session, sessionLoading])
+  );
 
   const openNotifications = async () => {
     router.push('/notifications' as any);
@@ -108,14 +130,31 @@ export default function HomeScreen() {
     }
   };
 
+  const openSocialFeed = () => {
+    router.push('/social-feed' as any);
+  };
+
   const openConnectionProfile = (item: ConnectionCard) => {
     const colors = getAvatarColors(item.connectedUserId);
     const initials = item.connectedUserFirstName.substring(0, 2).toUpperCase();
 
+    console.log('[navigation] opening connection-profile', {
+      sourceScreen: 'dashboard',
+      currentUserId: session?.userId ?? null,
+      currentRole: session?.role ?? role,
+      mentorshipId: item.mentorshipId,
+      targetScreen: 'connection-profile',
+      connectedUserId: item.connectedUserId,
+      connectedUserFirstName: item.connectedUserFirstName,
+      connectionType: item.type,
+    });
+
     router.push({
       pathname: '/connection-profile',
       params: {
+        sourceScreen: 'dashboard',
         id: String(item.connectedUserId),
+        mentorshipId: String(item.mentorshipId),
         type: item.type,
         name: item.connectedUserFirstName,
         initials,
@@ -134,15 +173,32 @@ export default function HomeScreen() {
         stat2Label: 'Duration',
         stat2Value: `${Math.round((new Date(item.endDate).getTime() - new Date(item.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))}mo`,
         stat3Label: 'Status',
-        stat3Value: 'Active',
+        stat3Value: formatMentorshipStatus(item.status),
       },
     });
   };
 
-  const sectionTitle = isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS';
-  const visibleConnections = isMentor
+  const roleScopedConnections = isMentor
     ? connections.filter((c) => c.type === 'mentee')
     : connections.filter((c) => c.type === 'mentor');
+  const activeConnections = roleScopedConnections.filter((c) => c.status === 'ACTIVE');
+  const pastConnections = roleScopedConnections.filter((c) => c.status !== 'ACTIVE');
+  const visibleConnections = selectedTab === 'active' ? activeConnections : pastConnections;
+  const sectionTitle = selectedTab === 'active'
+    ? (isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS')
+    : (isMentor ? 'PAST MENTEES' : 'PAST MENTORS');
+
+  if (sessionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#456B50" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>
@@ -156,10 +212,19 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.headerTopRow}>
-          <View style={styles.profileBadge}>
-            <Text style={styles.profileBadgeText}>
-              {isMentor ? 'Mentor Mode' : 'Mentee Mode'}
-            </Text>
+          <View style={styles.headerActionGroup}>
+            <View style={styles.profileBadge}>
+              <Text style={styles.profileBadgeText}>
+                {isMentor ? 'Mentor Mode' : 'Mentee Mode'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.feedButton}
+              onPress={openSocialFeed}
+            >
+              <Text style={styles.feedButtonText}>Feed</Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity
@@ -188,13 +253,71 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <TouchableOpacity style={styles.feedEntryCard} onPress={openSocialFeed}>
+          <View style={styles.feedEntryHeader}>
+            <View style={styles.feedEntryInfo}>
+              <Text style={styles.feedEntryEyebrow}>SOCIAL FEED</Text>
+              <Text style={styles.feedEntryTitle}>Browse updates from your network</Text>
+            </View>
+            <View style={styles.feedEntryBadge}>
+              <Text style={styles.feedEntryBadgeText}>New</Text>
+            </View>
+          </View>
+          <Text style={styles.feedEntryText}>
+            Open the mobile social feed to switch between `For You` and `Following`.
+          </Text>
+          <View style={styles.feedEntryButton}>
+            <Text style={styles.feedEntryButtonText}>Open Feed</Text>
+          </View>
+        </TouchableOpacity>
+
         <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+        <View style={styles.tabRow}>
+          <TouchableOpacity
+            style={[styles.tabChip, selectedTab === 'active' && styles.tabChipActive]}
+            onPress={() => setSelectedTab('active')}
+          >
+            <Text style={[styles.tabChipText, selectedTab === 'active' && styles.tabChipTextActive]}>
+              Active ({activeConnections.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabChip, selectedTab === 'past' && styles.tabChipActive]}
+            onPress={() => setSelectedTab('past')}
+          >
+            <Text style={[styles.tabChipText, selectedTab === 'past' && styles.tabChipTextActive]}>
+              Past ({pastConnections.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+          {(['active', 'past'] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setSelectedTab(tab)}
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                borderRadius: 14,
+                alignItems: 'center',
+                backgroundColor: selectedTab === tab ? '#456B50' : '#EEE9E3',
+              }}
+            >
+              <Text style={{ fontWeight: '700', fontSize: 14, color: selectedTab === tab ? '#fff' : '#7E7368' }}>
+                {tab === 'active' ? `Active (${activeConnections.length})` : `Past (${pastConnections.length})`}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {loading ? (
           <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 30 }} />
         ) : visibleConnections.length === 0 ? (
           <View style={styles.emptyStateContainer}>
-            <Text style={styles.emptyStateText}>No active connections found.</Text>
+            <Text style={styles.emptyStateText}>
+              {selectedTab === 'active' ? 'No active mentorships found.' : 'No past mentorships found.'}
+            </Text>
           </View>
         ) : (
           visibleConnections.map((item) => {
@@ -217,21 +340,37 @@ export default function HomeScreen() {
                       </Text>
                     </View>
 
-                    <View style={styles.activeBadge}>
-                      <Text style={styles.activeBadgeText}>Active</Text>
+                    <View
+                      style={[
+                        styles.activeBadge,
+                        item.status !== 'ACTIVE' && styles.pastBadge,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.activeBadgeText,
+                          item.status !== 'ACTIVE' && styles.pastBadgeText,
+                        ]}
+                      >
+                        {formatMentorshipStatus(item.status)}
+                      </Text>
                     </View>
                   </View>
 
                   <View style={styles.progressTrack}>
                     <View style={[styles.progressFill, { width: `${item.progress}%` }]} />
                   </View>
-                  <Text style={styles.progressText}>Progress: {item.progress}%</Text>
+                  <Text style={styles.progressText}>
+                    {item.status === 'ACTIVE' ? `Progress: ${item.progress}%` : `Ended ${formatMentorshipStatus(item.status).toLowerCase()}`}
+                  </Text>
 
                   <TouchableOpacity
                     style={styles.viewProfileButton}
                     onPress={() => openConnectionProfile(item)}
                   >
-                    <Text style={styles.viewProfileButtonText}>Open Shared Space</Text>
+                    <Text style={styles.viewProfileButtonText}>
+                      {item.status === 'ACTIVE' ? 'Open Shared Space' : 'View Mentorship'}
+                    </Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
               </View>
@@ -316,6 +455,25 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
   },
+  headerActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  feedButton: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  feedButtonText: {
+    color: '#F7F4EE',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
   title: {
     color: '#F7F4EE',
     fontSize: 34,
@@ -326,12 +484,94 @@ const styles = StyleSheet.create({
   titleItalic: { fontStyle: 'italic', fontWeight: '700' },
   scrollArea: { flex: 1, backgroundColor: '#ECE8E1' },
   scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 34 },
+  feedEntryCard: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#DDD5CA',
+  },
+  feedEntryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  feedEntryInfo: {
+    flex: 1,
+  },
+  feedEntryEyebrow: {
+    color: '#8B8176',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  feedEntryTitle: {
+    color: '#23372B',
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+  },
+  feedEntryBadge: {
+    backgroundColor: '#D7E8DA',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  feedEntryBadgeText: {
+    color: '#2F563C',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  feedEntryText: {
+    color: '#6F6459',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  feedEntryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#456B50',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  feedEntryButtonText: {
+    color: '#F8F6F2',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 2,
     color: '#8B8176',
+    marginBottom: 12,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 10,
     marginBottom: 18,
+  },
+  tabChip: {
+    backgroundColor: '#E4DDD2',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  tabChipActive: {
+    backgroundColor: '#456B50',
+  },
+  tabChipText: {
+    color: '#6F6459',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tabChipTextActive: {
+    color: '#F7F4EE',
   },
   activeCard: {
     backgroundColor: '#F8F6F2',
@@ -359,6 +599,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   activeBadgeText: { color: '#2F563C', fontSize: 11, fontWeight: '700' },
+  pastBadge: {
+    backgroundColor: '#E9DFD4',
+  },
+  pastBadgeText: {
+    color: '#775E43',
+  },
   progressTrack: {
     height: 9,
     borderRadius: 999,

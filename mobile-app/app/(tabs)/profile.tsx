@@ -4,6 +4,13 @@ import apiClient from '../../api/client'; // Klasör yapına göre kontrol et (a
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../../components/RoleContext';
+import { useProtectedSession } from '../../components/useProtectedSession';
+import {
+  getPushPermissionState,
+  getStoredPushToken,
+  registerPushToken,
+  unregisterStoredPushToken,
+} from '../../lib/pushNotifications';
 import {
   View,
   Text,
@@ -12,11 +19,20 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
   Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import ActionModal from '../../components/ActionModal';
 
 type AppRole = 'mentor' | 'mentee';
+type NotificationPreferences = {
+  matchesEnabled: boolean;
+  messagesEnabled: boolean;
+  meetingsEnabled: boolean;
+  tasksEnabled: boolean;
+  requestsEnabled: boolean;
+};
 
 // İsme göre baş harfleri hesaplayan yardımcı fonksiyon
 const getInitials = (name: string) => {
@@ -30,7 +46,26 @@ const getInitials = (name: string) => {
 
 export default function ProfileScreen() {
   const { role, clearRole } = useRole();
+  const { session, sessionLoading } = useProtectedSession('profile');
   const isMentor = role === 'mentor';
+
+  useEffect(() => {
+    const logProfileSession = async () => {
+      const [storedUserId, storedRole, storedToken] = await Promise.all([
+        SecureStore.getItemAsync('userId'),
+        SecureStore.getItemAsync('userRole'),
+        SecureStore.getItemAsync('userToken'),
+      ]);
+      console.log('[profile] session context', {
+        storedUserId,
+        storedRole,
+        tokenPresent: Boolean(storedToken),
+        roleFromContext: role,
+      });
+    };
+
+    void logProfileSession();
+  }, [role]);
 
   const handleLogout = async () => {
     try {
@@ -38,6 +73,7 @@ export default function ProfileScreen() {
         SecureStore.getItemAsync('userId'),
         SecureStore.getItemAsync('userRole'),
       ]);
+      await unregisterStoredPushToken().catch(() => undefined);
       if (userId && (savedRole === 'mentor' || savedRole === 'mentee')) {
         await SecureStore.deleteItemAsync(getAvatarStorageKey(savedRole, userId)).catch(() => undefined);
       }
@@ -55,11 +91,27 @@ export default function ProfileScreen() {
     }
   };
 
-  if (isMentor) {
-    return <MentorProfileContent onLogout={handleLogout} />;
+  if (sessionLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text>Loading session…</Text>
+      </View>
+    );
   }
 
-  return <MenteeProfileContent onLogout={handleLogout} />;
+  if (role === 'admin') {
+    return <AdminProfileContent onLogout={handleLogout} />;
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  if (isMentor) {
+    return <MentorProfileContent onLogout={handleLogout} sessionUserId={String(session.userId)} />;
+  }
+
+  return <MenteeProfileContent onLogout={handleLogout} sessionUserId={String(session.userId)} />;
 }
 
 // Token (Chip) Editörü Bileşeni
@@ -93,7 +145,12 @@ function TokenEditor({
           onSubmitEditing={onAdd}
           returnKeyType="done"
         />
-        <TouchableOpacity style={styles.addTokenButton} onPress={onAdd}>
+        <TouchableOpacity
+          style={styles.addTokenButton}
+          onPress={onAdd}
+          accessibilityRole="button"
+          accessibilityLabel={`Add ${label}`}
+        >
           <Text style={styles.addTokenButtonText}>Add</Text>
         </TouchableOpacity>
       </View>
@@ -101,7 +158,12 @@ function TokenEditor({
         {values.map((item) => (
           <View key={item} style={styles.tokenChip}>
             <Text style={styles.tokenChipText}>{item}</Text>
-            <TouchableOpacity onPress={() => onRemove(item)}>
+            <TouchableOpacity
+              onPress={() => onRemove(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${item}`}
+              hitSlop={8}
+            >
               <Text style={styles.tokenRemoveText}>×</Text>
             </TouchableOpacity>
           </View>
@@ -172,8 +234,253 @@ async function uploadProfilePhoto(uri: string) {
   return response.data?.profilePhoto || uri;
 }
 
+async function deleteProfilePhoto() {
+  await apiClient.delete('/users/me/photo');
+}
+
+function openAvatarActions(
+  role: AppRole,
+  userId: string,
+  profilePhoto: string | null,
+  setProfilePhoto: (v: string | null) => void,
+) {
+  const options: { text: string; onPress: () => void; style?: 'destructive' | 'cancel' | 'default' }[] = [
+    {
+      text: 'Change Photo',
+      onPress: async () => {
+        const uri = await pickAvatar();
+        if (!uri) return;
+        try {
+          const saved = await uploadProfilePhoto(uri);
+          await cacheAvatar(role, userId, saved);
+          setProfilePhoto(saved);
+        } catch {
+          await cacheAvatar(role, userId, uri);
+          setProfilePhoto(uri);
+          Alert.alert('Warning', 'Photo updated locally but could not be uploaded.');
+        }
+      },
+    },
+  ];
+  if (profilePhoto) {
+    options.push({
+      text: 'Remove Photo',
+      style: 'destructive',
+      onPress: async () => {
+        try {
+          await deleteProfilePhoto();
+          await SecureStore.deleteItemAsync(getAvatarStorageKey(role, userId));
+          setProfilePhoto(null);
+        } catch {
+          Alert.alert('Error', 'Could not remove the photo. Please try again.');
+        }
+      },
+    });
+  }
+  options.push({ text: 'Cancel', style: 'cancel', onPress: () => {} });
+  Alert.alert('Profile Photo', 'Choose an action', options);
+}
+
+function NotificationToggleRow({
+  label,
+  value,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  value: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <View style={styles.notificationRow}>
+      <Text style={styles.notificationLabel}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.toggleButton, value && styles.toggleButtonOn, disabled && styles.toggleButtonDisabled]}
+        onPress={onToggle}
+        disabled={disabled}
+      >
+        <Text style={styles.toggleButtonText}>{value ? 'On' : 'Off'}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function PushSettingsCard() {
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [permissionState, setPermissionState] = useState('Loading...');
+  const [deviceRegistered, setDeviceRegistered] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [registering, setRegistering] = useState(false);
+
+  const loadPushSettings = async () => {
+    try {
+      setLoading(true);
+      const [prefsRes, storedToken, permission] = await Promise.all([
+        apiClient.get('/users/me/notification-preferences'),
+        getStoredPushToken(),
+        getPushPermissionState(),
+      ]);
+
+      setPrefs(prefsRes.data);
+      setDeviceRegistered(Boolean(storedToken));
+      setPermissionState(
+        permission === 'granted'
+          ? 'Granted'
+          : permission === 'denied'
+            ? 'Denied'
+            : permission === 'unsupported'
+              ? 'Physical device required'
+              : 'Not requested'
+      );
+    } catch (error) {
+      console.error('Error loading push settings:', error);
+      setPermissionState('Unavailable');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPushSettings();
+  }, []);
+
+  const updatePreferences = async (patch: Partial<NotificationPreferences>) => {
+    if (!prefs) return;
+
+    const previousPrefs = prefs;
+    const optimisticPrefs = { ...prefs, ...patch };
+    setPrefs(optimisticPrefs);
+
+    try {
+      setSaving(true);
+      const response = await apiClient.patch('/users/me/notification-preferences', patch);
+      setPrefs(response.data);
+    } catch (error: any) {
+      setPrefs(previousPrefs);
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        'Could not update notification preferences.';
+      Alert.alert('Error', message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const enablePush = async () => {
+    try {
+      setRegistering(true);
+      const result = await registerPushToken();
+
+      if (result.status === 'registered') {
+        setDeviceRegistered(true);
+        setPermissionState('Granted');
+        Alert.alert('Success', 'This device is now registered for push notifications.');
+        return;
+      }
+
+      if (result.status === 'permission_denied') {
+        setPermissionState('Denied');
+        Alert.alert('Permission needed', 'Push notifications were not enabled because permission was denied.');
+        return;
+      }
+
+      if (result.status === 'simulator') {
+        setPermissionState('Physical device required');
+        Alert.alert('Unavailable', 'Push registration requires a physical device.');
+        return;
+      }
+
+      Alert.alert('Error', result.message);
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const disablePush = async () => {
+    try {
+      setRegistering(true);
+      await unregisterStoredPushToken();
+      setDeviceRegistered(false);
+      Alert.alert('Disabled', 'This device has been removed from push notification delivery.');
+    } catch {
+      Alert.alert('Error', 'Could not disable push notifications on this device.');
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  return (
+    <View style={styles.formCardMentee}>
+      <Text style={styles.sectionHeaderText}>PUSH NOTIFICATIONS</Text>
+      {loading || !prefs ? (
+        <Text style={styles.pushStatusText}>Loading push settings...</Text>
+      ) : (
+        <>
+          <Text style={styles.pushStatusText}>Permission: {permissionState}</Text>
+          <Text style={styles.pushStatusText}>
+            Device registration: {deviceRegistered ? 'Registered' : 'Not registered'}
+          </Text>
+
+          <View style={styles.pushButtonRow}>
+            <TouchableOpacity
+              style={[styles.pushActionButton, registering && styles.toggleButtonDisabled]}
+              onPress={enablePush}
+              disabled={registering}
+            >
+              <Text style={styles.pushActionButtonText}>
+                {registering ? 'Working...' : deviceRegistered ? 'Refresh Device Token' : 'Enable Push'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.pushDangerButton, (!deviceRegistered || registering) && styles.toggleButtonDisabled]}
+              onPress={disablePush}
+              disabled={!deviceRegistered || registering}
+            >
+              <Text style={styles.pushDangerButtonText}>Disable</Text>
+            </TouchableOpacity>
+          </View>
+
+          <NotificationToggleRow
+            label="Messages"
+            value={prefs.messagesEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ messagesEnabled: !prefs.messagesEnabled })}
+          />
+          <NotificationToggleRow
+            label="Meetings"
+            value={prefs.meetingsEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ meetingsEnabled: !prefs.meetingsEnabled })}
+          />
+          <NotificationToggleRow
+            label="Tasks"
+            value={prefs.tasksEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ tasksEnabled: !prefs.tasksEnabled })}
+          />
+          <NotificationToggleRow
+            label="Requests"
+            value={prefs.requestsEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ requestsEnabled: !prefs.requestsEnabled })}
+          />
+          <NotificationToggleRow
+            label="Matches"
+            value={prefs.matchesEnabled}
+            disabled={saving}
+            onToggle={() => updatePreferences({ matchesEnabled: !prefs.matchesEnabled })}
+          />
+        </>
+      )}
+    </View>
+  );
+}
+
 // --- MENTEE PROFILI ---
-function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
+function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => void; sessionUserId: string }) {
   const [fullName, setFullName] = useState('');
   const [department, setDepartment] = useState('');
   const [aboutMe, setAboutMe] = useState('');
@@ -219,7 +526,6 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const userId = await SecureStore.getItemAsync('userId');
         const profileRes = await apiClient.get('/users/me');
         const data = profileRes.data;
         setFullName([data.firstName, data.lastName].filter(Boolean).join(' '));
@@ -233,18 +539,15 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
         if (data.skills) setSkills(data.skills);
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
-          if (userId) {
-            await cacheAvatar('mentee', userId, data.profilePhoto);
-          }
-        } else if (userId) {
-          const local = await loadCachedAvatar('mentee', userId);
+          await cacheAvatar('mentee', sessionUserId, data.profilePhoto);
+        } else if (sessionUserId) {
+          const local = await loadCachedAvatar('mentee', sessionUserId);
           if (local) setProfilePhoto(local);
         }
       } catch (error) {
         console.error('Error fetching mentee profile:', error);
-        const userId = await SecureStore.getItemAsync('userId');
-        if (userId) {
-          const local = await loadCachedAvatar('mentee', userId);
+        if (sessionUserId) {
+          const local = await loadCachedAvatar('mentee', sessionUserId);
           if (local) setProfilePhoto(local);
         }
       }
@@ -253,14 +556,24 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
         const reqRes = await apiClient.get('/mentorship-requests/sent');
         const list = reqRes.data.content ?? reqRes.data;
         setSentRequests(list);
-      } catch (error) {
-        console.error('Error fetching sent requests:', error);
+      } catch (error: any) {
+        const [storedUserId, storedRole] = await Promise.all([
+          SecureStore.getItemAsync('userId'),
+          SecureStore.getItemAsync('userRole'),
+        ]);
+        console.error('[profile] failed to fetch sent requests', {
+          status: error?.response?.status,
+          data: error?.response?.data,
+          storedUserId,
+          storedRole,
+          roleFromContext: 'mentee',
+        });
       } finally {
         setRequestsLoading(false);
       }
     };
     fetchAll();
-  }, []);
+  }, [sessionUserId]);
 
   return (
     <View style={styles.container}>
@@ -271,20 +584,11 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
           <TouchableOpacity
             style={styles.avatarCircle}
             onPress={async () => {
-              const userId = await SecureStore.getItemAsync('userId');
-              if (!userId) return;
-              const uri = await pickAvatar();
-              if (!uri) return;
-              try {
-                const savedPhoto = await uploadProfilePhoto(uri);
-                await cacheAvatar('mentee', userId, savedPhoto);
-                setProfilePhoto(savedPhoto);
-              } catch {
-                await cacheAvatar('mentee', userId, uri);
-                setProfilePhoto(uri);
-                Alert.alert('Warning', 'Photo was updated locally but could not be uploaded to the server.');
-              }
+              openAvatarActions('mentee', sessionUserId, profilePhoto, setProfilePhoto);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile photo"
+            accessibilityHint="Opens photo actions for your profile picture"
           >
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
@@ -305,6 +609,8 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/mentorship-requests')}
+              accessibilityRole="button"
+              accessibilityLabel="My requests"
             >
               <Text style={styles.quickActionIcon}>📋</Text>
               <Text style={styles.quickActionText}>My Requests</Text>
@@ -312,9 +618,20 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.navigate('/explore')}
+              accessibilityRole="button"
+              accessibilityLabel="Find mentor"
             >
               <Text style={styles.quickActionIcon}>🔍</Text>
               <Text style={styles.quickActionText}>Find Mentor</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/availability-scheduling')}
+              accessibilityRole="button"
+              accessibilityLabel="Availability"
+            >
+              <Text style={styles.quickActionIcon}>📅</Text>
+              <Text style={styles.quickActionText}>Availability</Text>
             </TouchableOpacity>
           </View>
 
@@ -354,12 +671,20 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
               <TouchableOpacity
                 style={[styles.toggleButton, profileVisibility && styles.toggleButtonOn]}
                 onPress={() => setProfileVisibility(!profileVisibility)}
+                accessibilityRole="switch"
+                accessibilityLabel="Profile visibility"
+                accessibilityState={{ checked: profileVisibility }}
               >
                 <Text style={styles.toggleButtonText}>{profileVisibility ? 'Public' : 'Private'}</Text>
               </TouchableOpacity>
             </View>
           </View>
-          <TouchableOpacity style={styles.saveButtonMentee} onPress={handleSave}>
+          <TouchableOpacity
+            style={styles.saveButtonMentee}
+            onPress={handleSave}
+            accessibilityRole="button"
+            accessibilityLabel="Save mentee profile changes"
+          >
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
 
@@ -395,7 +720,12 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
             })
           )}
 
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={onLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
+          >
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
         </View>
@@ -405,7 +735,7 @@ function MenteeProfileContent({ onLogout }: { onLogout: () => void }) {
 }
 
 // --- MENTOR PROFILI ---
-function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
+function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => void; sessionUserId: string }) {
   const [displayName, setDisplayName] = useState('');
   const [title, setTitle] = useState('');
   const [bio, setBio] = useState('');
@@ -424,7 +754,6 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
-        const userId = await SecureStore.getItemAsync('userId');
         const response = await apiClient.get('/users/me');
         const data = response.data;
         setDisplayName([data.firstName, data.lastName].filter(Boolean).join(' '));
@@ -440,24 +769,21 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
         if (data.mentorshipDuration != null) setMentorshipDuration(String(data.mentorshipDuration));
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
-          if (userId) {
-            await cacheAvatar('mentor', userId, data.profilePhoto);
-          }
-        } else if (userId) {
-          const local = await loadCachedAvatar('mentor', userId);
+          await cacheAvatar('mentor', sessionUserId, data.profilePhoto);
+        } else if (sessionUserId) {
+          const local = await loadCachedAvatar('mentor', sessionUserId);
           if (local) setProfilePhoto(local);
         }
       } catch (error) {
         console.error('Error fetching mentor profile:', error);
-        const userId = await SecureStore.getItemAsync('userId');
-        if (userId) {
-          const local = await loadCachedAvatar('mentor', userId);
+        if (sessionUserId) {
+          const local = await loadCachedAvatar('mentor', sessionUserId);
           if (local) setProfilePhoto(local);
         }
       }
     };
     fetchProfileData();
-  }, []);
+  }, [sessionUserId]);
 
   const handleSave = async () => {
     const capacity = parseInt(maxMenteeCapacity, 10);
@@ -499,18 +825,11 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             onPress={async () => {
               const userId = await SecureStore.getItemAsync('userId');
               if (!userId) return;
-              const uri = await pickAvatar();
-              if (!uri) return;
-              try {
-                const savedPhoto = await uploadProfilePhoto(uri);
-                await cacheAvatar('mentor', userId, savedPhoto);
-                setProfilePhoto(savedPhoto);
-              } catch {
-                await cacheAvatar('mentor', userId, uri);
-                setProfilePhoto(uri);
-                Alert.alert('Warning', 'Photo was updated locally but could not be uploaded to the server.');
-              }
+              openAvatarActions('mentor', userId, profilePhoto, setProfilePhoto);
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile photo"
+            accessibilityHint="Opens photo actions for your profile picture"
           >
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
@@ -531,6 +850,8 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/(tabs)/explore' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Requests"
             >
               <Text style={styles.quickActionIcon}>📋</Text>
               <Text style={styles.quickActionText}>Requests</Text>
@@ -538,6 +859,8 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
             <TouchableOpacity
               style={styles.quickActionButton}
               onPress={() => router.push('/availability-scheduling')}
+              accessibilityRole="button"
+              accessibilityLabel="Availability"
             >
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Availability</Text>
@@ -596,9 +919,233 @@ function MentorProfileContent({ onLogout }: { onLogout: () => void }) {
               placeholderTextColor="#B5ADA3"
             />
           </View>
-          <TouchableOpacity style={styles.saveButtonMentor} onPress={handleSave}>
+          <TouchableOpacity
+            style={styles.saveButtonMentor}
+            onPress={handleSave}
+            accessibilityRole="button"
+            accessibilityLabel="Save mentor profile changes"
+          >
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={onLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
+          >
+            <Text style={styles.logoutButtonText}>Log Out</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
+  const [users, setUsers] = useState<any[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [broadcastText, setBroadcastText] = useState('');
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [view, setView] = useState<'users' | 'broadcast'>('users');
+  const [banTarget, setBanTarget] = useState<{ id: string; name: string } | null>(null);
+  const [banReason, setBanReason] = useState('');
+  const [banHours, setBanHours] = useState('168');
+
+  useEffect(() => {
+    apiClient.get('/users?size=100').then((res) => {
+      const data = res.data?.content ?? res.data ?? [];
+      setUsers(data);
+    }).catch(() => {}).finally(() => setUsersLoading(false));
+  }, []);
+
+  const banUser = (userId: string, userName: string) => {
+    setBanReason('');
+    setBanHours('168');
+    setBanTarget({ id: userId, name: userName });
+  };
+
+  const confirmBan = async () => {
+    if (!banTarget) return;
+    const durationHours = parseInt(banHours, 10);
+    if (!banReason.trim() || isNaN(durationHours) || durationHours < 1) {
+      Alert.alert('Invalid', 'Please fill in a reason and a valid duration.');
+      return;
+    }
+    setActionLoading((p) => ({ ...p, [banTarget.id]: true }));
+    try {
+      await apiClient.post(`/admin/users/${banTarget.id}/ban`, { reason: banReason.trim(), durationHours });
+      setBanTarget(null);
+      Alert.alert('Banned', `${banTarget.name} has been banned for ${durationHours}h.`);
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Could not ban user.');
+    } finally {
+      setActionLoading((p) => ({ ...p, [banTarget!.id]: false }));
+    }
+  };
+
+  const unbanUser = async (userId: string, userName: string) => {
+    Alert.alert('Unban', `Remove active ban for ${userName}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Unban',
+        onPress: async () => {
+          setActionLoading((p) => ({ ...p, [userId]: true }));
+          try {
+            await apiClient.post(`/admin/users/${userId}/unban`);
+            Alert.alert('Done', `${userName} has been unbanned.`);
+          } catch (err: any) {
+            Alert.alert('Error', err?.response?.data?.message || 'Could not unban user.');
+          } finally {
+            setActionLoading((p) => ({ ...p, [userId]: false }));
+          }
+        },
+      },
+    ]);
+  };
+
+  const sendBroadcast = async () => {
+    if (!broadcastText.trim()) return;
+    setBroadcasting(true);
+    try {
+      await apiClient.post('/admin/messages/broadcast', { body: broadcastText.trim() });
+      setBroadcastText('');
+      Alert.alert('Sent', 'Broadcast message sent to all users.');
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Could not send broadcast.');
+    } finally {
+      setBroadcasting(false);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <ActionModal
+        visible={!!banTarget}
+        title={`Ban ${banTarget?.name ?? 'User'}`}
+        message="The user will be blocked from logging in until the ban expires."
+        fields={[
+          {
+            label: 'Reason',
+            placeholder: 'e.g. Repeated harassment of mentees',
+            value: banReason,
+            onChange: setBanReason,
+            multiline: true,
+            required: true,
+          },
+          {
+            label: 'Duration (hours)',
+            placeholder: 'e.g. 168 = 1 week',
+            value: banHours,
+            onChange: setBanHours,
+            keyboardType: 'number-pad',
+            required: true,
+          },
+        ]}
+        confirmLabel="Ban User"
+        danger
+        loading={banTarget ? !!actionLoading[banTarget.id] : false}
+        onConfirm={confirmBan}
+        onCancel={() => setBanTarget(null)}
+      />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={[styles.header, { paddingBottom: 40 }]}>
+          <View style={styles.topCircle} />
+          <View style={[styles.avatarCircle, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+            <Text style={styles.avatarText}>👑</Text>
+          </View>
+          <Text style={styles.name}>Admin Panel</Text>
+          <Text style={styles.roleText}>System Administrator</Text>
+        </View>
+
+        <View style={styles.body}>
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
+            <TouchableOpacity
+              style={[styles.quickActionButton, view === 'users' && { backgroundColor: '#D7E8DA', borderColor: '#456B50' }]}
+              onPress={() => setView('users')}
+            >
+              <Text style={styles.quickActionIcon}>👥</Text>
+              <Text style={styles.quickActionText}>Users</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.quickActionButton, view === 'broadcast' && { backgroundColor: '#D7E8DA', borderColor: '#456B50' }]}
+              onPress={() => setView('broadcast')}
+            >
+              <Text style={styles.quickActionIcon}>📢</Text>
+              <Text style={styles.quickActionText}>Broadcast</Text>
+            </TouchableOpacity>
+          </View>
+
+          {view === 'users' ? (
+            <>
+              <Text style={styles.sectionHeaderText}>USER MANAGEMENT</Text>
+              {usersLoading ? (
+                <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color="#456B50" />
+                </View>
+              ) : users.length === 0 ? (
+                <View style={styles.emptyRequestsCard}>
+                  <Text style={styles.emptyRequestsText}>No users found.</Text>
+                </View>
+              ) : (
+                users.map((u) => {
+                  const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || String(u.id);
+                  const uid = String(u.id);
+                  return (
+                    <View key={uid} style={styles.requestCard}>
+                      <View style={styles.requestCardRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.requestCardName}>{name}</Text>
+                          <Text style={{ color: '#7E7368', fontSize: 12, marginTop: 2 }}>
+                            {u.role || 'USER'} {u.email ? `· ${u.email}` : ''}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                        <TouchableOpacity
+                          style={{ flex: 1, backgroundColor: '#FDF0EF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#FAD4D4', opacity: actionLoading[uid] ? 0.5 : 1 }}
+                          onPress={() => banUser(uid, name)}
+                          disabled={!!actionLoading[uid]}
+                        >
+                          <Text style={{ color: '#D9534F', fontWeight: '700', fontSize: 13 }}>🚫 Ban</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{ flex: 1, backgroundColor: '#D7E8DA', borderRadius: 12, paddingVertical: 10, alignItems: 'center', opacity: actionLoading[uid] ? 0.5 : 1 }}
+                          onPress={() => unbanUser(uid, name)}
+                          disabled={!!actionLoading[uid]}
+                        >
+                          <Text style={{ color: '#2F563C', fontWeight: '700', fontSize: 13 }}>✓ Unban</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={styles.sectionHeaderText}>BROADCAST MESSAGE</Text>
+              <View style={styles.formCardMentee}>
+                <Text style={styles.inputLabel}>Message to all users</Text>
+                <TextInput
+                  style={[styles.input, styles.aboutInput]}
+                  value={broadcastText}
+                  onChangeText={setBroadcastText}
+                  placeholder="Write a broadcast message..."
+                  placeholderTextColor="#B5ADA3"
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[styles.saveButtonMentee, { marginTop: 8, opacity: (!broadcastText.trim() || broadcasting) ? 0.5 : 1 }]}
+                  onPress={sendBroadcast}
+                  disabled={!broadcastText.trim() || broadcasting}
+                >
+                  <Text style={styles.saveButtonText}>{broadcasting ? 'Sending...' : 'Send Broadcast'}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
           <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
@@ -637,6 +1184,34 @@ const styles = StyleSheet.create({
   tokenChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 15, backgroundColor: '#EEF3EE', borderWidth: 1, borderColor: '#D7E8DA' },
   tokenChipText: { color: '#2F563C', fontSize: 13, fontWeight: '600' },
   tokenRemoveText: { color: '#2F563C', fontSize: 18, fontWeight: '700', marginLeft: 8 },
+  pushStatusText: { color: '#7E7368', fontSize: 13, marginBottom: 10, lineHeight: 18 },
+  pushButtonRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  pushActionButton: {
+    flex: 1,
+    backgroundColor: '#4B7B57',
+    borderRadius: 15,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  pushActionButtonText: { color: '#F8F6F2', fontWeight: '700', fontSize: 13 },
+  pushDangerButton: {
+    minWidth: 96,
+    backgroundColor: '#FDF0EF',
+    borderRadius: 15,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FAD4D4',
+  },
+  pushDangerButtonText: { color: '#D9534F', fontWeight: '700', fontSize: 13 },
+  notificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  notificationLabel: { color: '#4A4138', fontSize: 14, fontWeight: '600' },
   logoutButton: { backgroundColor: '#FDF0EF', borderWidth: 1, borderColor: '#FAD4D4', borderRadius: 20, paddingVertical: 15, alignItems: 'center', marginTop: 12 },
   logoutButtonText: { color: '#D9534F', fontSize: 16, fontWeight: '700' },
   quickActionsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
@@ -707,6 +1282,9 @@ const styles = StyleSheet.create({
   },
   toggleButtonOn: {
     backgroundColor: '#D7E8DA',
+  },
+  toggleButtonDisabled: {
+    opacity: 0.5,
   },
   toggleButtonText: {
     color: '#2F563C',

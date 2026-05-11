@@ -11,6 +11,14 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import UserProfilePage from './pages/UserProfilePage'
+import MentorshipDetailPage from './pages/MentorshipDetailPage'
+import MessagesPage from './pages/MessagesPage'
+import TasksPage from './pages/TasksPage'
+import SchedulePage from './pages/SchedulePage'
+import NotificationsPage from './pages/NotificationsPage'
+import FeedPage from './pages/FeedPage'
+import FeedPostDetailPage from './pages/FeedPostDetailPage'
+import FeedBookmarksPage from './pages/FeedBookmarksPage'
 
 export default function App() {
   return (
@@ -29,6 +37,14 @@ export default function App() {
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/users/:id" element={<UserProfilePage />} />
+          <Route path="/mentorships/:id" element={<MentorshipDetailPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/feed" element={<FeedPage />} />
+          <Route path="/feed/bookmarks" element={<FeedBookmarksPage />} />
+          <Route path="/feed/:id" element={<FeedPostDetailPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

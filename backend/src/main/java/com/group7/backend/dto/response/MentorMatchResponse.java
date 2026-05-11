@@ -12,7 +12,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @Schema(description = "Privacy-safe mentor match result with compatibility score")
-public class MentorMatchResponse {
+public class MentorMatchResponse implements MatchSummary {
 
     @Schema(description = "Mentor user ID", example = "42")
     private Long id;
@@ -26,8 +26,14 @@ public class MentorMatchResponse {
     @Schema(description = "Mentoring field", example = "Computer Science")
     private String field;
 
+    @Schema(description = "Optional ISCED-F URI for the mentoring field")
+    private String fieldUri;
+
     @Schema(description = "Expertise summary", example = "Backend Development")
     private String expertise;
+
+    @Schema(description = "Optional ESCO skill URI for the expertise")
+    private String expertiseUri;
 
     @Schema(description = "Affiliation (university/company)", example = "Bogazici University")
     private String affiliation;
@@ -35,11 +41,20 @@ public class MentorMatchResponse {
     @Schema(description = "List of interests", example = "[\"AI\", \"Systems\"]")
     private List<String> interests;
 
+    @Schema(description = "Canonical URIs parallel to `interests`. Entries may be ESCO, Wikidata, or null.")
+    private List<String> interestUris;
+
     @Schema(description = "Preferred mentee skills", example = "[\"Java\", \"Python\"]")
     private List<String> preferredMenteeSkills;
 
+    @Schema(description = "ESCO skill URIs parallel to `preferredMenteeSkills`.")
+    private List<String> preferredMenteeSkillUris;
+
     @Schema(description = "Preferred mentee major", example = "Computer Engineering")
     private String preferredMenteeMajor;
+
+    @Schema(description = "Optional ISCED-F URI for the preferred mentee major")
+    private String preferredMenteeMajorUri;
 
     @Schema(description = "Mentoring goals", example = "Help students with career guidance")
     private String mentoringGoals;
@@ -56,11 +71,16 @@ public class MentorMatchResponse {
         r.setFirstName(mentor.getFirstName());
         r.setBio(mentor.getBio());
         r.setField(mentor.getField());
+        r.setFieldUri(mentor.getFieldUri());
         r.setExpertise(mentor.getExpertise());
+        r.setExpertiseUri(mentor.getExpertiseUri());
         r.setAffiliation(mentor.getAffiliation());
         r.setInterests(mentor.getInterests());
+        r.setInterestUris(mentor.getInterestUris());
         r.setPreferredMenteeSkills(mentor.getPreferredMenteeSkills());
+        r.setPreferredMenteeSkillUris(mentor.getPreferredMenteeSkillUris());
         r.setPreferredMenteeMajor(mentor.getPreferredMenteeMajor());
+        r.setPreferredMenteeMajorUri(mentor.getPreferredMenteeMajorUri());
         r.setMentoringGoals(mentor.getMentoringGoals());
         r.setMentorshipDuration(mentor.getMentorshipDuration());
         r.setMatchScore(score);

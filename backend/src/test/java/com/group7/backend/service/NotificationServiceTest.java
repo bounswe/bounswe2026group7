@@ -11,10 +11,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,6 +30,9 @@ class NotificationServiceTest {
 
     @Mock
     private NotificationRepository notificationRepository;
+
+    @Spy
+    private Clock clock = Clock.systemUTC();
 
     @InjectMocks
     private NotificationService notificationService;
@@ -46,7 +51,7 @@ class NotificationServiceTest {
         notification.setTitle("Mentorship request accepted");
         notification.setBody("Ahmet accepted your mentorship request.");
         notification.setRead(false);
-        notification.setCreatedAt(OffsetDateTime.now(ZoneId.of("Europe/Istanbul")));
+        notification.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
     }
 
     @Test
