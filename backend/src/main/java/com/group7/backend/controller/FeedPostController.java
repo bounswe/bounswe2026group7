@@ -22,6 +22,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.WebRequest;
+
+import java.time.OffsetDateTime;
 
 /**
  * REST surface for the social-feed posts core (#348).
@@ -83,17 +86,41 @@ public class FeedPostController {
     @GetMapping("/{id:\\d+}")
     @Operation(summary = "Get a feed post by id",
             description = "Returns the post if present and not soft-deleted. The viewer's "
-                    + "id is reflected in the response's isAuthor flag.")
+                    + "id is reflected in the response's isAuthor flag. Participates in "
+                    + "conditional GET: clients may send If-None-Match with the ETag from "
+                    + "a prior response to receive 304 when the post body is unchanged.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Post body"),
+            @ApiResponse(responseCode = "304", description = "Not Modified — If-None-Match matched current ETag"),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
             @ApiResponse(responseCode = "404", description = "Post not found or soft-deleted", content = @Content)
     })
     public ResponseEntity<FeedPostResponse> getById(
             @Parameter(description = "Feed post id") @PathVariable Long id,
-            Authentication authentication) {
+            Authentication authentication,
+            WebRequest webRequest) {
         Long viewerId = (Long) authentication.getCredentials();
-        return ResponseEntity.ok(feedPostService.getById(id, viewerId));
+        FeedPostResponse post = feedPostService.getById(id, viewerId);
+        // ETag derived from updatedAt (falls back to createdAt) — the only
+        // post-shape mutation point. Counters / viewer flags live on the
+        // separate /interactions endpoint with no-cache, so they never
+        // invalidate this cache.
+        OffsetDateTime lastModified = post.updatedAt() != null ? post.updatedAt() : post.createdAt();
+        long lastModifiedMillis = lastModified.toInstant().toEpochMilli();
+        String etag = "\"" + lastModifiedMillis + "\"";
+        if (webRequest.checkNotModified(etag, lastModifiedMillis)) {
+            // Spring writes 304 from the WebRequest hint; null return is the
+            // documented Spring 6 pattern for conditional-GET short-circuit.
+            return null;
+        }
+        // private because isAuthor is viewer-relative; max-age=30 is short
+        // enough that staleness is harmless and long enough to absorb
+        // typical UI-render reload bursts.
+        return ResponseEntity.ok()
+                .eTag(etag)
+                .lastModified(lastModifiedMillis)
+                .header("Cache-Control", "private, max-age=30")
+                .body(post);
     }
 
     @PatchMapping("/{id:\\d+}")

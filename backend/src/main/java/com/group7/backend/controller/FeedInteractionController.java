@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -61,7 +62,13 @@ public class FeedInteractionController {
             @Parameter(description = "Feed post id") @PathVariable Long id,
             Authentication authentication) {
         Long viewerId = (Long) authentication.getCredentials();
-        return ResponseEntity.ok(interactionService.getInteractionState(id, viewerId));
+        // Cache-Control: no-cache so likers' updates surface immediately and
+        // viewer-relative flags (viewerHasLiked / viewerHasBookmarked) stay
+        // fresh. Symmetric with the static GET /api/feed/posts/{id} endpoint
+        // which uses ETag + private/max-age=30.
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache())
+                .body(interactionService.getInteractionState(id, viewerId));
     }
 
     // ── Likes ──────────────────────────────────────────────────────────────
