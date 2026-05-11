@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
-import { getUserById, createMentorshipRequest, getSentMentorshipRequests, getActiveMentorships, getMentorAvailability } from '../services/api'
+import { getUserById, createMentorshipRequest, getMentorAvailability } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
 
 function ProfileField({ label, value, chips = false }) {
@@ -49,7 +50,13 @@ export default function UserProfilePage() {
   const [modalVisible, setModalVisible] = useState(false)
   const [requestLoading, setRequestLoading] = useState(false)
   const [requestError, setRequestError] = useState('')
-  const [requestSent, setRequestSent] = useState(false)
+
+  const {
+    sentRequests,
+    activeMentorships,
+    refresh: refreshMentorships,
+    isMentee: userIsMentee
+  } = useMentorship()
 
   useEffect(() => {
     getUserById(id)
@@ -69,32 +76,24 @@ export default function UserProfilePage() {
       })
       .catch(() => {})
 
-    if (isMentee) {
-      getSentMentorshipRequests()
-        .then(data => {
-          const sent = (data.content || []).some(r => String(r.mentorId) === String(id))
-          setRequestSent(sent)
-        })
-        .catch(() => {})
+    if (userIsMentee && id) {
+      // Check if we already have a pending request to this specific mentor
+      // This is now handled by derived state from context (sentRequests)
     }
 
-    if (!isMentee) {
+    if (!userIsMentee && id && activeMentorships) {
       // Mentor viewing a mentee: only show photo if there's an active mentorship between them.
-      getActiveMentorships()
-        .then(data => {
-          const active = (data || []).some(m => m.status === 'ACTIVE' && String(m.menteeId) === String(id))
-          setCanSeePhoto(active)
-        })
-        .catch(() => {})
+      const active = (activeMentorships || []).some(m => m.status === 'ACTIVE' && String(m.menteeId) === String(id))
+      setCanSeePhoto(active)
     }
-  }, [id, isMentee])
+  }, [id, userIsMentee, activeMentorships])
 
   async function handleSubmitRequest(message) {
     setRequestLoading(true)
     setRequestError('')
     try {
       await createMentorshipRequest({ mentorId: parseInt(id), message })
-      setRequestSent(true)
+      refreshMentorships() // Refresh context to update sentRequests and pending counts
       setModalVisible(false)
     } catch (err) {
       setRequestError(err.message || 'Failed to send request.')
@@ -186,16 +185,27 @@ export default function UserProfilePage() {
             </div>
           )}
 
-          {isMentee && isMentorProfile && (
+          {userIsMentee && isMentorProfile && (
             <div style={{ textAlign: 'center' }}>
-              <button
-                className={`send-request-btn${requestSent ? ' sent' : ''}`}
-                disabled={requestSent}
-                onClick={() => !requestSent && setModalVisible(true)}
-                style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
-              >
-                {requestSent ? '✓ Request Sent' : 'Send Request'}
-              </button>
+              {(() => {
+                const isPending = (sentRequests || []).some(r => String(r.mentorId) === String(id) && r.status === 'PENDING')
+                const hasActiveMentor = (activeMentorships || []).some(m => m.status === 'ACTIVE')
+                const isFull = profile.maxMenteeCapacity != null && (profile.currentMenteeCount ?? 0) >= profile.maxMenteeCapacity
+                
+                const btnDisabled = isPending || hasActiveMentor || isFull
+                const btnLabel = isPending ? '✓ Request Sent' : isFull ? 'At Capacity' : hasActiveMentor ? 'Already Mentored' : 'Send Request'
+                
+                return (
+                  <button
+                    className={`send-request-btn${isPending ? ' sent' : ''}${hasActiveMentor && !isPending ? ' locked' : ''}`}
+                    disabled={btnDisabled}
+                    onClick={() => !btnDisabled && setModalVisible(true)}
+                    style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
+                  >
+                    {btnLabel}
+                  </button>
+                )
+              })()}
             </div>
           )}
 
