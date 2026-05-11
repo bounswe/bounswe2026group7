@@ -2251,6 +2251,18 @@
   cursor: pointer;
 }
 
+/* ── MEETINGS (#337) ── */
+.meeting-card-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--green-dark);
+  text-decoration: underline;
+}
+.meeting-card-link:hover { color: #15693a; }
+.task-bucket--past { opacity: 0.85; }
+.task-bucket--past .task-card { background: #fafbfa; }
+
 /* ── MILESTONES (#288) ── */
 .md-milestones { margin-top: 16px; }
 .milestone-progress {
