@@ -58,6 +58,12 @@ public class UserNotificationPreferences {
     @Column(name = "milestone_reminders_enabled", nullable = false)
     private boolean milestoneRemindersEnabled = true;
 
+    @Column(name = "feed_engagement_enabled", nullable = false)
+    private boolean feedEngagementEnabled = true;
+
+    @Column(name = "new_follower_enabled", nullable = false)
+    private boolean newFollowerEnabled = true;
+
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
@@ -99,6 +105,8 @@ public class UserNotificationPreferences {
             // auto-completion all change the user's relationship status and
             // their pending tasks/meetings, so always-on.
             case MENTORSHIP_ENDED, MENTORSHIP_EXTENDED, MENTORSHIP_AUTO_COMPLETED -> true;
+            case FEED_LIKE, FEED_COMMENT, FEED_SHARE -> feedEngagementEnabled;
+            case NEW_FOLLOWER -> newFollowerEnabled;
         };
     }
 }
