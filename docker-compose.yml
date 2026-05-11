@@ -46,6 +46,12 @@ services:
       MENTOR_EXPLANATION_TIMEOUT_MS: ${MENTOR_EXPLANATION_TIMEOUT_MS:-3000}
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      # Advanced For-You feed ranker (#438). Default off; flip
+      # FEED_ADVANCED_RANKER=true in .env to swap the InterestOverlapFeedRanker
+      # for AdvancedForYouFeedRanker (+ pipeline). FEED_BANDIT_ENABLED stays
+      # off until the impression-tracking follow-up PR lands.
+      FEED_ADVANCED_RANKER: ${FEED_ADVANCED_RANKER:-false}
+      FEED_BANDIT_ENABLED: ${FEED_BANDIT_ENABLED:-false}
     volumes:
       - uploads_data:/app/uploads
     depends_on:

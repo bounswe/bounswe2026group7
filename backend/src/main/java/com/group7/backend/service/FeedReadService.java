@@ -12,6 +12,7 @@ import com.group7.backend.repository.FollowRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.service.ranking.FeedRanker;
 import com.group7.backend.service.ranking.FeedScoreResult;
+import com.group7.backend.service.ranking.feed.ForYouScoringPipeline;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +27,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -70,6 +72,7 @@ public class FeedReadService {
     private final FollowRepository followRepository;
     private final HashtagNormalizer hashtagNormalizer;
     private final FeedRanker feedRanker;
+    private final Optional<ForYouScoringPipeline> forYouPipeline;
     private final int candidateWindow;
 
     public FeedReadService(FeedPostRepository feedPostRepository,
@@ -77,12 +80,14 @@ public class FeedReadService {
                            FollowRepository followRepository,
                            HashtagNormalizer hashtagNormalizer,
                            FeedRanker feedRanker,
+                           Optional<ForYouScoringPipeline> forYouPipeline,
                            @Value("${app.feed.forYou.candidate-window:200}") int candidateWindow) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.hashtagNormalizer = hashtagNormalizer;
         this.feedRanker = feedRanker;
+        this.forYouPipeline = forYouPipeline;
         this.candidateWindow = candidateWindow;
     }
 
@@ -100,6 +105,16 @@ public class FeedReadService {
             return Page.empty(pageable);
         }
 
+        // When the advanced ranker is wired in, route through the full
+        // ForYouScoringPipeline (precompute → score → MMR → diversity
+        // floor → bandit slots on page 0). Otherwise fall back to the
+        // legacy Schwartzian-transform path on the single-shot
+        // InterestOverlapFeedRanker; both produce the same Page<FeedPostListItem>
+        // shape, so downstream callers are unaffected.
+        if (forYouPipeline.isPresent()) {
+            return slicePageFromPipeline(candidates, viewerId, pageable);
+        }
+
         FeedRanker.FeedRankingContext context = buildRankingContext(viewerId);
         // Score once, sort once, slice once. Comparator.comparingInt re-runs
         // its key extractor on every compare(a, b), so a naive
@@ -114,6 +129,61 @@ public class FeedReadService {
                 .sorted(Comparator.comparingInt((Scored s) -> s.result().score()).reversed())
                 .toList();
         return slicePage(ranked, pageable);
+    }
+
+    /**
+     * Advanced-path slice. Asks the pipeline for the already-paginated
+     * ranked list (the pipeline handles MMR + diversity floor + bandit
+     * internally) and maps each entry through {@code toListItem} with
+     * its accumulated factor list.
+     *
+     * <p>Note: pipeline owns page slicing because the floor and bandit
+     * are page-0 contracts — slicing before the floor would lose the
+     * outsider candidate to draw from.
+     */
+    private Page<FeedPostListItem> slicePageFromPipeline(List<FeedPost> candidates,
+                                                        Long viewerId,
+                                                        Pageable pageable) {
+        FeedRanker.FeedRankingContext context = buildRankingContext(viewerId);
+        List<ForYouScoringPipeline.RankedFeedPost> ranked = forYouPipeline.get().rank(
+                candidates,
+                context.viewerId(),
+                context.viewerInterestHashtags(),
+                context.viewerFollowedAuthorIds(),
+                context.now(),
+                pageable.getPageSize(),
+                pageable.getPageNumber());
+
+        if (ranked.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, candidates.size());
+        }
+        Map<Long, String> authorNames = resolveAuthorNames(
+                ranked.stream().map(ForYouScoringPipeline.RankedFeedPost::post).toList());
+        List<FeedPostListItem> items = ranked.stream()
+                .map(r -> toListItemFromRanked(r, authorNames))
+                .toList();
+        return new PageImpl<>(items, pageable, candidates.size());
+    }
+
+    private static FeedPostListItem toListItemFromRanked(ForYouScoringPipeline.RankedFeedPost ranked,
+                                                        Map<Long, String> authorNames) {
+        FeedPost post = ranked.post();
+        List<String> tags = post.getHashtags().stream()
+                .map(FeedPostHashtag::getId)
+                .map(id -> id.getTag())
+                .sorted()
+                .toList();
+        return new FeedPostListItem(
+                post.getId(),
+                post.getAuthorId(),
+                authorNames.getOrDefault(post.getAuthorId(), null),
+                post.getBody(),
+                tags,
+                post.getCreatedAt(),
+                0L,
+                0L,
+                ranked.factors()
+        );
     }
 
     /**
