@@ -259,6 +259,34 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
     }
 
+    /**
+     * Restore window expired (#487). The post was soft-deleted longer
+     * ago than {@code app.feed.cleanup.restore-window-days}, so it is
+     * unrecoverable via the restore endpoint. 410 Gone differentiates
+     * "expired" from {@link FeedPostNotDeletedException}'s 409 ("not
+     * deleted") and from a plain 404 ("never existed").
+     */
+    @ExceptionHandler(FeedPostExpiredRestoreException.class)
+    public ResponseEntity<Map<String, String>> handleExpiredRestore(
+            FeedPostExpiredRestoreException ex, HttpServletRequest request) {
+        log.info("Expired restore: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.GONE, "Gone", ex.getMessage());
+    }
+
+    /**
+     * Restore was requested on a live (non-deleted) post (#487).
+     * 409 Conflict is the precise semantic: the resource is in a
+     * state incompatible with the requested operation.
+     */
+    @ExceptionHandler(FeedPostNotDeletedException.class)
+    public ResponseEntity<Map<String, String>> handleNotDeleted(
+            FeedPostNotDeletedException ex, HttpServletRequest request) {
+        log.info("Restore on live post: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
+    }
+
     private ResponseEntity<Map<String, String>> buildErrorResponse(HttpStatus status, String error, String message) {
         Map<String, String> body = Map.of("error", error, "message", message);
         return ResponseEntity.status(status).body(body);

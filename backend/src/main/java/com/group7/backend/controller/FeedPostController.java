@@ -185,6 +185,27 @@ public class FeedPostController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{id:\\d+}/restore")
+    @Operation(summary = "Restore a soft-deleted feed post (author-only, within 30 days)",
+            description = "Resurrects a soft-deleted post that is still within the configured "
+                    + "restore window (app.feed.cleanup.restore-window-days, default 30). "
+                    + "The post becomes visible again on the public feed surfaces; no fanout "
+                    + "is emitted to followers (a restore is a quiet rollback, not a publish).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Post restored"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Non-author cannot restore", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post never existed", content = @Content),
+            @ApiResponse(responseCode = "409", description = "Post is not deleted (nothing to restore)", content = @Content),
+            @ApiResponse(responseCode = "410", description = "Restore window has expired", content = @Content)
+    })
+    public ResponseEntity<FeedPostResponse> restore(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(feedPostService.restorePost(id, requesterId));
+    }
+
     @GetMapping("/{id:\\d+}/history")
     @Operation(summary = "Get edit history for a feed post (author or admin)",
             description = "Returns the post's edit history newest-first, capped at 50 entries. "

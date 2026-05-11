@@ -8,6 +8,8 @@ import com.group7.backend.entity.FeedPost;
 import com.group7.backend.entity.FeedPostEditHistory;
 import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.entity.User;
+import com.group7.backend.exception.FeedPostExpiredRestoreException;
+import com.group7.backend.exception.FeedPostNotDeletedException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.AttachmentRepository;
 import com.group7.backend.repository.FeedPostEditHistoryRepository;
@@ -15,6 +17,7 @@ import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -112,6 +115,15 @@ public class FeedPostService {
     private final FeedPostMapper feedPostMapper;
     private final FeedPostEventPublisher feedPostEventPublisher;
     private final FeedPostEditHistoryRepository historyRepository;
+    /**
+     * Days after a soft-delete during which the post author can call
+     * {@code POST /api/feed/posts/{id}/restore}. Bound to
+     * {@code app.feed.cleanup.restore-window-days} (default 30) — same
+     * source as the cleanup scheduler so the two stay in lock-step:
+     * a post becomes restorable until exactly the same instant the
+     * scheduler is allowed to hard-delete it.
+     */
+    private final int restoreWindowDays;
 
     public FeedPostService(FeedPostRepository feedPostRepository,
                            UserRepository userRepository,
@@ -119,7 +131,8 @@ public class FeedPostService {
                            HashtagNormalizer hashtagNormalizer,
                            FeedPostMapper feedPostMapper,
                            FeedPostEventPublisher feedPostEventPublisher,
-                           FeedPostEditHistoryRepository historyRepository) {
+                           FeedPostEditHistoryRepository historyRepository,
+                           @Value("${app.feed.cleanup.restore-window-days:30}") int restoreWindowDays) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
         this.attachmentRepository = attachmentRepository;
@@ -127,6 +140,9 @@ public class FeedPostService {
         this.feedPostMapper = feedPostMapper;
         this.feedPostEventPublisher = feedPostEventPublisher;
         this.historyRepository = historyRepository;
+        // Defensive clamp: a misconfigured 0 would expire every restore
+        // immediately. Mirrored in FeedSoftDeleteCleanupScheduler.
+        this.restoreWindowDays = Math.max(1, restoreWindowDays);
     }
 
     /**
@@ -328,6 +344,52 @@ public class FeedPostService {
                         h.getId(), h.getEditorId(), h.getPreviousBody(),
                         h.getPreviousHashtags(), h.getEditedAt()))
                 .toList();
+    }
+
+    /**
+     * Author-only restore of a soft-deleted post (#487). Walks the
+     * status surface explicitly:
+     * <ul>
+     *   <li>{@code 404} — post never existed.</li>
+     *   <li>{@code 403} — caller is not the post author.</li>
+     *   <li>{@code 409} — post is currently visible (nothing to restore).</li>
+     *   <li>{@code 410} — post was soft-deleted longer ago than the
+     *       configured restore window; the cleanup scheduler will
+     *       reap it on its next run.</li>
+     *   <li>{@code 200} — restored. {@code deletedAt} cleared,
+     *       {@code updatedAt} bumped to {@code now} so the
+     *       follower-feed read paths surface the post again.</li>
+     * </ul>
+     *
+     * <p>No fanout: a restore is a quiet rollback ("undo my mistake"),
+     * not a publish. The original {@code FeedPostCreatedEvent} fired
+     * at create time and is not re-emitted.
+     *
+     * <p>Concurrency: a concurrent edit that bumps the post version
+     * while restore is in flight surfaces as
+     * {@code ObjectOptimisticLockingFailureException} → 409 via the
+     * existing handler. A second restore call after a successful one
+     * lands in the {@code 409} branch above (post is no longer
+     * deleted), keeping the contract predictable.
+     */
+    @Transactional
+    public FeedPostResponse restorePost(Long postId, Long actorId) {
+        FeedPost post = feedPostRepository.findById(postId)
+                .orElseThrow(() -> new ResourceNotFoundException("Feed post not found with id: " + postId));
+        assertAuthor(post, actorId);
+        if (post.getDeletedAt() == null) {
+            throw new FeedPostNotDeletedException("Post " + postId + " is not deleted");
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        if (post.getDeletedAt().plusDays(restoreWindowDays).isBefore(now)) {
+            throw new FeedPostExpiredRestoreException(
+                    "Restore window of " + restoreWindowDays + " days has expired for post " + postId);
+        }
+        post.setDeletedAt(null);
+        post.setUpdatedAt(now);
+        FeedPost saved = feedPostRepository.save(post);
+        log.info("Restored feed post: id={}, authorId={}", postId, actorId);
+        return feedPostMapper.toResponse(saved, actorId);
     }
 
     /**

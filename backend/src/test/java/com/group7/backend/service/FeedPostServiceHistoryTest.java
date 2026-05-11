@@ -11,10 +11,10 @@ import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FeedPostEditHistoryRepository;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
@@ -47,7 +47,24 @@ class FeedPostServiceHistoryTest {
     @Mock private FeedPostMapper feedPostMapper;
     @Mock private FeedPostEventPublisher feedPostEventPublisher;
     @Mock private FeedPostEditHistoryRepository historyRepository;
-    @InjectMocks private FeedPostService feedPostService;
+
+    private FeedPostService feedPostService;
+
+    @BeforeEach
+    void setUp() {
+        // Manual construction: the service's restoreWindowDays primitive
+        // parameter cannot be auto-wired by Mockito. 30 matches the
+        // production default; restore-specific tests live in
+        // FeedPostServiceRestoreTest.
+        feedPostService = new FeedPostService(
+                feedPostRepository,
+                userRepository,
+                hashtagNormalizer,
+                feedPostMapper,
+                feedPostEventPublisher,
+                historyRepository,
+                30);
+    }
 
     // ── update() snapshot behaviour ───────────────────────────────────────
 
