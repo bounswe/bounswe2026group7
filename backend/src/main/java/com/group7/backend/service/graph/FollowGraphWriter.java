@@ -96,4 +96,17 @@ public class FollowGraphWriter {
     public long countAllFollows() {
         return graph.countAllFollows();
     }
+
+    /**
+     * Personalized PageRank — read-only Cypher against the GDS projection.
+     * Wrapped in a Neo4j tx (read-only) so Spring Data Neo4j has a
+     * TransactionTemplate available — without this the call would fail with
+     * "TransactionTemplate.execute(...) because this.txTemplate is null"
+     * (the PR 1 bug we already cured for the write paths).
+     */
+    @Transactional(value = "neo4jTransactionManager", readOnly = true)
+    public java.util.List<com.group7.backend.repository.graph.UserScoreProjection>
+            personalizedPageRank(java.util.List<Long> seedUserIds, double alpha, int iterations) {
+        return graph.personalizedPageRank(seedUserIds, alpha, iterations);
+    }
 }

@@ -5,6 +5,8 @@ import org.springframework.data.neo4j.repository.Neo4jRepository;
 import org.springframework.data.neo4j.repository.query.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 /**
  * Spring Data Neo4j repository for the follow-graph mirror (#437).
  *
@@ -62,4 +64,38 @@ public interface FollowGraphRepository extends Neo4jRepository<UserNode, Long> {
      */
     @Query("MATCH (u:User {userId: $userId}) DETACH DELETE u")
     void detachDeleteUser(@Param("userId") Long userId);
+
+    /**
+     * Personalized PageRank seeded from the viewer's followee set. Reads
+     * the in-memory GDS projection {@code follow-graph} populated by
+     * {@code FollowGraphProjectionService}.
+     *
+     * <p>The pattern comprehension resolves Postgres-style {@code userId}s
+     * to Neo4j internal node ids in the same Cypher round-trip — GDS's
+     * {@code sourceNodes} parameter wants internal ids, not application
+     * ids. {@code WHERE NOT u.userId IN $seedUserIds} drops the viewer's
+     * own followees from the result so they don't appear as
+     * recommendations.
+     *
+     * <p>Returns at most 200 candidates sorted by PR score desc. The
+     * service layer caches the result per viewer.
+     */
+    @Query("""
+            MATCH (seed:User) WHERE seed.userId IN $seedUserIds
+            WITH collect(seed) AS seedNodes, $seedUserIds AS seedUserIds
+            CALL gds.pageRank.stream('follow-graph', {
+                sourceNodes: seedNodes,
+                dampingFactor: $alpha,
+                maxIterations: $iterations
+            })
+            YIELD nodeId, score
+            WITH gds.util.asNode(nodeId) AS u, score, seedUserIds
+            WHERE NOT u.userId IN seedUserIds
+            RETURN u.userId AS userId, score
+            ORDER BY score DESC LIMIT 200
+            """)
+    List<UserScoreProjection> personalizedPageRank(
+            @Param("seedUserIds") List<Long> seedUserIds,
+            @Param("alpha") double alpha,
+            @Param("iterations") int iterations);
 }
