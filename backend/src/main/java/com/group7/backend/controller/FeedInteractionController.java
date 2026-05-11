@@ -202,6 +202,25 @@ public class FeedInteractionController {
         return ResponseEntity.ok(interactionService.editComment(id, requesterId, request.body()));
     }
 
+    @GetMapping("/comments/{id:\\d+}")
+    @Operation(summary = "Get a single comment by id (permalink)",
+            description = "Returns the comment if present, not soft-deleted, AND its parent "
+                    + "post is still visible. 404 if any of those conditions fail.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Comment",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.FEED_COMMENT_RESPONSE))),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Comment soft-deleted or parent post not visible", content = @Content)
+    })
+    public ResponseEntity<FeedCommentResponse> getComment(
+            @Parameter(description = "Comment id") @PathVariable Long id,
+            Authentication authentication) {
+        Long viewerId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(interactionService.getComment(id, viewerId));
+    }
+
     @DeleteMapping("/comments/{id:\\d+}")
     @Operation(summary = "Soft-delete a comment (author-only)")
     @ApiResponses({

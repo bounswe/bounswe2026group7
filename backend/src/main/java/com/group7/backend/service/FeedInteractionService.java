@@ -296,6 +296,30 @@ public class FeedInteractionService {
         log.info("Soft-deleted comment: id={}, authorId={}", commentId, requesterId);
     }
 
+    /**
+     * Single-comment read (#489 permalink). Returns the comment iff it is
+     * not soft-deleted AND its parent post is still visible — without
+     * the parent-visibility check, a permalink to a comment on a
+     * soft-deleted post would surface orphan content with no navigation
+     * affordance. 404 on either condition.
+     *
+     * <p>Lives on this service (not {@code FeedReadService}) because
+     * every other single-comment operation already lives here; splitting
+     * one comment op into a different service would fragment the
+     * comment logic.
+     */
+    public FeedCommentResponse getComment(Long commentId, Long viewerId) {
+        FeedPostComment comment = commentRepository.findByIdAndDeletedAtIsNull(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
+        // Orphan-permalink guard: 404 when the parent post is soft-deleted.
+        // Same exception message as the comment-missing branch — distinguishing
+        // the two would leak whether the comment id ever existed, an
+        // unnecessary information disclosure for anyone probing ids.
+        feedPostRepository.findByIdAndDeletedAtIsNull(comment.getPostId())
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
+        return mapComment(comment, viewerId, resolveAuthorName(comment.getAuthorId()));
+    }
+
     // ── Aggregate state ────────────────────────────────────────────────────
 
     /**
