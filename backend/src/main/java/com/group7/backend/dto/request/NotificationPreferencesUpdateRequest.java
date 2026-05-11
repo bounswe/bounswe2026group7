@@ -24,4 +24,6 @@ public class NotificationPreferencesUpdateRequest {
     private Boolean requestsEnabled;
     private Boolean taskDeadlineRemindersEnabled;
     private Boolean milestoneRemindersEnabled;
+    private Boolean feedEngagementEnabled;
+    private Boolean newFollowerEnabled;
 }

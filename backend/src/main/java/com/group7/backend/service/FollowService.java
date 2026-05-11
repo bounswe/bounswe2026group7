@@ -55,14 +55,19 @@ public class FollowService {
 
     private final FollowRepository followRepository;
     private final UserRepository userRepository;
+    /** Drives the Neo4j follow-graph mirror via {@code FollowChangedEvent} (#437). */
     private final ApplicationEventPublisher eventPublisher;
+    /** Drives the in-app new-follower push / email notifications (#482). */
+    private final NotificationEventPublisher notificationEventPublisher;
 
     public FollowService(FollowRepository followRepository,
                          UserRepository userRepository,
-                         ApplicationEventPublisher eventPublisher) {
+                         ApplicationEventPublisher eventPublisher,
+                         NotificationEventPublisher notificationEventPublisher) {
         this.followRepository = followRepository;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
+        this.notificationEventPublisher = notificationEventPublisher;
     }
 
     /**
@@ -83,8 +88,15 @@ public class FollowService {
         int inserted = followRepository.upsertFollow(followerId, followeeId);
         if (inserted == 1) {
             // Fire only on a fresh edge — duplicate follows don't change graph state.
-            // Listener runs AFTER_COMMIT so a Neo4j outage can't roll this back (#437).
+            // Both listeners run AFTER_COMMIT (Neo4j sync from #437, notification
+            // fanout from #482) so a downstream failure can't roll back the
+            // Postgres write.
             eventPublisher.publishEvent(FollowChangedEvent.followed(followerId, followeeId));
+            String followerFirstName = userRepository.findById(followerId)
+                    .map(User::getFirstName)
+                    .orElse(null);
+            notificationEventPublisher.publishNewFollower(
+                    followeeId, followerFirstName, followerId);
         }
         return new FollowResult(followerId, followeeId, inserted == 1);
     }

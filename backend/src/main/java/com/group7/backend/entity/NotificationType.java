@@ -42,5 +42,16 @@ public enum NotificationType {
     // when end_date passes; both participants receive it.
     MENTORSHIP_ENDED,
     MENTORSHIP_EXTENDED,
-    MENTORSHIP_AUTO_COMPLETED
+    MENTORSHIP_AUTO_COMPLETED,
+    // Social-feed engagement. FEED_LIKE / FEED_COMMENT / FEED_SHARE fire to
+    // the post author when another user interacts with their post. Self-likes
+    // / self-comments / self-shares are skipped at the publisher call site.
+    // FEED_LIKE is deduplicated against the 24h same-body window so a single
+    // actor liking multiple posts collapses to one notification per day.
+    FEED_LIKE,
+    FEED_COMMENT,
+    FEED_SHARE,
+    // Sent to the followee when another user follows them. Self-follow is
+    // already blocked upstream by SelfFollowException.
+    NEW_FOLLOWER
 }
