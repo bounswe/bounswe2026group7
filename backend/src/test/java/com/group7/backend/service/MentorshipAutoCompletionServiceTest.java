@@ -25,7 +25,6 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -41,7 +40,6 @@ class MentorshipAutoCompletionServiceTest {
 
     @Mock private MentorshipRepository mentorshipRepository;
     @Mock private MentorshipAuditLogRepository mentorshipAuditLogRepository;
-    @Mock private MentorshipCleanupService mentorshipCleanupService;
     @Mock private NotificationEventPublisher notificationEventPublisher;
     @Mock private PlatformTransactionManager transactionManager;
 
@@ -55,7 +53,7 @@ class MentorshipAutoCompletionServiceTest {
         // the empty-list short-circuit before TransactionTemplate is touched).
         lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         service = new MentorshipAutoCompletionService(mentorshipRepository,
-                mentorshipAuditLogRepository, mentorshipCleanupService,
+                mentorshipAuditLogRepository,
                 notificationEventPublisher, clock, transactionManager);
     }
 
@@ -104,8 +102,6 @@ class MentorshipAutoCompletionServiceTest {
         assertThat(processed).isEqualTo(2);
         assertThat(m1.getStatus()).isEqualTo(MentorshipStatus.COMPLETED);
         assertThat(m2.getStatus()).isEqualTo(MentorshipStatus.COMPLETED);
-        verify(mentorshipCleanupService).cleanupChildren(100L);
-        verify(mentorshipCleanupService).cleanupChildren(101L);
         // Both participants of each mentorship receive a notification:
         // m1 -> recipients 1L (mentor) and 2L (mentee); m2 -> 3L and 4L.
         verify(notificationEventPublisher).publishMentorshipAutoCompleted(eq(1L), anyString());
@@ -164,7 +160,6 @@ class MentorshipAutoCompletionServiceTest {
         int processed = service.autoCompleteExpired();
 
         assertThat(processed).isEqualTo(1);
-        verify(mentorshipCleanupService, never()).cleanupChildren(anyLong());
         verify(mentorshipAuditLogRepository, never()).save(any());
     }
 
@@ -176,13 +171,13 @@ class MentorshipAutoCompletionServiceTest {
                 .thenReturn(List.of(m1, m2));
         when(mentorshipRepository.findById(100L)).thenReturn(Optional.of(m1));
         when(mentorshipRepository.findById(101L)).thenReturn(Optional.of(m2));
-        doThrow(new RuntimeException("cleanup boom"))
-                .when(mentorshipCleanupService).cleanupChildren(100L);
+        doThrow(new RuntimeException("save boom"))
+                .when(mentorshipRepository).save(m1);
 
         int processed = service.autoCompleteExpired();
 
         assertThat(processed).isEqualTo(1);
         assertThat(m2.getStatus()).isEqualTo(MentorshipStatus.COMPLETED);
-        verify(mentorshipCleanupService).cleanupChildren(101L);
+        verify(mentorshipRepository).save(m2);
     }
 }
