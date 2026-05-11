@@ -76,6 +76,37 @@ function parseJsonList(value: string | string[] | undefined): string[] {
   }
 }
 
+function toIsoDateOrNull(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const parsed = new Date(`${trimmed}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return parsed.toISOString();
+}
+
+function formatStatusLabel(status: MilestoneStatus) {
+  return status
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatDateLabel(value: string | null) {
+  if (!value) return 'No target date';
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'No target date';
+
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 export default function ConnectionProfileScreen() {
   const { role } = useRole();
   const isMentorViewer = role === 'mentor';
