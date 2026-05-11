@@ -62,6 +62,9 @@ class FollowRecommendationServiceTest {
         service = new FollowRecommendationService(
                 userRepository, followRepository,
                 new RuleBasedFollowRanker(INTEREST_WEIGHT, FOLLOW_GRAPH_WEIGHT),
+                java.time.Clock.fixed(
+                        java.time.Instant.parse("2026-05-12T00:00:00Z"),
+                        java.time.ZoneOffset.UTC),
                 RANKING_WINDOW);
         firstPage = PageRequest.of(0, 20);
 
@@ -89,7 +92,7 @@ class FollowRecommendationServiceTest {
     void noCandidates_returnsEmptyPage() {
         Mentee viewer = mentee(VIEWER_ID, List.of("ai"));
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of());
 
         Page<FollowRecommendationResponse> result = service.recommend(VIEWER_ID, firstPage);
@@ -113,7 +116,7 @@ class FollowRecommendationServiceTest {
         Mentor c40 = mentor(40L, List.of("Java"));          // score 3 — same as c10
 
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of(c10, c20, c30, c40));
 
         Page<FollowRecommendationResponse> result = service.recommend(VIEWER_ID, firstPage);
@@ -132,7 +135,7 @@ class FollowRecommendationServiceTest {
         Mentor c20 = mentor(20L, List.of("Java"));
 
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of(c10, c20));
 
         Page<FollowRecommendationResponse> result = service.recommend(VIEWER_ID, firstPage);
@@ -154,7 +157,7 @@ class FollowRecommendationServiceTest {
         Mentor candidate = mentor(10L, List.of("ai", "DATABASES"));
 
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of(candidate));
 
         Page<FollowRecommendationResponse> result = service.recommend(VIEWER_ID, firstPage);
@@ -187,7 +190,7 @@ class FollowRecommendationServiceTest {
                         followEdge(100L, 200L),
                         followEdge(101L, 200L),
                         followEdge(101L, 300L)));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of(c200, c300));
 
         Page<FollowRecommendationResponse> result = service.recommend(VIEWER_ID, firstPage);
@@ -220,7 +223,7 @@ class FollowRecommendationServiceTest {
                         followEdge(100L, VIEWER_ID),  // would credit the viewer
                         followEdge(100L, 100L),       // would credit already-followed
                         followEdge(100L, 200L)));     // legitimate second-hop
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of(c200));
 
         Page<FollowRecommendationResponse> result = service.recommend(VIEWER_ID, firstPage);
@@ -239,7 +242,7 @@ class FollowRecommendationServiceTest {
         when(followRepository.findByIdFollowerIdOrderByCreatedAtDescIdFolloweeIdDesc(
                 eq(VIEWER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of(c10));
 
         service.recommend(VIEWER_ID, firstPage);
@@ -253,13 +256,13 @@ class FollowRecommendationServiceTest {
     void candidateQueryUsesRankingWindow() {
         Mentee viewer = mentee(VIEWER_ID, List.of());
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of());
 
         service.recommend(VIEWER_ID, firstPage);
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(userRepository).findFollowRecommendationCandidates(eq(VIEWER_ID), captor.capture());
+        verify(userRepository).findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), captor.capture());
         assertThat(captor.getValue().getPageSize()).isEqualTo(RANKING_WINDOW);
         assertThat(captor.getValue().getPageNumber()).isZero();
     }
@@ -273,7 +276,7 @@ class FollowRecommendationServiceTest {
             candidates.add(mentor(id, List.of()));
         }
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(candidates);
 
         Page<FollowRecommendationResponse> page1 = service.recommend(VIEWER_ID, PageRequest.of(0, 2));
@@ -296,7 +299,7 @@ class FollowRecommendationServiceTest {
     void pageBeyondTotalReturnsEmpty() {
         Mentee viewer = mentee(VIEWER_ID, List.of());
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of(mentor(1L, List.of())));
 
         Page<FollowRecommendationResponse> result =
@@ -314,7 +317,7 @@ class FollowRecommendationServiceTest {
         c.setProfilePhoto("https://cdn/x.png");
 
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of(c));
 
         FollowRecommendationResponse only = service.recommend(VIEWER_ID, firstPage)
@@ -335,7 +338,7 @@ class FollowRecommendationServiceTest {
         Mentee candidate = mentee(99L, List.of());
 
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(List.of(candidate));
 
         FollowRecommendationResponse only = service.recommend(VIEWER_ID, firstPage)
@@ -350,7 +353,7 @@ class FollowRecommendationServiceTest {
     void followeeFetchUsesMaxViewerFolloweesPageSize() {
         Mentee viewer = mentee(VIEWER_ID, List.of());
         when(userRepository.findById(VIEWER_ID)).thenReturn(Optional.of(viewer));
-        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(Pageable.class)))
+        when(userRepository.findFollowRecommendationCandidates(eq(VIEWER_ID), any(java.time.OffsetDateTime.class), any(Pageable.class)))
                 .thenReturn(Collections.emptyList());
 
         service.recommend(VIEWER_ID, firstPage);

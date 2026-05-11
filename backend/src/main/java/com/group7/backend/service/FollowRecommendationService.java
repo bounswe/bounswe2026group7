@@ -19,6 +19,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -79,15 +81,18 @@ public class FollowRecommendationService {
     private final UserRepository userRepository;
     private final FollowRepository followRepository;
     private final FollowRanker ranker;
+    private final Clock clock;
     private final int rankingWindow;
 
     public FollowRecommendationService(UserRepository userRepository,
                                        FollowRepository followRepository,
                                        FollowRanker ranker,
+                                       Clock clock,
                                        @Value("${app.matching.ranking-window:200}") int rankingWindow) {
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.ranker = ranker;
+        this.clock = clock;
         this.rankingWindow = rankingWindow;
     }
 
@@ -99,7 +104,7 @@ public class FollowRecommendationService {
         FollowRecommendationContext ctx = buildContext(viewer);
 
         List<User> candidates = userRepository.findFollowRecommendationCandidates(
-                viewerId, PageRequest.of(0, rankingWindow));
+                viewerId, OffsetDateTime.now(clock), PageRequest.of(0, rankingWindow));
 
         if (candidates.isEmpty()) {
             return new PageImpl<>(List.of(), pageable, 0);
@@ -151,7 +156,7 @@ public class FollowRecommendationService {
             }
         }
 
-        return new FollowRecommendationContext(viewer.getId(), interestLabels, followeeIds, secondHop);
+        return FollowRecommendationContext.legacy(viewer.getId(), interestLabels, followeeIds, secondHop);
     }
 
     private static Set<String> lowercasedInterests(User user) {
