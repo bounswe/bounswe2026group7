@@ -41,3 +41,4 @@ public interface FeedScoringSignal {
     SignalContribution compute(FeedPost post, FeedScoringContext context);
 }
 
+// trigger
