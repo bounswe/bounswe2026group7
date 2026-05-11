@@ -4,10 +4,12 @@ import com.group7.backend.entity.FeedPost;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -186,4 +188,28 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
     long countUnreadFollowingPostsCapped(@Param("viewerId") Long viewerId,
                                           @Param("since") java.time.OffsetDateTime since,
                                           @Param("capPlusOne") int capPlusOne);
+
+    /**
+     * Hard-deletes feed posts soft-deleted earlier than {@code cutoff}
+     * (#487). Used by {@code FeedSoftDeleteCleanupScheduler}; backed
+     * by the partial index {@code idx_feed_posts_deleted_at_pending_cleanup}
+     * (V43) so the scan walks only matching rows.
+     *
+     * <p>Hibernate's bulk delete bypasses entity lifecycle callbacks
+     * but Postgres still honours the {@code ON DELETE CASCADE} FKs
+     * on {@code feed_post_likes}, {@code feed_post_bookmarks},
+     * {@code feed_post_shares}, {@code feed_post_comments}, and
+     * {@code feed_post_edit_history}, so all child rows are reaped
+     * atomically.
+     *
+     * <p>{@code flushAutomatically = true} flushes any pending JPA
+     * writes before the bulk delete runs — matches the project
+     * convention used in {@code FollowRepository.upsertFollow}.
+     * {@code clearAutomatically = false} keeps unrelated entities
+     * cached in the persistence context (the scheduler is the only
+     * mutator in its transaction, so cache eviction would be wasteful).
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = false)
+    @Query("DELETE FROM FeedPost p WHERE p.deletedAt IS NOT NULL AND p.deletedAt < :cutoff")
+    int hardDeletePostsSoftDeletedBefore(@Param("cutoff") OffsetDateTime cutoff);
 }
