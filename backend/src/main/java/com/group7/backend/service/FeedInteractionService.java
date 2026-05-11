@@ -183,6 +183,8 @@ public class FeedInteractionService {
                 ordered.stream().map(FeedPost::getId).toList());
         List<FeedPostListItem> items = ordered.stream().map(p -> {
             PostCounts c = counts.get(p.getId());
+            long likeCount = (c == null) ? 0L : c.likeCount();
+            long commentCount = (c == null) ? 0L : c.commentCount();
             return new FeedPostListItem(
                     p.getId(),
                     p.getAuthorId(),
@@ -190,8 +192,9 @@ public class FeedInteractionService {
                     p.getBody(),
                     p.getHashtags().stream().map(h -> h.getId().getTag()).sorted().toList(),
                     p.getCreatedAt(),
-                    c.likeCount(),
-                    c.commentCount()
+                    likeCount,
+                    commentCount,
+                    List.of()
             );
         }).toList();
         return new PageImpl<>(items, pageable, postIds.getTotalElements());

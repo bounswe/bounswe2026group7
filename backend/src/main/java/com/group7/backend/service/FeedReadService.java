@@ -11,6 +11,7 @@ import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.FollowRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.service.ranking.FeedRanker;
+import com.group7.backend.service.ranking.FeedScoreResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -103,18 +104,17 @@ public class FeedReadService {
         }
 
         FeedRanker.FeedRankingContext context = buildRankingContext(viewerId);
-        // Score once, sort once, slice once. Comparator.comparingDouble re-runs
+        // Score once, sort once, slice once. Comparator.comparingInt re-runs
         // its key extractor on every compare(a, b), so a naive
-        // .sorted(comparingDouble(p -> ranker.score(p, ctx))) calls the ranker
-        // O(N log N) times instead of N. Schwartzian transform fixes that:
-        // materialise (score, post) tuples once, sort by the cached score, then
-        // unwrap. Cheap enough for our 200-candidate window; if the window
-        // grows past a few thousand a partial-selection (k-largest) is the
-        // next move.
-        List<FeedPost> ranked = candidates.stream()
+        // .sorted(comparingInt(p -> ranker.score(p, ctx).score())) calls the
+        // ranker O(N log N) times instead of N. Schwartzian transform fixes
+        // that: materialise (FeedScoreResult, post) tuples once, sort by the
+        // cached score, then unwrap. Cheap enough for our 200-candidate
+        // window; if the window grows past a few thousand a partial-selection
+        // (k-largest) is the next move.
+        List<Scored> ranked = candidates.stream()
                 .map(p -> new Scored(feedRanker.score(p, context), p))
-                .sorted(Comparator.comparingDouble(Scored::score).reversed())
-                .map(Scored::post)
+                .sorted(Comparator.comparingInt((Scored s) -> s.result().score()).reversed())
                 .toList();
         return slicePage(ranked, pageable);
     }
@@ -249,23 +249,24 @@ public class FeedReadService {
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(
                         page.getContent().stream().map(FeedPost::getId).toList());
-        return page.map(p -> toListItem(p, authorNames, counts));
+        return page.map(p -> toListItem(p, authorNames, counts, List.of()));
     }
 
-    private Page<FeedPostListItem> slicePage(List<FeedPost> ranked, Pageable pageable) {
+    private Page<FeedPostListItem> slicePage(List<Scored> ranked, Pageable pageable) {
         int total = ranked.size();
         int from = Math.min((int) pageable.getOffset(), total);
         int to = Math.min(from + pageable.getPageSize(), total);
-        List<FeedPost> slice = ranked.subList(from, to);
+        List<Scored> slice = ranked.subList(from, to);
         if (slice.isEmpty()) {
             return new PageImpl<>(List.of(), pageable, total);
         }
-        Map<Long, String> authorNames = resolveAuthorNames(slice);
+        List<FeedPost> posts = slice.stream().map(Scored::post).toList();
+        Map<Long, String> authorNames = resolveAuthorNames(posts);
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(
-                        slice.stream().map(FeedPost::getId).toList());
+                        posts.stream().map(FeedPost::getId).toList());
         List<FeedPostListItem> items = slice.stream()
-                .map(p -> toListItem(p, authorNames, counts))
+                .map(s -> toListItem(s.post(), authorNames, counts, s.result().factors()))
                 .toList();
         return new PageImpl<>(items, pageable, total);
     }
@@ -279,13 +280,16 @@ public class FeedReadService {
 
     private static FeedPostListItem toListItem(FeedPost post,
                                                Map<Long, String> authorNames,
-                                               Map<Long, FeedInteractionService.PostCounts> counts) {
+                                               Map<Long, FeedInteractionService.PostCounts> counts,
+                                               List<String> factors) {
         List<String> tags = post.getHashtags().stream()
                 .map(FeedPostHashtag::getId)
                 .map(id -> id.getTag())
                 .sorted()
                 .toList();
         FeedInteractionService.PostCounts c = counts.get(post.getId());
+        long likeCount = (c == null) ? 0L : c.likeCount();
+        long commentCount = (c == null) ? 0L : c.commentCount();
         return new FeedPostListItem(
                 post.getId(),
                 post.getAuthorId(),
@@ -293,12 +297,15 @@ public class FeedReadService {
                 post.getBody(),
                 tags,
                 post.getCreatedAt(),
-                c.likeCount(),
-                c.commentCount()
+                likeCount,
+                commentCount,
+                factors
         );
     }
 
-    /** Holds a feed post alongside its computed ranker score so the sort
-     *  key is materialised exactly once per post (Schwartzian transform). */
-    private record Scored(double score, FeedPost post) {}
+    /** Holds a feed post alongside its scoring result so the sort key is
+     *  materialised exactly once per post (Schwartzian transform) and the
+     *  factor list flows from scoring to the response without a second
+     *  ranker pass. */
+    private record Scored(FeedScoreResult result, FeedPost post) {}
 }

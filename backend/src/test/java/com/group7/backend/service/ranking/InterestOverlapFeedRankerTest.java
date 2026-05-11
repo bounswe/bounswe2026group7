@@ -13,9 +13,10 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Unit coverage for {@link InterestOverlapFeedRanker} (#350). Exercises
- * the three independent scoring axes (interest overlap, time decay,
- * follow boost) and their composition under the configured weights.
+ * Unit coverage for {@link InterestOverlapFeedRanker}. Exercises the three
+ * independent scoring axes (interest overlap, time decay, follow boost)
+ * and their composition under the configured weights, asserting the new
+ * integer [0, 100] score contract.
  */
 class InterestOverlapFeedRankerTest {
 
@@ -25,6 +26,10 @@ class InterestOverlapFeedRankerTest {
 
     private final OffsetDateTime now = OffsetDateTime.parse("2026-05-08T12:00:00Z");
 
+    private int scoreOf(FeedPost post, FeedRanker.FeedRankingContext ctx) {
+        return ranker.score(post, ctx).score();
+    }
+
     // ── Interest overlap ───────────────────────────────────────────────────
 
     @Test
@@ -33,8 +38,8 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of(), Set.of(), now);
 
-        // 0 interest * 0.5 + 1.0 time * 0.3 + 0 follow * 0.2 = 0.3
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.3, withinTolerance());
+        // 0 interest * 0.5 + 1.0 time * 0.3 + 0 follow * 0.2 = 0.3 → 30
+        assertThat(scoreOf(post, ctx)).isEqualTo(30);
     }
 
     @Test
@@ -43,8 +48,8 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of("data", "ai", "ml"), Set.of(), now);
 
-        // 1.0 interest * 0.5 + 1.0 time * 0.3 + 0 follow * 0.2 = 0.8
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.8, withinTolerance());
+        // 1.0 * 0.5 + 1.0 * 0.3 + 0 * 0.2 = 0.8 → 80
+        assertThat(scoreOf(post, ctx)).isEqualTo(80);
     }
 
     @Test
@@ -53,8 +58,8 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of("data"), Set.of(), now);
 
-        // 0.5 interest * 0.5 + 1.0 time * 0.3 + 0 follow * 0.2 = 0.55
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.55, withinTolerance());
+        // 0.5 * 0.5 + 1.0 * 0.3 + 0 * 0.2 = 0.55 → 55
+        assertThat(scoreOf(post, ctx)).isEqualTo(55);
     }
 
     @Test
@@ -63,8 +68,8 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of("data"), Set.of(), now);
 
-        // 0 interest * 0.5 + 1.0 time * 0.3 + 0 follow * 0.2 = 0.3
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.3, withinTolerance());
+        // 0 + 0.3 + 0 = 0.3 → 30
+        assertThat(scoreOf(post, ctx)).isEqualTo(30);
     }
 
     // ── Time decay ─────────────────────────────────────────────────────────
@@ -75,8 +80,8 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of(), Set.of(), now);
 
-        // exp(-0 * ln(2) / halflife) = 1.0; total = 0.0 + 0.3 + 0.0 = 0.3
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.3, withinTolerance());
+        // exp(-0 * ln(2) / halflife) = 1.0; total = 0 + 0.3 + 0 = 0.3 → 30
+        assertThat(scoreOf(post, ctx)).isEqualTo(30);
     }
 
     @Test
@@ -85,8 +90,8 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of(), Set.of(), now);
 
-        // exp(-1 * ln(2)) = 0.5; total = 0 + 0.5 * 0.3 + 0 = 0.15
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.15, withinTolerance());
+        // exp(-1 * ln(2)) = 0.5; total = 0 + 0.5 * 0.3 + 0 = 0.15 → 15
+        assertThat(scoreOf(post, ctx)).isEqualTo(15);
     }
 
     @Test
@@ -97,8 +102,8 @@ class InterestOverlapFeedRankerTest {
                 1L, Set.of(), Set.of(), now);
 
         // The Math.max(0, deltaSeconds) guard means future timestamps
-        // score the same as now (1.0 on the time axis).
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.3, withinTolerance());
+        // score the same as now (1.0 on the time axis) → 30.
+        assertThat(scoreOf(post, ctx)).isEqualTo(30);
     }
 
     // ── Follow boost ───────────────────────────────────────────────────────
@@ -109,8 +114,8 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of(), Set.of(99L), now);
 
-        // 0 + 0.3 + 1.0 * 0.2 = 0.5
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.5, withinTolerance());
+        // 0 + 0.3 + 1.0 * 0.2 = 0.5 → 50
+        assertThat(scoreOf(post, ctx)).isEqualTo(50);
     }
 
     @Test
@@ -119,8 +124,8 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of(), Set.of(2L, 3L), now);
 
-        // 0 + 0.3 + 0 = 0.3
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.3, withinTolerance());
+        // 0 + 0.3 + 0 = 0.3 → 30
+        assertThat(scoreOf(post, ctx)).isEqualTo(30);
     }
 
     @Test
@@ -129,7 +134,7 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of(), Set.of(), now);
 
-        assertThat(ranker.score(post, ctx)).isCloseTo(0.3, withinTolerance());
+        assertThat(scoreOf(post, ctx)).isEqualTo(30);
     }
 
     // ── Composition: relative ordering across realistic candidates ─────────
@@ -144,13 +149,39 @@ class InterestOverlapFeedRankerTest {
         FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
                 1L, Set.of("data"), Set.of(50L), now);
 
-        double sMatchFollowed = ranker.score(matchAndFollowed, ctx);
-        double sMatchOnly = ranker.score(matchOnly, ctx);
-        double sNeither = ranker.score(neither, ctx);
+        int sMatchFollowed = scoreOf(matchAndFollowed, ctx);
+        int sMatchOnly = scoreOf(matchOnly, ctx);
+        int sNeither = scoreOf(neither, ctx);
 
         // Ordering: matchAndFollowed > matchOnly > neither.
         assertThat(sMatchFollowed).isGreaterThan(sMatchOnly);
         assertThat(sMatchOnly).isGreaterThan(sNeither);
+    }
+
+    // ── Result contract ────────────────────────────────────────────────────
+
+    @Test
+    void scoreResult_legacyRankerEmitsEmptyFactorList() {
+        FeedPost post = postWithTags(List.of("data"), now, 99L);
+        FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
+                1L, Set.of("data"), Set.of(99L), now);
+
+        FeedScoreResult result = ranker.score(post, ctx);
+
+        assertThat(result.factors()).isEmpty();
+        assertThat(result.score()).isBetween(0, 100);
+    }
+
+    @Test
+    void scoreResult_isClampedToZeroHundredEvenWithMisconfiguredWeights() {
+        // Weights summing past 1.0 are mistuned but shouldn't blow past 100.
+        InterestOverlapFeedRanker mistuned = new InterestOverlapFeedRanker(
+                10.0, 10.0, 10.0, Duration.ofHours(24));
+        FeedPost post = postWithTags(List.of("data"), now, 99L);
+        FeedRanker.FeedRankingContext ctx = new FeedRanker.FeedRankingContext(
+                1L, Set.of("data"), Set.of(99L), now);
+
+        assertThat(mistuned.score(post, ctx).score()).isEqualTo(100);
     }
 
     // ── Edge cases ─────────────────────────────────────────────────────────
@@ -165,8 +196,8 @@ class InterestOverlapFeedRankerTest {
                 1L, Set.of(), Set.of(), now);
 
         // halflife=0 → degenerate guard: score 1.0 only when delta == 0.
-        assertThat(zeroHalfLife.score(now0, ctx)).isCloseTo(0.3, withinTolerance());
-        assertThat(zeroHalfLife.score(old, ctx)).isCloseTo(0.0, withinTolerance());
+        assertThat(zeroHalfLife.score(now0, ctx).score()).isEqualTo(30);
+        assertThat(zeroHalfLife.score(old, ctx).score()).isEqualTo(0);
     }
 
     // ── Fixtures ───────────────────────────────────────────────────────────
@@ -182,9 +213,5 @@ class InterestOverlapFeedRankerTest {
         }
         p.setHashtags(hashtags);
         return p;
-    }
-
-    private static org.assertj.core.data.Offset<Double> withinTolerance() {
-        return org.assertj.core.data.Offset.offset(0.001);
     }
 }
