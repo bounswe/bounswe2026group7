@@ -155,7 +155,12 @@ export default function HomeScreen() {
     });
   };
 
+<<<<<<< codex/mobile-my-mentorships-history-pr
   const roleScopedConnections = isMentor
+=======
+  const sectionTitle = isMentor ? 'ACTIVE MENTEES' : 'ACTIVE MENTORS';
+  const visibleConnections = isMentor
+>>>>>>> dev
     ? connections.filter((c) => c.type === 'mentee')
     : connections.filter((c) => c.type === 'mentor');
   const activeConnections = roleScopedConnections.filter((c) => c.status === 'ACTIVE');

@@ -91,6 +91,14 @@ public class UserNotificationPreferences {
             // Auto-ban system (#134) — system-mandated communications, always
             // enabled. Users cannot opt out of "you have been banned" notices.
             case USER_BANNED, BAN_LIFTED, BAN_EXPIRED -> true;
+            // Mentorship cancellation (#133) — losing an active mentorship is a
+            // consequential lifecycle event that affects ongoing tasks/meetings,
+            // so it bypasses category opt-outs the same way ban notices do.
+            case MENTORSHIP_CANCELLED -> true;
+            // Mentorship lifecycle (#237) — same reasoning: end / extend /
+            // auto-completion all change the user's relationship status and
+            // their pending tasks/meetings, so always-on.
+            case MENTORSHIP_ENDED, MENTORSHIP_EXTENDED, MENTORSHIP_AUTO_COMPLETED -> true;
         };
     }
 }

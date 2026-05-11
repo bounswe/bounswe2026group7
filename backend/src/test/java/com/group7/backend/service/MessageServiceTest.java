@@ -387,6 +387,46 @@ class MessageServiceTest {
                 .markAllAsReadForReader(any(), any(), any(OffsetDateTime.class));
     }
 
+    @Test
+    void send_inAdminBroadcast_fansOutToAllOtherParticipants_andEventCarriesNullRecipient() {
+        // Three admins in a broadcast: a1 sends, a2 + a3 should each receive a
+        // NEW_MESSAGE notification. MessageSentEvent.recipientId is null for
+        // ADMIN_BROADCAST per the event's documented contract.
+        com.group7.backend.entity.Admin a1 = new com.group7.backend.entity.Admin();
+        a1.setId(10L);
+        a1.setFirstName("Bootstrap");
+
+        Conversation broadcast = new Conversation();
+        broadcast.setId(700L);
+        broadcast.setKind(ConversationKind.ADMIN_BROADCAST);
+        // No mentorship, no pair columns — singleton row.
+
+        when(conversationRepository.findById(700L)).thenReturn(Optional.of(broadcast));
+        when(participantRepository.existsByConversationIdAndUserId(700L, 10L)).thenReturn(true);
+        when(participantRepository.findOtherParticipantUserIds(700L, 10L))
+                .thenReturn(List.of(20L, 30L));
+        when(userRepository.findById(10L)).thenReturn(Optional.of(a1));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> {
+            Message m = inv.getArgument(0);
+            m.setId(800L);
+            return m;
+        });
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setContent("All-hands");
+
+        messageService.send(10L, 700L, req);
+
+        ArgumentCaptor<MessageSentEvent> eventCaptor = ArgumentCaptor.forClass(MessageSentEvent.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        // Forward-compatible-nullable contract: null signals "not 1:1".
+        assertThat(eventCaptor.getValue().recipientId()).isNull();
+
+        // Every non-sender admin receives a notification — fan-out, not findFirst.
+        verify(notificationEventPublisher).publishNewMessage(eq(20L), eq("Bootstrap"));
+        verify(notificationEventPublisher).publishNewMessage(eq(30L), eq("Bootstrap"));
+    }
+
     private Message newPersistedMessage(Long id, com.group7.backend.entity.User sender, String content) {
         Message m = new Message();
         m.setId(id);

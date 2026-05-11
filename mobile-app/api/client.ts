@@ -1,8 +1,7 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { router } from 'expo-router';
 
-// Kendi bilgisayarının IPv4 adresini buraya yazmalısın. 
-// Örnek: 'http://192.168.1.45:8080/api'
 const apiClient = axios.create({
   baseURL: 'http://167.71.44.71:8080/api',
   headers: {
@@ -10,24 +9,43 @@ const apiClient = axios.create({
   },
 });
 
-
-// Interceptor: Her istek gitmeden önce araya girer
 apiClient.interceptors.request.use(
   async (config) => {
-    // YENİ EKLENEN KISIM: Eğer istek /auth/ ile başlıyorsa (login veya register) 
-    // token aramaya çalışma, direkt isteği yolla!
     if (config.url && config.url.includes('/auth/')) {
       return config;
     }
-
-    // Auth dışındaki sayfalar (profil vb.) için token'ı ekle
     const token = await SecureStore.getItemAsync('userToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      console.warn('[apiClient] No token for:', config.method?.toUpperCase(), config.url);
     }
     return config;
   },
-  (error) => {
+  (error) => Promise.reject(error)
+);
+
+let isRedirectingToLogin = false;
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const status = error?.response?.status;
+    const url = error?.config?.url ?? '';
+    const method = error?.config?.method?.toUpperCase();
+    const data = error?.response?.data;
+    console.error(`[apiClient] ${method} ${url} → ${status}`, JSON.stringify(data));
+
+    // Token yoksa ya da süresi dolduysa otomatik çıkış yap
+    if (status === 401 && !url.includes('/auth/') && !isRedirectingToLogin) {
+      isRedirectingToLogin = true;
+      await SecureStore.deleteItemAsync('userToken');
+      await SecureStore.deleteItemAsync('userId');
+      await SecureStore.deleteItemAsync('userRole');
+      router.replace('/onboarding');
+      setTimeout(() => { isRedirectingToLogin = false; }, 3000);
+    }
+
     return Promise.reject(error);
   }
 );

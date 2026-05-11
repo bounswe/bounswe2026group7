@@ -76,6 +76,7 @@ function parseJsonList(value: string | string[] | undefined): string[] {
   }
 }
 
+<<<<<<< codex/mobile-my-mentorships-history-pr
 function toIsoDateOrNull(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -101,6 +102,22 @@ function formatDateLabel(value: string | null) {
     day: 'numeric',
     year: 'numeric',
   });
+=======
+function formatDateLabel(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatStatusLabel(status: MilestoneStatus): string {
+  return status === 'IN_PROGRESS' ? 'In Progress' : status.charAt(0) + status.slice(1).toLowerCase();
+}
+
+function toIsoDateOrNull(dateStr: string): string | null {
+  if (!dateStr.trim()) return null;
+  const d = new Date(dateStr.trim());
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+>>>>>>> dev
 }
 
 export default function ConnectionProfileScreen() {
@@ -284,6 +301,7 @@ export default function ConnectionProfileScreen() {
         mode,
         targetName: name,
         targetType: type,
+        mentorshipId,
       },
     });
   };

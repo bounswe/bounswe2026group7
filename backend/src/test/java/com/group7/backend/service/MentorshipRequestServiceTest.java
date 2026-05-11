@@ -56,6 +56,9 @@ class MentorshipRequestServiceTest {
     @Mock
     private BanService banService;
 
+    @Mock
+    private MentorshipCooldownPolicy mentorshipCooldownPolicy;
+
     @InjectMocks
     private MentorshipRequestService mentorshipRequestService;
 

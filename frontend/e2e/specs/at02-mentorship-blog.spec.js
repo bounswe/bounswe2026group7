@@ -54,18 +54,25 @@ async function loginViaUi(page, { email, password }) {
   // that a tight 10s wait fires before the POST goes out, even though the
   // login itself succeeds shortly after); the swallow on the catch keeps
   // the timeout from masking the real navigation outcome below.
+  // Budget tracks the navigation wait below: response-fallback must outlive
+  // the nav assertion so a slow webkit POST surfaces its real status code
+  // instead of degrading to a generic "stuck on /login" message.
   const loginResponsePromise = page
     .waitForResponse(
       res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',
-      { timeout: 30_000 },
+      { timeout: 45_000 },
     )
     .catch(() => null);
   await loginPage.signIn({ email, password });
   // Successful login navigates to /home; on failure we stay on /login. Wait
   // on the navigation as the source of truth — if it doesn't happen, fall
   // back to the captured response (if any) for a useful error message.
+  // 40s here absorbs CI webkit slowness: AT-01 webkit takes ~10s for the
+  // same login navigation against ~4s on chromium, so the previous 20s
+  // budget left no headroom once first-paint slack and framer-motion
+  // entrance stacked up under load.
   try {
-    await expect(page).toHaveURL(/\/home$/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/\/home$/, { timeout: 40_000 });
   } catch (navErr) {
     const loginResponse = await loginResponsePromise;
     if (loginResponse && !loginResponse.ok()) {
