@@ -389,8 +389,11 @@ public class FollowRecommendationService {
                         FollowRecommendationService::jaccardSimilarity);
 
         List<FollowRecommendationResponse> out = new ArrayList<>(ranked.size());
+        // 3a. MMR-picked outputK items at the top, in MMR order.
+        java.util.Set<Long> mmrPickedIds = new java.util.HashSet<>(outputK);
         for (MmrReranker.Reranked<FollowRecommendationResponse> r : reranked) {
             FollowRecommendationResponse resp = r.value();
+            mmrPickedIds.add(resp.getId());
             if (r.diversePick()) {
                 // Response's factors list comes from List.copyOf(...) in
                 // the ranker and is therefore immutable — defensively
@@ -401,6 +404,18 @@ public class FollowRecommendationService {
             }
             out.add(resp);
         }
+        // 3b. Any HEAD items MMR didn't pick still belong in the result —
+        //     they were in the top-K by relevance and dropping them would
+        //     leak items out of the page contract (the caller computes
+        //     total = ranked.size() so pagination expects every item to
+        //     appear). Append them in their original relevance order
+        //     immediately after the MMR'd selection.
+        for (FollowRecommendationResponse r : head) {
+            if (!mmrPickedIds.contains(r.getId())) {
+                out.add(r);
+            }
+        }
+        // 3c. Then the tail beyond the MMR window in its original order.
         if (ranked.size() > topK) {
             out.addAll(ranked.subList(topK, ranked.size()));
         }

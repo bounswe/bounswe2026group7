@@ -137,7 +137,10 @@ class InterestOverlapFollowSignalTest {
     }
 
     private static FollowRecommendationContext ctx(Set<String> viewerLabels) {
-        return FollowRecommendationContext.legacy(42L, viewerLabels, Set.of(), Map.of());
+        // Non-empty followees so coldStart=false — InterestOverlapFollowSignal
+        // yields to ColdStartPopularitySignal in cold-start mode and we
+        // want to test the established-user path here.
+        return FollowRecommendationContext.legacy(42L, viewerLabels, Set.of(999L), Map.of());
     }
 
     private static Mentor mentor(List<String> labels) {

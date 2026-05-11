@@ -46,6 +46,15 @@ public class InterestOverlapFollowSignal implements FollowScoringSignal {
 
     @Override
     public SignalContribution compute(User candidate, FollowRecommendationContext ctx) {
+        // Cold-start contract: ColdStartPopularitySignal owns the
+        // interest-overlap leg of the score (its 40% mix). If both
+        // signals fired we'd double-count overlap into the weighted
+        // sum AND emit duplicate "shared-interest:<Label>" factors
+        // in the response. Yielding to cold-start keeps the math
+        // clean and the explanation card readable.
+        if (ctx.coldStart()) {
+            return SignalContribution.NONE;
+        }
         List<String> candidateLabels = labelsOf(candidate);
         if (candidateLabels.isEmpty() || ctx.viewerInterestLabels().isEmpty()) {
             return SignalContribution.NONE;
