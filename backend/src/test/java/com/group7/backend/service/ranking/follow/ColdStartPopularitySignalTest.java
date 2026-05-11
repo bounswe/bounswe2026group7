@@ -118,6 +118,78 @@ class ColdStartPopularitySignalTest {
         assertThat(signal.getWeight()).isEqualTo(0.12);
     }
 
+    @Test
+    void nullPopularityMap_treatedAsAbsent() {
+        FollowRecommendationContext c = new FollowRecommendationContext(
+                42L, Set.of("ai"), Set.of(), Map.of(),
+                Map.of(), Map.of(), Set.of(), /*popularityByMajor*/ null,
+                null, true, OffsetDateTime.now());
+        SignalContribution out = signal.compute(mentor(7L, List.of("ai")), c);
+        // Interest match still contributes.
+        assertThat(out.normalizedScore()).isCloseTo(0.4, offset(1e-9));
+    }
+
+    @Test
+    void nullViewerInterestLabels_skipsInterestHalf() {
+        FollowRecommendationContext c = new FollowRecommendationContext(
+                42L, /*viewerInterestLabels*/ null, Set.of(), Map.of(),
+                Map.of(), Map.of(), Set.of(), Map.of(7L, 100L),
+                null, true, OffsetDateTime.now());
+        SignalContribution out = signal.compute(mentor(7L, List.of("ai")), c);
+        // popularity full only.
+        assertThat(out.normalizedScore()).isCloseTo(0.6, offset(1e-9));
+    }
+
+    @Test
+    void nullLabelInCandidateList_isSkipped() {
+        // Mix one null label among real labels — the null entry must
+        // not crash and must not count toward overlap.
+        List<String> labelsWithNull = new java.util.ArrayList<>();
+        labelsWithNull.add("ai");
+        labelsWithNull.add(null);
+        SignalContribution out = signal.compute(mentor(7L, labelsWithNull),
+                ctx(true, Map.of(7L, 100L), Set.of("ai")));
+        // 1 overlap / 1 union (null filtered) = 1.0 interest, full popularity
+        // blend = 0.6 + 0.4 = 1.0
+        assertThat(out.normalizedScore()).isCloseTo(1.0, offset(1e-9));
+    }
+
+    @Test
+    void nullCountInPopularityMap_doesNotCrash() {
+        Map<Long, Long> mapWithNull = new java.util.HashMap<>();
+        mapWithNull.put(7L, null);
+        SignalContribution out = signal.compute(mentor(7L, List.of("ai")),
+                ctx(true, mapWithNull, Set.of("ai")));
+        // popularity → 0 (null count), interest match full = 0.4 blend
+        assertThat(out.normalizedScore()).isCloseTo(0.4, offset(1e-9));
+    }
+
+    @Test
+    void menteeWithNullInterests_returnsEmptyLabels() {
+        Mentee m = new Mentee();
+        m.setId(7L);
+        m.setEmail("m@x.com"); m.setFirstName("M"); m.setLastName("L");
+        m.setInterests(null);
+
+        SignalContribution out = signal.compute(m,
+                ctx(true, Map.of(7L, 100L), Set.of("ai")));
+        // No candidate labels → no overlap → only popularity contributes
+        assertThat(out.normalizedScore()).isCloseTo(0.6, offset(1e-9));
+    }
+
+    @Test
+    void adminCandidate_returnsNone_noInterestNoPopularity() {
+        com.group7.backend.entity.Admin a = new com.group7.backend.entity.Admin();
+        a.setId(7L);
+        a.setEmail("a@x.com"); a.setFirstName("A"); a.setLastName("L");
+        // popularity map only contains a mentor at id 8L
+        SignalContribution out = signal.compute(a,
+                ctx(true, Map.of(8L, 100L), Set.of("ai")));
+        // Admin has no interest labels via candidateInterestLabels;
+        // popularity map doesn't include id 7 → both halves are 0 → NONE
+        assertThat(out).isSameAs(SignalContribution.NONE);
+    }
+
     private static FollowRecommendationContext ctx(boolean coldStart,
                                                    Map<Long, Long> popularityMap,
                                                    Set<String> interests) {
