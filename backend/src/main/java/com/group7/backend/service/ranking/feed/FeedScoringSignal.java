@@ -40,3 +40,4 @@ public interface FeedScoringSignal {
     /** Compute this signal's contribution for the {@code post}. */
     SignalContribution compute(FeedPost post, FeedScoringContext context);
 }
+
