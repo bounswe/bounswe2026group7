@@ -363,7 +363,8 @@ class MentorshipControllerTest {
     private MentorshipProgressResponse sampleProgress() {
         return new MentorshipProgressResponse(
                 100L, 10L, 4L, 2L, 4L, 1L, 0.325f,
-                java.time.OffsetDateTime.of(2026, 5, 5, 0, 0, 0, 0, java.time.ZoneOffset.UTC));
+                java.time.OffsetDateTime.of(2026, 5, 5, 0, 0, 0, 0, java.time.ZoneOffset.UTC),
+                5L, 27L);
     }
 
     @Test

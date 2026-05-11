@@ -51,5 +51,21 @@ public interface MentorshipRepository extends JpaRepository<Mentorship, Long> {
 
     @Query(value = "SELECT pg_advisory_xact_lock(:lockId)", nativeQuery = true)
     void acquireAdvisoryLock(@Param("lockId") Long lockId);
+
+    // Stats aggregations (#253) — single-row COUNTs scoped to one user.
+
+    @Query("SELECT COUNT(m) FROM Mentorship m WHERE m.mentor.id = :mentorId AND m.status = :status")
+    long countByMentorIdAndStatus(@Param("mentorId") Long mentorId,
+                                  @Param("status") MentorshipStatus status);
+
+    @Query("SELECT COUNT(m) FROM Mentorship m WHERE m.mentee.id = :menteeId AND m.status = :status")
+    long countByMenteeIdAndStatus(@Param("menteeId") Long menteeId,
+                                  @Param("status") MentorshipStatus status);
+
+    @Query("SELECT COUNT(DISTINCT m.mentee.id) FROM Mentorship m WHERE m.mentor.id = :mentorId")
+    long countDistinctMenteesByMentorId(@Param("mentorId") Long mentorId);
+
+    @Query("SELECT COUNT(DISTINCT m.mentor.id) FROM Mentorship m WHERE m.mentee.id = :menteeId")
+    long countDistinctMentorsByMenteeId(@Param("menteeId") Long menteeId);
 }
 
