@@ -58,6 +58,10 @@ services:
       # CI / local Playwright runs flip them on via .env.
       APP_TEST_ENDPOINTS_ENABLED: ${APP_TEST_ENDPOINTS_ENABLED:-false}
       APP_SPAM_ENABLED: ${APP_SPAM_ENABLED:-true}
+      # Verification-email send swaps to NoOpEmailService when off — used by
+      # Playwright so /api/test/users registrations don't fail with Resend
+      # 401 when the API key is the placeholder.
+      APP_EMAIL_ENABLED: ${APP_EMAIL_ENABLED:-true}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
