@@ -6,6 +6,7 @@ import com.group7.backend.entity.FollowId;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.User;
+import com.group7.backend.event.FollowChangedEvent;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.exception.SelfFollowException;
@@ -14,9 +15,11 @@ import com.group7.backend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -59,6 +62,7 @@ class FollowServiceTest {
 
     @Mock private FollowRepository followRepository;
     @Mock private UserRepository userRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private NotificationEventPublisher notificationEventPublisher;
     @InjectMocks private FollowService followService;
 
@@ -113,22 +117,60 @@ class FollowServiceTest {
         assertThat(result.followeeId()).isEqualTo(BOB);
     }
 
-    // ── unfollow() ───────────────────────────────────────────────────────────
-
     @Test
-    void unfollow_delegatesToDeleteById_returnsVoid() {
-        followService.unfollow(ALICE, BOB);
+    void follow_publishesFollowedEvent_onFreshInsert() {
+        // Graph-sync hook (#437): the listener materialises the edge into
+        // Neo4j after AFTER_COMMIT. The event must fire on every fresh
+        // insert so the mirror stays in sync.
+        when(userRepository.existsById(BOB)).thenReturn(true);
+        when(followRepository.upsertFollow(ALICE, BOB)).thenReturn(1);
 
-        verify(followRepository).deleteById(new FollowId(ALICE, BOB));
+        followService.follow(ALICE, BOB);
+
+        ArgumentCaptor<FollowChangedEvent> captor = ArgumentCaptor.forClass(FollowChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().followerId()).isEqualTo(ALICE);
+        assertThat(captor.getValue().followeeId()).isEqualTo(BOB);
+        assertThat(captor.getValue().type()).isEqualTo(FollowChangedEvent.ChangeType.FOLLOWED);
     }
 
     @Test
-    void unfollow_doesNotThrow_evenIfRepositoryIsCalledOnMissingEdge() {
-        // Spring Data 3.x deleteById is silent on missing; the service does
-        // not need a guard, and the controller reflects this with a 204.
+    void follow_doesNotPublishEvent_onDuplicateInsert() {
+        // Idempotent re-follow doesn't change graph state; firing an event
+        // would queue redundant Neo4j writes.
+        when(userRepository.existsById(BOB)).thenReturn(true);
+        when(followRepository.upsertFollow(ALICE, BOB)).thenReturn(0);
+
+        followService.follow(ALICE, BOB);
+
+        verify(eventPublisher, never()).publishEvent(any(FollowChangedEvent.class));
+    }
+
+    // ── unfollow() ───────────────────────────────────────────────────────────
+
+    @Test
+    void unfollow_deletesAndPublishesEvent_whenEdgeExists() {
+        when(followRepository.existsById(new FollowId(ALICE, BOB))).thenReturn(true);
+
+        followService.unfollow(ALICE, BOB);
+
+        verify(followRepository).deleteById(new FollowId(ALICE, BOB));
+        ArgumentCaptor<FollowChangedEvent> captor = ArgumentCaptor.forClass(FollowChangedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(FollowChangedEvent.ChangeType.UNFOLLOWED);
+    }
+
+    @Test
+    void unfollow_isSilent_andDoesNotPublishEvent_whenEdgeMissing() {
+        // Spring Data 3.x deleteById is silent on missing; we additionally
+        // skip the event publication so the graph mirror isn't notified
+        // about a no-op (matches follow's duplicate-insert semantics).
+        when(followRepository.existsById(new FollowId(ALICE, BOB))).thenReturn(false);
+
         followService.unfollow(ALICE, BOB);  // no exception
 
-        verify(followRepository).deleteById(any(FollowId.class));
+        verify(followRepository, never()).deleteById(any(FollowId.class));
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     // ── listFollowers / listFollowing ────────────────────────────────────────
