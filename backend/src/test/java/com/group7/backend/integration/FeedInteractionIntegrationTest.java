@@ -5,12 +5,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.entity.User;
+import com.group7.backend.entity.Notification;
+import com.group7.backend.entity.NotificationType;
 import com.group7.backend.repository.FeedPostLikeRepository;
+import com.group7.backend.repository.NotificationRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.VerificationTokenRepository;
 import com.group7.backend.service.EmailService;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -57,6 +63,7 @@ class FeedInteractionIntegrationTest {
     @Autowired private UserRepository userRepository;
     @Autowired private VerificationTokenRepository verificationTokenRepository;
     @Autowired private FeedPostLikeRepository likeRepository;
+    @Autowired private NotificationRepository notificationRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
     @MockitoBean private EmailService emailService;
 
@@ -471,5 +478,117 @@ class FeedInteractionIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
         return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asLong();
+    }
+
+    private long userIdByEmail(String email) {
+        return userRepository.findByEmail(email).orElseThrow().getId();
+    }
+
+    private List<Notification> notificationsFor(Long userId, NotificationType type) {
+        return notificationRepository.findForUser(userId, false).stream()
+                .filter(n -> n.getType() == type)
+                .toList();
+    }
+
+    private List<Notification> awaitNotifications(Long userId, NotificationType type, int expectedCount) {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .pollInterval(Duration.ofMillis(50))
+                .untilAsserted(() -> assertThat(notificationsFor(userId, type)).hasSize(expectedCount));
+        return notificationsFor(userId, type);
+    }
+
+    // ── Engagement notifications ───────────────────────────────────────────
+
+    @Test
+    void toggleLike_publishesFeedLikeNotification_toPostAuthorOnly() throws Exception {
+        String authorToken = registerAndLogin("notif_like_author@test.com");
+        String likerToken = registerAndLogin("notif_like_liker@test.com");
+        long pid = createPost(authorToken, "post to like", List.of());
+        long authorId = userIdByEmail("notif_like_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/like")
+                        .header("Authorization", "Bearer " + likerToken))
+                .andExpect(status().isOk());
+
+        List<Notification> rows = awaitNotifications(authorId, NotificationType.FEED_LIKE, 1);
+        assertThat(rows.get(0).getBody()).contains("liked your post.");
+
+        // Author self-likes → no extra notification (self-actor skip).
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/like")
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk());
+        // Give the async listener a beat; it should still settle at 1.
+        Thread.sleep(200);
+        assertThat(notificationsFor(authorId, NotificationType.FEED_LIKE)).hasSize(1);
+    }
+
+    @Test
+    void toggleLike_secondLikeAcrossPosts_collapsesUnder24hDedup() throws Exception {
+        String authorToken = registerAndLogin("notif_dedup_author@test.com");
+        String likerToken = registerAndLogin("notif_dedup_liker@test.com");
+        long pidA = createPost(authorToken, "post A", List.of());
+        long pidB = createPost(authorToken, "post B", List.of());
+        long authorId = userIdByEmail("notif_dedup_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pidA + "/like")
+                        .header("Authorization", "Bearer " + likerToken))
+                .andExpect(status().isOk());
+        awaitNotifications(authorId, NotificationType.FEED_LIKE, 1);
+        mockMvc.perform(post("/api/feed/posts/" + pidB + "/like")
+                        .header("Authorization", "Bearer " + likerToken))
+                .andExpect(status().isOk());
+        // Same body "<firstName> liked your post." → second insert is deduped.
+        // Give the listener time to run and confirm it stays at 1.
+        Thread.sleep(300);
+        assertThat(notificationsFor(authorId, NotificationType.FEED_LIKE)).hasSize(1);
+    }
+
+    @Test
+    void addComment_publishesFeedCommentNotification_toPostAuthor() throws Exception {
+        String authorToken = registerAndLogin("notif_cmt_author@test.com");
+        String commenterToken = registerAndLogin("notif_cmt_commenter@test.com");
+        long pid = createPost(authorToken, "post to comment", List.of());
+        long authorId = userIdByEmail("notif_cmt_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/comments")
+                        .header("Authorization", "Bearer " + commenterToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"hi\"}"))
+                .andExpect(status().isCreated());
+
+        List<Notification> rows = awaitNotifications(authorId, NotificationType.FEED_COMMENT, 1);
+        assertThat(rows.get(0).getBody()).contains("commented on your post.");
+
+        // Author self-comments → no extra notification (self-actor skip).
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/comments")
+                        .header("Authorization", "Bearer " + authorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"my own\"}"))
+                .andExpect(status().isCreated());
+        Thread.sleep(200);
+        assertThat(notificationsFor(authorId, NotificationType.FEED_COMMENT)).hasSize(1);
+    }
+
+    @Test
+    void recordShare_publishesFeedShareNotification_toPostAuthor() throws Exception {
+        String authorToken = registerAndLogin("notif_share_author@test.com");
+        String sharerToken = registerAndLogin("notif_share_sharer@test.com");
+        long pid = createPost(authorToken, "post to share", List.of());
+        long authorId = userIdByEmail("notif_share_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/share")
+                        .header("Authorization", "Bearer " + sharerToken))
+                .andExpect(status().isOk());
+
+        List<Notification> rows = awaitNotifications(authorId, NotificationType.FEED_SHARE, 1);
+        assertThat(rows.get(0).getBody()).contains("shared your post.");
+
+        // Author self-shares → no extra notification.
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/share")
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk());
+        Thread.sleep(200);
+        assertThat(notificationsFor(authorId, NotificationType.FEED_SHARE)).hasSize(1);
     }
 }

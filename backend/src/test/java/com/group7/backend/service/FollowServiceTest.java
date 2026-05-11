@@ -59,6 +59,7 @@ class FollowServiceTest {
 
     @Mock private FollowRepository followRepository;
     @Mock private UserRepository userRepository;
+    @Mock private NotificationEventPublisher notificationEventPublisher;
     @InjectMocks private FollowService followService;
 
     private static final Long ALICE = 1L;

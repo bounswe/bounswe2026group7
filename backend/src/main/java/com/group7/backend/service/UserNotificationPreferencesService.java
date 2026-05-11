@@ -44,6 +44,8 @@ public class UserNotificationPreferencesService {
         if (request.getRequestsEnabled() != null) prefs.setRequestsEnabled(request.getRequestsEnabled());
         if (request.getTaskDeadlineRemindersEnabled() != null) prefs.setTaskDeadlineRemindersEnabled(request.getTaskDeadlineRemindersEnabled());
         if (request.getMilestoneRemindersEnabled() != null) prefs.setMilestoneRemindersEnabled(request.getMilestoneRemindersEnabled());
+        if (request.getFeedEngagementEnabled() != null) prefs.setFeedEngagementEnabled(request.getFeedEngagementEnabled());
+        if (request.getNewFollowerEnabled() != null) prefs.setNewFollowerEnabled(request.getNewFollowerEnabled());
         return UserNotificationPreferencesResponse.from(repository.save(prefs));
     }
 

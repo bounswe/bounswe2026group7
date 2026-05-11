@@ -47,7 +47,7 @@ class UserNotificationPreferencesControllerTest {
     void getReturns200WithDefaults() throws Exception {
         mockMenteeJwt("tok", 7L);
         UserNotificationPreferencesResponse response = new UserNotificationPreferencesResponse(
-                true, true, true, true, true, true, true, OffsetDateTime.now(ZoneOffset.UTC));
+                true, true, true, true, true, true, true, true, true, OffsetDateTime.now(ZoneOffset.UTC));
         when(service.get(7L)).thenReturn(response);
 
         mockMvc.perform(get("/api/users/me/notification-preferences")
@@ -61,7 +61,7 @@ class UserNotificationPreferencesControllerTest {
     void patchAppliesPartialUpdate() throws Exception {
         mockMenteeJwt("tok", 7L);
         UserNotificationPreferencesResponse response = new UserNotificationPreferencesResponse(
-                false, true, true, true, true, true, true, OffsetDateTime.now(ZoneOffset.UTC));
+                false, true, true, true, true, true, true, true, true, OffsetDateTime.now(ZoneOffset.UTC));
         when(service.update(eq(7L), any(NotificationPreferencesUpdateRequest.class)))
                 .thenReturn(response);
 
