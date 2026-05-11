@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
-type UserRole = 'mentee' | 'mentor';
+type UserRole = 'mentee' | 'mentor' | 'admin';
 
 type RoleContextType = {
   role: UserRole;
@@ -16,7 +16,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     SecureStore.getItemAsync('userRole').then((saved) => {
-      if (saved === 'mentor' || saved === 'mentee') {
+      if (saved === 'mentor' || saved === 'mentee' || saved === 'admin') {
         setRoleState(saved);
       }
     });

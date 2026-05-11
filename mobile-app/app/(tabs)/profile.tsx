@@ -19,9 +19,11 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
   Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import ActionModal from '../../components/ActionModal';
 
 type AppRole = 'mentor' | 'mentee';
 type NotificationPreferences = {
@@ -95,6 +97,10 @@ export default function ProfileScreen() {
         <Text>Loading session…</Text>
       </View>
     );
+  }
+
+  if (role === 'admin') {
+    return <AdminProfileContent onLogout={handleLogout} />;
   }
 
   if (!session) {
@@ -927,6 +933,220 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
             accessibilityRole="button"
             accessibilityLabel="Log out"
           >
+            <Text style={styles.logoutButtonText}>Log Out</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
+  const [users, setUsers] = useState<any[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [broadcastText, setBroadcastText] = useState('');
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [view, setView] = useState<'users' | 'broadcast'>('users');
+  const [banTarget, setBanTarget] = useState<{ id: string; name: string } | null>(null);
+  const [banReason, setBanReason] = useState('');
+  const [banHours, setBanHours] = useState('168');
+
+  useEffect(() => {
+    apiClient.get('/users?size=100').then((res) => {
+      const data = res.data?.content ?? res.data ?? [];
+      setUsers(data);
+    }).catch(() => {}).finally(() => setUsersLoading(false));
+  }, []);
+
+  const banUser = (userId: string, userName: string) => {
+    setBanReason('');
+    setBanHours('168');
+    setBanTarget({ id: userId, name: userName });
+  };
+
+  const confirmBan = async () => {
+    if (!banTarget) return;
+    const durationHours = parseInt(banHours, 10);
+    if (!banReason.trim() || isNaN(durationHours) || durationHours < 1) {
+      Alert.alert('Invalid', 'Please fill in a reason and a valid duration.');
+      return;
+    }
+    setActionLoading((p) => ({ ...p, [banTarget.id]: true }));
+    try {
+      await apiClient.post(`/admin/users/${banTarget.id}/ban`, { reason: banReason.trim(), durationHours });
+      setBanTarget(null);
+      Alert.alert('Banned', `${banTarget.name} has been banned for ${durationHours}h.`);
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Could not ban user.');
+    } finally {
+      setActionLoading((p) => ({ ...p, [banTarget!.id]: false }));
+    }
+  };
+
+  const unbanUser = async (userId: string, userName: string) => {
+    Alert.alert('Unban', `Remove active ban for ${userName}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Unban',
+        onPress: async () => {
+          setActionLoading((p) => ({ ...p, [userId]: true }));
+          try {
+            await apiClient.post(`/admin/users/${userId}/unban`);
+            Alert.alert('Done', `${userName} has been unbanned.`);
+          } catch (err: any) {
+            Alert.alert('Error', err?.response?.data?.message || 'Could not unban user.');
+          } finally {
+            setActionLoading((p) => ({ ...p, [userId]: false }));
+          }
+        },
+      },
+    ]);
+  };
+
+  const sendBroadcast = async () => {
+    if (!broadcastText.trim()) return;
+    setBroadcasting(true);
+    try {
+      await apiClient.post('/admin/messages/broadcast', { body: broadcastText.trim() });
+      setBroadcastText('');
+      Alert.alert('Sent', 'Broadcast message sent to all users.');
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Could not send broadcast.');
+    } finally {
+      setBroadcasting(false);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <ActionModal
+        visible={!!banTarget}
+        title={`Ban ${banTarget?.name ?? 'User'}`}
+        message="The user will be blocked from logging in until the ban expires."
+        fields={[
+          {
+            label: 'Reason',
+            placeholder: 'e.g. Repeated harassment of mentees',
+            value: banReason,
+            onChange: setBanReason,
+            multiline: true,
+            required: true,
+          },
+          {
+            label: 'Duration (hours)',
+            placeholder: 'e.g. 168 = 1 week',
+            value: banHours,
+            onChange: setBanHours,
+            keyboardType: 'number-pad',
+            required: true,
+          },
+        ]}
+        confirmLabel="Ban User"
+        danger
+        loading={banTarget ? !!actionLoading[banTarget.id] : false}
+        onConfirm={confirmBan}
+        onCancel={() => setBanTarget(null)}
+      />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={[styles.header, { paddingBottom: 40 }]}>
+          <View style={styles.topCircle} />
+          <View style={[styles.avatarCircle, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+            <Text style={styles.avatarText}>👑</Text>
+          </View>
+          <Text style={styles.name}>Admin Panel</Text>
+          <Text style={styles.roleText}>System Administrator</Text>
+        </View>
+
+        <View style={styles.body}>
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
+            <TouchableOpacity
+              style={[styles.quickActionButton, view === 'users' && { backgroundColor: '#D7E8DA', borderColor: '#456B50' }]}
+              onPress={() => setView('users')}
+            >
+              <Text style={styles.quickActionIcon}>👥</Text>
+              <Text style={styles.quickActionText}>Users</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.quickActionButton, view === 'broadcast' && { backgroundColor: '#D7E8DA', borderColor: '#456B50' }]}
+              onPress={() => setView('broadcast')}
+            >
+              <Text style={styles.quickActionIcon}>📢</Text>
+              <Text style={styles.quickActionText}>Broadcast</Text>
+            </TouchableOpacity>
+          </View>
+
+          {view === 'users' ? (
+            <>
+              <Text style={styles.sectionHeaderText}>USER MANAGEMENT</Text>
+              {usersLoading ? (
+                <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color="#456B50" />
+                </View>
+              ) : users.length === 0 ? (
+                <View style={styles.emptyRequestsCard}>
+                  <Text style={styles.emptyRequestsText}>No users found.</Text>
+                </View>
+              ) : (
+                users.map((u) => {
+                  const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || String(u.id);
+                  const uid = String(u.id);
+                  return (
+                    <View key={uid} style={styles.requestCard}>
+                      <View style={styles.requestCardRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.requestCardName}>{name}</Text>
+                          <Text style={{ color: '#7E7368', fontSize: 12, marginTop: 2 }}>
+                            {u.role || 'USER'} {u.email ? `· ${u.email}` : ''}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                        <TouchableOpacity
+                          style={{ flex: 1, backgroundColor: '#FDF0EF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#FAD4D4', opacity: actionLoading[uid] ? 0.5 : 1 }}
+                          onPress={() => banUser(uid, name)}
+                          disabled={!!actionLoading[uid]}
+                        >
+                          <Text style={{ color: '#D9534F', fontWeight: '700', fontSize: 13 }}>🚫 Ban</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={{ flex: 1, backgroundColor: '#D7E8DA', borderRadius: 12, paddingVertical: 10, alignItems: 'center', opacity: actionLoading[uid] ? 0.5 : 1 }}
+                          onPress={() => unbanUser(uid, name)}
+                          disabled={!!actionLoading[uid]}
+                        >
+                          <Text style={{ color: '#2F563C', fontWeight: '700', fontSize: 13 }}>✓ Unban</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={styles.sectionHeaderText}>BROADCAST MESSAGE</Text>
+              <View style={styles.formCardMentee}>
+                <Text style={styles.inputLabel}>Message to all users</Text>
+                <TextInput
+                  style={[styles.input, styles.aboutInput]}
+                  value={broadcastText}
+                  onChangeText={setBroadcastText}
+                  placeholder="Write a broadcast message..."
+                  placeholderTextColor="#B5ADA3"
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[styles.saveButtonMentee, { marginTop: 8, opacity: (!broadcastText.trim() || broadcasting) ? 0.5 : 1 }]}
+                  onPress={sendBroadcast}
+                  disabled={!broadcastText.trim() || broadcasting}
+                >
+                  <Text style={styles.saveButtonText}>{broadcasting ? 'Sending...' : 'Send Broadcast'}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
             <Text style={styles.logoutButtonText}>Log Out</Text>
           </TouchableOpacity>
         </View>

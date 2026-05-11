@@ -13,6 +13,7 @@ import {
 import { useRole } from '../components/RoleContext';
 import { useProtectedSession } from '../components/useProtectedSession';
 import apiClient from '../api/client';
+import ActionModal from '../components/ActionModal';
 
 type AvailabilitySlot = {
   dayOfWeek: string;
@@ -138,6 +139,9 @@ export default function ConnectionProfileScreen() {
   const [milestoneCreating, setMilestoneCreating] = useState(false);
   const [actionItemDraft, setActionItemDraft] = useState('');
   const [actionItemCreating, setActionItemCreating] = useState(false);
+  const [mentorshipActionLoading, setMentorshipActionLoading] = useState(false);
+  const [endModalVisible, setEndModalVisible] = useState(false);
+  const [endReason, setEndReason] = useState('');
 
   useEffect(() => {
     console.log('[connection-profile] route context', {
@@ -312,6 +316,34 @@ export default function ConnectionProfileScreen() {
       .finally(() => setAvailabilityLoading(false));
   }, [isViewingMentor, id]);
 
+  const handleEndMentorship = () => {
+    setEndReason('');
+    setEndModalVisible(true);
+  };
+
+  const confirmEndMentorship = async () => {
+    if (!isMentorViewer && !endReason.trim()) {
+      Alert.alert('Required', 'Please enter a reason for cancellation.');
+      return;
+    }
+    setMentorshipActionLoading(true);
+    try {
+      if (isMentorViewer) {
+        await apiClient.patch(`/mentorships/${mentorshipId}/end`, { reason: endReason.trim() });
+      } else {
+        await apiClient.post(`/mentorships/${mentorshipId}/cancel`, { reason: endReason.trim() });
+      }
+      setEndModalVisible(false);
+      Alert.alert('Done', `Mentorship ${isMentorViewer ? 'ended' : 'cancelled'} successfully.`, [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Could not complete the action.');
+    } finally {
+      setMentorshipActionLoading(false);
+    }
+  };
+
   const openRequest = (mode: 'meeting' | 'change' | 'end') => {
     const mentorId = session?.role === 'mentor' ? session.userId : Number(id);
     const menteeId = session?.role === 'mentee' ? session.userId : Number(id);
@@ -466,6 +498,26 @@ export default function ConnectionProfileScreen() {
 
   return (
     <View style={styles.container}>
+      <ActionModal
+        visible={endModalVisible}
+        title={isMentorViewer ? 'End Mentorship' : 'Cancel Mentorship'}
+        message={isMentorViewer
+          ? 'Add a wrap-up note for your mentee (optional).'
+          : 'Please provide a reason for cancelling this mentorship.'}
+        fields={[{
+          label: isMentorViewer ? 'Wrap-up note' : 'Reason',
+          placeholder: isMentorViewer ? 'e.g. Goal achieved — great work!' : 'e.g. Schedules no longer align',
+          value: endReason,
+          onChange: setEndReason,
+          multiline: true,
+          required: !isMentorViewer,
+        }]}
+        confirmLabel={isMentorViewer ? 'End Mentorship' : 'Cancel Mentorship'}
+        danger
+        loading={mentorshipActionLoading}
+        onConfirm={confirmEndMentorship}
+        onCancel={() => setEndModalVisible(false)}
+      />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.topCircle} />
@@ -940,8 +992,18 @@ export default function ConnectionProfileScreen() {
               <Text style={styles.actionButtonSecondaryText}>Change Request</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButtonDanger} onPress={() => openRequest('end')}>
-              <Text style={styles.actionButtonDangerText}>End Mentorship</Text>
+            <TouchableOpacity
+              style={[styles.actionButtonDanger, mentorshipActionLoading && { opacity: 0.6 }]}
+              onPress={handleEndMentorship}
+              disabled={mentorshipActionLoading}
+            >
+              <Text style={styles.actionButtonDangerText}>
+                {mentorshipActionLoading
+                  ? 'Please wait...'
+                  : isMentorViewer
+                  ? 'End Mentorship'
+                  : 'Cancel Mentorship'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

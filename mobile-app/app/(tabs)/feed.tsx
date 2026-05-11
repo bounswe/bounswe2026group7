@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { router } from 'expo-router';
+import ActionModal from '../../components/ActionModal';
 import {
   View,
   Text,
@@ -13,7 +15,6 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 import apiClient from '../../api/client';
 
 type Post = {
@@ -63,56 +64,26 @@ function extractHashtags(text: string): string[] {
   return [...new Set(matches.map((t) => t.slice(1).toLowerCase()))];
 }
 
-const MOCK_POSTS: Post[] = [
-  {
-    id: 'mock-1',
-    authorId: null,
-    author: 'Ahmet Yılmaz',
-    initials: 'AY',
-    avatarBg: '#D7E8DA',
-    avatarText: '#2F563C',
-    time: '2h ago',
-    text: 'Just finished a great mentoring session on system design! Always start with requirements before solutions. #mentoring #systemdesign',
-    hashtags: ['mentoring', 'systemdesign'],
-    likes: 24,
-    comments: 5,
+function mapFeedItem(item: any, feedType: 'recommended' | 'following'): Post {
+  const authorName = item.authorFirstName || 'Unknown';
+  const color = getAvatarColor(authorName);
+  return {
+    id: String(item.id),
+    authorId: item.authorId ?? null,
+    author: authorName,
+    initials: getInitials(authorName),
+    avatarBg: color.bg,
+    avatarText: color.text,
+    time: item.createdAt ? timeAgo(item.createdAt) : '',
+    text: item.body || '',
+    hashtags: item.hashtags ?? [],
+    likes: item.likeCount ?? 0,
+    comments: item.commentCount ?? 0,
     liked: false,
-    type: 'recommended',
-    isAuthor: false,
-  },
-  {
-    id: 'mock-2',
-    authorId: null,
-    author: 'Zeynep Kaya',
-    initials: 'ZK',
-    avatarBg: '#E8D7E0',
-    avatarText: '#563C4A',
-    time: '4h ago',
-    text: 'Excited to share that I just landed my first internship offer! Thanks to my mentor 🎉 #career #internship',
-    hashtags: ['career', 'internship'],
-    likes: 67,
-    comments: 12,
-    liked: false,
-    type: 'following',
-    isAuthor: false,
-  },
-  {
-    id: 'mock-3',
-    authorId: null,
-    author: 'Murat Demir',
-    initials: 'MD',
-    avatarBg: '#D7DCE8',
-    avatarText: '#3C4256',
-    time: '6h ago',
-    text: 'Great insights on ML pipelines. Feature stores and model versioning are key before deploying to production. #machinelearning #mlops',
-    hashtags: ['machinelearning', 'mlops'],
-    likes: 41,
-    comments: 8,
-    liked: false,
-    type: 'recommended',
-    isAuthor: false,
-  },
-];
+    type: feedType,
+    isAuthor: item.isAuthor === true,
+  };
+}
 
 function renderTextWithHashtags(text: string) {
   const parts = text.split(/(#\w+)/g);
@@ -130,49 +101,140 @@ function renderTextWithHashtags(text: string) {
 }
 
 export default function FeedScreen() {
-  const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [activeTab, setActiveTab] = useState<'forYou' | 'following'>('forYou');
   const [searchQuery, setSearchQuery] = useState('');
   const [createVisible, setCreateVisible] = useState(false);
   const [postDraft, setPostDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [myUserId, setMyUserId] = useState<number | null>(null);
   const [myName, setMyName] = useState('');
+  const [editPost, setEditPost] = useState<Post | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [commentPostId, setCommentPostId] = useState<string | null>(null);
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [reportPostTarget, setReportPostTarget] = useState<Post | null>(null);
+  const [reportPostReason, setReportPostReason] = useState('');
 
   useEffect(() => {
-    SecureStore.getItemAsync('userId').then((id) => {
-      if (id) setMyUserId(Number(id));
-    });
-    SecureStore.getItemAsync('firstName').then((name) => {
-      if (name) setMyName(name);
-    });
+    apiClient.get('/users/me').then((res) => {
+      const firstName = res.data?.firstName || res.data?.profile?.firstName || '';
+      setMyName(firstName);
+    }).catch(() => {});
   }, []);
+
+  const fetchPosts = useCallback(async () => {
+    try {
+      const endpoint =
+        activeTab === 'forYou'
+          ? '/feed/for-you?page=0&size=20'
+          : '/feed/following?page=0&size=20';
+      const res = await apiClient.get(endpoint);
+      const items: any[] = res.data?.content ?? res.data ?? [];
+      const feedType: 'recommended' | 'following' = activeTab === 'forYou' ? 'recommended' : 'following';
+      setPosts(items.map((item) => mapFeedItem(item, feedType)));
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status !== 403) {
+        Alert.alert('Error', 'Could not load posts.');
+      }
+      setPosts([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchPosts();
+  }, [fetchPosts]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+    fetchPosts();
+  }, [fetchPosts]);
+
+  const [searchResults, setSearchResults] = useState<Post[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  const runSearch = useCallback(async (q: string) => {
+    if (!q.trim()) { setSearchResults(null); return; }
+    setSearchLoading(true);
+    try {
+      const isHashtag = q.trim().startsWith('#');
+      const param = isHashtag
+        ? `hashtag=${encodeURIComponent(q.trim().replace('#', ''))}`
+        : `q=${encodeURIComponent(q.trim())}`;
+      const res = await apiClient.get(`/feed/search?${param}&page=0&size=20`);
+      const items: any[] = res.data?.content ?? res.data ?? [];
+      setSearchResults(items.map((item) => mapFeedItem(item, 'recommended')));
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
   }, []);
 
-  const filteredPosts = posts.filter((p) => {
-    const matchesSearch =
-      searchQuery === '' ||
-      p.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.hashtags.some((h) => h.includes(searchQuery.toLowerCase().replace('#', '')));
-    if (!matchesSearch) return false;
-    if (activeTab === 'following') return p.type === 'following';
-    return true;
-  });
+  useEffect(() => {
+    const timer = setTimeout(() => runSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery, runSearch]);
 
-  const toggleLike = (id: string) => {
+  const filteredPosts = searchQuery.trim()
+    ? (searchResults ?? [])
+    : posts;
+
+  const openComments = async (postId: string) => {
+    setCommentPostId(postId);
+    setComments([]);
+    setCommentDraft('');
+    setCommentsLoading(true);
+    try {
+      const res = await apiClient.get(`/feed/posts/${postId}/comments?page=0&size=50`);
+      setComments(res.data?.content ?? res.data ?? []);
+    } catch {
+      setComments([]);
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+
+  const submitComment = async () => {
+    if (!commentDraft.trim() || !commentPostId || commentSubmitting) return;
+    setCommentSubmitting(true);
+    try {
+      const res = await apiClient.post(`/feed/posts/${commentPostId}/comments`, { body: commentDraft.trim() });
+      setComments((prev) => [...prev, res.data]);
+      setCommentDraft('');
+      setPosts((prev) => prev.map((p) => p.id === commentPostId ? { ...p, comments: p.comments + 1 } : p));
+    } catch {
+      Alert.alert('Error', 'Could not post comment.');
+    } finally {
+      setCommentSubmitting(false);
+    }
+  };
+
+  const toggleLike = async (id: string) => {
     setPosts((prev) =>
       prev.map((p) =>
-        p.id === id
-          ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 }
-          : p
+        p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p
       )
     );
+    try {
+      await apiClient.post(`/feed/posts/${id}/like`);
+    } catch {
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p
+        )
+      );
+    }
   };
 
   const handleDeletePost = (post: Post) => {
@@ -193,12 +255,37 @@ export default function FeedScreen() {
     ]);
   };
 
+  const handleEditPost = async () => {
+    if (!editPost || !editDraft.trim() || editSubmitting) return;
+    setEditSubmitting(true);
+    try {
+      await apiClient.patch(`/feed/posts/${editPost.id}`, { body: editDraft.trim() });
+      setPosts((prev) => prev.map((p) => p.id === editPost.id ? { ...p, text: editDraft.trim() } : p));
+      setEditPost(null);
+    } catch {
+      Alert.alert('Error', 'Could not edit post.');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   const handlePostLongPress = (post: Post) => {
-    if (!post.isAuthor) return;
-    Alert.alert('Post Options', undefined, [
-      { text: 'Delete Post', style: 'destructive', onPress: () => handleDeletePost(post) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    if (post.isAuthor) {
+      Alert.alert('Post Options', undefined, [
+        { text: 'Edit Post', onPress: () => { setEditPost(post); setEditDraft(post.text); } },
+        { text: 'Delete Post', style: 'destructive', onPress: () => handleDeletePost(post) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    } else {
+      Alert.alert('Post Options', undefined, [
+        {
+          text: 'Report Post',
+          style: 'destructive',
+          onPress: () => { setReportPostReason(''); setReportPostTarget(post); },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
   };
 
   const submitPost = async () => {
@@ -243,6 +330,28 @@ export default function FeedScreen() {
 
   return (
     <View style={styles.container}>
+      <ActionModal
+        visible={!!reportPostTarget}
+        title="Report Post"
+        message="Help us understand the issue. Your report is anonymous."
+        fields={[{
+          label: 'Reason',
+          placeholder: 'e.g. spam, misinformation, inappropriate content',
+          value: reportPostReason,
+          onChange: setReportPostReason,
+          multiline: true,
+          required: true,
+        }]}
+        confirmLabel="Submit Report"
+        danger
+        onConfirm={() => {
+          if (!reportPostReason.trim()) return;
+          setReportPostTarget(null);
+          setReportPostReason('');
+          Alert.alert('Report Submitted', 'Thank you. Our team will review this report.');
+        }}
+        onCancel={() => { setReportPostTarget(null); setReportPostReason(''); }}
+      />
       <View style={styles.header}>
         <View style={styles.topCircle} />
         <View style={styles.statusRow}>
@@ -262,8 +371,9 @@ export default function FeedScreen() {
             onChangeText={setSearchQuery}
             returnKeyType="search"
           />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
+          {searchLoading && <ActivityIndicator size="small" color="rgba(255,255,255,0.7)" style={{ marginRight: 4 }} />}
+          {searchQuery.length > 0 && !searchLoading && (
+            <TouchableOpacity onPress={() => { setSearchQuery(''); setSearchResults(null); }}>
               <Text style={styles.searchClear}>✕</Text>
             </TouchableOpacity>
           )}
@@ -287,92 +397,189 @@ export default function FeedScreen() {
         ))}
       </View>
 
-      <ScrollView
-        style={styles.feed}
-        contentContainerStyle={styles.feedContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#456B50" />
-        }
-      >
-        {filteredPosts.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📭</Text>
-            <Text style={styles.emptyText}>No posts found.</Text>
-          </View>
-        )}
-
-        {filteredPosts.map((post) => (
-          <TouchableOpacity
-            key={post.id}
-            style={styles.postCard}
-            onLongPress={() => handlePostLongPress(post)}
-            activeOpacity={0.97}
-          >
-            <View style={styles.postHeader}>
-              <View style={[styles.postAvatar, { backgroundColor: post.avatarBg }]}>
-                <Text style={[styles.postAvatarText, { color: post.avatarText }]}>{post.initials}</Text>
-              </View>
-              <View style={styles.postMeta}>
-                <View style={styles.postMetaTop}>
-                  <Text style={styles.postAuthor}>{post.author}</Text>
-                  {post.type === 'recommended' && (
-                    <View style={styles.recommendedBadge}>
-                      <Text style={styles.recommendedBadgeText}>✦ For You</Text>
-                    </View>
-                  )}
-                  {post.isAuthor && (
-                    <View style={styles.myPostBadge}>
-                      <Text style={styles.myPostBadgeText}>You</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.postTime}>{post.time}</Text>
-              </View>
+      {loading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#456B50" />
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.feed}
+          contentContainerStyle={styles.feedContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#456B50" />
+          }
+        >
+          {filteredPosts.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📭</Text>
+              <Text style={styles.emptyText}>
+                {activeTab === 'following' ? 'Follow people to see their posts here.' : 'No posts found.'}
+              </Text>
             </View>
+          )}
 
-            <View style={styles.postBody}>
-              {renderTextWithHashtags(post.text)}
-            </View>
-
-            {post.hashtags.length > 0 && (
-              <View style={styles.hashtagRow}>
-                {post.hashtags.map((tag) => (
-                  <View key={tag} style={styles.hashtagChip}>
-                    <Text style={styles.hashtagChipText}>#{tag}</Text>
+          {filteredPosts.map((post) => (
+            <TouchableOpacity
+              key={post.id}
+              style={styles.postCard}
+              onLongPress={() => handlePostLongPress(post)}
+              activeOpacity={0.97}
+            >
+              <View style={styles.postHeader}>
+                <TouchableOpacity
+                  onPress={() => post.authorId && router.push({ pathname: '/user-profile', params: { userId: String(post.authorId) } } as any)}
+                  disabled={!post.authorId}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.postAvatar, { backgroundColor: post.avatarBg }]}>
+                    <Text style={[styles.postAvatarText, { color: post.avatarText }]}>{post.initials}</Text>
                   </View>
-                ))}
+                </TouchableOpacity>
+                <View style={styles.postMeta}>
+                  <View style={styles.postMetaTop}>
+                    <TouchableOpacity
+                      onPress={() => post.authorId && router.push({ pathname: '/user-profile', params: { userId: String(post.authorId) } } as any)}
+                      disabled={!post.authorId}
+                    >
+                      <Text style={styles.postAuthor}>{post.author}</Text>
+                    </TouchableOpacity>
+                    {post.type === 'recommended' && (
+                      <View style={styles.recommendedBadge}>
+                        <Text style={styles.recommendedBadgeText}>✦ For You</Text>
+                      </View>
+                    )}
+                    {post.isAuthor && (
+                      <View style={styles.myPostBadge}>
+                        <Text style={styles.myPostBadgeText}>You</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.postTime}>{post.time}</Text>
+                </View>
               </View>
-            )}
 
-            <View style={styles.postActions}>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => toggleLike(post.id)}>
-                <Text style={[styles.actionIcon, post.liked && styles.actionIconLiked]}>
-                  {post.liked ? '♥' : '♡'}
-                </Text>
-                <Text style={[styles.actionCount, post.liked && styles.actionCountLiked]}>
-                  {post.likes}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.postBody}>
+                {renderTextWithHashtags(post.text)}
+              </View>
 
-              <TouchableOpacity style={styles.actionBtn}>
-                <Text style={styles.actionIcon}>💬</Text>
-                <Text style={styles.actionCount}>{post.comments}</Text>
-              </TouchableOpacity>
+              {post.hashtags.length > 0 && (
+                <View style={styles.hashtagRow}>
+                  {post.hashtags.map((tag) => (
+                    <View key={tag} style={styles.hashtagChip}>
+                      <Text style={styles.hashtagChipText}>#{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
 
-              <TouchableOpacity style={styles.actionBtn}>
-                <Text style={styles.actionIcon}>↗</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        ))}
+              <View style={styles.postActions}>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => toggleLike(post.id)}>
+                  <Text style={[styles.actionIcon, post.liked && styles.actionIconLiked]}>
+                    {post.liked ? '♥' : '♡'}
+                  </Text>
+                  <Text style={[styles.actionCount, post.liked && styles.actionCountLiked]}>
+                    {post.likes}
+                  </Text>
+                </TouchableOpacity>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => openComments(post.id)}>
+                  <Text style={styles.actionIcon}>💬</Text>
+                  <Text style={styles.actionCount}>{post.comments}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.actionBtn}>
+                  <Text style={styles.actionIcon}>↗</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          ))}
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+      )}
 
       <TouchableOpacity style={styles.createFab} onPress={() => setCreateVisible(true)}>
         <Text style={styles.createFabIcon}>✏</Text>
       </TouchableOpacity>
+
+      <Modal visible={editPost !== null} animationType="slide" transparent onRequestClose={() => setEditPost(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={styles.createSheet}>
+            <View style={styles.createSheetHandle} />
+            <View style={styles.createHeader}>
+              <Text style={styles.createTitle}>Edit Post</Text>
+              <TouchableOpacity onPress={() => setEditPost(null)} disabled={editSubmitting}>
+                <Text style={styles.createClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.createInput, { height: 120 }]}
+              value={editDraft}
+              onChangeText={setEditDraft}
+              multiline
+              placeholder="Edit your post..."
+              placeholderTextColor="#B0A898"
+            />
+            <TouchableOpacity
+              style={[styles.postBtn, (!editDraft.trim() || editSubmitting) && { opacity: 0.4 }]}
+              onPress={handleEditPost}
+              disabled={!editDraft.trim() || editSubmitting}
+            >
+              <Text style={styles.postBtnText}>{editSubmitting ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={commentPostId !== null} animationType="slide" transparent onRequestClose={() => setCommentPostId(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={[styles.createSheet, { maxHeight: '80%' }]}>
+            <View style={styles.createSheetHandle} />
+            <View style={styles.createHeader}>
+              <Text style={styles.createTitle}>Comments</Text>
+              <TouchableOpacity onPress={() => setCommentPostId(null)}>
+                <Text style={styles.createClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {commentsLoading ? (
+              <ActivityIndicator size="large" color="#456B50" style={{ marginVertical: 24 }} />
+            ) : (
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                {comments.length === 0 && (
+                  <Text style={{ color: '#9A8F82', textAlign: 'center', marginVertical: 24 }}>No comments yet. Be the first!</Text>
+                )}
+                {comments.filter((c) => !c.isDeleted).map((c) => (
+                  <View key={c.id} style={{ marginBottom: 14, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#F0EDE8' }}>
+                    <Text style={{ fontWeight: '700', color: '#1D1D38', fontSize: 13, marginBottom: 3 }}>{c.authorFirstName || 'User'}</Text>
+                    <Text style={{ color: '#3A3A3A', fontSize: 14, lineHeight: 20 }}>{c.body}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+              <TextInput
+                style={[styles.createInput, { flex: 1, marginBottom: 0, height: 44 }]}
+                placeholder="Write a comment..."
+                placeholderTextColor="#B0A898"
+                value={commentDraft}
+                onChangeText={setCommentDraft}
+                returnKeyType="send"
+                onSubmitEditing={submitComment}
+              />
+              <TouchableOpacity
+                style={[styles.postBtn, { paddingHorizontal: 18, height: 44, justifyContent: 'center' }]}
+                onPress={submitComment}
+                disabled={commentSubmitting || !commentDraft.trim()}
+              >
+                <Text style={styles.postBtnText}>{commentSubmitting ? '...' : 'Send'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Modal visible={createVisible} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
@@ -498,12 +705,14 @@ const styles = StyleSheet.create({
   filterTabText: { color: '#9A8F82', fontSize: 14, fontWeight: '600' },
   filterTabTextActive: { color: '#456B50' },
 
+  loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
   feed: { flex: 1 },
   feedContent: { paddingTop: 12, paddingHorizontal: 16 },
 
   emptyState: { paddingVertical: 60, alignItems: 'center' },
   emptyIcon: { fontSize: 36, marginBottom: 10 },
-  emptyText: { color: '#9A8F82', fontSize: 15, fontWeight: '500' },
+  emptyText: { color: '#9A8F82', fontSize: 15, fontWeight: '500', textAlign: 'center' },
 
   postCard: {
     backgroundColor: '#F8F6F2',
