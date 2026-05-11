@@ -1,6 +1,7 @@
 package com.group7.backend.controller;
 
 import com.group7.backend.controller.support.PageableSupport;
+import com.group7.backend.docs.feed.FeedApiExamples;
 import com.group7.backend.dto.request.FeedCommentRequest;
 import com.group7.backend.dto.response.FeedCommentResponse;
 import com.group7.backend.dto.response.FeedPostInteractionState;
@@ -9,6 +10,7 @@ import com.group7.backend.service.FeedInteractionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -77,7 +79,11 @@ public class FeedInteractionController {
     @Operation(summary = "Toggle like on a feed post",
             description = "Idempotent toggle. Returns the updated interaction state.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Toggle applied; current state returned"),
+            @ApiResponse(responseCode = "200", description = "Toggle applied; current state returned",
+                    content = @Content(examples = {
+                            @ExampleObject(name = "now-liked",   value = FeedApiExamples.TOGGLE_LIKE_RESPONSE_LIKED),
+                            @ExampleObject(name = "now-unliked", value = FeedApiExamples.TOGGLE_LIKE_RESPONSE_UNLIKED)
+                    })),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
             @ApiResponse(responseCode = "404", description = "Post not found or soft-deleted", content = @Content)
     })
@@ -139,9 +145,16 @@ public class FeedInteractionController {
     // ── Comments ───────────────────────────────────────────────────────────
 
     @PostMapping("/posts/{id:\\d+}/comments")
-    @Operation(summary = "Add a comment to a feed post")
+    @Operation(summary = "Add a comment to a feed post",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.ADD_COMMENT_REQUEST))))
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Comment created"),
+            @ApiResponse(responseCode = "201", description = "Comment created",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.FEED_COMMENT_RESPONSE))),
             @ApiResponse(responseCode = "400", description = "Validation failure", content = @Content),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
             @ApiResponse(responseCode = "404", description = "Post not found", content = @Content)
