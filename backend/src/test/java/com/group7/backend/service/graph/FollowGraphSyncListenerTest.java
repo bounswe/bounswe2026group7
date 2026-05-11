@@ -61,6 +61,18 @@ class FollowGraphSyncListenerTest {
     }
 
     @Test
+    void userDeletedEvent_detachDeletesTheUserNode() {
+        // Mirrors the Postgres ON DELETE CASCADE on follows: one DETACH
+        // DELETE drops the user node + every incident :FOLLOWS edge.
+        listener.handle(FollowChangedEvent.userDeleted(ALICE));
+
+        verify(graph).detachDeleteUser(ALICE);
+        verify(graph, never()).mergeUser(anyLong());
+        verify(graph, never()).mergeFollow(anyLong(), anyLong());
+        verify(graph, never()).deleteFollow(anyLong(), anyLong());
+    }
+
+    @Test
     void transientFailure_thenSuccess_logsNothing() {
         // First call throws, retry succeeds — the queue must not be touched.
         doThrow(new RuntimeException("connection flake"))

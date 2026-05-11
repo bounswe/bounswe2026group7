@@ -52,4 +52,14 @@ public interface FollowGraphRepository extends Neo4jRepository<UserNode, Long> {
      */
     @Query("MATCH ()-[r:FOLLOWS]->() DELETE r")
     void deleteAllFollowEdges();
+
+    /**
+     * Removes a user node and every incident {@code :FOLLOWS} edge in one
+     * Cypher call. Mirrors the Postgres-side {@code ON DELETE CASCADE} on
+     * {@code follows}, fired by {@code FollowGraphSyncListener} when a
+     * {@link com.group7.backend.event.FollowChangedEvent} of type
+     * {@code USER_DELETED} arrives.
+     */
+    @Query("MATCH (u:User {userId: $userId}) DETACH DELETE u")
+    void detachDeleteUser(@Param("userId") Long userId);
 }

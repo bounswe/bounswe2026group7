@@ -151,8 +151,12 @@ public class FollowGraphResyncJob {
      * {@code follows} and re-emits it onto Neo4j. Existing edges are
      * MERGE-idempotent; orphaned edges in Neo4j (the source of the drift)
      * are dropped first with a single {@code MATCH ... DELETE}.
+     *
+     * <p>Public so {@link FollowGraphBootstrap} can invoke it on first-time
+     * sync-enable startup without reaching through the broader
+     * {@link #runResync()} entry-point.
      */
-    void fullRebuild() {
+    public void fullRebuild() {
         graph.deleteAllFollowEdges();
         List<Follow> all = follows.findAll();
         for (Follow f : all) {

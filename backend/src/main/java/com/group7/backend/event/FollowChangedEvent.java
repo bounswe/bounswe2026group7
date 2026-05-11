@@ -9,6 +9,13 @@ package com.group7.backend.event;
  * <p>Fields are primitive ids — no entity references — so the listener
  * can run on a different transaction (or no transaction) without lazy-
  * initialisation hazards.
+ *
+ * <p>{@code USER_DELETED} carries only the deleted user's id in
+ * {@code followerId}; {@code followeeId} is {@code null}. The listener
+ * DETACH-DELETEs the matching {@code :User} node, which reaps every
+ * incident {@code :FOLLOWS} edge in one Cypher call — mirroring the
+ * Postgres-side {@code ON DELETE CASCADE} on {@code follows} without
+ * needing a follow-row event per cascaded edge.
  */
 public record FollowChangedEvent(
         Long followerId,
@@ -17,7 +24,8 @@ public record FollowChangedEvent(
 ) {
     public enum ChangeType {
         FOLLOWED,
-        UNFOLLOWED
+        UNFOLLOWED,
+        USER_DELETED
     }
 
     public static FollowChangedEvent followed(Long followerId, Long followeeId) {
@@ -26,5 +34,9 @@ public record FollowChangedEvent(
 
     public static FollowChangedEvent unfollowed(Long followerId, Long followeeId) {
         return new FollowChangedEvent(followerId, followeeId, ChangeType.UNFOLLOWED);
+    }
+
+    public static FollowChangedEvent userDeleted(Long userId) {
+        return new FollowChangedEvent(userId, null, ChangeType.USER_DELETED);
     }
 }

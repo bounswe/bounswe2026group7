@@ -69,12 +69,22 @@ public class FollowGraphSyncListener {
     }
 
     private void applyToGraph(FollowChangedEvent event) {
-        graph.mergeUser(event.followerId());
-        graph.mergeUser(event.followeeId());
-        if (event.type() == FollowChangedEvent.ChangeType.FOLLOWED) {
-            graph.mergeFollow(event.followerId(), event.followeeId());
-        } else {
-            graph.deleteFollow(event.followerId(), event.followeeId());
+        switch (event.type()) {
+            case FOLLOWED -> {
+                graph.mergeUser(event.followerId());
+                graph.mergeUser(event.followeeId());
+                graph.mergeFollow(event.followerId(), event.followeeId());
+            }
+            case UNFOLLOWED -> {
+                graph.mergeUser(event.followerId());
+                graph.mergeUser(event.followeeId());
+                graph.deleteFollow(event.followerId(), event.followeeId());
+            }
+            case USER_DELETED ->
+                // Mirrors the Postgres CASCADE: a single DETACH DELETE drops
+                // the user node and every incident follow edge — no per-edge
+                // event needed.
+                graph.detachDeleteUser(event.followerId());
         }
     }
 
