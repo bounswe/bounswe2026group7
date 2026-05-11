@@ -40,7 +40,7 @@ services:
       APP_ADMIN_BOOTSTRAP_LAST_NAME: ${APP_ADMIN_BOOTSTRAP_LAST_NAME:-Admin}
       # Advanced mentor ranker (#436). Defaults keep the LLM/embedding paths
       # off; flip the flags in .env to enable.
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-placeholder-disabled-set-OPENAI_API_KEY-to-enable}
       MENTOR_ADVANCED_RANKER: ${MENTOR_ADVANCED_RANKER:-false}
       MENTOR_EXPLANATION_ENABLED: ${MENTOR_EXPLANATION_ENABLED:-false}
       MENTOR_EXPLANATION_TIMEOUT_MS: ${MENTOR_EXPLANATION_TIMEOUT_MS:-3000}
@@ -52,6 +52,12 @@ services:
       # off until the impression-tracking follow-up PR lands.
       FEED_ADVANCED_RANKER: ${FEED_ADVANCED_RANKER:-false}
       FEED_BANDIT_ENABLED: ${FEED_BANDIT_ENABLED:-false}
+      # E2E / Playwright fixtures rely on /api/test/* seed-and-reset
+      # endpoints and on the spam-bot defences being off so registrations
+      # don't need a real form-token round-trip. Default off in production;
+      # CI / local Playwright runs flip them on via .env.
+      APP_TEST_ENDPOINTS_ENABLED: ${APP_TEST_ENDPOINTS_ENABLED:-false}
+      APP_SPAM_ENABLED: ${APP_SPAM_ENABLED:-true}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
