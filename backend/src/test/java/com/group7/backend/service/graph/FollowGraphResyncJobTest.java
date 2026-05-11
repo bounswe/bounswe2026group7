@@ -6,7 +6,6 @@ import com.group7.backend.entity.FollowId;
 import com.group7.backend.event.FollowChangedEvent;
 import com.group7.backend.repository.FailedGraphSyncRepository;
 import com.group7.backend.repository.FollowRepository;
-import com.group7.backend.repository.graph.FollowGraphRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,14 +33,14 @@ import static org.mockito.Mockito.when;
 class FollowGraphResyncJobTest {
 
     @Mock private FollowRepository follows;
-    @Mock private FollowGraphRepository graph;
+    @Mock private FollowGraphWriter graphWriter;
     @Mock private FailedGraphSyncRepository failedLog;
     @Mock private FailedGraphSyncWriter failedSyncWriter;
     private FollowGraphResyncJob job;
 
     @BeforeEach
     void setUp() {
-        job = new FollowGraphResyncJob(follows, graph, failedLog, failedSyncWriter,
+        job = new FollowGraphResyncJob(follows, graphWriter, failedLog, failedSyncWriter,
                 "0 0 3 * * *");
     }
 
@@ -69,12 +68,12 @@ class FollowGraphResyncJobTest {
     void runResync_doesNothing_whenCountsMatchAndQueueEmpty() {
         when(failedLog.findAllUnsynced()).thenReturn(List.of());
         when(follows.count()).thenReturn(150L);
-        when(graph.countAllFollows()).thenReturn(150L);
+        when(graphWriter.countAllFollows()).thenReturn(150L);
 
         job.runResync();
 
-        verify(graph, never()).deleteAllFollowEdges();
-        verify(graph, never()).mergeFollow(anyLong(), anyLong());
+        verify(graphWriter, never()).deleteAllFollowEdges();
+        verify(graphWriter, never()).mergeFollow(anyLong(), anyLong());
     }
 
     // ── failed-event replay ─────────────────────────────────────────────────
@@ -86,13 +85,11 @@ class FollowGraphResyncJobTest {
         queued.setId(42L);
         when(failedLog.findAllUnsynced()).thenReturn(List.of(queued));
         when(follows.count()).thenReturn(150L);
-        when(graph.countAllFollows()).thenReturn(150L);
+        when(graphWriter.countAllFollows()).thenReturn(150L);
 
         job.runResync();
 
-        verify(graph).mergeUser(7L);
-        verify(graph).mergeUser(9L);
-        verify(graph).mergeFollow(7L, 9L);
+        verify(graphWriter).replay(queued);
         // Resync stamp is delegated to the writer's REQUIRES_NEW transaction.
         verify(failedSyncWriter).markResynced(queued);
     }
@@ -106,13 +103,11 @@ class FollowGraphResyncJobTest {
                 FollowChangedEvent.userDeleted(11L), "transient");
         when(failedLog.findAllUnsynced()).thenReturn(List.of(queued));
         when(follows.count()).thenReturn(0L);
-        when(graph.countAllFollows()).thenReturn(0L);
+        when(graphWriter.countAllFollows()).thenReturn(0L);
 
         job.runResync();
 
-        verify(graph).detachDeleteUser(11L);
-        verify(graph, never()).mergeFollow(anyLong(), anyLong());
-        verify(graph, never()).deleteFollow(anyLong(), anyLong());
+        verify(graphWriter).replay(queued);
         verify(failedSyncWriter).markResynced(queued);
     }
 
@@ -122,12 +117,11 @@ class FollowGraphResyncJobTest {
                 FollowChangedEvent.unfollowed(7L, 9L), "transient");
         when(failedLog.findAllUnsynced()).thenReturn(List.of(queued));
         when(follows.count()).thenReturn(0L);
-        when(graph.countAllFollows()).thenReturn(0L);
+        when(graphWriter.countAllFollows()).thenReturn(0L);
 
         job.runResync();
 
-        verify(graph).deleteFollow(7L, 9L);
-        verify(graph, never()).mergeFollow(anyLong(), anyLong());
+        verify(graphWriter).replay(queued);
     }
 
     // ── full rebuild on drift ───────────────────────────────────────────────
@@ -136,16 +130,16 @@ class FollowGraphResyncJobTest {
     void runResync_triggersFullRebuild_whenDriftExceedsThreshold() {
         when(failedLog.findAllUnsynced()).thenReturn(List.of());
         when(follows.count()).thenReturn(50L);
-        when(graph.countAllFollows()).thenReturn(40L);  // 10-row delta, below floor → triggers
+        when(graphWriter.countAllFollows()).thenReturn(40L);  // 10-row delta, below floor → triggers
         Follow f1 = followOf(1L, 2L);
         Follow f2 = followOf(2L, 3L);
         when(follows.findAll()).thenReturn(List.of(f1, f2));
 
         job.runResync();
 
-        verify(graph).deleteAllFollowEdges();
-        verify(graph).mergeFollow(1L, 2L);
-        verify(graph).mergeFollow(2L, 3L);
+        verify(graphWriter).deleteAllFollowEdges();
+        verify(graphWriter).mergeFollow(1L, 2L);
+        verify(graphWriter).mergeFollow(2L, 3L);
     }
 
     @Test
@@ -154,11 +148,11 @@ class FollowGraphResyncJobTest {
         // the graph based on stale data. Logged warn + no destructive op.
         when(failedLog.findAllUnsynced()).thenReturn(List.of());
         when(follows.count()).thenReturn(100L);
-        when(graph.countAllFollows()).thenThrow(new RuntimeException("neo4j down"));
+        when(graphWriter.countAllFollows()).thenThrow(new RuntimeException("neo4j down"));
 
         job.runResync();
 
-        verify(graph, never()).deleteAllFollowEdges();
+        verify(graphWriter, never()).deleteAllFollowEdges();
     }
 
     // ── isolation: a failing replay doesn't block subsequent ones ───────────
@@ -174,18 +168,16 @@ class FollowGraphResyncJobTest {
         when(failedLog.findAllUnsynced())
                 .thenReturn(List.of(queuedFail, queuedOk));
         when(follows.count()).thenReturn(0L);
-        when(graph.countAllFollows()).thenReturn(0L);
+        when(graphWriter.countAllFollows()).thenReturn(0L);
 
-        // mergeUser(3L) throws — drain should still process queuedOk.
+        // replay(queuedFail) throws — drain should still process queuedOk.
         org.mockito.Mockito.doThrow(new RuntimeException("still down"))
-                .when(graph).mergeUser(3L);
+                .when(graphWriter).replay(queuedFail);
 
         job.runResync();
 
         // The good row must have been applied even after the bad row threw.
-        verify(graph).mergeFollow(5L, 6L);
-        // The bad row did NOT advance.
-        verify(graph, never()).mergeFollow(eq(3L), anyLong());
+        verify(graphWriter).replay(queuedOk);
         // Only the good row's resync stamp was saved (via the writer).
         verify(failedSyncWriter, times(1)).markResynced(any(FailedGraphSync.class));
     }

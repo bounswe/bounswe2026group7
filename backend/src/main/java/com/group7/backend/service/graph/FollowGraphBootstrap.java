@@ -1,7 +1,6 @@
 package com.group7.backend.service.graph;
 
 import com.group7.backend.repository.FollowRepository;
-import com.group7.backend.repository.graph.FollowGraphRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -44,14 +43,14 @@ public class FollowGraphBootstrap {
     private static final Logger log = LoggerFactory.getLogger(FollowGraphBootstrap.class);
 
     private final FollowRepository follows;
-    private final FollowGraphRepository graph;
+    private final FollowGraphWriter graphWriter;
     private final FollowGraphResyncJob resyncJob;
 
     public FollowGraphBootstrap(FollowRepository follows,
-                                FollowGraphRepository graph,
+                                FollowGraphWriter graphWriter,
                                 FollowGraphResyncJob resyncJob) {
         this.follows = follows;
-        this.graph = graph;
+        this.graphWriter = graphWriter;
         this.resyncJob = resyncJob;
     }
 
@@ -65,7 +64,7 @@ public class FollowGraphBootstrap {
 
         long neoCount;
         try {
-            neoCount = graph.countAllFollows();
+            neoCount = graphWriter.countAllFollows();
         } catch (Exception e) {
             log.warn("FollowGraphBootstrap: Neo4j unreachable at startup — skipping bootstrap, "
                     + "resync job will catch up on next cron. Reason: {}", e.getMessage());

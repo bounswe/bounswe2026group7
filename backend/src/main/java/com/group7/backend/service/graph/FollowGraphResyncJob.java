@@ -2,10 +2,8 @@ package com.group7.backend.service.graph;
 
 import com.group7.backend.entity.FailedGraphSync;
 import com.group7.backend.entity.Follow;
-import com.group7.backend.event.FollowChangedEvent;
 import com.group7.backend.repository.FailedGraphSyncRepository;
 import com.group7.backend.repository.FollowRepository;
-import com.group7.backend.repository.graph.FollowGraphRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,19 +45,19 @@ public class FollowGraphResyncJob {
     static final long DRIFT_ABSOLUTE_FLOOR = 100L;
 
     private final FollowRepository follows;
-    private final FollowGraphRepository graph;
+    private final FollowGraphWriter graphWriter;
     private final FailedGraphSyncRepository failedLog;
     private final FailedGraphSyncWriter failedSyncWriter;
     private final String resyncCron;
 
     public FollowGraphResyncJob(FollowRepository follows,
-                                FollowGraphRepository graph,
+                                FollowGraphWriter graphWriter,
                                 FailedGraphSyncRepository failedLog,
                                 FailedGraphSyncWriter failedSyncWriter,
                                 @Value("${app.recommendations.follow.resync-cron:0 0 3 * * *}")
                                 String resyncCron) {
         this.follows = follows;
-        this.graph = graph;
+        this.graphWriter = graphWriter;
         this.failedLog = failedLog;
         this.failedSyncWriter = failedSyncWriter;
         this.resyncCron = resyncCron;
@@ -88,7 +86,7 @@ public class FollowGraphResyncJob {
         long pgCount = follows.count();
         long neoCount;
         try {
-            neoCount = graph.countAllFollows();
+            neoCount = graphWriter.countAllFollows();
         } catch (Exception e) {
             log.warn("Neo4j drift check failed; skipping rebuild this cycle", e);
             return;
@@ -134,43 +132,29 @@ public class FollowGraphResyncJob {
      * Apply one queued event and, if the apply succeeds, stamp it as resynced
      * via {@link FailedGraphSyncWriter#markResynced} (which opens its own
      * REQUIRES_NEW transaction so a stamp failure on row N cannot abort the
-     * subsequent rebuild). Not itself {@code @Transactional} — the Neo4j
-     * Cypher calls are not part of any Postgres transaction anyway.
+     * subsequent rebuild). The Cypher itself is wrapped in a Neo4j tx via
+     * {@link FollowGraphWriter#replay} so it can actually execute.
      */
     void replayOne(FailedGraphSync row) {
-        switch (row.getChangeType()) {
-            case FOLLOWED -> {
-                graph.mergeUser(row.getFollowerId());
-                graph.mergeUser(row.getFolloweeId());
-                graph.mergeFollow(row.getFollowerId(), row.getFolloweeId());
-            }
-            case UNFOLLOWED -> {
-                graph.mergeUser(row.getFollowerId());
-                graph.mergeUser(row.getFolloweeId());
-                graph.deleteFollow(row.getFollowerId(), row.getFolloweeId());
-            }
-            case USER_DELETED -> graph.detachDeleteUser(row.getFollowerId());
-        }
+        graphWriter.replay(row);
         failedSyncWriter.markResynced(row);
     }
 
     /**
      * Authoritative rebuild from Postgres. Streams every row in
-     * {@code follows} and re-emits it onto Neo4j. Existing edges are
-     * MERGE-idempotent; orphaned edges in Neo4j (the source of the drift)
-     * are dropped first with a single {@code MATCH ... DELETE}.
+     * {@code follows} and re-emits it onto Neo4j. Each {@code mergeFollow}
+     * call is its own Neo4j transaction via {@link FollowGraphWriter}.
+     * Idempotent MERGEs make partial-failure recovery a no-op on rerun.
      *
      * <p>Public so {@link FollowGraphBootstrap} can invoke it on first-time
      * sync-enable startup without reaching through the broader
      * {@link #runResync()} entry-point.
      */
     public void fullRebuild() {
-        graph.deleteAllFollowEdges();
+        graphWriter.deleteAllFollowEdges();
         List<Follow> all = follows.findAll();
         for (Follow f : all) {
-            graph.mergeUser(f.getId().getFollowerId());
-            graph.mergeUser(f.getId().getFolloweeId());
-            graph.mergeFollow(f.getId().getFollowerId(), f.getId().getFolloweeId());
+            graphWriter.mergeFollow(f.getId().getFollowerId(), f.getId().getFolloweeId());
         }
         log.info("Full rebuild complete: {} edges re-emitted", all.size());
     }

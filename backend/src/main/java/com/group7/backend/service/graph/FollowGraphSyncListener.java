@@ -1,7 +1,6 @@
 package com.group7.backend.service.graph;
 
 import com.group7.backend.event.FollowChangedEvent;
-import com.group7.backend.repository.graph.FollowGraphRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -32,12 +31,12 @@ public class FollowGraphSyncListener {
     private static final Logger log = LoggerFactory.getLogger(FollowGraphSyncListener.class);
     static final int MAX_RETRIES = 3;
 
-    private final FollowGraphRepository graph;
+    private final FollowGraphWriter graphWriter;
     private final FailedGraphSyncWriter failedSyncWriter;
 
-    public FollowGraphSyncListener(FollowGraphRepository graph,
+    public FollowGraphSyncListener(FollowGraphWriter graphWriter,
                                    FailedGraphSyncWriter failedSyncWriter) {
-        this.graph = graph;
+        this.graphWriter = graphWriter;
         this.failedSyncWriter = failedSyncWriter;
     }
 
@@ -46,7 +45,7 @@ public class FollowGraphSyncListener {
         Exception lastFailure = null;
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                applyToGraph(event);
+                graphWriter.apply(event);
                 if (attempt > 1) {
                     log.info("Neo4j sync succeeded on attempt {} for {}", attempt, event);
                 }
@@ -63,26 +62,6 @@ public class FollowGraphSyncListener {
             // Last-resort log. If Postgres is also down we have nothing left
             // to do — the nightly drift sweep is the safety net.
             log.error("Could not queue failed Neo4j sync for {}", event, queueFailure);
-        }
-    }
-
-    private void applyToGraph(FollowChangedEvent event) {
-        switch (event.type()) {
-            case FOLLOWED -> {
-                graph.mergeUser(event.followerId());
-                graph.mergeUser(event.followeeId());
-                graph.mergeFollow(event.followerId(), event.followeeId());
-            }
-            case UNFOLLOWED -> {
-                graph.mergeUser(event.followerId());
-                graph.mergeUser(event.followeeId());
-                graph.deleteFollow(event.followerId(), event.followeeId());
-            }
-            case USER_DELETED ->
-                // Mirrors the Postgres CASCADE: a single DETACH DELETE drops
-                // the user node and every incident follow edge — no per-edge
-                // event needed.
-                graph.detachDeleteUser(event.followerId());
         }
     }
 }

@@ -1,7 +1,6 @@
 package com.group7.backend.service.graph;
 
 import com.group7.backend.repository.FollowRepository;
-import com.group7.backend.repository.graph.FollowGraphRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,7 +23,7 @@ import static org.mockito.Mockito.when;
 class FollowGraphBootstrapTest {
 
     @Mock private FollowRepository follows;
-    @Mock private FollowGraphRepository graph;
+    @Mock private FollowGraphWriter graph;
     @Mock private FollowGraphResyncJob resyncJob;
     @InjectMocks private FollowGraphBootstrap bootstrap;
 
