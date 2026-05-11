@@ -60,7 +60,7 @@ class MatchingControllerTest {
         MentorMatchResponse match = new MentorMatchResponse();
         match.setFirstName("Ahmet");
         match.setMatchScore(10);
-        when(matchingService.getTopMentors(eq(1L), any(), any(Pageable.class)))
+        when(matchingService.getTopMentors(eq(1L), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(match)));
 
         mockMvc.perform(get("/api/matching/mentors")
@@ -74,7 +74,7 @@ class MatchingControllerTest {
     @Test
     void getTopMentorsWithKeywordReturns200() throws Exception {
         mockValidMenteeJwt("mentee-token", 1L);
-        when(matchingService.getTopMentors(eq(1L), eq("java"), any(Pageable.class)))
+        when(matchingService.getTopMentors(eq(1L), eq("java"), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/matching/mentors?keyword=java")
@@ -99,9 +99,27 @@ class MatchingControllerTest {
     }
 
     @Test
+    void getTopMentorsForwardsMaxDistanceKmParam() throws Exception {
+        mockValidMenteeJwt("mentee-token", 1L);
+        when(matchingService.getTopMentors(eq(1L), any(), eq(50.0), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/matching/mentors?maxDistanceKm=50")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk());
+
+        // And the unconstrained call still routes through the null-maxDistance path.
+        when(matchingService.getTopMentors(eq(1L), any(), eq((Double) null), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        mockMvc.perform(get("/api/matching/mentors")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void getTopMentorsReturns403WhenAlreadyHasMentor() throws Exception {
         mockValidMenteeJwt("mentee-token", 1L);
-        when(matchingService.getTopMentors(eq(1L), any(), any(Pageable.class)))
+        when(matchingService.getTopMentors(eq(1L), any(), any(), any(Pageable.class)))
                 .thenThrow(new com.group7.backend.exception.MatchingNotAllowedException(
                         "You already have an active mentor"));
 
