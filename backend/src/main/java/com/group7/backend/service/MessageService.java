@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -95,15 +96,25 @@ public class MessageService {
         message.setSentAt(OffsetDateTime.now(clock));
         Message saved = messageRepository.save(message);
 
-        Long recipientId = participantRepository
-                .findOtherParticipantUserIds(conversation.getId(), senderId)
-                .stream()
-                .findFirst()
-                .orElse(null);
+        // Notification fan-out: every non-sender participant gets a NEW_MESSAGE
+        // notification (in-app row + FCM push when a device is registered).
+        // For the existing 1:1 kinds (MENTORSHIP, MENTOR_PAIR, ADMIN_DIRECT)
+        // the list has size 1 and this loop runs once. For ADMIN_BROADCAST it
+        // runs once per other admin so the broadcast actually reaches every
+        // admin's inbox, not just whichever participant happened to be first.
+        List<Long> otherParticipantIds = participantRepository
+                .findOtherParticipantUserIds(conversation.getId(), senderId);
+        // MessageSentEvent.recipientId is forward-compatible-nullable per its
+        // Javadoc; null signals "non-1:1, listeners route by topic" — the
+        // STOMP listener broadcasts to /topic/conversation/{id} either way,
+        // and the FCM fan-out below covers per-user push.
+        Long eventRecipientId = conversation.getKind() == ConversationKind.ADMIN_BROADCAST
+                ? null
+                : otherParticipantIds.stream().findFirst().orElse(null);
         applicationEventPublisher.publishEvent(
-                new MessageSentEvent(saved.getId(), conversation.getId(), senderId, recipientId));
-        if (recipientId != null) {
-            notificationEventPublisher.publishNewMessage(recipientId, sender.getFirstName());
+                new MessageSentEvent(saved.getId(), conversation.getId(), senderId, eventRecipientId));
+        for (Long rid : otherParticipantIds) {
+            notificationEventPublisher.publishNewMessage(rid, sender.getFirstName());
         }
 
         log.info("Message sent: messageId={}, conversationId={}, senderId={}",

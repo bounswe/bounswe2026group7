@@ -42,6 +42,10 @@ public class GlobalExceptionHandler {
                 request.getMethod(), request.getRequestURI(), ban.getUser().getId(), ban.getExpiresAt());
         Map<String, Object> body = new HashMap<>();
         body.put("error", "Forbidden");
+        // Stable client-facing code so the frontend can branch on banned vs.
+        // generic 403 without parsing the message string. Required by #280:
+        // "banned users get 403 BANNED_UNTIL response".
+        body.put("code", "BANNED_UNTIL");
         body.put("message", ex.getMessage());
         body.put("reason", ban.getReason());
         body.put("expiresAt", ban.getExpiresAt().toString());
