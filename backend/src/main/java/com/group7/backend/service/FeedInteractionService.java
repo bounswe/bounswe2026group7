@@ -63,6 +63,7 @@ public class FeedInteractionService {
     private final FeedPostCommentRepository commentRepository;
     private final UserRepository userRepository;
     private final FeedPostMapper feedPostMapper;
+    private final NotificationEventPublisher notificationEventPublisher;
 
     public FeedInteractionService(FeedPostRepository feedPostRepository,
                                    FeedPostLikeRepository likeRepository,
@@ -70,7 +71,8 @@ public class FeedInteractionService {
                                    FeedPostShareRepository shareRepository,
                                    FeedPostCommentRepository commentRepository,
                                    UserRepository userRepository,
-                                   FeedPostMapper feedPostMapper) {
+                                   FeedPostMapper feedPostMapper,
+                                   NotificationEventPublisher notificationEventPublisher) {
         this.feedPostRepository = feedPostRepository;
         this.likeRepository = likeRepository;
         this.bookmarkRepository = bookmarkRepository;
@@ -78,6 +80,7 @@ public class FeedInteractionService {
         this.commentRepository = commentRepository;
         this.userRepository = userRepository;
         this.feedPostMapper = feedPostMapper;
+        this.notificationEventPublisher = notificationEventPublisher;
     }
 
     // ── Likes ──────────────────────────────────────────────────────────────
@@ -103,7 +106,7 @@ public class FeedInteractionService {
      */
     @Transactional
     public FeedPostInteractionState toggleLike(Long postId, Long userId) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         FeedPostLikeId id = new FeedPostLikeId(postId, userId);
         boolean nowLiked;
         if (likeRepository.existsByIdPostIdAndIdUserId(postId, userId)) {
@@ -114,6 +117,10 @@ public class FeedInteractionService {
             nowLiked = true;
         }
         log.info("Toggle like: postId={}, userId={}, nowLiked={}", postId, userId, nowLiked);
+        if (nowLiked && !userId.equals(post.getAuthorId())) {
+            notificationEventPublisher.publishFeedLike(
+                    post.getAuthorId(), resolveAuthorName(userId), postId);
+        }
         return interactionState(postId, userId);
     }
 
@@ -177,9 +184,13 @@ public class FeedInteractionService {
 
     @Transactional
     public FeedPostInteractionState recordShare(Long postId, Long sharerId) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         shareRepository.save(new FeedPostShare(postId, sharerId));
         log.info("Recorded share: postId={}, sharerId={}", postId, sharerId);
+        if (!sharerId.equals(post.getAuthorId())) {
+            notificationEventPublisher.publishFeedShare(
+                    post.getAuthorId(), resolveAuthorName(sharerId), postId);
+        }
         return interactionState(postId, sharerId);
     }
 
@@ -187,7 +198,7 @@ public class FeedInteractionService {
 
     @Transactional
     public FeedCommentResponse addComment(Long postId, Long authorId, String body) {
-        requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId);
         if (body == null || body.isBlank()) {
             throw new IllegalArgumentException("Comment body must not be blank");
         }
@@ -197,7 +208,12 @@ public class FeedInteractionService {
         comment.setUpdatedAt(now);
         FeedPostComment saved = commentRepository.save(comment);
         log.info("Created comment: id={}, postId={}, authorId={}", saved.getId(), postId, authorId);
-        return mapComment(saved, authorId, resolveAuthorName(authorId));
+        String actorFirstName = resolveAuthorName(authorId);
+        if (!authorId.equals(post.getAuthorId())) {
+            notificationEventPublisher.publishFeedComment(
+                    post.getAuthorId(), actorFirstName, postId);
+        }
+        return mapComment(saved, authorId, actorFirstName);
     }
 
     public Page<FeedCommentResponse> listComments(Long postId, Long viewerId, Pageable pageable) {
@@ -286,8 +302,8 @@ public class FeedInteractionService {
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    private void requireVisiblePost(Long postId) {
-        feedPostRepository.findByIdAndDeletedAtIsNull(postId)
+    private FeedPost requireVisiblePost(Long postId) {
+        return feedPostRepository.findByIdAndDeletedAtIsNull(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Feed post not found with id: " + postId));
     }
 

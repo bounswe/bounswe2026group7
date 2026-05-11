@@ -52,10 +52,10 @@ public class NotificationEventListener {
             return;
         }
 
-        if (event.type() == NotificationType.MATCH_FOUND) {
+        if (event.type() == NotificationType.MATCH_FOUND || event.type() == NotificationType.FEED_LIKE) {
             boolean existsRecent = notificationRepository.existsByRecipient_IdAndTypeAndBodyAndCreatedAtAfter(
                     event.recipientId(),
-                    NotificationType.MATCH_FOUND,
+                    event.type(),
                     event.body(),
                     OffsetDateTime.now(clock).minusHours(24)
             );

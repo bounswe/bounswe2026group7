@@ -4,12 +4,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.entity.User;
+import com.group7.backend.entity.Notification;
+import com.group7.backend.entity.NotificationType;
 import com.group7.backend.repository.FollowRepository;
+import com.group7.backend.repository.NotificationRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.VerificationTokenRepository;
 import com.group7.backend.service.EmailService;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -64,6 +70,7 @@ class FollowIntegrationTest {
     @Autowired private UserRepository userRepository;
     @Autowired private VerificationTokenRepository verificationTokenRepository;
     @Autowired private FollowRepository followRepository;
+    @Autowired private NotificationRepository notificationRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
     @MockitoBean private EmailService emailService;
 
@@ -332,6 +339,38 @@ class FollowIntegrationTest {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    // ── Engagement notifications ───────────────────────────────────────────
+
+    @Test
+    void follow_publishesNewFollowerNotification_andSkipsOnIdempotentReFollow() throws Exception {
+        Pair p = registerTwo("notif_follow_a@test.com", "notif_follow_b@test.com");
+
+        // First follow → NEW_FOLLOWER row appears on user B.
+        mockMvc.perform(post("/api/users/" + p.idB() + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA()))
+                .andExpect(status().is2xxSuccessful());
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .pollInterval(Duration.ofMillis(50))
+                .untilAsserted(() -> {
+                    List<Notification> rows = notificationRepository.findForUser(p.idB(), false).stream()
+                            .filter(n -> n.getType() == NotificationType.NEW_FOLLOWER)
+                            .toList();
+                    assertThat(rows).hasSize(1);
+                    assertThat(rows.get(0).getBody()).contains("started following you.");
+                });
+
+        // Re-follow (idempotent) → no second row.
+        mockMvc.perform(post("/api/users/" + p.idB() + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA()))
+                .andExpect(status().is2xxSuccessful());
+        Thread.sleep(300);
+        List<Notification> after2 = notificationRepository.findForUser(p.idB(), false).stream()
+                .filter(n -> n.getType() == NotificationType.NEW_FOLLOWER)
+                .toList();
+        assertThat(after2).hasSize(1);
+    }
 
     private record Pair(String tokenA, String tokenB, Long idA, Long idB) {
     }

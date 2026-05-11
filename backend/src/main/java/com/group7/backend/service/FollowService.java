@@ -53,10 +53,14 @@ public class FollowService {
 
     private final FollowRepository followRepository;
     private final UserRepository userRepository;
+    private final NotificationEventPublisher notificationEventPublisher;
 
-    public FollowService(FollowRepository followRepository, UserRepository userRepository) {
+    public FollowService(FollowRepository followRepository,
+                         UserRepository userRepository,
+                         NotificationEventPublisher notificationEventPublisher) {
         this.followRepository = followRepository;
         this.userRepository = userRepository;
+        this.notificationEventPublisher = notificationEventPublisher;
     }
 
     /**
@@ -75,6 +79,13 @@ public class FollowService {
             throw new ResourceNotFoundException("User not found with id: " + followeeId);
         }
         int inserted = followRepository.upsertFollow(followerId, followeeId);
+        if (inserted == 1) {
+            String followerFirstName = userRepository.findById(followerId)
+                    .map(User::getFirstName)
+                    .orElse(null);
+            notificationEventPublisher.publishNewFollower(
+                    followeeId, followerFirstName, followerId);
+        }
         return new FollowResult(followerId, followeeId, inserted == 1);
     }
 
