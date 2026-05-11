@@ -19,9 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Real-Postgres coverage for the eligibility queries added in #273
- * ({@link MenteeRepository#findUnattachedIds()},
- * {@link MentorRepository#findIdsWithCapacity()}) plus the
+ * Real-Postgres coverage for the mentee eligibility query added in #273
+ * ({@link MenteeRepository#findUnattachedIds()}) plus the
  * {@link LastMatchNotificationRepository} round-trip.
  *
  * <p>Pinned to the {@code test} profile because the migrations expect Postgres
@@ -82,40 +81,6 @@ class MatchNotificationEligibilityQueriesTest {
     @Test
     void findUnattachedIds_returnsEmptyListWhenNoMenteesExist() {
         assertThat(menteeRepository.findUnattachedIds()).isEmpty();
-    }
-
-    // ── findIdsWithCapacity (mentor eligibility) ─────────────────────────────
-
-    @Test
-    void findIdsWithCapacity_returnsOnlyMentorsBelowCapacity() {
-        Mentor empty = saveMentorWithCapacity("mn273_capa_a@example.com", 3, 0);
-        Mentor partial = saveMentorWithCapacity("mn273_capa_b@example.com", 3, 2);
-        saveMentorWithCapacity("mn273_capa_c@example.com", 2, 2);  // at cap → excluded
-
-        List<Long> ids = mentorRepository.findIdsWithCapacity();
-
-        assertThat(ids).containsExactlyInAnyOrder(empty.getId(), partial.getId());
-    }
-
-    @Test
-    void findIdsWithCapacity_excludesMentorsAtExactlyMaxCapacity() {
-        // Boundary: currentMenteeCount == maxMenteeCapacity → strictly excluded
-        // (we use < not <=). Otherwise a mentor who *just* filled would receive
-        // a confusing notification.
-        saveMentorWithCapacity("mn273_capb@example.com", 3, 3);
-
-        assertThat(mentorRepository.findIdsWithCapacity()).isEmpty();
-    }
-
-    @Test
-    void findIdsWithCapacity_isOrderedByIdAscending() {
-        Mentor a = saveMentorWithCapacity("mn273_cord_a@example.com", 3, 0);
-        Mentor b = saveMentorWithCapacity("mn273_cord_b@example.com", 3, 0);
-        Mentor c = saveMentorWithCapacity("mn273_cord_c@example.com", 3, 0);
-
-        List<Long> ids = mentorRepository.findIdsWithCapacity();
-
-        assertThat(ids).containsExactly(a.getId(), b.getId(), c.getId());
     }
 
     // ── LastMatchNotificationRepository round-trip ───────────────────────────
@@ -242,18 +207,6 @@ class MatchNotificationEligibilityQueriesTest {
         m.setIsEmailVerified(true);
         m.setMaxMenteeCapacity(3);
         m.setCurrentMenteeCount(0);
-        return mentorRepository.save(m);
-    }
-
-    private Mentor saveMentorWithCapacity(String email, int max, int current) {
-        Mentor m = new Mentor();
-        m.setFirstName("M");
-        m.setLastName("L");
-        m.setEmail(email);
-        m.setPasswordHash("x");
-        m.setIsEmailVerified(true);
-        m.setMaxMenteeCapacity(max);
-        m.setCurrentMenteeCount(current);
         return mentorRepository.save(m);
     }
 }

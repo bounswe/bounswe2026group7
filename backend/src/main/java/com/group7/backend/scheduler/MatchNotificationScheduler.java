@@ -1,7 +1,6 @@
 package com.group7.backend.scheduler;
 
 import com.group7.backend.repository.MenteeRepository;
-import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.service.MatchNotificationProcessor;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -17,25 +16,24 @@ import java.util.function.Supplier;
 
 /**
  * Daily cron driver for the change-detection match-notification path (#273).
- * For each eligible user (mentees with no active mentor; mentors with spare
- * capacity), invokes {@link MatchNotificationProcessor} in its own
- * {@code REQUIRES_NEW} transaction. The processor compares the current top
- * match's id to a per-user state row and publishes a {@code MATCH_FOUND}
+ * For each unattached mentee, invokes {@link MatchNotificationProcessor} in
+ * its own {@code REQUIRES_NEW} transaction. The processor compares the current
+ * top mentor's id to a per-user state row and publishes a {@code MATCH_FOUND}
  * event only when the value changed.
  *
  * <p><b>System component.</b> Bypasses controller-layer authorization
  * deliberately. Does not run in any authenticated user's context.
  *
- * <p><b>Failure isolation.</b> Each user is wrapped in its own try/catch:
+ * <p><b>Failure isolation.</b> Each mentee is wrapped in its own try/catch:
  * a thrown exception logs and the loop continues with the next user.
  * {@code IllegalStateException} (a precondition violation in the
  * processor's pure-rank delegate) is logged at ERROR — it indicates a
  * caller bug, not a transient operational problem. Other exceptions
  * (transient DB errors, etc.) are logged at WARN; the next scheduler tick
  * naturally retries since the user's state row was not advanced.
- * Each side ({@code notifyMentees}, {@code notifyMentors}) is additionally
- * wrapped in {@code runSafely} so a failure in the eligibility query for
- * one side does not skip the other.
+ * The mentee batch is additionally wrapped in {@code runSafely} so a
+ * failure in the eligibility query is logged once and the cron firing
+ * exits cleanly rather than propagating.
  *
  * <p><b>Multi-instance.</b> Two instances ticking at the same cron time
  * race harmlessly: PK uniqueness on {@code last_match_notifications}
@@ -70,7 +68,6 @@ public class MatchNotificationScheduler {
 
     private final MatchNotificationProcessor processor;
     private final MenteeRepository menteeRepository;
-    private final MentorRepository mentorRepository;
     private final String cronExpression;
     private final String zone;
 
@@ -85,12 +82,10 @@ public class MatchNotificationScheduler {
     public MatchNotificationScheduler(
             MatchNotificationProcessor processor,
             MenteeRepository menteeRepository,
-            MentorRepository mentorRepository,
             @Value("${app.matching.notification.cron:0 0 9 * * *}") String cronExpression,
             @Value("${app.matching.notification.zone:UTC}") String zone) {
         this.processor = processor;
         this.menteeRepository = menteeRepository;
-        this.mentorRepository = mentorRepository;
         this.cronExpression = cronExpression;
         this.zone = zone;
     }
@@ -109,39 +104,27 @@ public class MatchNotificationScheduler {
     }
 
     /**
-     * Runs daily at 09:00 UTC by default. Both sides processed sequentially
-     * inside one cron firing; each side's eligibility query and per-user loop
-     * is isolated by {@link #runSafely(String, Supplier)} so one side's
-     * failure does not skip the other.
+     * Runs daily at 09:00 UTC by default. Iterates eligible mentees inside a
+     * single cron firing; {@link #runSafely(String, Supplier)} guards the
+     * eligibility query so a transient DB failure logs once instead of
+     * propagating out of the @Scheduled method.
      */
     @Scheduled(
             cron = "${app.matching.notification.cron:0 0 9 * * *}",
             zone = "${app.matching.notification.zone:UTC}")
     public void notifyChangedMatches() {
         BatchResult mentees = runSafely("mentees", this::notifyMentees);
-        BatchResult mentors = runSafely("mentors", this::notifyMentors);
-        log.info(
-                "Match-notification check complete: "
-                        + "mentee_eligible={} mentee_publishes={} "
-                        + "mentor_eligible={} mentor_publishes={}",
-                mentees.eligible(), mentees.published(),
-                mentors.eligible(), mentors.published());
+        log.info("Match-notification check complete: mentee_eligible={} mentee_publishes={}",
+                mentees.eligible(), mentees.published());
     }
 
     /**
      * Iterates eligible mentees and dispatches each to the processor.
-     * Package-private so integration tests can invoke a single side without
+     * Package-private so integration tests can invoke the batch without
      * waiting for a cron tick.
      */
     BatchResult notifyMentees() {
         return processBatch("mentee", menteeRepository::findUnattachedIds, processor::processMentee);
-    }
-
-    /**
-     * Symmetric to {@link #notifyMentees} for the mentor side.
-     */
-    BatchResult notifyMentors() {
-        return processBatch("mentor", mentorRepository::findIdsWithCapacity, processor::processMentor);
     }
 
     /**
@@ -152,7 +135,7 @@ public class MatchNotificationScheduler {
      * so the loop keeps moving — the next tick naturally retries since the
      * user's state row was not advanced.
      *
-     * @param label    used in log messages ({@code "mentee"} / {@code "mentor"}).
+     * @param label    used in log messages (currently always {@code "mentee"}).
      * @param eligibilityQuery supplier for the list of ids to process.
      * @param processor returns true iff a notification was published.
      * @return eligible count (size of the list) and published count (true returns).
@@ -175,9 +158,9 @@ public class MatchNotificationScheduler {
     }
 
     /**
-     * Wraps a per-side batch so a failure in the eligibility query (e.g., a
-     * transient DB outage) does not abort the entire run — the other side
-     * still gets its turn.
+     * Wraps a batch so a failure in the eligibility query (e.g., a transient
+     * DB outage) is logged once instead of leaking out of the @Scheduled
+     * method. Returns an empty result so the run-summary log still renders.
      */
     private BatchResult runSafely(String label, Supplier<BatchResult> batch) {
         try {
