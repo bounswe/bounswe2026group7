@@ -1676,6 +1676,32 @@
   font-style: italic;
   color: var(--text-muted);
 }
+.feed-comment-like-btn {
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  font-family: 'DM Sans', sans-serif;
+  margin-left: auto;
+}
+.feed-comment-like-btn:hover:not(:disabled) {
+  background: var(--green-pale);
+  color: var(--green-dark);
+}
+.feed-comment-like-btn--active {
+  color: #e63946;
+}
+.feed-comment-like-btn--active:hover:not(:disabled) {
+  background: #fff1f2;
+}
 .feed-comment-composer {
   display: flex;
   gap: 10px;

@@ -11,6 +11,7 @@ import {
   getPostInteractions,
   getPostComments,
   addCommentToPost,
+  toggleLikeOnComment,
 } from '../services/api'
 
 /**
@@ -240,6 +241,44 @@ export default function FeedPostCard({
     }
   }
 
+  async function handleCommentLike(commentId) {
+    // Optimistic update
+    const prevComments = [...comments]
+    const commentIndex = comments.findIndex(c => c.id === commentId)
+    if (commentIndex === -1) return
+
+    const target = comments[commentIndex]
+    const prevLiked = Boolean(target.viewerHasLiked)
+    const prevCount = target.likeCount || 0
+
+    const nextLiked = !prevLiked
+    const nextCount = prevLiked ? Math.max(0, prevCount - 1) : prevCount + 1
+
+    const updatedComments = [...comments]
+    updatedComments[commentIndex] = {
+      ...target,
+      viewerHasLiked: nextLiked,
+      likeCount: nextCount
+    }
+    setComments(updatedComments)
+
+    try {
+      const updated = await toggleLikeOnComment(commentId)
+      // Sync with server response
+      setComments(prev => {
+        const idx = prev.findIndex(c => c.id === commentId)
+        if (idx === -1) return prev
+        const next = [...prev]
+        next[idx] = updated
+        return next
+      })
+    } catch (err) {
+      // Rollback
+      setComments(prevComments)
+      window.alert(err?.message || 'Failed to update comment like')
+    }
+  }
+
   async function handleShare(e) {
     e.stopPropagation()
     e.preventDefault()
@@ -428,6 +467,22 @@ export default function FeedPostCard({
                         ? <span className="feed-comment-deleted">Comment removed</span>
                         : renderTextWithMentions(comment.body, 'comment')}
                     </div>
+                    {!comment.isDeleted && (
+                      <button
+                        type="button"
+                        className={`feed-comment-like-btn${comment.viewerHasLiked ? ' feed-comment-like-btn--active' : ''}`}
+                        onClick={() => handleCommentLike(comment.id)}
+                        aria-label={comment.viewerHasLiked ? 'Unlike comment' : 'Like comment'}
+                        title={comment.viewerHasLiked ? 'Liked' : 'Like'}
+                      >
+                        <Heart
+                          size={13}
+                          strokeWidth={2}
+                          fill={comment.viewerHasLiked ? 'currentColor' : 'none'}
+                        />
+                        <span>{comment.likeCount || 0}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
