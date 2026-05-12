@@ -57,14 +57,27 @@ public class JsonLdResponseBodyAdvice implements ResponseBodyAdvice<Object> {
         if (body == null) {
             return null;
         }
-        if (!JsonLdMediaType.APPLICATION_LD_JSON.isCompatibleWith(selectedContentType)) {
+        if (!JsonLdMediaType.isJsonLd(selectedContentType)) {
             return body;
         }
 
-        // Page<T> wrapping in JSON-LD requires modeling pagination as a typed
-        // resource (e.g., schema.org ItemList). Deferred to a Wave 2 slice.
+        // Page<T> bodies are handed off to OrderedCollectionPageJsonLdAdvice
+        // (runs after this advice) which models them as an AS 2.0
+        // OrderedCollectionPage with hypermedia paging links. Returning the
+        // body untouched keeps the downstream advice able to inspect the
+        // original Page<T> with its pagination metadata intact.
         if (body instanceof Page<?>) {
-            return downgrade(body, response, "Page<T> body is not JSON-LD-shaped");
+            return body;
+        }
+
+        // An earlier advice in the chain may have already produced a
+        // JSON-LD document (e.g., OrderedCollectionPageJsonLdAdvice wrapping
+        // a Page<T> into a Map with @context). Recognise that shape and
+        // pass it through unchanged — without this, the downgrade branch
+        // below would rewrite Content-Type to application/json after the
+        // other advice carefully negotiated AS 2.0.
+        if (body instanceof Map<?, ?> map && map.containsKey("@context")) {
+            return body;
         }
 
         if (body instanceof Collection<?> collection) {

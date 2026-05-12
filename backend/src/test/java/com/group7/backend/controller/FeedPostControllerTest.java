@@ -71,7 +71,7 @@ class FeedPostControllerTest {
     private static FeedPostResponse stub(Long id, Long authorId) {
         return new FeedPostResponse(id, authorId, "Alice", "Hello", List.of("data"),
                 OffsetDateTime.now(), OffsetDateTime.now(), false, true, List.of(),
-                false, false);
+                false, false, null);
     }
 
     // ── POST /api/feed/posts ────────────────────────────────────────────────
@@ -191,7 +191,7 @@ class FeedPostControllerTest {
         // Fixed timestamps so the assertion is deterministic.
         OffsetDateTime t0 = OffsetDateTime.parse("2026-05-09T10:15:00Z");
         FeedPostResponse fixed = new FeedPostResponse(42L, 1L, "Alice", "Hello",
-                List.of("data"), t0, t0, false, true, List.of(), false, false);
+                List.of("data"), t0, t0, false, true, List.of(), false, false, null);
         when(feedPostService.getById(42L, 1L)).thenReturn(fixed);
 
         mockMvc.perform(get("/api/feed/posts/42").header("Authorization", "Bearer " + TOKEN))
@@ -206,7 +206,7 @@ class FeedPostControllerTest {
         mockMenteeJwt(TOKEN, 1L);
         OffsetDateTime t0 = OffsetDateTime.parse("2026-05-09T10:15:00Z");
         FeedPostResponse fixed = new FeedPostResponse(42L, 1L, "Alice", "Hello",
-                List.of("data"), t0, t0, false, true, List.of(), false, false);
+                List.of("data"), t0, t0, false, true, List.of(), false, false, null);
         when(feedPostService.getById(42L, 1L)).thenReturn(fixed);
 
         // First fetch — capture the ETag.
@@ -230,9 +230,9 @@ class FeedPostControllerTest {
         OffsetDateTime created = OffsetDateTime.parse("2026-05-09T10:15:00Z");
         OffsetDateTime edited = OffsetDateTime.parse("2026-05-09T11:02:34Z");
         FeedPostResponse before = new FeedPostResponse(42L, 1L, "Alice", "Hello",
-                List.of("data"), created, created, false, true, List.of(), false, false);
+                List.of("data"), created, created, false, true, List.of(), false, false, null);
         FeedPostResponse after = new FeedPostResponse(42L, 1L, "Alice", "Hello edited",
-                List.of("data"), created, edited, true, true, List.of(), false, false);
+                List.of("data"), created, edited, true, true, List.of(), false, false, null);
         when(feedPostService.getById(42L, 1L)).thenReturn(before, after);
 
         String etagBefore = mockMvc.perform(get("/api/feed/posts/42")

@@ -227,8 +227,13 @@ class JsonLdContentNegotiationTest {
     }
 
     @Test
-    void ldJsonRequest_pageResponse_downgradesContentType() throws Exception {
-        // seed a couple of mentors so the page has content
+    void ldJsonRequest_pageResponse_wrapsAsOrderedCollectionPage() throws Exception {
+        // Before #490 this test pinned the Page<T> downgrade-to-JSON
+        // behaviour; OrderedCollectionPageJsonLdAdvice now models pagination
+        // as an AS 2.0 OrderedCollectionPage and preserves the negotiated
+        // Content-Type, so the assertion flips: Content-Type stays
+        // application/ld+json and the body is the envelope with
+        // orderedItems, totalItems, and hypermedia paging links.
         registerAndLogin("Page", "Mentor1", "ld_page1@test.com", true);
         registerAndLogin("Page", "Mentor2", "ld_page2@test.com", true);
 
@@ -240,18 +245,21 @@ class JsonLdContentNegotiationTest {
                         .param("size", "10")
                         .accept(LD_JSON))
                 .andExpect(status().isOk())
-                // Page<T> can't be JSON-LD-shaped without modeling pagination as
-                // a typed resource, so the advice downgrades Content-Type to
-                // plain JSON. The body remains the standard Page envelope.
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().contentTypeCompatibleWith(LD_JSON))
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertThat(body.get("@context")).isNull();
-        assertThat(body.get("@graph")).isNull();
-        assertThat(body.get("content")).isNotNull();
-        assertThat(body.get("content").isArray()).isTrue();
-        assertThat(body.get("totalElements")).isNotNull();
+        assertThat(body.get("@context")).isNotNull();
+        assertThat(body.get("@type").asText()).isEqualTo("OrderedCollectionPage");
+        assertThat(body.get("totalItems").asLong()).isEqualTo(2L);
+        assertThat(body.get("orderedItems")).isNotNull();
+        assertThat(body.get("orderedItems").isArray()).isTrue();
+        assertThat(body.get("orderedItems").size()).isEqualTo(2);
+        // first / last always present; prev / next absent on a single-page result.
+        assertThat(body.get("first")).isNotNull();
+        assertThat(body.get("last")).isNotNull();
+        assertThat(body.get("prev")).isNull();
+        assertThat(body.get("next")).isNull();
     }
 
     @Test

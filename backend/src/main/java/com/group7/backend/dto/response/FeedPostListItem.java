@@ -53,7 +53,7 @@ public record FeedPostListItem(
         List<String> factors,
 
         @Schema(description = "Image attachments on the post, in author-specified order. Empty when "
-                + "the post has no media (#485).")
+                + "the post has no media.")
         List<AttachmentSummary> attachments,
 
         @Schema(description = "True if the authenticated viewer has liked this post. Always "
@@ -85,6 +85,12 @@ public record FeedPostListItem(
                 + "Used by the UI to render \"reposted N minutes ago\" alongside the post's own "
                 + "createdAt. Null on non-repost rows.",
                 nullable = true)
-        OffsetDateTime sharedAt
+        OffsetDateTime sharedAt,
+
+        @Schema(description = "Optional BCP-47 language tag for the body. Null for legacy posts. "
+                + "Drives the AS 2.0 contentMap / inLanguage fields in the JSON-LD list "
+                + "representation of this post.",
+                example = "en", nullable = true)
+        String lang
 ) {
 }
