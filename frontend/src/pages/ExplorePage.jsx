@@ -315,17 +315,20 @@ export default function ExplorePage() {
     setFilters({ availabilityDays: [], mentorshipDuration: [], minMatchScore: 0 })
   }
 
+  // Backends mix numeric and string ids in JSON payloads, so we coerce to
+  // String once at the boundary. Lookups elsewhere do the same.
   function toggleCompare(mentorId) {
+    const key = String(mentorId)
     setCompareIds(prev => {
       const next = new Set(prev)
-      if (next.has(mentorId)) {
-        next.delete(mentorId)
+      if (next.has(key)) {
+        next.delete(key)
       } else {
         if (next.size >= 3) {
           showTransientToast('You can compare up to 3 mentors at a time.')
           return prev
         }
-        next.add(mentorId)
+        next.add(key)
       }
       return next
     })
@@ -336,8 +339,8 @@ export default function ExplorePage() {
   // match across surfaces.
   const compareMentors = (() => {
     const pool = new Map()
-    for (const m of mentors) pool.set(m.id, m)
-    for (const m of matches) pool.set(m.id, m)
+    for (const m of mentors) pool.set(String(m.id), m)
+    for (const m of matches) pool.set(String(m.id), m)
     return [...compareIds].map(id => pool.get(id)).filter(Boolean)
   })()
 
@@ -568,7 +571,7 @@ export default function ExplorePage() {
                   <label className="mentor-compare-toggle" title="Add to comparison (up to 3)">
                     <input
                       type="checkbox"
-                      checked={compareIds.has(m.id)}
+                      checked={compareIds.has(String(m.id))}
                       onChange={() => toggleCompare(m.id)}
                       aria-label={`Add ${m.firstName} to comparison`}
                     />
@@ -635,7 +638,7 @@ export default function ExplorePage() {
         onClose={() => setCompareOpen(false)}
         onRemove={(id) => setCompareIds(prev => {
           const next = new Set(prev)
-          next.delete(id)
+          next.delete(String(id))
           if (next.size === 0) setCompareOpen(false)
           return next
         })}

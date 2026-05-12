@@ -3399,6 +3399,16 @@
   gap: 20px;
   align-items: start;
 }
+@media (max-width: 880px) {
+  .explore-body--with-sidebar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* On narrow viewports collapse the sticky sidebar into the document
+     flow so it doesn't trap the user's scroll. */
+  .mentor-filter-sidebar {
+    position: static;
+  }
+}
 .explore-main {
   min-width: 0;
 }
