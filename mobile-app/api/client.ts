@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
+import { clearBanNotice, storeBanNotice } from '../utils/banNotice';
 
 const apiClient = axios.create({
   baseURL: 'http://192.168.37.177:8080/api',
@@ -26,6 +27,7 @@ apiClient.interceptors.request.use(
 );
 
 let isRedirectingToLogin = false;
+let isRedirectingToBlocked = false;
 
 apiClient.interceptors.response.use(
   (response) => response,
@@ -34,14 +36,38 @@ apiClient.interceptors.response.use(
     const url = error?.config?.url ?? '';
     const method = error?.config?.method?.toUpperCase();
     const data = error?.response?.data;
-    console.error(`[apiClient] ${method} ${url} → ${status}`, JSON.stringify(data));
+    const isExpectedBanResponse = status === 403 && data?.code === 'BANNED_UNTIL';
+    const logLine = `[apiClient] ${method} ${url} → ${status}`;
+    if (isExpectedBanResponse) {
+      console.warn(logLine, JSON.stringify(data));
+    } else {
+      console.error(logLine, JSON.stringify(data));
+    }
+
+    if (isExpectedBanResponse && !isRedirectingToBlocked) {
+      isRedirectingToBlocked = true;
+      await Promise.all([
+        SecureStore.deleteItemAsync('userToken'),
+        SecureStore.deleteItemAsync('userId'),
+        SecureStore.deleteItemAsync('userRole'),
+        storeBanNotice({
+          reason: typeof data?.reason === 'string' ? data.reason : null,
+          expiresAt: typeof data?.expiresAt === 'string' ? data.expiresAt : null,
+        }),
+      ]);
+      router.replace('/blocked');
+      setTimeout(() => { isRedirectingToBlocked = false; }, 3000);
+    }
 
     // Token yoksa ya da süresi dolduysa otomatik çıkış yap
     if (status === 401 && !url.includes('/auth/') && !isRedirectingToLogin) {
       isRedirectingToLogin = true;
-      await SecureStore.deleteItemAsync('userToken');
-      await SecureStore.deleteItemAsync('userId');
-      await SecureStore.deleteItemAsync('userRole');
+      await Promise.all([
+        SecureStore.deleteItemAsync('userToken'),
+        SecureStore.deleteItemAsync('userId'),
+        SecureStore.deleteItemAsync('userRole'),
+        clearBanNotice(),
+      ]);
       router.replace('/onboarding');
       setTimeout(() => { isRedirectingToLogin = false; }, 3000);
     }
