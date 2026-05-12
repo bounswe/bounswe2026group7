@@ -140,34 +140,39 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
         </div>
       )}
 
-      {mentor.bio && <p className="match-bio">{mentor.bio}</p>}
-
-      {/* #286: Expandable Explanation section */}
+      {/* #286: Explanation & Factors Box */}
       {(mentor.explanation || factorChips.length > 0) && (
         <div className="match-explanation-box">
           {mentor.explanation && (
             <p className="match-explanation-prose">“{mentor.explanation}”</p>
           )}
-          
-          <button className="match-factors-toggle" onClick={() => setExpanded(!expanded)}>
-            {expanded ? 'Hide details' : 'Why this match?'}
-            <svg 
-              width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
-              style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
 
-          {expanded && factorChips.length > 0 && (
-            <ul className="match-factors-list">
-              {factorChips.map((f, i) => (
-                <li key={i} className="match-factor-item">
-                  <span className="match-factor-bullet" />
-                  {f.label}
-                </li>
-              ))}
-            </ul>
+          {factorChips.length > 0 && (
+            <>
+              <button 
+                className="match-factors-toggle" 
+                onClick={() => setExpanded(!expanded)}
+              >
+                {expanded ? 'Hide factors' : 'Show factors'}
+                <svg 
+                  width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+                  style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', marginLeft: '6px' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              
+              {expanded && (
+                <ul className="match-factors-list">
+                  {factorChips.map((f, i) => (
+                    <li key={i} className="match-factor-item">
+                      <span className="match-factor-bullet" />
+                      {f.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
       )}
@@ -288,10 +293,17 @@ export default function ExplorePage() {
     setAiState('loading')
     try {
       const data = await getMatchingMentors(null, maxDistance)
-      const list = Array.isArray(data) ? data.slice(0, 5) : []
-      setMatches(list)
+      const list = Array.isArray(data) ? data : []
+      
+      // #286: Client-side filter as fallback for unpaginated backend
+      const filtered = maxDistance < 500
+        ? list.filter(m => m.distanceKm == null || m.distanceKm <= maxDistance)
+        : list
+
+      setMatches(filtered.slice(0, 5))
       setAiState('done')
       setShowMatches(true)
+      
       // #286: Safer scroll into view
       if (matchSectionRef.current) {
         const ref = matchSectionRef.current
@@ -300,7 +312,6 @@ export default function ExplorePage() {
         }, 100)
       }
     } catch (err) {
-      console.error('AI Match Error:', err)
       setAiState('idle')
     }
   }

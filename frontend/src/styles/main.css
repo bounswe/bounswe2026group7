@@ -4335,6 +4335,33 @@
   text-decoration: underline;
 }
 
+.match-diverse-badge-premium {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.15), rgba(16, 185, 129, 0.1));
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 15px rgba(52, 211, 153, 0.1);
+  z-index: 2;
+}
+
+.match-explanation-prose {
+  margin: 0 0 10px 0;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  line-height: 1.5;
+  font-style: italic;
+  opacity: 0.9;
+}
+
 .match-factors-list {
   list-style: none;
   padding: 0;
