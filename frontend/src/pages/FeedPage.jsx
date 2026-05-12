@@ -144,6 +144,25 @@ export default function FeedPage() {
       if (activeSearch || loading) return
       setNewPostsCount(c => c + 1)
     },
+    // #563: patch like / comment / share counts on visible posts in place.
+    // Counts are authoritative (not deltas), so we overwrite — a missed
+    // frame self-heals on the next received one.
+    onEngagement: (payload) => {
+      setPosts(prev => {
+        let changed = false
+        const next = prev.map(p => {
+          if (String(p.id) !== String(payload.postId)) return p
+          changed = true
+          return {
+            ...p,
+            likeCount: payload.likeCount,
+            commentCount: payload.commentCount,
+            shareCount: payload.shareCount,
+          }
+        })
+        return changed ? next : prev
+      })
+    },
   })
 
   // #356: mark the feed read whenever the page loads with results. Cheap on
