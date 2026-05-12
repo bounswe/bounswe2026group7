@@ -82,10 +82,16 @@ export async function resetPassword({ token, newPassword }) {
   return handleResponse(res)
 }
 
-export async function getMatchingMentors(keyword) {
-  const url = keyword
-    ? `${BASE_URL}/matching/mentors/all?keyword=${encodeURIComponent(keyword)}`
+export async function getMatchingMentors(keyword, maxDistanceKm) {
+  const params = new URLSearchParams()
+  if (keyword) params.set('keyword', keyword)
+  if (maxDistanceKm != null) params.set('maxDistanceKm', maxDistanceKm)
+  
+  const queryString = params.toString()
+  const url = queryString 
+    ? `${BASE_URL}/matching/mentors/all?${queryString}`
     : `${BASE_URL}/matching/mentors/all`
+    
   const res = await fetch(url, { headers: authHeaders() })
   return handleResponse(res)
 }

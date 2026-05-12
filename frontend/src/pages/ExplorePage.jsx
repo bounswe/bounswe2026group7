@@ -79,6 +79,7 @@ function ScoreRing({ score, animate }) {
 // ── Match card (dark, animated) ───────────────────────────────────────────────
 function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequest, onViewProfile }) {
   const [scoreAnimate, setScoreAnimate] = useState(false)
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     if (visible) {
@@ -97,6 +98,10 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
   const isDiversePick = rawFactors.includes('diverse-pick')
   const factorChips = rawFactors.map(formatFactor).filter(Boolean)
 
+  // #286: Conditional distance rendering
+  const hasDistance = mentor.distanceKm != null && !isNaN(mentor.distanceKm)
+  const distanceStr = hasDistance ? `${mentor.distanceKm.toFixed(1)} km away` : null
+
   return (
     <div
       className="match-card"
@@ -107,16 +112,7 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
     >
       <div className="match-rank">#{rank + 1}</div>
       {isDiversePick && (
-        <span
-          className="match-diverse-pick"
-          title="Surfaced outside your primary goal for diversity"
-          style={{
-            position: 'absolute', top: 12, right: 12,
-            background: 'linear-gradient(135deg,#f59e0b,#ec4899)',
-            color: '#fff', fontSize: 10, fontWeight: 700,
-            padding: '3px 8px', borderRadius: 999, letterSpacing: 0.3,
-          }}
-        >
+        <span className="match-diverse-badge-premium" title="Surfaced outside your primary goal for diversity">
           Diverse pick
         </span>
       )}
@@ -126,6 +122,14 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
         <div className="match-header-info">
           <p className="match-name">{mentor.firstName}</p>
           <p className="match-role">{[mentor.expertise, mentor.affiliation].filter(Boolean).join(' · ')}</p>
+          {(mentor.city || hasDistance) && (
+            <div className="match-location-tag">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
+              </svg>
+              {[mentor.city, distanceStr].filter(Boolean).join(' · ')}
+            </div>
+          )}
         </div>
         <ScoreRing score={mentor.matchScore ?? 0} animate={scoreAnimate} />
       </div>
@@ -138,24 +142,37 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
 
       {mentor.bio && <p className="match-bio">{mentor.bio}</p>}
 
-      {factorChips.length > 0 && (
-        <div className="match-factors" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-          {factorChips.map((f, i) => (
-            <span
-              key={`${f.kind}-${f.label}-${i}`}
-              className={`match-factor match-factor--${f.kind}`}
-              style={{
-                fontSize: 11, fontWeight: 600, padding: '3px 8px',
-                borderRadius: 999, ...FACTOR_STYLES[f.kind],
-              }}
+      {/* #286: Expandable Explanation section */}
+      {(mentor.explanation || factorChips.length > 0) && (
+        <div className="match-explanation-box">
+          {mentor.explanation && (
+            <p className="match-explanation-prose">“{mentor.explanation}”</p>
+          )}
+          
+          <button className="match-factors-toggle" onClick={() => setExpanded(!expanded)}>
+            {expanded ? 'Hide details' : 'Why this match?'}
+            <svg 
+              width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+              style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
             >
-              {f.label}
-            </span>
-          ))}
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+
+          {expanded && factorChips.length > 0 && (
+            <ul className="match-factors-list">
+              {factorChips.map((f, i) => (
+                <li key={i} className="match-factor-item">
+                  <span className="match-factor-bullet" />
+                  {f.label}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
-      <div className="match-actions">
+      <div className="match-actions" style={{ marginTop: 16 }}>
         <button
           className={`match-btn-primary${alreadySent ? ' match-btn--sent' : ''}${locked ? ' match-btn--locked' : ''}`}
           disabled={btnDisabled}
@@ -221,6 +238,7 @@ export default function ExplorePage() {
   const [modalError, setModalError] = useState('')
   const [aiState, setAiState] = useState('idle') // idle | loading | done
   const [showMatches, setShowMatches] = useState(false)
+  const [maxDistance, setMaxDistance] = useState(500) // #286: default 500km
   const matchSectionRef = useRef(null)
 
   useEffect(() => {
@@ -269,7 +287,7 @@ export default function ExplorePage() {
     }
     setAiState('loading')
     try {
-      const data = await getMatchingMentors()
+      const data = await getMatchingMentors(null, maxDistance)
       const list = Array.isArray(data) ? data.slice(0, 5) : []
       setMatches(list)
       setAiState('done')
@@ -387,6 +405,26 @@ export default function ExplorePage() {
           />
         </div>
       </div>
+
+      {isMentee && !hasActiveMentor && (
+        <div className="proximity-filter">
+          <div className="proximity-label">
+            <span className="proximity-title">Proximity Filter</span>
+            <span className="proximity-value">Within {maxDistance === 500 ? 'Any' : `${maxDistance} km`}</span>
+          </div>
+          <div className="proximity-slider-wrap">
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>0</span>
+            <input 
+              type="range" 
+              className="proximity-slider"
+              min="0" max="500" step="10"
+              value={maxDistance}
+              onChange={(e) => setMaxDistance(parseInt(e.target.value))}
+            />
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>500+</span>
+          </div>
+        </div>
+      )}
 
       <div className="chips">
         {FILTERS.map(f => (
