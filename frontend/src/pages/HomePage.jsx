@@ -7,6 +7,7 @@ import {
   rejectMentorshipRequest,
   getActiveMentorships,
   getUserById,
+  getMentorshipProgress,
 } from '../services/api'
 import Avatar from '../components/Avatar'
 import { useAuth } from '../context/AuthContext'
@@ -41,6 +42,12 @@ export default function HomePage() {
   const [hasActiveMentor, setHasActiveMentor] = useState(false)
   const [activeMentorship, setActiveMentorship] = useState(null)
   const [activeMentorPhoto, setActiveMentorPhoto] = useState(null)
+  // #469: hero progress comes from the same /progress endpoint as the detail
+  // page so the two surfaces agree. progressRatio is the goal-completion
+  // ratio (tasks + milestones), not elapsed-time — the old date-based
+  // calculation showed 0% at the start of an active mentorship while the
+  // detail page already showed milestone-driven completion.
+  const [activeProgress, setActiveProgress] = useState(null)
   const [menteeLoading, setMenteeLoading] = useState(true)
 
   const [acceptingId, setAcceptingId] = useState(null)   // request being accepted
@@ -65,6 +72,7 @@ export default function HomePage() {
             setActiveMentorship(active)
             setHasActiveMentor(true)
             getUserById(active.mentorId).then(p => setActiveMentorPhoto(p?.profilePhoto || null)).catch(() => {})
+            getMentorshipProgress(active.id).then(setActiveProgress).catch(() => {})
           }
         }
         if (matchData.status === 'rejected') {
@@ -161,10 +169,12 @@ export default function HomePage() {
             const start = new Date(activeMentorship.startDate)
             const end = new Date(activeMentorship.endDate)
             const now = new Date()
-            const totalMs = end - start
-            const elapsedMs = Math.min(now - start, totalMs)
-            const progress = Math.round((elapsedMs / totalMs) * 100)
-            const daysLeft = Math.max(0, Math.ceil((end - now) / 86400000))
+            const progress = activeProgress
+              ? Math.round((activeProgress.progressRatio || 0) * 100)
+              : null
+            const daysLeft = activeProgress
+              ? Number(activeProgress.daysRemaining ?? 0)
+              : Math.max(0, Math.ceil((end - now) / 86400000))
             return (
               <div className="active-mentorship-hero">
                 <div className="amh-glow" />
@@ -197,9 +207,11 @@ export default function HomePage() {
                     <span>{daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining</span>
                   </div>
                   <div className="amh-progress-track">
-                    <div className="amh-progress-fill" style={{ width: `${progress}%` }} />
+                    <div className="amh-progress-fill" style={{ width: `${progress ?? 0}%` }} />
                   </div>
-                  <div className="amh-progress-pct">{progress}% complete</div>
+                  <div className="amh-progress-pct">
+                    {progress == null ? 'Loading progress…' : `${progress}% complete`}
+                  </div>
                 </div>
 
                 <div className="amh-actions">
