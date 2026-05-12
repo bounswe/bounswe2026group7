@@ -50,7 +50,7 @@ apiClient.interceptors.response.use(
     const logLine = `[apiClient] ${method} ${url} → ${status}`;
     if (isExpectedBanResponse) {
       console.warn(logLine, JSON.stringify(data));
-    } else {
+    } else if (!error?.config?.silent) {
       console.error(logLine, JSON.stringify(data));
     }
 
