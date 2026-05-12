@@ -107,6 +107,10 @@ public class UserNotificationPreferences {
             case MENTORSHIP_ENDED, MENTORSHIP_EXTENDED, MENTORSHIP_AUTO_COMPLETED -> true;
             case FEED_LIKE, FEED_COMMENT, FEED_SHARE -> feedEngagementEnabled;
             case NEW_FOLLOWER -> newFollowerEnabled;
+            // Admin-routed report fan-out — operational signal admins cannot
+            // opt out of. The fan-out itself only targets admin accounts, so
+            // there's no user-side preference to respect.
+            case REPORT_RECEIVED -> true;
         };
     }
 }

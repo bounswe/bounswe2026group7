@@ -16,7 +16,15 @@
 
         <logger name="com.group7.backend" level="DEBUG"/>
         <logger name="org.hibernate.SQL" level="DEBUG"/>
-        <logger name="org.hibernate.orm.jdbc.bind" level="TRACE"/>
+        <!--
+          org.hibernate.orm.jdbc.bind is intentionally NOT set to TRACE here.
+          That logger emits every JDBC parameter value (e.g. Report.description,
+          FeedPost.body, Message bodies, user-generated content), conflicting
+          with entity-level audit-logging discipline (see Report.java Javadoc:
+          "description ... MUST NOT be logged at any level"). Devs who need
+          parameter bindings for a specific debugging session can override at
+          runtime: `-Dlogging.level.org.hibernate.orm.jdbc.bind=TRACE`.
+        -->
 
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>

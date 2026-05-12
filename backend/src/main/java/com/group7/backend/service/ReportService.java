@@ -1,0 +1,246 @@
+package com.group7.backend.service;
+
+import com.group7.backend.dto.request.CreateReportRequest;
+import com.group7.backend.dto.response.ReportResponse;
+import com.group7.backend.entity.Mentorship;
+import com.group7.backend.entity.Report;
+import com.group7.backend.entity.ReportStatus;
+import com.group7.backend.entity.ReportStatusMachine;
+import com.group7.backend.entity.ReportTargetType;
+import com.group7.backend.entity.User;
+import com.group7.backend.exception.DuplicateReportException;
+import com.group7.backend.exception.InvalidReportTransitionException;
+import com.group7.backend.exception.ReportNotPermittedException;
+import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.event.ReportSubmittedEvent;
+import com.group7.backend.exception.SelfReportException;
+import com.group7.backend.repository.FeedPostRepository;
+import com.group7.backend.repository.MentorshipRepository;
+import com.group7.backend.repository.ReportRepository;
+import com.group7.backend.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.OffsetDateTime;
+
+/**
+ * Service layer for the user-reporting + admin-moderation surface (#135).
+ *
+ * <p>Concerns:
+ * <ul>
+ *   <li><b>Submit</b> ({@link #createReport}) — validates target +
+ *       self-report rule, persists, publishes a single
+ *       {@link ReportSubmittedEvent} for {@code ReportFanoutListener} to
+ *       fan out to admins after commit, returns the slim DTO (no target
+ *       summary).</li>
+ *   <li><b>User-own list</b> ({@link #listMyReports}) — strictly filtered
+ *       by the authenticated reporter id; structurally BOLA-safe.</li>
+ *   <li><b>Admin queue</b> ({@link #listForAdmin} + {@link #getForAdmin}) —
+ *       optional status + target-type filters; admin sees the
+ *       denormalised target summary.</li>
+ *   <li><b>Status transitions</b> ({@link #updateStatus}) — small
+ *       state-machine validating transitions out of OPEN /
+ *       UNDER_REVIEW; terminal RESOLVED / DISMISSED reject any further
+ *       change.</li>
+ * </ul>
+ *
+ * <p><b>Audit-logging discipline (OWASP A09).</b> Every report
+ * submission and every admin transition is logged at INFO with enough
+ * context for forensics (ids + enum types). The free-text
+ * {@code description} field is <b>never</b> logged at any level —
+ * potential PII / sensitive third-party content. Pinned by
+ * {@code ReportServiceTest} via a Logback list-appender.
+ *
+ * <p><b>Concurrent-admin safety.</b> {@code Report.@Version} bumps on
+ * every save, so two admins racing on the same transition will see one
+ * winner; the loser surfaces {@code ObjectOptimisticLockingFailureException}
+ * → 409 via the existing {@code ConcurrencyFailureException} handler.
+ *
+ * <p><b>Duplicate prevention.</b> Layered defence: optional pre-check
+ * for friendly UX is omitted (extra DB read for marginal gain) — the
+ * {@code idx_reports_active_unique} partial unique index is the source
+ * of truth. The catch-and-translate happens here.
+ */
+@Service
+@Transactional(readOnly = true)
+public class ReportService {
+
+    private static final Logger log = LoggerFactory.getLogger(ReportService.class);
+
+    /**
+     * Postgres index name from V27. Used to discriminate the duplicate-
+     * report case from any other {@link DataIntegrityViolationException}
+     * (notably foreign-key violations on a deleted reporter).
+     */
+    private static final String ACTIVE_REPORT_INDEX_NAME = "idx_reports_active_unique";
+
+    private final ReportRepository reportRepository;
+    private final UserRepository userRepository;
+    private final MentorshipRepository mentorshipRepository;
+    private final FeedPostRepository feedPostRepository;
+    private final ReportMapper reportMapper;
+    private final ApplicationEventPublisher applicationEventPublisher;
+
+    public ReportService(ReportRepository reportRepository,
+                         UserRepository userRepository,
+                         MentorshipRepository mentorshipRepository,
+                         FeedPostRepository feedPostRepository,
+                         ReportMapper reportMapper,
+                         ApplicationEventPublisher applicationEventPublisher) {
+        this.reportRepository = reportRepository;
+        this.userRepository = userRepository;
+        this.mentorshipRepository = mentorshipRepository;
+        this.feedPostRepository = feedPostRepository;
+        this.reportMapper = reportMapper;
+        this.applicationEventPublisher = applicationEventPublisher;
+    }
+
+    // ── Submit ──────────────────────────────────────────────────────────────
+
+    @Transactional
+    public ReportResponse createReport(Long reporterId, CreateReportRequest request) {
+        rejectSelfReport(request, reporterId);
+        validateTargetExists(request.targetType(), request.targetId(), reporterId);
+
+        Report report = new Report();
+        report.setReporterId(reporterId);
+        report.setTargetType(request.targetType());
+        report.setTargetId(request.targetId());
+        report.setProblemType(request.problemType());
+        report.setDescription(request.description());
+        report.setStatus(ReportStatus.OPEN);
+        report.setCreatedAt(OffsetDateTime.now());
+
+        Report saved;
+        try {
+            saved = reportRepository.save(report);
+        } catch (DataIntegrityViolationException ex) {
+            // Translate ONLY the partial-unique-index violation to 409.
+            // Other DataIntegrityViolations (e.g. foreign-key violation
+            // when the reporter row was deleted between JWT issuance and
+            // submit) bubble up to the generic 500 — misclassifying them
+            // as duplicates would mislead clients into infinite retries.
+            String causeMsg = ex.getMostSpecificCause().getMessage();
+            if (causeMsg != null && causeMsg.contains(ACTIVE_REPORT_INDEX_NAME)) {
+                log.warn("Duplicate report rejected: reporterId={}, targetType={}, targetId={}",
+                        reporterId, request.targetType(), request.targetId());
+                throw new DuplicateReportException(
+                        "An active report already exists for this target");
+            }
+            log.error("Report persist failed (non-duplicate integrity violation): reporterId={}, targetType={}, targetId={}, cause={}",
+                    reporterId, request.targetType(), request.targetId(), causeMsg);
+            throw ex;
+        }
+
+        // OWASP A09 audit log. Description is intentionally NOT logged
+        // (potential PII / sensitive third-party content).
+        log.info("Report submitted: id={}, reporterId={}, targetType={}, targetId={}, problemType={}",
+                saved.getId(), reporterId, saved.getTargetType(), saved.getTargetId(),
+                saved.getProblemType());
+
+        // Carry reporterFirstName with the event so the AFTER_COMMIT
+        // listener doesn't need to re-fetch the reporter on its async
+        // thread — saves one DB round-trip per fan-out. Null is fine; the
+        // listener falls back to a generic placeholder.
+        String reporterFirstName = userRepository.findById(reporterId)
+                .map(User::getFirstName)
+                .orElse(null);
+        applicationEventPublisher.publishEvent(new ReportSubmittedEvent(
+                saved.getId(), reporterId, reporterFirstName, saved.getTargetType()));
+        return reportMapper.toResponse(saved, false);
+    }
+
+    // ── User-own list ───────────────────────────────────────────────────────
+
+    public Page<ReportResponse> listMyReports(Long reporterId, Pageable pageable) {
+        return reportMapper.toResponses(
+                reportRepository.findByReporterIdOrderByCreatedAtDesc(reporterId, pageable),
+                false);
+    }
+
+    // ── Admin queue ─────────────────────────────────────────────────────────
+
+    public Page<ReportResponse> listForAdmin(ReportStatus status,
+                                              ReportTargetType targetType,
+                                              Pageable pageable) {
+        return reportMapper.toResponses(
+                reportRepository.findForAdminQueue(status, targetType, pageable),
+                true);
+    }
+
+    public ReportResponse getForAdmin(Long reportId) {
+        Report r = reportRepository.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Report not found with id: " + reportId));
+        return reportMapper.toResponse(r, true);
+    }
+
+    // ── Status transitions ──────────────────────────────────────────────────
+
+    @Transactional
+    public ReportResponse updateStatus(Long reportId, Long adminId, ReportStatus newStatus) {
+        Report r = reportRepository.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Report not found with id: " + reportId));
+        ReportStatus from = r.getStatus();
+        validateTransition(from, newStatus);
+
+        r.setStatus(newStatus);
+        r.setReviewedAt(OffsetDateTime.now());
+        r.setReviewedById(adminId);
+        Report saved = reportRepository.save(r);   // @Version bumps; concurrent → 409
+
+        log.info("Report transitioned: id={}, adminId={}, from={}, to={}",
+                saved.getId(), adminId, from, newStatus);
+        return reportMapper.toResponse(saved, true);
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+
+    private static void rejectSelfReport(CreateReportRequest request, Long reporterId) {
+        if (request.targetType() == ReportTargetType.USER
+                && reporterId.equals(request.targetId())) {
+            throw new SelfReportException("Users cannot report themselves");
+        }
+    }
+
+    private void validateTargetExists(ReportTargetType type, Long targetId, Long reporterId) {
+        switch (type) {
+            case USER -> {
+                if (!userRepository.existsById(targetId)) {
+                    throw new ResourceNotFoundException("User not found with id: " + targetId);
+                }
+            }
+            case MENTORSHIP -> {
+                Mentorship m = mentorshipRepository.findById(targetId)
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Mentorship not found with id: " + targetId));
+                boolean isParticipant =
+                        m.getMentor().getId().equals(reporterId)
+                                || m.getMentee().getId().equals(reporterId);
+                if (!isParticipant) {
+                    throw new ReportNotPermittedException(
+                            "Reporter is not a participant of this mentorship");
+                }
+            }
+            case POST -> {
+                if (feedPostRepository.findByIdAndDeletedAtIsNull(targetId).isEmpty()) {
+                    throw new ResourceNotFoundException(
+                            "Feed post not found with id: " + targetId);
+                }
+            }
+        }
+    }
+
+    private static void validateTransition(ReportStatus from, ReportStatus to) {
+        if (!ReportStatusMachine.canTransition(from, to)) {
+            throw new InvalidReportTransitionException(from, to);
+        }
+    }
+}
