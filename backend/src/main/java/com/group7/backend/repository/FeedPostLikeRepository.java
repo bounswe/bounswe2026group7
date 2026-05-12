@@ -47,4 +47,21 @@ public interface FeedPostLikeRepository extends JpaRepository<FeedPostLike, Feed
             GROUP BY l.id.postId
             """)
     List<PostCountTuple> countByPostIdIn(@Param("postIds") Collection<Long> postIds);
+
+    /**
+     * Returns the subset of {@code postIds} that the given viewer has
+     * liked. One round-trip — feeds the {@code viewerHasLiked} flag on
+     * {@link com.group7.backend.dto.response.FeedPostResponse} without
+     * N+1 existence checks per post. Empty result for anonymous viewers
+     * (caller guards on {@code viewerId == null}). Hits the composite PK
+     * index {@code (post_id, user_id)} so it's index-only and bounded by
+     * the candidate page size, not by the user's total like count.
+     */
+    @Query("""
+            SELECT l.id.postId FROM FeedPostLike l
+            WHERE l.id.userId = :viewerId
+              AND l.id.postId IN :postIds
+            """)
+    List<Long> findLikedPostIdsByViewer(@Param("viewerId") Long viewerId,
+                                        @Param("postIds") Collection<Long> postIds);
 }

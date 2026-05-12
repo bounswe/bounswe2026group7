@@ -801,6 +801,8 @@ class FeedReadIntegrationTest {
         Long sharedBy1 = objectMapper.readTree(page1.getResponse().getContentAsString())
                 .get("content").get(0).get("sharedById").asLong();
         assertThat(java.util.Set.of(sharedBy0, sharedBy1)).containsExactlyInAnyOrder(s1, s2);
+    }
+
     // ── Search filters: date range and language ─────────────────────────────
 
     @Test
