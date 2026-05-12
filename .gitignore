@@ -34,3 +34,5 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 .env
+# Local issue/PR scaffolding (claude-generated drafts)
+claude_files/
