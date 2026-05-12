@@ -95,9 +95,27 @@ export async function resetPassword({ token, newPassword }) {
   return handleResponse(res)
 }
 
-export async function getMatchingMentors(keyword) {
-  const url = keyword
-    ? `${BASE_URL}/matching/mentors/all?keyword=${encodeURIComponent(keyword)}`
+// #139 / backend #571: matching/mentors/all accepts a bunch of optional
+// filters. Keyword stays positional for backward compatibility with the
+// existing call sites that pass just a string. Extra filters go into the
+// second options object so adding more never grows the signature again.
+export async function getMatchingMentors(keyword, options = {}) {
+  const params = new URLSearchParams()
+  if (keyword) params.set('keyword', keyword)
+  const { maxDistanceKm, availabilityDays, mentorshipDuration, minMatchScore } = options
+  if (maxDistanceKm != null) params.set('maxDistanceKm', String(maxDistanceKm))
+  // Sets are serialised as repeated keys (?availabilityDays=MONDAY&availabilityDays=TUESDAY)
+  // which Spring binds into a Set<DayOfWeek> via its standard collection binder.
+  if (Array.isArray(availabilityDays)) {
+    for (const d of availabilityDays) if (d) params.append('availabilityDays', d)
+  }
+  if (Array.isArray(mentorshipDuration)) {
+    for (const n of mentorshipDuration) if (n != null) params.append('mentorshipDuration', String(n))
+  }
+  if (minMatchScore != null) params.set('minMatchScore', String(minMatchScore))
+  const qs = params.toString()
+  const url = qs
+    ? `${BASE_URL}/matching/mentors/all?${qs}`
     : `${BASE_URL}/matching/mentors/all`
   const res = await fetch(url, { headers: authHeaders() })
   return handleResponse(res)
