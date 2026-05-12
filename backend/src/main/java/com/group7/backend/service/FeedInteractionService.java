@@ -219,7 +219,11 @@ public class FeedInteractionService {
                     p.getCreatedAt(),
                     likeCount,
                     commentCount,
-                    List.of()
+                    List.of(),
+                    null,   // sharedById — bookmarks are user-scoped, not a repost surface
+                    null,   // sharedByFirstName
+                    null,   // shareCommentary
+                    null    // sharedAt
             );
         }).toList();
         return new PageImpl<>(items, pageable, postIds.getTotalElements());

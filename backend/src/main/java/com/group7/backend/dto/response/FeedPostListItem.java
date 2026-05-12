@@ -50,6 +50,27 @@ public record FeedPostListItem(
                 + "Codes from the advanced ranker are namespaced with a `feed:` prefix; the "
                 + "frontend strips the prefix and maps each code to a localized chip.",
                 example = "[\"feed:semantic-match:0.82\", \"feed:fresh\", \"feed:follow-boost\"]")
-        List<String> factors
+        List<String> factors,
+
+        @Schema(description = "User id of the follower who reposted this post into the viewer's "
+                + "Following feed. Null when the row originates from the post's own author "
+                + "(i.e., not a repost surface).",
+                nullable = true, example = "42")
+        Long sharedById,
+
+        @Schema(description = "First name of the reposting follower, denormalised for the UI. "
+                + "Null on non-repost rows.",
+                nullable = true, example = "Ada")
+        String sharedByFirstName,
+
+        @Schema(description = "Quote-share commentary; null on bare reposts and on non-repost rows.",
+                nullable = true, example = "Great take — fully agree.")
+        String shareCommentary,
+
+        @Schema(description = "Server-side timestamp of the repost (feed_post_shares.created_at). "
+                + "Used by the UI to render \"reposted N minutes ago\" alongside the post's own "
+                + "createdAt. Null on non-repost rows.",
+                nullable = true)
+        OffsetDateTime sharedAt
 ) {
 }
