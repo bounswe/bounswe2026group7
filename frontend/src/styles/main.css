@@ -3218,6 +3218,35 @@
 .md-primary-btn { background: var(--green-dark); }
 .md-primary-btn:hover:not(:disabled) { background: var(--green-mid); }
 
+/* Extend-mentorship 1/3/6 month picker (#276). */
+.md-extend-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+.md-extend-option {
+  padding: 12px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.md-extend-option:hover:not(:disabled) {
+  border-color: var(--green-mid);
+}
+.md-extend-option--active {
+  border-color: var(--green-dark);
+  background: var(--green-pale);
+  color: var(--green-dark);
+}
+.md-extend-option:disabled { opacity: 0.5; cursor: not-allowed; }
+
 @media (max-width: 720px) {
   .md-stats-row { grid-template-columns: repeat(2, 1fr); }
   .md-hero { flex-wrap: wrap; }

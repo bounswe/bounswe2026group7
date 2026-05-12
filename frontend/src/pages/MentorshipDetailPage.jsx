@@ -11,6 +11,7 @@ import {
   updateSharedGoal,
   cancelMentorship,
   endMentorship,
+  extendMentorship,
   listMentorshipMeetings,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -156,6 +157,95 @@ function EndMentorshipModal({ open, onClose, onConfirm, loading, otherName }) {
             disabled={loading}
           >
             {loading ? 'Ending…' : 'End Mentorship'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Mentor-side extension modal (#276 / 1.1.1.2.13). Backend requires
+ * additionalMonths ∈ {1, 3, 6}; we render the choice as a 3-up segmented
+ * picker rather than a free-form input so we never send an invalid value.
+ */
+function ExtendMentorshipModal({ open, onClose, onConfirm, loading, otherName, currentEndDate }) {
+  const overlayRef = useRef(null)
+  const [months, setMonths] = useState(3)
+
+  useEffect(() => {
+    if (open) setMonths(3)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose, loading])
+
+  if (!open) return null
+
+  const projectedEnd = currentEndDate
+    ? (() => {
+        const d = new Date(currentEndDate)
+        if (isNaN(d.getTime())) return null
+        d.setMonth(d.getMonth() + months)
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+      })()
+    : null
+
+  return (
+    <div
+      className="modal-overlay"
+      ref={overlayRef}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
+    >
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="extendMentorshipTitle">
+        <div className="modal-header">
+          <div>
+            <h2 id="extendMentorshipTitle">Extend mentorship?</h2>
+            <p className="modal-subtitle">
+              Push the end date of your mentorship with {otherName || 'this mentee'} forward.
+              Your mentee will be notified.
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>
+          Add to current end date
+        </label>
+        <div className="md-extend-options">
+          {[1, 3, 6].map(m => (
+            <button
+              key={m}
+              type="button"
+              className={`md-extend-option${months === m ? ' md-extend-option--active' : ''}`}
+              onClick={() => setMonths(m)}
+              disabled={loading}
+              aria-pressed={months === m}
+            >
+              +{m} month{m !== 1 ? 's' : ''}
+            </button>
+          ))}
+        </div>
+
+        {projectedEnd && (
+          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '12px' }}>
+            New end date: <strong style={{ color: 'var(--text)' }}>{projectedEnd}</strong>
+          </div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
+          <button
+            type="button"
+            className="modal-btn-primary"
+            onClick={() => onConfirm(months)}
+            disabled={loading}
+          >
+            {loading ? 'Extending…' : `Extend by ${months} month${months !== 1 ? 's' : ''}`}
           </button>
         </div>
       </div>
@@ -355,6 +445,9 @@ export default function MentorshipDetailPage() {
   const [endOpen, setEndOpen] = useState(false)
   const [endLoading, setEndLoading] = useState(false)
   const [endError, setEndError] = useState(null)
+  const [extendOpen, setExtendOpen] = useState(false)
+  const [extendLoading, setExtendLoading] = useState(false)
+  const [extendError, setExtendError] = useState(null)
 
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
@@ -422,6 +515,21 @@ export default function MentorshipDetailPage() {
       setEndError(err?.message || 'Failed to end mentorship')
     } finally {
       setEndLoading(false)
+    }
+  }
+
+  async function handleExtendConfirm(additionalMonths) {
+    setExtendLoading(true)
+    setExtendError(null)
+    try {
+      const updated = await extendMentorship(mentorship.id, additionalMonths)
+      setMentorship(updated)
+      setExtendOpen(false)
+      refresh()
+    } catch (err) {
+      setExtendError(err?.message || 'Failed to extend mentorship')
+    } finally {
+      setExtendLoading(false)
     }
   }
 
@@ -725,6 +833,16 @@ export default function MentorshipDetailPage() {
         >
           My Tasks
         </button>
+        {viewerIsMentor && (
+          <button
+            className="md-action-btn"
+            onClick={() => setExtendOpen(true)}
+            disabled={!isActive}
+            title={isActive ? 'Add 1, 3, or 6 months to the end date' : 'This mentorship has already ended'}
+          >
+            Extend Duration
+          </button>
+        )}
         {viewerIsMentor ? (
           <button
             className="md-action-btn md-action-danger"
@@ -759,6 +877,22 @@ export default function MentorshipDetailPage() {
           <div className="md-error-sub">{endError}</div>
         </div>
       )}
+
+      {extendError && (
+        <div className="md-error-card" style={{ marginTop: '12px' }}>
+          <div className="md-error-title">Couldn’t extend mentorship</div>
+          <div className="md-error-sub">{extendError}</div>
+        </div>
+      )}
+
+      <ExtendMentorshipModal
+        open={extendOpen}
+        onClose={() => !extendLoading && setExtendOpen(false)}
+        onConfirm={handleExtendConfirm}
+        loading={extendLoading}
+        otherName={displayName || otherFirstName}
+        currentEndDate={mentorship.endDate}
+      />
 
       <EndMentorshipModal
         open={endOpen}
