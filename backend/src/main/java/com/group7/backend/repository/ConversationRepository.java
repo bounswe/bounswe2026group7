@@ -65,4 +65,25 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
      * matches and the query is constant-time.
      */
     Optional<Conversation> findFirstByKind(ConversationKind kind);
+
+    /**
+     * Page of ADMIN_DIRECT conversations the given user participates in,
+     * ordered by most-recent activity (NULLS LAST) with a deterministic
+     * tiebreaker on {@code c.id}. Mirrors the mentor-pair query above and
+     * uses the same participant-junction lookup so the same
+     * {@code idx_conversation_participants_user} index serves both kinds.
+     */
+    @Query(
+            value = "SELECT c FROM Conversation c "
+                    + "JOIN ConversationParticipant cp ON cp.conversation = c "
+                    + "WHERE cp.user.id = :userId "
+                    + "AND c.kind = com.group7.backend.entity.ConversationKind.ADMIN_DIRECT "
+                    + "ORDER BY (SELECT MAX(m.sentAt) FROM Message m WHERE m.conversation = c) DESC NULLS LAST, "
+                    + "c.id DESC",
+            countQuery = "SELECT COUNT(c) FROM Conversation c "
+                    + "WHERE c.kind = com.group7.backend.entity.ConversationKind.ADMIN_DIRECT "
+                    + "AND EXISTS (SELECT 1 FROM ConversationParticipant cp "
+                    + "WHERE cp.conversation = c AND cp.user.id = :userId)")
+    Page<Conversation> findAdminDirectConversationsForUserOrderedByLastMessage(
+            @Param("userId") Long userId, Pageable pageable);
 }

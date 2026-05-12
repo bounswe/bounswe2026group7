@@ -353,4 +353,86 @@ class ConversationServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("transaction isolation");
     }
+
+    // ── findAdminDirectByPair ──────────────────────────────────────────────
+
+    @Test
+    void findAdminDirectByPair_selfPair_returnsEmpty() {
+        assertThat(conversationService.findAdminDirectByPair(5L, 5L)).isEmpty();
+        verify(conversationRepository, never())
+                .findByPairAIdAndPairBIdAndKind(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void findAdminDirectByPair_nullSide_returnsEmpty() {
+        assertThat(conversationService.findAdminDirectByPair(null, 5L)).isEmpty();
+        assertThat(conversationService.findAdminDirectByPair(5L, null)).isEmpty();
+        verify(conversationRepository, never())
+                .findByPairAIdAndPairBIdAndKind(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void findAdminDirectByPair_normalisesPairOrderingBeforeLookup() {
+        Conversation existing = new Conversation();
+        existing.setId(800L);
+        when(conversationRepository.findByPairAIdAndPairBIdAndKind(
+                3L, 7L, ConversationKind.ADMIN_DIRECT))
+                .thenReturn(Optional.of(existing));
+
+        // Calling with high-then-low; service must swap to (3, 7) on lookup.
+        Optional<Conversation> result = conversationService.findAdminDirectByPair(7L, 3L);
+
+        assertThat(result).containsSame(existing);
+    }
+
+    // ── findAdminBroadcastForReader ────────────────────────────────────────
+
+    @Test
+    void findAdminBroadcastForReader_noSingleton_returnsEmpty_withoutCreating() {
+        when(conversationRepository.findFirstByKind(ConversationKind.ADMIN_BROADCAST))
+                .thenReturn(Optional.empty());
+
+        assertThat(conversationService.findAdminBroadcastForReader(99L)).isEmpty();
+
+        // No participant probe, no sync — pure read short-circuit.
+        verify(participantRepository, never())
+                .existsByConversationIdAndUserId(anyLong(), anyLong());
+        verify(conversationCreator, never()).createForAdminBroadcastInNewTx(any());
+    }
+
+    @Test
+    void findAdminBroadcastForReader_callerAlreadyParticipant_skipsSync() {
+        Conversation broadcast = new Conversation();
+        broadcast.setId(7000L);
+        broadcast.setKind(ConversationKind.ADMIN_BROADCAST);
+        when(conversationRepository.findFirstByKind(ConversationKind.ADMIN_BROADCAST))
+                .thenReturn(Optional.of(broadcast));
+        when(participantRepository.existsByConversationIdAndUserId(7000L, 99L))
+                .thenReturn(true);
+
+        Optional<Conversation> result = conversationService.findAdminBroadcastForReader(99L);
+
+        assertThat(result).containsSame(broadcast);
+        // Common path: one probe, no findAllAdmins call.
+        verify(userRepository, never()).findAllAdmins();
+    }
+
+    @Test
+    void findAdminBroadcastForReader_callerMissing_runsFullSync() {
+        Conversation broadcast = new Conversation();
+        broadcast.setId(7000L);
+        broadcast.setKind(ConversationKind.ADMIN_BROADCAST);
+        when(conversationRepository.findFirstByKind(ConversationKind.ADMIN_BROADCAST))
+                .thenReturn(Optional.of(broadcast));
+        when(participantRepository.existsByConversationIdAndUserId(7000L, 99L))
+                .thenReturn(false);
+        // The sync inside the service iterates findAllAdmins(); stub an empty list
+        // so we don't have to mock per-admin existsBy/addParticipant calls.
+        when(userRepository.findAllAdmins()).thenReturn(java.util.List.of());
+
+        Optional<Conversation> result = conversationService.findAdminBroadcastForReader(99L);
+
+        assertThat(result).containsSame(broadcast);
+        verify(userRepository).findAllAdmins();
+    }
 }
