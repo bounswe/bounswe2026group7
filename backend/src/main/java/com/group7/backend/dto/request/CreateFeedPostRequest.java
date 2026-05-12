@@ -4,6 +4,7 @@ import com.group7.backend.dto.feed.FeedPostLimits;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
@@ -38,6 +39,11 @@ public record CreateFeedPostRequest(
                 + "creates a text-only post.",
                 example = "[\"5b9c1f0a-2c2c-4cf2-8f1d-9d4f1a0e6b5e\"]")
         @Size(max = 4, message = "A post can carry at most 4 attachments")
-        List<@NotNull UUID> attachmentIds
+        List<@NotNull UUID> attachmentIds,
+
+        @Schema(description = "Optional BCP-47 language tag (e.g. \"en\", \"tr-TR\"). Used by the search endpoint's lang filter.",
+                example = "en", nullable = true)
+        @Pattern(regexp = "^[a-z]{2,3}(-[A-Z]{2})?$", message = "lang must be a BCP-47 short tag like 'en' or 'tr-TR'")
+        String lang
 ) {
 }

@@ -21,6 +21,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.stream.Collectors;
+
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -72,6 +74,7 @@ public class FeedReadService {
     private final FeedInteractionService feedInteractionService;
     private final Optional<ForYouScoringPipeline> forYouPipeline;
     private final FeedPostMapper feedPostMapper;
+    private final UserKeywordMuteService keywordMuteService;
     private final int candidateWindow;
 
     public FeedReadService(FeedPostRepository feedPostRepository,
@@ -82,6 +85,7 @@ public class FeedReadService {
                            FeedInteractionService feedInteractionService,
                            Optional<ForYouScoringPipeline> forYouPipeline,
                            FeedPostMapper feedPostMapper,
+                           UserKeywordMuteService keywordMuteService,
                            @Value("${app.feed.forYou.candidate-window:200}") int candidateWindow) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
@@ -91,6 +95,7 @@ public class FeedReadService {
         this.feedInteractionService = feedInteractionService;
         this.forYouPipeline = forYouPipeline;
         this.feedPostMapper = feedPostMapper;
+        this.keywordMuteService = keywordMuteService;
         this.candidateWindow = candidateWindow;
     }
 
@@ -160,19 +165,43 @@ public class FeedReadService {
         if (ranked.isEmpty()) {
             return new PageImpl<>(List.of(), pageable, candidates.size());
         }
-        List<FeedPost> rankedPosts = ranked.stream()
+        List<ForYouScoringPipeline.RankedFeedPost> visibleRanked = filterMutedRanked(viewerId, ranked);
+        if (visibleRanked.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, candidates.size());
+        }
+        List<FeedPost> rankedPosts = visibleRanked.stream()
                 .map(ForYouScoringPipeline.RankedFeedPost::post).toList();
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(
                         rankedPosts.stream().map(FeedPost::getId).toList());
-        Map<Long, List<String>> factorsByPostId = ranked.stream()
-                .collect(java.util.stream.Collectors.toMap(
+        Map<Long, List<String>> factorsByPostId = visibleRanked.stream()
+                .collect(Collectors.toMap(
                         r -> r.post().getId(),
                         ForYouScoringPipeline.RankedFeedPost::factors));
         List<FeedPostListItem> items = feedPostMapper.toListItems(
                 rankedPosts, viewerId, counts, factorsByPostId);
         return new PageImpl<>(items, pageable, candidates.size());
     }
+
+    private List<ForYouScoringPipeline.RankedFeedPost> filterMutedRanked(
+            Long viewerId, List<ForYouScoringPipeline.RankedFeedPost> ranked) {
+        if (viewerId == null || ranked.isEmpty()) {
+            return ranked;
+        }
+        List<FeedPost> posts = ranked.stream()
+                .map(ForYouScoringPipeline.RankedFeedPost::post).toList();
+        List<FeedPost> filtered = keywordMuteService.filter(viewerId, posts);
+        if (filtered.size() == posts.size()) {
+            return ranked;
+        }
+        Set<Long> allowedIds = filtered.stream()
+                .map(FeedPost::getId)
+                .collect(Collectors.toSet());
+        return ranked.stream()
+                .filter(r -> allowedIds.contains(r.post().getId()))
+                .toList();
+    }
+
 
     /**
      * Following feed (#350, requirement 1.1.7.4). Chronological over
@@ -187,9 +216,9 @@ public class FeedReadService {
      * Author profile posts feed (#471). Chronological over posts
      * authored by the given user id.
      */
-    public Page<FeedPostListItem> postsByAuthor(Long authorId, Pageable pageable) {
+    public Page<FeedPostListItem> postsByAuthor(Long authorId, Long viewerId, Pageable pageable) {
         Page<FeedPost> page = feedPostRepository.findByAuthorIdForFeed(authorId, pageable);
-        return mapPage(page, null);
+        return mapPage(page, viewerId);
     }
 
     /**
@@ -205,7 +234,13 @@ public class FeedReadService {
      * (e.g., contains spaces) returns no results — the search input is
      * silently treated as not matching anything rather than error.
      */
-    public Page<FeedPostListItem> search(String keyword, String hashtag, Pageable pageable) {
+    public Page<FeedPostListItem> search(String keyword,
+                                          String hashtag,
+                                          OffsetDateTime since,
+                                          OffsetDateTime until,
+                                          String lang,
+                                          Long viewerId,
+                                          Pageable pageable) {
         String normalisedKeyword = (keyword == null || keyword.isBlank())
                 ? null
                 : escapeLikePattern(keyword.trim().toLowerCase(Locale.ROOT));
@@ -216,17 +251,31 @@ public class FeedReadService {
             // for a richer message.
             return Page.empty(pageable);
         }
-        // Reject empty-filter search: returning the full visible feed via the
-        // search endpoint is bug-magnet behaviour (clients fall back to /search
-        // for "show me everything," which masks pagination cost growth as the
-        // post count scales). The For-You and Following endpoints are the
-        // correct surfaces for "no specific filter" reads.
-        if (normalisedKeyword == null && normalisedHashtag == null) {
+        // Reject empty-filter search across ALL filters: returning the full
+        // visible feed via /search is bug-magnet behaviour, and the For-You
+        // / Following endpoints are the correct surfaces for "no specific
+        // filter" reads.
+        if (normalisedKeyword == null && normalisedHashtag == null
+                && since == null && until == null && lang == null) {
             throw new IllegalArgumentException(
-                    "Search requires at least one of 'q' or 'hashtag' — use /api/feed/for-you or /api/feed/following for the full feed");
+                    "Search requires at least one of 'q', 'hashtag', 'since', 'until', or 'lang' — "
+                            + "use /api/feed/for-you or /api/feed/following for the full feed");
         }
-        Page<FeedPost> page = feedPostRepository.searchPosts(normalisedKeyword, normalisedHashtag, pageable);
-        return mapPage(page, null);
+        if (since != null && until != null && !since.isBefore(until)) {
+            throw new IllegalArgumentException("'since' must be strictly before 'until'");
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime windowLow = now.minusYears(10);
+        OffsetDateTime windowHigh = now.plusDays(1);
+        if (since != null && since.isBefore(windowLow)) {
+            throw new IllegalArgumentException("'since' is too far in the past (limit: 10 years)");
+        }
+        if (until != null && until.isAfter(windowHigh)) {
+            throw new IllegalArgumentException("'until' is too far in the future (limit: 1 day)");
+        }
+        Page<FeedPost> page = feedPostRepository.searchPosts(
+                normalisedKeyword, normalisedHashtag, since, until, lang, pageable);
+        return mapPage(page, viewerId);
     }
 
     /**
@@ -298,27 +347,34 @@ public class FeedReadService {
 
     /**
      * Maps a JPA {@link Page} of posts into list-item DTOs while preserving
-     * pagination metadata. Delegates DTO assembly to {@link FeedPostMapper}
-     * so the single source of truth for author-name batching and attachment
-     * URL construction stays in one place.
+     * pagination metadata. Applies the viewer's keyword-mute filter before
+     * batch-mapping so muted posts never reach the DTO assembly stage.
+     * Delegates DTO assembly to {@link FeedPostMapper} so the single source
+     * of truth for author-name batching and attachment URL construction
+     * stays in one place.
      */
     private Page<FeedPostListItem> mapPage(Page<FeedPost> page, Long viewerId) {
         if (page.isEmpty()) {
             return Page.empty(page.getPageable());
         }
+        List<FeedPost> filtered = keywordMuteService.filter(viewerId, page.getContent());
+        if (filtered.isEmpty()) {
+            return new PageImpl<>(List.of(), page.getPageable(), page.getTotalElements());
+        }
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(
-                        page.getContent().stream().map(FeedPost::getId).toList());
+                        filtered.stream().map(FeedPost::getId).toList());
         List<FeedPostListItem> items = feedPostMapper.toListItems(
-                page.getContent(), viewerId, counts);
+                filtered, viewerId, counts);
         return new PageImpl<>(items, page.getPageable(), page.getTotalElements());
     }
 
     private Page<FeedPostListItem> slicePage(List<Scored> ranked, Pageable pageable, Long viewerId) {
-        int total = ranked.size();
+        List<Scored> visible = filterMutedScored(viewerId, ranked);
+        int total = visible.size();
         int from = Math.min((int) pageable.getOffset(), total);
         int to = Math.min(from + pageable.getPageSize(), total);
-        List<Scored> slice = ranked.subList(from, to);
+        List<Scored> slice = visible.subList(from, to);
         if (slice.isEmpty()) {
             return new PageImpl<>(List.of(), pageable, total);
         }
@@ -334,6 +390,24 @@ public class FeedReadService {
                 posts, viewerId, counts, factorsByPostId);
         return new PageImpl<>(items, pageable, total);
     }
+
+    private List<Scored> filterMutedScored(Long viewerId, List<Scored> ranked) {
+        if (viewerId == null || ranked.isEmpty()) {
+            return ranked;
+        }
+        List<FeedPost> posts = ranked.stream().map(Scored::post).toList();
+        List<FeedPost> filtered = keywordMuteService.filter(viewerId, posts);
+        if (filtered.size() == posts.size()) {
+            return ranked;
+        }
+        Set<Long> allowedIds = filtered.stream()
+                .map(FeedPost::getId)
+                .collect(Collectors.toSet());
+        return ranked.stream()
+                .filter(s -> allowedIds.contains(s.post().getId()))
+                .toList();
+    }
+
 
     /** Holds a feed post alongside its scoring result so the sort key is
      *  materialised exactly once per post (Schwartzian transform) and the
