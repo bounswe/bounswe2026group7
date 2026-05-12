@@ -43,6 +43,8 @@ class UserSearchControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockitoBean private UserService userService;
+    // #518: UserController constructor now also depends on MentorRatingService.
+    @MockitoBean private com.group7.backend.service.MentorRatingService mentorRatingService;
     @MockitoBean private JwtService jwtService;
 
     private static final String TOKEN = "test-jwt";
