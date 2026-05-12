@@ -172,6 +172,7 @@ export default function ConnectionProfileScreen() {
   const [mentorshipActionLoading, setMentorshipActionLoading] = useState(false);
   const [endModalVisible, setEndModalVisible] = useState(false);
   const [endReason, setEndReason] = useState('');
+  const [mentorshipStatus, setMentorshipStatus] = useState('');
 
   useEffect(() => {
     console.log('[connection-profile] route context', {
@@ -216,13 +217,14 @@ export default function ConnectionProfileScreen() {
       if (res.data.sharedGoal) setSharedGoal(res.data.sharedGoal);
       if (res.data.startDate) setMentorshipStartDate(String(res.data.startDate).slice(0, 10));
       if (res.data.endDate) setMentorshipEndDate(String(res.data.endDate).slice(0, 10));
+      if (res.data.status) setMentorshipStatus(res.data.status);
     }).catch(() => {});
 
-    apiClient.get(`/mentorships/${mentorshipId}/meetings`)
+    apiClient.get(`/mentorships/${mentorshipId}/meetings`, { silent: true })
       .then((res) => setMeetings((res.data ?? []) as MeetingSummary[]))
       .catch(() => setMeetings([]));
 
-    apiClient.get(`/mentorships/${mentorshipId}/tasks`)
+    apiClient.get(`/mentorships/${mentorshipId}/tasks`, { silent: true })
       .then((res) => setTasks((res.data ?? []) as TaskSummary[]))
       .catch(() => setTasks([]));
   }, [mentorshipId, session, sessionLoading]);
@@ -335,6 +337,7 @@ export default function ConnectionProfileScreen() {
   const stat3Value = parseString(params.stat3Value);
 
   const isViewingMentor = type === 'mentor';
+  const isActive = !mentorshipStatus || mentorshipStatus === 'ACTIVE';
   const selectedMilestone = selectedMilestoneId ? milestoneDetails[selectedMilestoneId] : null;
 
   const timelineEvents: TimelineEvent[] = useMemo(() => {
@@ -495,7 +498,7 @@ export default function ConnectionProfileScreen() {
     });
     router.push({
       pathname: '/meetings-sessions',
-      params: { connectedUserName: name, connectedUserType: type, mentorshipId, sourceScreen: 'connection-profile' },
+      params: { connectedUserName: name, connectedUserType: type, mentorshipId, mentorshipStatus, sourceScreen: 'connection-profile' },
     });
   };
 
@@ -696,22 +699,30 @@ export default function ConnectionProfileScreen() {
 
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stat1Value || '-'}</Text>
+            <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{stat1Value || '-'}</Text>
             <Text style={styles.statLabel}>{stat1Label || 'Stat'}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stat2Value || '-'}</Text>
+            <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{stat2Value || '-'}</Text>
             <Text style={styles.statLabel}>{stat2Label || 'Stat'}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stat3Value || '-'}</Text>
+            <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{stat3Value || '-'}</Text>
             <Text style={styles.statLabel}>{stat3Label || 'Stat'}</Text>
           </View>
         </View>
 
         <View style={styles.body}>
+          {!isActive && (
+            <View style={styles.historyBanner}>
+              <Text style={styles.historyBannerText}>
+                {`${mentorshipStatus === 'COMPLETED' ? 'Completed Mentorship' : 'Cancelled Mentorship'} — view only`}
+              </Text>
+            </View>
+          )}
+
           <Text style={styles.sectionTitle}>PROFILE</Text>
 
           <View style={styles.card}>
@@ -878,7 +889,7 @@ export default function ConnectionProfileScreen() {
             ) : (
               <>
                 <Text style={styles.cardText}>
-                  {sharedGoal || 'No shared goal set yet. Tap Edit to define one together.'}
+                  {sharedGoal || (isActive ? 'No shared goal set yet. Tap Edit to define one together.' : 'No shared goal was set.')}
                 </Text>
                 <TouchableOpacity
                   style={styles.goalEditButton}
@@ -918,7 +929,7 @@ export default function ConnectionProfileScreen() {
               <View style={[styles.progressFill, { width: `${overallProgressPercent}%` }]} />
             </View>
 
-            {isMentorViewer && (
+            {isActive && isMentorViewer && (
               <>
                 <TouchableOpacity
                   style={styles.actionButtonSecondary}
@@ -1041,7 +1052,7 @@ export default function ConnectionProfileScreen() {
                       <View style={[styles.progressFill, { width: `${selectedMilestoneProgressPercent}%` }]} />
                     </View>
 
-                    {isMentorViewer && (
+                    {isActive && isMentorViewer && (
                       <View style={styles.statusFilterRow}>
                         {(['PENDING', 'IN_PROGRESS', 'COMPLETED'] as MilestoneStatus[]).map((status) => (
                           <TouchableOpacity
@@ -1102,7 +1113,7 @@ export default function ConnectionProfileScreen() {
                         ))
                     )}
 
-                    {isMentorViewer && (
+                    {isActive && isMentorViewer && (
                       <View style={styles.actionItemComposer}>
                         <TextInput
                           style={styles.milestoneInput}
@@ -1198,27 +1209,33 @@ export default function ConnectionProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('meeting')}>
-              <Text style={styles.actionButtonSecondaryText}>Setup Meeting Request</Text>
-            </TouchableOpacity>
+            {isActive && (
+              <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('meeting')}>
+                <Text style={styles.actionButtonSecondaryText}>Setup Meeting Request</Text>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('change')}>
-              <Text style={styles.actionButtonSecondaryText}>Change Request</Text>
-            </TouchableOpacity>
+            {isActive && (
+              <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('change')}>
+                <Text style={styles.actionButtonSecondaryText}>Change Request</Text>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity
-              style={[styles.actionButtonDanger, mentorshipActionLoading && { opacity: 0.6 }]}
-              onPress={handleEndMentorship}
-              disabled={mentorshipActionLoading}
-            >
-              <Text style={styles.actionButtonDangerText}>
-                {mentorshipActionLoading
-                  ? 'Please wait...'
-                  : isMentorViewer
-                  ? 'End Mentorship'
-                  : 'Cancel Mentorship'}
-              </Text>
-            </TouchableOpacity>
+            {isActive && (
+              <TouchableOpacity
+                style={[styles.actionButtonDanger, mentorshipActionLoading && { opacity: 0.6 }]}
+                onPress={handleEndMentorship}
+                disabled={mentorshipActionLoading}
+              >
+                <Text style={styles.actionButtonDangerText}>
+                  {mentorshipActionLoading
+                    ? 'Please wait...'
+                    : isMentorViewer
+                    ? 'End Mentorship'
+                    : 'Cancel Mentorship'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -1992,5 +2009,20 @@ const styles = StyleSheet.create({
   },
   actionItemComposer: {
     marginTop: 16,
+  },
+  historyBanner: {
+    backgroundColor: '#F5E8CC',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E8D4A8',
+  },
+  historyBannerText: {
+    color: '#7A5010',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });

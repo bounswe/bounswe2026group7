@@ -3,11 +3,15 @@ import { router, useLocalSearchParams } from 'expo-router';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Image,
+  Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import apiClient from '../api/client';
 import AuthImage from '../components/AuthImage';
 
@@ -52,6 +56,13 @@ export default function MyBlogScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
+  // Create post state
+  const [showCreate, setShowCreate] = useState(false);
+  const [postBody, setPostBody] = useState('');
+  const [postHashtags, setPostHashtags] = useState('');
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const fetchPosts = useCallback(async (p = 0) => {
     if (!authorId) return;
     try {
@@ -75,26 +86,132 @@ export default function MyBlogScreen() {
     fetchPosts(0);
   }, [fetchPosts]);
 
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photo library.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setSelectedImageUri(result.assets[0].uri);
+    }
+  };
+
+  const uploadAttachment = async (uri: string): Promise<string | null> => {
+    const extension = uri.split('.').pop()?.toLowerCase();
+    const type = extension === 'png' ? 'image/png'
+      : extension === 'webp' ? 'image/webp'
+      : 'image/jpeg';
+    const formData = new FormData();
+    formData.append('file', { uri, name: `post-image.${extension || 'jpg'}`, type } as any);
+    const res = await apiClient.post('/messages/attachments', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data?.id ?? null;
+  };
+
+  const submitPost = async () => {
+    if (!postBody.trim()) return;
+    setSubmitting(true);
+    try {
+      const hashtags = postHashtags
+        .split(/[\s,#]+/)
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+
+      let attachmentIds: string[] = [];
+      if (selectedImageUri) {
+        const id = await uploadAttachment(selectedImageUri);
+        if (id) attachmentIds = [id];
+      }
+
+      await apiClient.post('/feed/posts', { body: postBody.trim(), hashtags, attachmentIds });
+      setPostBody('');
+      setPostHashtags('');
+      setSelectedImageUri(null);
+      setShowCreate(false);
+      await fetchPosts(0);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.message ?? 'Could not create post.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backText}>‹ Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>My Blog</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>My Blog</Text>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => setShowCreate((v) => !v)}
+          >
+            <Text style={styles.createButtonText}>{showCreate ? '✕ Cancel' : '+ New Post'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {showCreate && (
+        <View style={styles.createCard}>
+          <TextInput
+            style={styles.bodyInput}
+            value={postBody}
+            onChangeText={setPostBody}
+            placeholder="What's on your mind?"
+            placeholderTextColor="#B5ADA3"
+            multiline
+          />
+          <TextInput
+            style={styles.hashtagInput}
+            value={postHashtags}
+            onChangeText={setPostHashtags}
+            placeholder="Hashtags (e.g. datascience ai)"
+            placeholderTextColor="#B5ADA3"
+          />
+          {selectedImageUri && (
+            <View style={styles.imagePreviewWrapper}>
+              <Image source={{ uri: selectedImageUri }} style={styles.imagePreview} resizeMode="cover" />
+              <TouchableOpacity style={styles.removeImageBtn} onPress={() => setSelectedImageUri(null)}>
+                <Text style={styles.removeImageText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <View style={styles.createActions}>
+            <TouchableOpacity style={styles.attachBtn} onPress={pickImage}>
+              <Text style={styles.attachBtnText}>📷 Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.submitBtn, (!postBody.trim() || submitting) && { opacity: 0.5 }]}
+              onPress={submitPost}
+              disabled={!postBody.trim() || submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.submitBtnText}>Post</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 60 }} />
       ) : (
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {posts.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>No posts yet.</Text>
-              <Text style={styles.emptySubText}>Posts you create in the feed will appear here.</Text>
+              <Text style={styles.emptySubText}>{'Tap "New Post" to write your first post.'}</Text>
             </View>
           ) : (
             <>
@@ -157,8 +274,75 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   backText: { color: '#F7F4EE', fontSize: 14, fontWeight: '700' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { color: '#F7F4EE', fontSize: 28, fontWeight: '700' },
-  content: { padding: 24, paddingBottom: 48 },
+  createButton: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  createButtonText: { color: '#F7F4EE', fontSize: 14, fontWeight: '700' },
+  createCard: {
+    backgroundColor: '#F8F6F2',
+    margin: 16,
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#DDD5CA',
+  },
+  bodyInput: {
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    borderRadius: 14,
+    padding: 14,
+    fontSize: 15,
+    color: '#3E352C',
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 10,
+  },
+  hashtagInput: {
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 14,
+    color: '#3E352C',
+    marginBottom: 10,
+  },
+  imagePreviewWrapper: { position: 'relative', marginBottom: 10 },
+  imagePreview: { width: '100%', height: 180, borderRadius: 14 },
+  removeImageBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeImageText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  createActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  attachBtn: {
+    backgroundColor: '#EEF3EE',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  attachBtnText: { color: '#2F563C', fontSize: 14, fontWeight: '700' },
+  submitBtn: {
+    backgroundColor: '#456B50',
+    borderRadius: 14,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  submitBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  content: { padding: 16, paddingBottom: 48 },
   empty: { paddingTop: 60, alignItems: 'center' },
   emptyText: { color: '#6F6459', fontSize: 18, fontWeight: '700', marginBottom: 8 },
   emptySubText: { color: '#9A8F82', fontSize: 14, textAlign: 'center' },
@@ -167,6 +351,8 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 20,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#DDD5CA',
   },
   postBody: { fontSize: 15, color: '#2D2D2D', lineHeight: 23, marginBottom: 12 },
   hashtagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },

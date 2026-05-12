@@ -75,6 +75,19 @@ type PendingAttachment = {
   size?: number;
 };
 
+function parseSharedPost(text: string): { author: string; body: string; imageUrl?: string; imageFilename?: string } | null {
+  if (!text.startsWith('📤 ')) return null;
+  const withoutIcon = text.slice('📤 '.length);
+  const colonIdx = withoutIcon.indexOf(': "');
+  if (colonIdx === -1) return null;
+  const author = withoutIcon.slice(0, colonIdx);
+  const rest = withoutIcon.slice(colonIdx + 3);
+  const imgMatch = rest.match(/\n\[img:(.+?)\|(.+?)\]$/);
+  let rawBody = imgMatch ? rest.slice(0, rest.lastIndexOf('\n[img:')) : rest;
+  if (rawBody.endsWith('"')) rawBody = rawBody.slice(0, -1);
+  return { author, body: rawBody, imageUrl: imgMatch?.[1], imageFilename: imgMatch?.[2] };
+}
+
 function formatRelativeTime(iso?: string | null) {
   if (!iso) return '';
   const date = new Date(iso);
@@ -843,9 +856,33 @@ export default function MessagesScreen() {
                     ]}
                   >
                     <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-                      <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>
-                        {message.text}
-                      </Text>
+                      {(() => {
+                        const shared = parseSharedPost(message.text);
+                        if (shared) {
+                          return (
+                            <View style={[styles.sharedPostCard, isMe && styles.sharedPostCardMe]}>
+                              <Text style={[styles.sharedPostLabel, isMe && styles.sharedPostLabelMe]}>📤 Shared Post</Text>
+                              <View style={[styles.sharedPostDivider, isMe && styles.sharedPostDividerMe]} />
+                              <Text style={[styles.sharedPostAuthor, isMe && styles.sharedPostAuthorMe]}>{shared.author}</Text>
+                              {shared.body ? (
+                                <Text style={[styles.sharedPostBody, isMe && styles.sharedPostBodyMe]}>{shared.body}</Text>
+                              ) : null}
+                              {shared.imageUrl ? (
+                                <AuthImage
+                                  downloadUrl={shared.imageUrl}
+                                  filename={shared.imageFilename || 'shared_post_img.jpg'}
+                                  style={{ marginTop: 8, borderRadius: 8, height: 160 }}
+                                />
+                              ) : null}
+                            </View>
+                          );
+                        }
+                        return (
+                          <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>
+                            {message.text}
+                          </Text>
+                        );
+                      })()}
 
                       {message.attachment ? (
                         message.attachment.contentType?.includes('image') && message.attachment.downloadUrl ? (
@@ -1668,5 +1705,54 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
+  },
+
+  sharedPostCard: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(61,107,82,0.25)',
+    padding: 10,
+    minWidth: 180,
+  },
+  sharedPostCardMe: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  sharedPostLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#3D6B52',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  sharedPostLabelMe: {
+    color: 'rgba(255,255,255,0.75)',
+  },
+  sharedPostDivider: {
+    height: 1,
+    backgroundColor: 'rgba(61,107,82,0.2)',
+    marginBottom: 8,
+  },
+  sharedPostDividerMe: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  sharedPostAuthor: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1A2E22',
+    marginBottom: 4,
+  },
+  sharedPostAuthorMe: {
+    color: '#FFFFFF',
+  },
+  sharedPostBody: {
+    fontSize: 12,
+    color: '#3A3A3A',
+    lineHeight: 18,
+  },
+  sharedPostBodyMe: {
+    color: 'rgba(255,255,255,0.9)',
   },
 });

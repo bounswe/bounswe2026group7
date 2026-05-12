@@ -1,10 +1,20 @@
-import axios from 'axios';
+import axios, { InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { clearBanNotice, storeBanNotice } from '../utils/banNotice';
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    silent?: boolean;
+  }
+}
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL
+  ? `${process.env.EXPO_PUBLIC_API_URL}/api`
+  : 'http://10.1.195.120:8080/api';
+
 const apiClient = axios.create({
-  baseURL: 'http://192.168.37.177:8080/api',
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -40,7 +50,7 @@ apiClient.interceptors.response.use(
     const logLine = `[apiClient] ${method} ${url} → ${status}`;
     if (isExpectedBanResponse) {
       console.warn(logLine, JSON.stringify(data));
-    } else {
+    } else if (!error?.config?.silent) {
       console.error(logLine, JSON.stringify(data));
     }
 

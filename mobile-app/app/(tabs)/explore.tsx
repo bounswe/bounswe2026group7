@@ -41,6 +41,10 @@ type MentorCard = {
   availability: string[];
   following: boolean;
   followLoading: boolean;
+  factors: string[];
+  distanceKm: number | null;
+  matchScore: number;
+  explanation: string | null;
 };
 
 export default function ExploreScreen() {
@@ -79,7 +83,33 @@ function mapMentor(m: any, isMatch = false): MentorCard {
     availability: [],
     following: false,
     followLoading: false,
+    factors: m.factors || [],
+    distanceKm: m.distanceKm ?? null,
+    matchScore: m.matchScore ?? 0,
+    explanation: m.explanation ?? null,
   };
+}
+
+type FactorChip = { label: string; icon: string; color: string; bgColor: string };
+
+function parseFactorChips(factors: string[]): FactorChip[] {
+  const chips: FactorChip[] = [];
+  for (const f of factors) {
+    if (f.startsWith('nearby:')) {
+      chips.push({ label: `${f.replace('nearby:', '')} away`, icon: '📍', color: '#315A7A', bgColor: '#D8E5F1' });
+    } else if (f === 'city-match') {
+      chips.push({ label: 'Same city', icon: '📍', color: '#315A7A', bgColor: '#D8E5F1' });
+    } else if (f.startsWith('interest-match:')) {
+      chips.push({ label: f.replace('interest-match:', ''), icon: '✓', color: '#2F563C', bgColor: '#D7E8DA' });
+    } else if (f.startsWith('skill-match:')) {
+      chips.push({ label: f.replace('skill-match:', ''), icon: '✓', color: '#2F563C', bgColor: '#D7E8DA' });
+    } else if (f === 'major-exact') {
+      chips.push({ label: 'Major match', icon: '✓', color: '#2F563C', bgColor: '#D7E8DA' });
+    } else if (f === 'major-partial') {
+      chips.push({ label: 'Related major', icon: '~', color: '#66582F', bgColor: '#F1E1BB' });
+    }
+  }
+  return chips.slice(0, 4);
 }
 
 function MenteeExploreContent() {
@@ -264,6 +294,24 @@ function MenteeExploreContent() {
                   <View key={idx} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>
                 ))}
               </View>
+              {isMatchMode && mentor.factors.length > 0 && (() => {
+                const chips = parseFactorChips(mentor.factors);
+                return chips.length > 0 ? (
+                  <View style={styles.whySection}>
+                    <Text style={styles.whyLabel}>Why recommended</Text>
+                    <View style={styles.whyChipsRow}>
+                      {chips.map((chip, i) => (
+                        <View key={i} style={[styles.whyChip, { backgroundColor: chip.bgColor }]}>
+                          <Text style={[styles.whyChipText, { color: chip.color }]}>{chip.icon} {chip.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    {!!mentor.explanation && (
+                      <Text style={styles.whyExplanation}>{mentor.explanation}</Text>
+                    )}
+                  </View>
+                ) : null;
+              })()}
               <View style={styles.divider} />
               <View style={styles.cardBottomRow}>
                 <View style={styles.ratingRow}>
@@ -1323,5 +1371,37 @@ const styles = StyleSheet.create({
   },
   followButtonTextActive: {
     color: '#2F563C',
+  },
+  whySection: {
+    marginBottom: 14,
+  },
+  whyLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9A8F82',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  whyChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  whyChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  whyChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  whyExplanation: {
+    fontSize: 13,
+    color: '#4A4138',
+    fontStyle: 'italic',
+    lineHeight: 19,
+    marginTop: 8,
   },
 });
