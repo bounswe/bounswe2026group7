@@ -131,6 +131,35 @@ jobs:
             exit "$rc"
           fi
 
+      - name: Warm up backend auth path
+        # /actuator/health is excluded from the Spring Security filter chain,
+        # so wait-on'ing it confirms the JVM is up but never exercises the
+        # /api/auth/* path. The first Playwright login is therefore the first
+        # request through the whole security chain (JIT-cold filters, Jackson
+        # reflective deserialisation, Hibernate metadata for users, the
+        # rate-limit interceptor, etc.) — measured locally at ~200ms cold vs
+        # ~6ms warm, a 30x speedup. On a contended GitHub runner the cold
+        # path occasionally exceeds AT-02's 30s waitForResponse budget and
+        # the spec fails with a TimeoutError that has nothing to do with the
+        # code under test.
+        #
+        # One throwaway POST with bogus credentials triggers a 401 (AuthService
+        # short-circuits on "user not found" before BCrypt, so this won't
+        # warm BCrypt itself — that JIT-warms on AT-01's real login) but
+        # does pay every other cold cost. Rate-limit budget is 10/min per
+        # IP; this uses 1, leaving 9 for AT-01. AT-07 calls
+        # /api/test/reset-ratelimits before its own probe so it's unaffected.
+        run: |
+          set +e
+          curl -sS -o /dev/null -w "warmup login HTTP %{http_code} in %{time_total}s\n" \
+            --max-time 30 \
+            -X POST http://localhost:8080/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"e2e-warmup@nonexistent.invalid","password":"warmup"}' || true
+          # Non-fatal: if the warmup itself times out we still want Playwright
+          # to run and produce its own diagnostics rather than failing here.
+          exit 0
+
       - name: Build and start frontend preview
         working-directory: frontend
         env:
