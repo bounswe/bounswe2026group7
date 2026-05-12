@@ -220,9 +220,10 @@ function MenteeExploreContent() {
             onChangeText={(q) => { setSearchQuery(q); setCurrentPage(0); }}
             returnKeyType="search"
             autoCapitalize="none"
+            testID="explore.search-input"
           />
         </View>
-        <TouchableOpacity style={[styles.matchButton, isMatchMode && styles.matchButtonActive]} onPress={toggleMatchMode} disabled={matchLoading}>
+        <TouchableOpacity style={[styles.matchButton, isMatchMode && styles.matchButtonActive]} onPress={toggleMatchMode} disabled={matchLoading} testID="explore.match-toggle">
           {matchLoading
             ? <ActivityIndicator size="small" color="#F8F6F2" />
             : <Text style={[styles.matchButtonText, isMatchMode && styles.matchButtonTextActive]}>
@@ -236,7 +237,7 @@ function MenteeExploreContent() {
       ) : (
         <ScrollView ref={scrollRef} style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
           {pagedMentors.map((mentor) => (
-            <View key={mentor.id} style={styles.card}>
+            <View key={mentor.id} style={styles.card} testID={`explore.mentor-card.${mentor.id}`}>
               <View style={styles.cardTopRow}>
                 <View style={[styles.avatar, { backgroundColor: mentor.avatarBg }]}>
                   <Text style={[styles.avatarText, { color: mentor.avatarText }]}>{mentor.initials}</Text>
@@ -274,6 +275,7 @@ function MenteeExploreContent() {
                     style={[styles.followButton, mentor.following && styles.followButtonActive]}
                     onPress={() => handleFollow(mentor.id)}
                     disabled={mentor.followLoading}
+                    testID={`explore.mentor-follow.${mentor.id}`}
                   >
                     {mentor.followLoading
                       ? <ActivityIndicator size="small" color="#456B50" />
@@ -281,7 +283,7 @@ function MenteeExploreContent() {
                           {mentor.following ? '✓' : '+ Follow'}
                         </Text>}
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.viewButton} onPress={() => openMentorProfile(mentor)}>
+                  <TouchableOpacity style={styles.viewButton} onPress={() => openMentorProfile(mentor)} testID={`explore.mentor-view.${mentor.id}`}>
                     <Text style={styles.viewButtonText}>View</Text>
                   </TouchableOpacity>
                 </View>

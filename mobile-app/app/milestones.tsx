@@ -201,13 +201,13 @@ export default function MilestonesScreen() {
 
         <View style={styles.headerRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12, padding: 5 }}>
+            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12, padding: 5 }} testID="milestones.back">
               <Text style={{ fontSize: 24, color: '#1D1D38', fontWeight: 'bold' }}>←</Text>
             </TouchableOpacity>
             <Text style={styles.title}>Milestones</Text>
           </View>
           {isMentor && (
-            <TouchableOpacity onPress={() => setShowAddModal(true)}>
+            <TouchableOpacity onPress={() => setShowAddModal(true)} testID="milestones.add-button">
               <Text style={styles.addText}>+ Add</Text>
             </TouchableOpacity>
           )}
@@ -234,6 +234,7 @@ export default function MilestonesScreen() {
                   style={styles.card}
                   onPress={() => toggleExpand(milestone)}
                   activeOpacity={0.85}
+                  testID={`milestones.card.${milestone.id}`}
                 >
                   <View style={styles.cardHeader}>
                     <View style={styles.cardHeaderLeft}>
@@ -265,6 +266,7 @@ export default function MilestonesScreen() {
                               style={styles.actionItemRow}
                               onPress={() => toggleActionItem(milestone.id, item)}
                               activeOpacity={0.7}
+                              testID={`milestones.action-item.${item.id}`}
                             >
                               <View style={[styles.actionCheck, item.isCompleted && styles.actionCheckDone]}>
                                 {item.isCompleted && <Text style={styles.actionCheckMark}>✓</Text>}
@@ -300,6 +302,7 @@ export default function MilestonesScreen() {
               onChangeText={setNewTitle}
               placeholder="Milestone title"
               placeholderTextColor="#B0A898"
+              testID="milestones.modal.title-input"
             />
 
             <Text style={styles.modalLabel}>Description</Text>
@@ -333,7 +336,7 @@ export default function MilestonesScreen() {
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSubmit} onPress={handleAddMilestone} disabled={saving}>
+              <TouchableOpacity style={styles.modalSubmit} onPress={handleAddMilestone} disabled={saving} testID="milestones.modal.submit">
                 <Text style={styles.modalSubmitText}>{saving ? 'Saving…' : 'Create'}</Text>
               </TouchableOpacity>
             </View>

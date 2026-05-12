@@ -11,14 +11,12 @@ import {
   createFeedPost,
   updateFeedPost,
   deleteFeedPost,
-  restoreFeedPost,
   getFollowRecommendations,
   followUser,
   getTrendingHashtags,
-  markFeedRead,
+  getFeedPostById,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
-import { showUndoToast } from '../utils/toast'
 import useFeedSubscription from '../hooks/useFeedSubscription'
 import '../styles/main.css'
 
@@ -76,21 +74,8 @@ export default function FeedPage() {
   // data. Hidden during active search to avoid double-filtering the view.
   const [trending, setTrending] = useState([])
 
-  // Live-feed buffer (#356). When the STOMP push arrives while the user is
-  // scrolled away from the top or on a different tab, we surface a "X new
-  // posts" pill instead of yanking the list. Clicking the pill reloads.
-  // We keep just the count, not the slim payloads, since the reload path
-  // fetches the canonical full FeedPostListItem from the REST endpoint.
-  const [newPostsCount, setNewPostsCount] = useState(0)
-
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag?, since?, until?, lang? } or null
-  // #543: advanced filters. Open state is a toggle; values persist across
-  // searches so users don't lose a date range when they refine the keyword.
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const [filterSince, setFilterSince] = useState('')
-  const [filterUntil, setFilterUntil] = useState('')
-  const [filterLang, setFilterLang] = useState('')
+  const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag? } or null
 
   // Minimal compose — full UI lands in #353
   const [composeOpen, setComposeOpen] = useState(false)
@@ -131,35 +116,6 @@ export default function FeedPage() {
 
   useEffect(() => { reload() }, [reload])
 
-  // #356: subscribe to /topic/feed.{userId} so a new post from someone the
-  // user follows surfaces a "X new posts" pill without a refresh. The pill
-  // only fires on the For-You / Following tabs without an active search —
-  // a hashtag-search view shouldn't pretend a new post arrived for it.
-  useFeedSubscription(userId, {
-    onPost: () => {
-      if (activeSearch || loading) return
-      setNewPostsCount(c => c + 1)
-    },
-    onShare: () => {
-      if (activeSearch || loading) return
-      setNewPostsCount(c => c + 1)
-    },
-  })
-
-  // #356: mark the feed read whenever the page loads with results. Cheap on
-  // backend (single UPDATE) and idempotent, so re-firing on tab change is
-  // harmless. Triggers only when posts > 0 — empty feed has nothing to read.
-  useEffect(() => {
-    if (loading || activeSearch || posts.length === 0) return
-    markFeedRead().catch(() => { /* swallow — best-effort */ })
-  }, [loading, activeSearch, posts.length])
-
-  function handleClickNewPosts() {
-    setNewPostsCount(0)
-    reload()
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
   useEffect(() => {
     let cancelled = false
     getTrendingHashtags(10)
@@ -188,6 +144,24 @@ export default function FeedPage() {
     loadRecommendations()
   }, [tab, activeSearch, loading, posts.length, loadRecommendations])
 
+  // Live following-feed pushes — backend fans out new posts to followers over
+  // `/topic/feed.{userId}` (FeedPostPushPayload). We only act on the canonical
+  // post-frame shape (with `postId`); share-frames are out-of-scope for v1.
+  // Frames are ignored when the viewer isn't on the Following tab or is
+  // searching, so the list reflects the user's current filter.
+  const handleFeedFrame = useCallback((payload) => {
+    if (tab !== 'following' || activeSearch) return
+    if (!payload || payload.postId == null) return
+    getFeedPostById(payload.postId)
+      .then(post => {
+        if (!post) return
+        setPosts(prev => prev.some(p => p.id === post.id) ? prev : [post, ...prev])
+      })
+      .catch(() => { /* dropped frame — next reload will reconcile */ })
+  }, [tab, activeSearch])
+
+  useFeedSubscription(userId, handleFeedFrame)
+
   // ── Tab nav ───────────────────────────────────────────────────────────
   function changeTab(next) {
     setActiveSearch(null)
@@ -201,35 +175,20 @@ export default function FeedPage() {
   function handleSearchSubmit(e) {
     e.preventDefault()
     const trimmed = searchQuery.trim()
-    // Date inputs are LocalDate (YYYY-MM-DD). Backend wants ISO-8601 datetime.
-    // since = start of day inclusive, until = start of next day exclusive
-    // (matches backend's half-open semantics).
-    const sinceIso = filterSince ? new Date(`${filterSince}T00:00:00Z`).toISOString() : undefined
-    const untilIso = filterUntil ? (() => {
-      const d = new Date(`${filterUntil}T00:00:00Z`)
-      d.setUTCDate(d.getUTCDate() + 1)
-      return d.toISOString()
-    })() : undefined
-    const lang = filterLang || undefined
-
-    const hasKeyword = trimmed.length > 0
-    const hasHashtag = hasKeyword && /^#?\w+$/.test(trimmed) && trimmed.startsWith('#')
-    const hasAnyFilter = hasKeyword || sinceIso || untilIso || lang
-    if (!hasAnyFilter) {
+    if (!trimmed) {
       setActiveSearch(null)
       return
     }
-    const next = { since: sinceIso, until: untilIso, lang }
-    if (hasHashtag) next.hashtag = trimmed.slice(1)
-    else if (hasKeyword) next.q = trimmed
-    setActiveSearch(next)
+    // Treat any leading "#word" as a hashtag query
+    if (/^#?\w+$/.test(trimmed) && trimmed.startsWith('#')) {
+      setActiveSearch({ hashtag: trimmed.slice(1) })
+    } else {
+      setActiveSearch({ q: trimmed })
+    }
   }
 
   function clearSearch() {
     setSearchQuery('')
-    setFilterSince('')
-    setFilterUntil('')
-    setFilterLang('')
     setActiveSearch(null)
   }
 
@@ -297,28 +256,13 @@ export default function FeedPage() {
   }
 
   // ── Delete ────────────────────────────────────────────────────────────
-  // Backend soft-deletes posts (#487 / #544); restoring is possible within
-  // a 30-day window via POST /api/feed/posts/{id}/restore. The confirm copy
-  // reflects that, and a successful delete drops an undo toast that calls
-  // restoreFeedPost on click.
   async function handleDelete(post) {
     if (!post) return
-    const confirmed = window.confirm(
-      'Hide this post? You can restore it within 30 days from the toast below.'
-    )
+    const confirmed = window.confirm('Delete this post? This cannot be undone.')
     if (!confirmed) return
     try {
       await deleteFeedPost(post.id)
       setPosts(prev => prev.filter(p => p.id !== post.id))
-      showUndoToast('Post hidden.', async () => {
-        try {
-          const restored = await restoreFeedPost(post.id)
-          // Reinsert at the original index if we still have the list around.
-          setPosts(prev => [restored, ...prev])
-        } catch (err) {
-          window.alert(err?.message || 'Failed to restore post')
-        }
-      })
     } catch (err) {
       window.alert(err?.message || 'Failed to delete post')
     }
@@ -360,6 +304,7 @@ export default function FeedPage() {
             <button
               className="action-btn"
               onClick={() => setComposeOpen(v => !v)}
+              data-testid="feed-composer-toggle"
             >
               {composeOpen ? 'Close' : 'New post'}
             </button>
@@ -376,18 +321,20 @@ export default function FeedPage() {
               onChange={(e) => setComposeBody(e.target.value)}
               disabled={composeBusy}
               style={{ width: '100%', maxHeight: 'none', resize: 'vertical' }}
+              data-testid="feed-composer-body"
             />
             <FeedImageUploader
               value={composeAttachments}
               onChange={setComposeAttachments}
               disabled={composeBusy}
             />
-            {composeError && <div className="md-composer-error">{composeError}</div>}
+            {composeError && <div className="md-composer-error" data-testid="feed-composer-error">{composeError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
               <button
                 className="md-composer-send"
                 onClick={submitCompose}
                 disabled={composeBusy || !composeBody.trim()}
+                data-testid="feed-composer-send"
               >
                 {composeBusy ? 'Publishing…' : 'Publish'}
               </button>
@@ -402,6 +349,7 @@ export default function FeedPage() {
               type="button"
               className={`feed-tab${tab === t.key && !activeSearch ? ' feed-tab--active' : ''}`}
               onClick={() => changeTab(t.key)}
+              data-testid={`feed-tab-${t.key}`}
             >
               {t.label}
             </button>
@@ -415,76 +363,13 @@ export default function FeedPage() {
             placeholder="Search posts (or #hashtag)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="feed-search-input"
           />
           <button type="submit" className="action-btn">Search</button>
-          <button
-            type="button"
-            className={`action-btn${filtersOpen || filterSince || filterUntil || filterLang ? ' action-btn--active' : ''}`}
-            onClick={() => setFiltersOpen(v => !v)}
-            aria-expanded={filtersOpen}
-            aria-controls="feed-filters-panel"
-          >
-            Filters{(filterSince || filterUntil || filterLang) ? ' •' : ''}
-          </button>
           {activeSearch && (
             <button type="button" className="action-btn" onClick={clearSearch}>Clear</button>
           )}
         </form>
-
-        {filtersOpen && (
-          <div id="feed-filters-panel" className="feed-filters">
-            <div className="feed-filter-field">
-              <label htmlFor="feed-filter-since">From</label>
-              <input
-                id="feed-filter-since"
-                type="date"
-                className="feed-filter-input"
-                value={filterSince}
-                max={filterUntil || undefined}
-                onChange={(e) => setFilterSince(e.target.value)}
-              />
-            </div>
-            <div className="feed-filter-field">
-              <label htmlFor="feed-filter-until">To</label>
-              <input
-                id="feed-filter-until"
-                type="date"
-                className="feed-filter-input"
-                value={filterUntil}
-                min={filterSince || undefined}
-                onChange={(e) => setFilterUntil(e.target.value)}
-              />
-            </div>
-            <div className="feed-filter-field">
-              <label htmlFor="feed-filter-lang">Language</label>
-              <select
-                id="feed-filter-lang"
-                className="feed-filter-input"
-                value={filterLang}
-                onChange={(e) => setFilterLang(e.target.value)}
-              >
-                <option value="">Any</option>
-                <option value="en">English</option>
-                <option value="tr">Türkçe</option>
-                <option value="de">Deutsch</option>
-                <option value="fr">Français</option>
-                <option value="es">Español</option>
-              </select>
-            </div>
-            <button
-              type="button"
-              className="action-btn"
-              onClick={() => {
-                setFilterSince('')
-                setFilterUntil('')
-                setFilterLang('')
-              }}
-              disabled={!filterSince && !filterUntil && !filterLang}
-            >
-              Reset
-            </button>
-          </div>
-        )}
 
         {!activeSearch && trending.length > 0 && (
           <div className="feed-trending" aria-label="Trending hashtags">
@@ -509,17 +394,6 @@ export default function FeedPage() {
               ))}
             </div>
           </div>
-        )}
-
-        {newPostsCount > 0 && !loading && !activeSearch && (
-          <button
-            type="button"
-            className="feed-new-pill"
-            onClick={handleClickNewPosts}
-            aria-live="polite"
-          >
-            {newPostsCount} new post{newPostsCount === 1 ? '' : 's'} · click to refresh
-          </button>
         )}
 
         {loading ? (
@@ -552,7 +426,7 @@ export default function FeedPage() {
                 ) : (
                   <div className="follow-suggested-rail">
                     {recommendations.map(rec => (
-                      <div className="follow-suggested-card" key={rec.id}>
+                      <div className="follow-suggested-card" key={rec.id} data-testid={`feed-rec-card-${rec.id}`}>
                         <div className="follow-suggested-main">
                           <Avatar
                             src={rec.profilePhoto}
@@ -567,7 +441,11 @@ export default function FeedPage() {
                         {Array.isArray(rec.factors) && rec.factors.length > 0 && (
                           <div className="follow-suggested-factors">
                             {rec.factors.slice(0, 2).map((f, i) => (
-                              <span className="follow-suggested-factor" key={`${rec.id}-f-${i}`}>
+                              <span
+                                className="follow-suggested-factor"
+                                key={`${rec.id}-f-${i}`}
+                                data-testid={`feed-rec-factor-${rec.id}-${i}`}
+                              >
                                 {formatFollowFactor(f)}
                               </span>
                             ))}
@@ -586,6 +464,7 @@ export default function FeedPage() {
                             type="button"
                             onClick={() => !rec.busy && handleFollowSuggestion(rec.id)}
                             disabled={rec.busy}
+                            data-testid={`feed-rec-follow-${rec.id}`}
                           >
                             {rec.busy ? 'Following…' : 'Follow'}
                           </button>
@@ -600,7 +479,10 @@ export default function FeedPage() {
             <div className="empty-state">No posts yet — be the first to share something.</div>
           )
         ) : (
-          <div className="feed-list">
+          <div
+            className="feed-list"
+            data-testid={tab === 'following' ? 'feed-list-following' : 'feed-list-for-you'}
+          >
             {posts.map(p => (
               <FeedPostCard
                 key={p.id}
@@ -616,7 +498,13 @@ export default function FeedPage() {
 
       {editing && (
         <div className="modal-backdrop" onClick={() => !editBusy && setEditing(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            data-testid="feed-edit-modal"
+          >
             <h2>Edit post</h2>
             <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Body</label>
             <textarea
@@ -625,6 +513,7 @@ export default function FeedPage() {
               onChange={(e) => setEditBody(e.target.value)}
               rows={5}
               disabled={editBusy}
+              data-testid="feed-edit-body"
             />
             <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Hashtags (space-separated)</label>
             <input
@@ -634,6 +523,7 @@ export default function FeedPage() {
               placeholder="design react ux"
               disabled={editBusy}
               style={{ minHeight: 'auto', height: '40px' }}
+              data-testid="feed-edit-hashtags"
             />
             <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Images</label>
             <FeedImageUploader
@@ -643,8 +533,18 @@ export default function FeedPage() {
             />
             {editError && <div className="md-composer-error" style={{ marginTop: '8px' }}>{editError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-              <button className="action-btn" onClick={() => setEditing(null)} disabled={editBusy}>Cancel</button>
-              <button className="md-composer-send" onClick={submitEdit} disabled={editBusy || !editBody.trim()}>
+              <button
+                className="action-btn"
+                onClick={() => setEditing(null)}
+                disabled={editBusy}
+                data-testid="feed-edit-cancel"
+              >Cancel</button>
+              <button
+                className="md-composer-send"
+                onClick={submitEdit}
+                disabled={editBusy || !editBody.trim()}
+                data-testid="feed-edit-save"
+              >
                 {editBusy ? 'Saving…' : 'Save'}
               </button>
             </div>

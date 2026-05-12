@@ -316,7 +316,7 @@ export default function UserProfilePage() {
         <div>
           <div className="profile-card-hero">
             <Avatar src={avatarSrc} initials={initials} size="lg" className="profile-avatar-lg" />
-            <div className="profile-name">{displayName}</div>
+            <div className="profile-name" data-testid="user-profile-name">{displayName}</div>
             <div className="profile-role">{isMentorProfile ? 'Mentor' : 'Mentee'}</div>
             {isMentorProfile && profile.maxMenteeCapacity != null && (
               <span className={`availability-badge ${(profile.currentMenteeCount ?? 0) < profile.maxMenteeCapacity ? 'available' : 'full'}`}>

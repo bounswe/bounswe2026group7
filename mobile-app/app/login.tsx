@@ -107,6 +107,7 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             accessibilityLabel="Email address"
             accessibilityHint="Enter the email address for your account"
+            testID="login.email-input"
           />
 
           <Text style={styles.label}>PASSWORD</Text>
@@ -119,6 +120,7 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             accessibilityLabel="Password"
             accessibilityHint="Enter your account password"
+            testID="login.password-input"
           />
 
           <TouchableOpacity
@@ -126,6 +128,7 @@ export default function LoginScreen() {
             accessibilityRole="button"
             accessibilityLabel="Forgot password"
             accessibilityHint="Opens password recovery"
+            testID="login.forgot-password"
           >
             <Text style={styles.forgotText}>Forgot password?</Text>
           </TouchableOpacity>
@@ -141,6 +144,7 @@ export default function LoginScreen() {
             accessibilityLabel="Sign in"
             accessibilityHint="Signs you in and opens the main app"
             accessibilityState={{ disabled: !isFormValid }}
+            testID="login.submit-button"
           >
             <Text
               style={[
@@ -163,6 +167,7 @@ export default function LoginScreen() {
             accessibilityRole="button"
             accessibilityLabel="Continue with Google"
             accessibilityHint="Starts Google sign in when available"
+            testID="login.google-button"
           >
             <Text style={styles.googleButtonText}>Continue with Google</Text>
           </TouchableOpacity>
@@ -172,6 +177,7 @@ export default function LoginScreen() {
             <Text
               style={styles.signUpText}
               onPress={() => router.push('/register')}
+              testID="login.signup-link"
             >
               Sign up
             </Text>

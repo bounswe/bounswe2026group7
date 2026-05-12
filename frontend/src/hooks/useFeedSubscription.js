@@ -31,8 +31,14 @@ export default function useFeedSubscription(userId, { onPost, onShare } = {}) {
     if (!userId) return undefined
     const client = getStompClient()
     let subscription = null
+    // `cancelled` guards the deferred-CONNECT path: if the hook unmounts
+    // before the socket connects, the attach() scheduled on onConnect must
+    // short-circuit, otherwise we'd subscribe with no cleanup reference and
+    // leak a zombie subscription on every reconnect.
+    let cancelled = false
 
     function attach() {
+      if (cancelled) return
       try {
         subscription = client.subscribe(
           `/topic/feed.${userId}`,
@@ -57,6 +63,8 @@ export default function useFeedSubscription(userId, { onPost, onShare } = {}) {
     if (client.connected) {
       attach()
     } else {
+      // Defer subscription until CONNECT completes. Chain onto any prior
+      // override so multiple concurrent hooks all get their attach() call.
       const original = client.onConnect
       client.onConnect = (frame) => {
         try { original?.(frame) } catch { /* ignore */ }
@@ -65,6 +73,7 @@ export default function useFeedSubscription(userId, { onPost, onShare } = {}) {
     }
 
     return () => {
+      cancelled = true
       try { subscription?.unsubscribe() } catch { /* ignore */ }
     }
   }, [userId])
