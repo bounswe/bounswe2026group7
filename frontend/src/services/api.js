@@ -262,6 +262,18 @@ export async function getActiveMentorships() {
   return handleResponse(res)
 }
 
+// Paginated mentorship history filter (#408 / backend #521). status accepts
+// 'ALL' or any MentorshipStatus name (ACTIVE / COMPLETED / CANCELLED /
+// TERMINATED). Backend caps size at 100. Returns a Spring Page<>:
+//   { content, totalPages, totalElements, number, size, last, ... }
+export async function getMentorshipsByStatus({ status = 'ALL', page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ status, page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/mentorships?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 // Backend has no GET /api/mentorships/{id} yet — fetch the user's list and
 // filter client-side. If the id isn't in the list, the caller treats it as 403.
 export async function getMentorshipById(id) {
