@@ -1,5 +1,6 @@
 package com.group7.backend.service;
 
+import com.group7.backend.dto.request.CreateRepostRequest;
 import com.group7.backend.dto.response.FeedCommentResponse;
 import com.group7.backend.dto.response.FeedPostInteractionState;
 import com.group7.backend.dto.response.FeedPostListItem;
@@ -11,6 +12,7 @@ import com.group7.backend.entity.FeedPostShare;
 import com.group7.backend.entity.User;
 import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.event.FeedEngagementEvent;
+import com.group7.backend.event.FeedPostSharedEvent;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FeedPostBookmarkRepository;
 import com.group7.backend.repository.FeedPostCommentRepository;
@@ -21,6 +23,7 @@ import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.projection.PostCountTuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -29,12 +32,14 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -81,6 +86,15 @@ public class FeedInteractionService {
     private final NotificationEventPublisher notificationEventPublisher;
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * Window during which an identical-payload repost from the same
+     * sharer collapses to the existing row instead of creating a
+     * duplicate. Defends against network retries causing double-fanout;
+     * not a defence against simultaneous-click races. Configurable for
+     * ops tuning, ISO 8601 duration syntax.
+     */
+    private final Duration repostIdempotencyWindow;
+
     public FeedInteractionService(FeedPostRepository feedPostRepository,
                                    FeedPostLikeRepository likeRepository,
                                    FeedPostBookmarkRepository bookmarkRepository,
@@ -89,7 +103,9 @@ public class FeedInteractionService {
                                    UserRepository userRepository,
                                    FeedPostMapper feedPostMapper,
                                    NotificationEventPublisher notificationEventPublisher,
-                                   ApplicationEventPublisher eventPublisher) {
+                                   ApplicationEventPublisher eventPublisher,
+                                   @Value("${app.feed.repost.idempotency-window:PT60S}")
+                                   Duration repostIdempotencyWindow) {
         this.feedPostRepository = feedPostRepository;
         this.likeRepository = likeRepository;
         this.bookmarkRepository = bookmarkRepository;
@@ -99,6 +115,7 @@ public class FeedInteractionService {
         this.feedPostMapper = feedPostMapper;
         this.notificationEventPublisher = notificationEventPublisher;
         this.eventPublisher = eventPublisher;
+        this.repostIdempotencyWindow = repostIdempotencyWindow;
     }
 
     // ── Likes ──────────────────────────────────────────────────────────────
@@ -253,6 +270,75 @@ public class FeedInteractionService {
                     post.getAuthorId(), resolveAuthorName(sharerId), postId);
         }
         return interactionState(postId, sharerId);
+    }
+
+    /**
+     * Repost or quote-share a post. Distinct from {@link #recordShare}:
+     * the row is written with {@code is_repost = TRUE} and the share
+     * fans out via STOMP to the sharer's followers. The original post
+     * surfaces in those followers' Following feeds with "shared by X"
+     * attribution.
+     *
+     * <p>Idempotency is enforced at the service layer with a sliding
+     * {@link #repostIdempotencyWindow}: an identical
+     * {@code (post_id, sharer_id, body)} write inside the window
+     * collapses to the existing row, returning the same interaction
+     * state without re-firing fanout or notification. NULL bodies match
+     * NULL bodies via Postgres' {@code IS NOT DISTINCT FROM}.
+     *
+     * <p>The race where two simultaneous identical requests both pass
+     * the idempotency check is a known v1 limitation; both rows insert
+     * and both fanouts fire. Realistic client retries are serialised by
+     * the network round-trip, so the window is enough in practice.
+     */
+    @Transactional
+    public FeedPostInteractionState recordRepost(Long postId, Long sharerId,
+                                                  CreateRepostRequest request) {
+        FeedPost post = requireVisiblePost(postId);
+        String body = blankToNull(request != null ? request.body() : null);
+
+        Optional<FeedPostShare> recent = shareRepository.findRecentRepost(
+                postId, sharerId, body,
+                OffsetDateTime.now().minus(repostIdempotencyWindow));
+        if (recent.isPresent()) {
+            log.info("Repost idempotent collapse: postId={}, sharerId={}, withinSec={}",
+                    postId, sharerId, repostIdempotencyWindow.toSeconds());
+            return interactionState(postId, sharerId);
+        }
+
+        FeedPostShare share = new FeedPostShare(postId, sharerId);
+        share.setBody(body);
+        share.setRepost(true);
+        FeedPostShare saved = shareRepository.save(share);
+
+        String sharerFirstName = resolveAuthorName(sharerId);
+
+        // FeedPostShare.createdAt is insertable=false, so the entity field is
+        // NULL right after save() until a refresh. Use the JVM clock — same
+        // transaction, sub-millisecond drift from the DB DEFAULT NOW(), and
+        // STOMP fanout ordering does not depend on the exact persisted
+        // microsecond.
+        eventPublisher.publishEvent(new FeedPostSharedEvent(
+                saved.getId(),
+                saved.getPostId(),
+                saved.getSharerId(),
+                sharerFirstName,
+                saved.getBody(),
+                OffsetDateTime.now()));
+
+        publishEngagement(post, sharerId);
+        log.info("Recorded repost: postId={}, sharerId={}, hasCommentary={}",
+                postId, sharerId, body != null);
+
+        if (!sharerId.equals(post.getAuthorId())) {
+            notificationEventPublisher.publishFeedShare(
+                    post.getAuthorId(), sharerFirstName, postId);
+        }
+        return interactionState(postId, sharerId);
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s;
     }
 
     // ── Comments ───────────────────────────────────────────────────────────
