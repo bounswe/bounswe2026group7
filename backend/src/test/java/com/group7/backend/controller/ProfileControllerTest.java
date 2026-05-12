@@ -69,11 +69,11 @@ class ProfileControllerTest {
      * the assertion JSON paths.
      */
     private UserProfileResponse wrapMentor() {
-        return new UserProfileResponse(buildMentorResponse(), 0L, 0L);
+        return new UserProfileResponse(buildMentorResponse(), 0L, 0L, false);
     }
 
     private UserProfileResponse wrapMentee() {
-        return new UserProfileResponse(buildMenteeResponse(), 0L, 0L);
+        return new UserProfileResponse(buildMenteeResponse(), 0L, 0L, false);
     }
 
     private MentorResponse buildMentorResponse() {

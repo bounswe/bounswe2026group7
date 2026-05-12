@@ -11,6 +11,7 @@ import com.group7.backend.dto.response.UserProfileResponse;
 import com.group7.backend.dto.response.UserRatingSummary;
 import com.group7.backend.dto.response.UserResponse;
 import com.group7.backend.entity.Admin;
+import com.group7.backend.entity.FollowId;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.entity.TaggedTermLists;
@@ -228,7 +229,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserProfileResponse getOwnUserProfile(Long userId) {
         ProfileResponse profile = getOwnProfile(userId);
-        return wrapWithCounts(profile, userId);
+        return wrapWithCounts(profile, userId, userId);
     }
 
     /**
@@ -241,21 +242,27 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserProfileResponse getUserProfile(Long targetId, Long requesterId) {
         ProfileResponse profile = getProfileById(targetId, requesterId);
-        return wrapWithCounts(profile, targetId);
+        return wrapWithCounts(profile, targetId, requesterId);
     }
 
-    private UserProfileResponse wrapWithCounts(ProfileResponse profile, Long userId) {
-        long followers = followRepository.countByIdFolloweeId(userId);
-        long following = followRepository.countByIdFollowerId(userId);
+    private UserProfileResponse wrapWithCounts(ProfileResponse profile, Long profileUserId, Long viewerId) {
+        long followers = followRepository.countByIdFolloweeId(profileUserId);
+        long following = followRepository.countByIdFollowerId(profileUserId);
         // Mentor rating summary (#237). Mentees never accumulate rows in
         // mentor_ratings, so the aggregate returns (null, 0) for them; we
         // still set the fields uniformly so the response shape is stable.
-        UserRatingSummary rating = mentorRatingService.aggregateForMentor(userId);
+        UserRatingSummary rating = mentorRatingService.aggregateForMentor(profileUserId);
         if (profile instanceof UserResponse base) {
             base.setAverageRating(rating.averageRating());
             base.setRatingCount(rating.ratingCount());
         }
-        return new UserProfileResponse(profile, followers, following);
+        // Self-view and anonymous reads never render Follow/Unfollow, so they
+        // skip the existsById probe; clients render Follow only when the
+        // boolean is true AND the viewer is somebody else.
+        boolean isFollowing = viewerId != null
+                && !viewerId.equals(profileUserId)
+                && followRepository.existsById(new FollowId(viewerId, profileUserId));
+        return new UserProfileResponse(profile, followers, following, isFollowing);
     }
 
     @Transactional(readOnly = true)
