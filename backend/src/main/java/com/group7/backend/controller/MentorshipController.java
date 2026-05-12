@@ -265,6 +265,30 @@ public class MentorshipController {
         return ResponseEntity.ok(mentorshipService.extendMentorship(userId, id, request));
     }
 
+    @GetMapping("/{id}/rating")
+    @Operation(
+            summary = "Get the rating for this mentorship (mentor or mentee, #518)",
+            description = "Returns the rating row submitted by this mentorship's mentee, "
+                    + "if any. Visible to both the mentor and the mentee — non-participants "
+                    + "get 404 (uniform with the rest of the mentorship surface). 404 also "
+                    + "when the mentorship has no rating yet — lets the web client "
+                    + "deterministically render the 'You rated …' block on first paint "
+                    + "without depending on localStorage or a duplicate-POST probe."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Rating found",
+                    content = @Content(schema = @Schema(implementation = MentorRatingResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentorship not found, caller is not a participant, "
+                    + "or no rating exists yet", content = @Content)
+    })
+    public ResponseEntity<MentorRatingResponse> getMentorshipRating(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(mentorRatingService.getMentorshipRating(userId, id));
+    }
+
     @PostMapping("/{id}/rating")
     @Operation(
             summary = "Submit a mentor rating (mentee-only, #237)",

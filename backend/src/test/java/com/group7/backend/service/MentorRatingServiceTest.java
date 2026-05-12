@@ -184,4 +184,82 @@ class MentorRatingServiceTest {
         assertThat(summary.averageRating()).isNull();
         assertThat(summary.ratingCount()).isZero();
     }
+
+    // ── Read endpoints (#518) ─────────────────────────────────────────────
+
+    @Test
+    void getMentorshipRating_returnsRatingForMentee() {
+        MentorRating rating = MentorRating.of(100L, 1L, 2L, 5, "Great!");
+        rating.setId(42L);
+        when(mentorshipRepository.findByIdAndParticipant(100L, 2L))
+                .thenReturn(Optional.of(mentorship));
+        when(mentorRatingRepository.findByMentorshipId(100L))
+                .thenReturn(Optional.of(rating));
+
+        MentorRatingResponse response = mentorRatingService.getMentorshipRating(2L, 100L);
+
+        assertThat(response.getId()).isEqualTo(42L);
+        assertThat(response.getMentorshipId()).isEqualTo(100L);
+        assertThat(response.getScore()).isEqualTo(5);
+        assertThat(response.getComment()).isEqualTo("Great!");
+    }
+
+    @Test
+    void getMentorshipRating_alsoReturnsRatingForMentor() {
+        // The mentor on the mentorship can also fetch the rating they
+        // received — the ACL is "either participant", not "mentee only".
+        MentorRating rating = MentorRating.of(100L, 1L, 2L, 4, "Good");
+        rating.setId(43L);
+        when(mentorshipRepository.findByIdAndParticipant(100L, 1L))
+                .thenReturn(Optional.of(mentorship));
+        when(mentorRatingRepository.findByMentorshipId(100L))
+                .thenReturn(Optional.of(rating));
+
+        MentorRatingResponse response = mentorRatingService.getMentorshipRating(1L, 100L);
+
+        assertThat(response.getId()).isEqualTo(43L);
+    }
+
+    @Test
+    void getMentorshipRating_throws404_whenCallerIsNotParticipant() {
+        when(mentorshipRepository.findByIdAndParticipant(100L, 999L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mentorRatingService.getMentorshipRating(999L, 100L))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(mentorRatingRepository, never()).findByMentorshipId(any());
+    }
+
+    @Test
+    void getMentorshipRating_throws404_whenNoRatingExistsYet() {
+        when(mentorshipRepository.findByIdAndParticipant(100L, 2L))
+                .thenReturn(Optional.of(mentorship));
+        when(mentorRatingRepository.findByMentorshipId(100L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mentorRatingService.getMentorshipRating(2L, 100L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("No rating exists");
+    }
+
+    @Test
+    void getMentorRatings_passesPageableThroughToRepository() {
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(0, 10);
+        org.springframework.data.domain.Page<MentorRating> page =
+                new org.springframework.data.domain.PageImpl<>(java.util.List.of(
+                        MentorRating.of(100L, 1L, 2L, 5, "newest"),
+                        MentorRating.of(101L, 1L, 3L, 4, "older")),
+                        pageable, 2);
+        when(mentorRatingRepository.findByMentorIdOrderByCreatedAtDesc(1L, pageable))
+                .thenReturn(page);
+
+        org.springframework.data.domain.Page<MentorRatingResponse> result =
+                mentorRatingService.getMentorRatings(1L, pageable);
+
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getContent().get(0).getComment()).isEqualTo("newest");
+        assertThat(result.getContent().get(1).getComment()).isEqualTo("older");
+    }
 }
