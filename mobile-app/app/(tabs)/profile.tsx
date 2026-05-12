@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import ActionModal from '../../components/ActionModal';
+import LocationPicker from '../../components/LocationPicker';
 
 type AppRole = 'mentor' | 'mentee';
 type NotificationPreferences = {
@@ -493,6 +494,7 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
   const [skillInput, setSkillInput] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [location, setLocation] = useState<{ city: string; latitude: number; longitude: number } | undefined>();
   const [sentRequests, setSentRequests] = useState<SentRequest[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
 
@@ -512,9 +514,12 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
         profileVisibility,
         interests,
         skills,
+        city: location?.city,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
       };
 
-      await apiClient.patch('/users/me/mentee', updateData);
+      await apiClient.put('/users/me/mentee', updateData);
       Alert.alert('Başarılı', 'Profilin güncellendi!');
     } catch (error: any) {
       const serverMessage = error.response?.data?.message || error.message;
@@ -537,6 +542,13 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
         if (data.profileVisibility != null) setProfileVisibility(data.profileVisibility);
         if (data.interests) setInterests(data.interests);
         if (data.skills) setSkills(data.skills);
+        if (data.city) {
+          setLocation({
+            city: data.city,
+            latitude: data.latitude || 0,
+            longitude: data.longitude || 0,
+          });
+        }
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
           await cacheAvatar('mentee', sessionUserId, data.profilePhoto);
@@ -678,6 +690,11 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
                 <Text style={styles.toggleButtonText}>{profileVisibility ? 'Public' : 'Private'}</Text>
               </TouchableOpacity>
             </View>
+            <LocationPicker
+              initialLocation={location}
+              onLocationSelect={setLocation}
+              roleTheme="mentee"
+            />
           </View>
           <TouchableOpacity
             style={styles.saveButtonMentee}
@@ -750,6 +767,7 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
   const [maxMenteeCapacity, setMaxMenteeCapacity] = useState('3');
   const [mentorshipDuration, setMentorshipDuration] = useState('');
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [location, setLocation] = useState<{ city: string; latitude: number; longitude: number } | undefined>();
 
   useEffect(() => {
     const fetchProfileData = async () => {
@@ -767,6 +785,13 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
         if (data.interests) setInterests(data.interests);
         if (data.maxMenteeCapacity != null) setMaxMenteeCapacity(String(data.maxMenteeCapacity));
         if (data.mentorshipDuration != null) setMentorshipDuration(String(data.mentorshipDuration));
+        if (data.city) {
+          setLocation({
+            city: data.city,
+            latitude: data.latitude || 0,
+            longitude: data.longitude || 0,
+          });
+        }
         if (data.profilePhoto) {
           setProfilePhoto(data.profilePhoto);
           await cacheAvatar('mentor', sessionUserId, data.profilePhoto);
@@ -794,7 +819,7 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
     try {
       const nameParts = displayName.trim().split(' ');
       const duration = parseInt(mentorshipDuration, 10);
-      await apiClient.patch('/users/me/mentor', {
+      await apiClient.put('/users/me/mentor', {
         firstName: nameParts[0],
         lastName: nameParts.length > 1 ? nameParts.slice(1).join(' ') : '',
         field: title,
@@ -807,6 +832,9 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
         interests,
         maxMenteeCapacity: capacity,
         ...(mentorshipDuration && !isNaN(duration) ? { mentorshipDuration: duration } : {}),
+        city: location?.city,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
       });
       Alert.alert('Başarılı', 'Profilin güncellendi!');
     } catch (error: any) {
@@ -917,6 +945,11 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
               keyboardType="number-pad"
               placeholder="e.g. 3"
               placeholderTextColor="#B5ADA3"
+            />
+            <LocationPicker
+              initialLocation={location}
+              onLocationSelect={setLocation}
+              roleTheme="mentor"
             />
           </View>
           <TouchableOpacity
