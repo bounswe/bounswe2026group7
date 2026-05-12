@@ -1,5 +1,12 @@
 uml-diagrams/
 
+# Local seed output (regenerated on every run of scripts/seed_local.py)
+scripts/seed_local_credentials.txt
+
+# Python bytecode
+__pycache__/
+*.pyc
+
 # Backend - Spring Boot
 backend/target/
 backend/*.class
