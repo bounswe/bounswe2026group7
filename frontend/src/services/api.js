@@ -653,11 +653,13 @@ export async function markMentorPairMessagesRead(otherMentorId) {
 // ── Social feed ───────────────────────────────────────────────────────────
 // Backend: FeedPostController + FeedReadController (+ FeedInteractionController in #340)
 
-export async function createFeedPost({ body, hashtags = [] }) {
+export async function createFeedPost({ body, hashtags = [], attachmentIds = [] }) {
+  const payload = { body, hashtags }
+  if (attachmentIds.length > 0) payload.attachmentIds = attachmentIds
   const res = await fetch(`${BASE_URL}/feed/posts`, {
     method: 'POST',
     headers: authJsonHeaders(),
-    body: JSON.stringify({ body, hashtags }),
+    body: JSON.stringify(payload),
   })
   return handleResponse(res)
 }
@@ -669,10 +671,13 @@ export async function getFeedPostById(id) {
   return handleResponse(res)
 }
 
-export async function updateFeedPost(id, { body, hashtags }) {
+export async function updateFeedPost(id, { body, hashtags, attachmentIds }) {
   const payload = {}
   if (body !== undefined) payload.body = body
   if (hashtags !== undefined) payload.hashtags = hashtags
+  // attachmentIds: omit to leave attachments untouched; pass [] to clear them;
+  // pass an array to replace the post's attachment list (backend semantics).
+  if (attachmentIds !== undefined) payload.attachmentIds = attachmentIds
   const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
     method: 'PATCH',
     headers: authJsonHeaders(),
