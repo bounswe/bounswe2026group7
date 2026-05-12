@@ -260,6 +260,26 @@ public class ConversationService {
     }
 
     /**
+     * Read-only lookup of an existing {@link ConversationKind#ADMIN_DIRECT}
+     * row for the given pair, or empty if none exists. Used by the read
+     * endpoints that must NOT auto-create a conversation on first access —
+     * a recipient opening their inbox should not synthesise a thread.
+     *
+     * @param userIdA one side of the pair (order does not matter; this method
+     *                normalises to {@code min/max})
+     * @param userIdB the other side
+     */
+    public Optional<Conversation> findAdminDirectByPair(Long userIdA, Long userIdB) {
+        if (userIdA == null || userIdB == null || Objects.equals(userIdA, userIdB)) {
+            return Optional.empty();
+        }
+        long lower = Math.min(userIdA, userIdB);
+        long higher = Math.max(userIdA, userIdB);
+        return conversationRepository
+                .findByPairAIdAndPairBIdAndKind(lower, higher, ConversationKind.ADMIN_DIRECT);
+    }
+
+    /**
      * Returns the singleton {@link ConversationKind#ADMIN_BROADCAST}
      * conversation, creating it on first call and re-syncing its participant
      * list to include every current admin. Re-syncing on each access is what
