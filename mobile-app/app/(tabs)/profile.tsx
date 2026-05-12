@@ -972,30 +972,36 @@ function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
   const [banHours, setBanHours] = useState('168');
   const [userSearch, setUserSearch] = useState('');
 
-  useEffect(() => {
-    // Backend clamps page size to 100, so iterate pages until everyone's loaded.
-    const fetchAll = async () => {
-      const all: any[] = [];
-      try {
-        for (let page = 0; page < 50; page++) {
-          const res = await apiClient.get(`/users?size=100&page=${page}`);
-          const body = res.data;
-          const content: any[] = body?.content ?? (Array.isArray(body) ? body : []);
-          all.push(...content);
-          const totalPages = body?.totalPages;
-          if (typeof totalPages === 'number' && page + 1 >= totalPages) break;
-          if (content.length === 0) break;
-        }
-        setUsers(all);
-      } catch {
-        // keep whatever pages succeeded
-        setUsers(all);
-      } finally {
-        setUsersLoading(false);
+  const fetchAllUsers = async () => {
+    const all: any[] = [];
+    setUsersLoading(true);
+    try {
+      for (let page = 0; page < 50; page++) {
+        const res = await apiClient.get(`/users?size=100&page=${page}`);
+        const body = res.data;
+        const content: any[] = body?.content ?? (Array.isArray(body) ? body : []);
+        all.push(...content);
+        const totalPages = body?.totalPages;
+        if (typeof totalPages === 'number' && page + 1 >= totalPages) break;
+        if (content.length === 0) break;
       }
-    };
-    fetchAll();
+      setUsers(all);
+    } catch {
+      setUsers(all);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchAllUsers();
   }, []);
+
+  useEffect(() => {
+    if (view === 'users') {
+      void fetchAllUsers();
+    }
+  }, [view]);
 
   const filteredUsers = (() => {
     const q = userSearch.trim().toLowerCase();
@@ -1176,6 +1182,25 @@ function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
                   </TouchableOpacity>
                 )}
               </View>
+              <TouchableOpacity
+                style={{
+                  alignSelf: 'flex-start',
+                  backgroundColor: '#EAF1EB',
+                  borderWidth: 1,
+                  borderColor: '#C9D8CC',
+                  borderRadius: 12,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  marginBottom: 12,
+                  opacity: usersLoading ? 0.6 : 1,
+                }}
+                onPress={() => void fetchAllUsers()}
+                disabled={usersLoading}
+              >
+                <Text style={{ color: '#2F563C', fontSize: 12, fontWeight: '700' }}>
+                  {usersLoading ? 'Refreshing...' : '↻ Refresh Users'}
+                </Text>
+              </TouchableOpacity>
               {!usersLoading && users.length > 0 && (
                 <Text style={{ color: '#7E7368', fontSize: 12, marginBottom: 10 }}>
                   {filteredUsers.length} of {users.length} users
@@ -1201,7 +1226,7 @@ function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.requestCardName}>{name}</Text>
                           <Text style={{ color: '#7E7368', fontSize: 12, marginTop: 2 }}>
-                            {u.role || 'USER'} {u.email ? `· ${u.email}` : ''}
+                            #{uid} · {u.role || 'USER'} {u.email ? `· ${u.email}` : ''}
                           </Text>
                         </View>
                       </View>

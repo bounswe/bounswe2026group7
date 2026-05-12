@@ -104,6 +104,34 @@ describe('LoginScreen', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('routes banned users to the blocked screen instead of showing a generic login error', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    (apiClient.post as jest.Mock).mockRejectedValue({
+      response: {
+        status: 403,
+        data: {
+          code: 'BANNED_UNTIL',
+          reason: 'Spam activity detected',
+          expiresAt: '2026-05-20T10:30:00Z',
+        },
+      },
+    });
+
+    const { getByPlaceholderText, getByText } = render(<LoginScreen />);
+
+    fireEvent.changeText(getByPlaceholderText('ovgu@boun.edu.tr'), 'mentor@example.com');
+    fireEvent.changeText(getByPlaceholderText('••••••••'), 'secret123');
+    fireEvent.press(getByText('Sign In'));
+
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith('/blocked');
+    });
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('banReason', 'Spam activity detected');
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('banExpiresAt', '2026-05-20T10:30:00Z');
+  });
+
   it('cleans up partial session state when secure storage write fails', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);

@@ -2,6 +2,7 @@
 import apiClient from '../api/client';
 import * as SecureStore from 'expo-secure-store';
 import { useRole } from '../components/RoleContext';
+import { clearBanNotice, storeBanNotice } from '../utils/banNotice';
 
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -30,6 +31,7 @@ export default function LoginScreen() {
       SecureStore.deleteItemAsync('userToken'),
       SecureStore.deleteItemAsync('userId'),
       SecureStore.deleteItemAsync('userRole'),
+      clearBanNotice(),
     ]);
   };
 
@@ -40,11 +42,7 @@ export default function LoginScreen() {
     }
 
     try {
-      await Promise.all([
-        SecureStore.deleteItemAsync('userToken'),
-        SecureStore.deleteItemAsync('userId'),
-        SecureStore.deleteItemAsync('userRole'),
-      ]);
+      await clearStoredSession();
 
       const response = await apiClient.post('/auth/login', {
         email: email,
@@ -57,15 +55,21 @@ export default function LoginScreen() {
       await SecureStore.setItemAsync('userRole', normalizedRole);
       setRole(normalizedRole as any);
       await SecureStore.setItemAsync('userToken', sessionToken);
+      await clearBanNotice();
 
       router.replace('/(tabs)');
 
-    } catch (error) {
-      await Promise.all([
-        SecureStore.deleteItemAsync('userToken'),
-        SecureStore.deleteItemAsync('userId'),
-        SecureStore.deleteItemAsync('userRole'),
-      ]);
+    } catch (error: any) {
+      await clearStoredSession();
+      const data = error?.response?.data;
+      if (error?.response?.status === 403 && data?.code === 'BANNED_UNTIL') {
+        await storeBanNotice({
+          reason: typeof data?.reason === 'string' ? data.reason : null,
+          expiresAt: typeof data?.expiresAt === 'string' ? data.expiresAt : null,
+        });
+        router.replace('/blocked');
+        return;
+      }
       Alert.alert("Login Failed", "Invalid email or password.");
       console.error(error);
     }
