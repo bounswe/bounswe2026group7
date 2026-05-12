@@ -18,12 +18,15 @@ services:
       - group7_net
 
   neo4j:
-    image: neo4j:5-community
+    # Custom image that bakes the GDS plugin jar in at build time. The
+    # upstream NEO4J_PLUGINS=["graph-data-science"] approach downloaded the
+    # JAR from the Neo4j plugin marketplace during container start, which
+    # was unreliable on CI runners (Bolt opened before the download
+    # completed; gds.* procedures returned "procedure not found"). Baking
+    # the JAR into an image layer removes that race for every consumer.
+    build: ./backend/docker/neo4j-gds
     environment:
       NEO4J_AUTH: ${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:-group7pass}
-      NEO4J_PLUGINS: '["graph-data-science"]'
-      NEO4J_dbms_security_procedures_unrestricted: gds.*
-      NEO4J_dbms_security_procedures_allowlist: gds.*
     ports:
       - "${NEO4J_HTTP_PORT:-7474}:7474"
       - "${NEO4J_BOLT_PORT:-7687}:7687"
