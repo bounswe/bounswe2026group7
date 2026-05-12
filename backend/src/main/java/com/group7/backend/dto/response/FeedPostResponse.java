@@ -55,6 +55,16 @@ public record FeedPostResponse(
                 + "the post has no media (#485). Each downloadUrl resolves to the feed-scoped "
                 + "/api/uploads/feed-media/{id} endpoint, which requires authentication but no "
                 + "per-user ACL.")
-        List<AttachmentSummary> attachments
+        List<AttachmentSummary> attachments,
+
+        @Schema(description = "True if the authenticated viewer has liked this post. Always "
+                + "false for anonymous reads. Lets the UI render the heart-icon toggle state "
+                + "without a follow-up GET /interactions call per item.")
+        boolean viewerHasLiked,
+
+        @Schema(description = "True if the authenticated viewer has bookmarked this post. "
+                + "Always false for anonymous reads. Lets the UI render the bookmark-icon "
+                + "toggle state without a follow-up GET /interactions call per item.")
+        boolean viewerHasBookmarked
 ) {
 }

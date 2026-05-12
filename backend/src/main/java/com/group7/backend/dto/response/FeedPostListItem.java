@@ -56,6 +56,16 @@ public record FeedPostListItem(
                 + "the post has no media (#485).")
         List<AttachmentSummary> attachments,
 
+        @Schema(description = "True if the authenticated viewer has liked this post. Always "
+                + "false for anonymous reads. Lets the UI render the heart-icon toggle state "
+                + "without a follow-up GET /interactions call per item.")
+        boolean viewerHasLiked,
+
+        @Schema(description = "True if the authenticated viewer has bookmarked this post. "
+                + "Always false for anonymous reads. Lets the UI render the bookmark-icon "
+                + "toggle state without a follow-up GET /interactions call per item.")
+        boolean viewerHasBookmarked,
+
         @Schema(description = "User id of the follower who reposted this post into the viewer's "
                 + "Following feed. Null when the row originates from the post's own author "
                 + "(i.e., not a repost surface).",
