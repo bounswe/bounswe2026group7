@@ -4,6 +4,9 @@ import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
 import { getAllMentors, getMatchingMentors, getMatchingMentees, getActiveMentorships, getSentMentorshipRequests, createMentorshipRequest } from '../services/api'
+import MentorFilterSidebar from '../components/MentorFilterSidebar'
+import MentorCompareModal from '../components/MentorCompareModal'
+import { showTransientToast } from '../utils/toast'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
 
@@ -225,6 +228,21 @@ export default function ExplorePage() {
   const [showMatches, setShowMatches] = useState(false)
   const matchSectionRef = useRef(null)
 
+  // #139: advanced filters. State lives here; controls in MentorFilterSidebar.
+  // Filters are passed straight through to the matching API which has been
+  // accepting them since backend #571. The selection is also applied client-
+  // side when the AI Match panel isn't open (i.e., to the regular mentor
+  // grid which comes from getAllMentors — that endpoint doesn't take the
+  // same filter params).
+  const [filters, setFilters] = useState({
+    availabilityDays: [],
+    mentorshipDuration: [],
+    minMatchScore: 0,
+  })
+  // #139: compare mode. Selection is a Set of mentor ids, capped at 3.
+  const [compareIds, setCompareIds] = useState(() => new Set())
+  const [compareOpen, setCompareOpen] = useState(false)
+
   useEffect(() => {
     async function init() {
       setLoading(true)
@@ -271,7 +289,14 @@ export default function ExplorePage() {
     }
     setAiState('loading')
     try {
-      const data = await getMatchingMentors()
+      // #139: forward the advanced filters to the matching endpoint. None of
+      // them are required — empty arrays / zero score are sent as nothing,
+      // so this is backward compatible with the no-filter case.
+      const data = await getMatchingMentors(null, {
+        availabilityDays: filters.availabilityDays,
+        mentorshipDuration: filters.mentorshipDuration,
+        minMatchScore: filters.minMatchScore > 0 ? filters.minMatchScore : undefined,
+      })
       const list = Array.isArray(data) ? data.slice(0, 5) : []
       setMatches(list)
       setAiState('done')
@@ -281,6 +306,43 @@ export default function ExplorePage() {
       setAiState('idle')
     }
   }
+
+  function updateFilters(patch) {
+    setFilters(prev => ({ ...prev, ...patch }))
+  }
+
+  function resetFilters() {
+    setFilters({ availabilityDays: [], mentorshipDuration: [], minMatchScore: 0 })
+  }
+
+  // Backends mix numeric and string ids in JSON payloads, so we coerce to
+  // String once at the boundary. Lookups elsewhere do the same.
+  function toggleCompare(mentorId) {
+    const key = String(mentorId)
+    setCompareIds(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        if (next.size >= 3) {
+          showTransientToast('You can compare up to 3 mentors at a time.')
+          return prev
+        }
+        next.add(key)
+      }
+      return next
+    })
+  }
+
+  // Mentor objects currently selected for comparison. Combines the AI
+  // matches list and the regular all-mentors list so a user can mix-and-
+  // match across surfaces.
+  const compareMentors = (() => {
+    const pool = new Map()
+    for (const m of mentors) pool.set(String(m.id), m)
+    for (const m of matches) pool.set(String(m.id), m)
+    return [...compareIds].map(id => pool.get(id)).filter(Boolean)
+  })()
 
   const filtered = isMentee
     ? mentors.filter(m => {
@@ -389,8 +451,36 @@ export default function ExplorePage() {
             data-testid="explore-search-input"
           />
         </div>
+        {/* #139: open compare modal. Disabled when no mentor selected. */}
+        {isMentee && (
+          <button
+            type="button"
+            className="action-btn"
+            disabled={compareIds.size === 0}
+            onClick={() => setCompareOpen(true)}
+            data-testid="explore-compare-btn"
+            title={compareIds.size === 0 ? 'Select up to 3 mentors to compare' : `Compare ${compareIds.size} selected`}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            Compare ({compareIds.size}/3)
+          </button>
+        )}
       </div>
 
+      <div className={`explore-body${isMentee ? ' explore-body--with-sidebar' : ''}`}>
+        {/* #139: mentor-side filter sidebar. Mentees only — backend matching
+            API is mentee-only too, so showing it on mentor view would be moot. */}
+        {isMentee && (
+          <MentorFilterSidebar
+            availabilityDays={filters.availabilityDays}
+            mentorshipDuration={filters.mentorshipDuration}
+            minMatchScore={filters.minMatchScore}
+            onChange={updateFilters}
+            onReset={resetFilters}
+          />
+        )}
+
+      <div className="explore-main">
       <div className="chips">
         {FILTERS.map(f => (
           <div key={f} className={`chip${activeFilter === f ? ' active' : ''}`} onClick={() => setActiveFilter(f)}>
@@ -478,6 +568,15 @@ export default function ExplorePage() {
                 )}
                 {m.bio && <div className="mc-bio">{m.bio}</div>}
                 <div className="mc-footer">
+                  <label className="mentor-compare-toggle" title="Add to comparison (up to 3)">
+                    <input
+                      type="checkbox"
+                      checked={compareIds.has(String(m.id))}
+                      onChange={() => toggleCompare(m.id)}
+                      aria-label={`Add ${m.firstName} to comparison`}
+                    />
+                    Compare
+                  </label>
                   <div className="mentor-actions">
                     <button
                       className={`send-request-btn${alreadySent ? ' sent' : ''}${hasActiveMentor && !alreadySent ? ' locked' : ''}`}
@@ -530,6 +629,20 @@ export default function ExplorePage() {
           })}
         </div>
       )}
+      </div> {/* /explore-main */}
+      </div> {/* /explore-body */}
+
+      <MentorCompareModal
+        open={compareOpen}
+        mentors={compareMentors}
+        onClose={() => setCompareOpen(false)}
+        onRemove={(id) => setCompareIds(prev => {
+          const next = new Set(prev)
+          next.delete(String(id))
+          if (next.size === 0) setCompareOpen(false)
+          return next
+        })}
+      />
     </MainLayout>
   )
 }

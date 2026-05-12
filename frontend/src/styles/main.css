@@ -3389,6 +3389,192 @@
   opacity: 0.75;
 }
 
+/* Mentor filter sidebar + compare mode (#139). */
+.explore-body {
+  display: block;
+}
+.explore-body--with-sidebar {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 880px) {
+  .explore-body--with-sidebar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* On narrow viewports collapse the sticky sidebar into the document
+     flow so it doesn't trap the user's scroll. */
+  .mentor-filter-sidebar {
+    position: static;
+  }
+}
+.explore-main {
+  min-width: 0;
+}
+
+.mentor-filter-sidebar {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  position: sticky;
+  top: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-family: 'DM Sans', sans-serif;
+}
+.mentor-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mentor-filter-reset {
+  background: transparent;
+  border: none;
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.mentor-filter-reset:hover { text-decoration: underline; }
+.mentor-filter-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mentor-filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mentor-filter-score-value {
+  font-weight: 700;
+  color: var(--green-dark);
+}
+.mentor-filter-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.mentor-filter-day {
+  font-size: 11px;
+  padding: 6px 2px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text);
+}
+.mentor-filter-day:hover { border-color: var(--green-mid); }
+.mentor-filter-day--active {
+  background: var(--green-pale);
+  border-color: var(--green-dark);
+  color: var(--green-dark);
+  font-weight: 600;
+}
+.mentor-filter-durations {
+  display: flex;
+  gap: 6px;
+}
+.mentor-filter-duration {
+  flex: 1;
+  font-size: 12px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text);
+}
+.mentor-filter-duration:hover { border-color: var(--green-mid); }
+.mentor-filter-duration--active {
+  background: var(--green-pale);
+  border-color: var(--green-dark);
+  color: var(--green-dark);
+  font-weight: 600;
+}
+.mentor-filter-slider {
+  width: 100%;
+}
+
+.mentor-compare-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-right: auto;
+}
+.mentor-compare-toggle input { margin: 0; }
+
+.mentor-compare-card {
+  max-width: 900px;
+}
+.mentor-compare-grid {
+  display: grid;
+  gap: 6px 12px;
+  margin-top: 12px;
+  align-items: start;
+}
+.mentor-compare-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--green-pale);
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--green-dark);
+}
+.mentor-compare-remove {
+  background: transparent;
+  border: none;
+  color: var(--green-dark);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.mentor-compare-row-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mentor-compare-cell {
+  padding: 8px 4px;
+  font-size: 13px;
+  color: var(--text);
+  border-top: 1px solid var(--border);
+}
+.mentor-compare-empty { color: var(--text-muted); }
+.mentor-compare-factors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mentor-compare-factor {
+  background: #f1f5ee;
+  border: 1px solid #e2e8d8;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text);
+}
+
 /* Admin messaging (#410). */
 .admin-subnav {
   display: flex;
