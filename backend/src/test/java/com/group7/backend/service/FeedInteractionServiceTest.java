@@ -8,6 +8,7 @@ import com.group7.backend.entity.FeedPostShare;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FeedPostBookmarkRepository;
+import com.group7.backend.repository.FeedPostCommentLikeRepository;
 import com.group7.backend.repository.FeedPostCommentRepository;
 import com.group7.backend.repository.FeedPostLikeRepository;
 import com.group7.backend.repository.FeedPostRepository;
@@ -23,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +66,7 @@ class FeedInteractionServiceTest {
     @Mock private FeedPostBookmarkRepository bookmarkRepository;
     @Mock private FeedPostShareRepository shareRepository;
     @Mock private FeedPostCommentRepository commentRepository;
+    @Mock private FeedPostCommentLikeRepository commentLikeRepository;
     @Mock private UserRepository userRepository;
     @Mock private FeedPostMapper feedPostMapper;
     @Mock private NotificationEventPublisher notificationEventPublisher;
@@ -73,16 +76,24 @@ class FeedInteractionServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 60s repost idempotency matches the production default
+        // (app.feed.repost.idempotency-window=PT60S). None of the toggle /
+        // comment / share / count tests below exercise the repost path, so
+        // the exact value doesn't affect assertions — pinning it to the
+        // production default keeps reads of this test in sync with the
+        // shipped behaviour.
         service = new FeedInteractionService(
                 feedPostRepository,
                 likeRepository,
                 bookmarkRepository,
                 shareRepository,
                 commentRepository,
+                commentLikeRepository,
                 userRepository,
                 feedPostMapper,
                 notificationEventPublisher,
-                eventPublisher);
+                eventPublisher,
+                Duration.ofSeconds(60));
     }
 
     // ── toggleLike ─────────────────────────────────────────────────────────
