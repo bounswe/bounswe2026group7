@@ -164,6 +164,7 @@ export default function ProfilePage() {
         } : {
           backgroundInfo: form.background || null,
           goals: form.goals || null,
+          affiliation: form.affiliation || null,
           major: form.major || null,
           careerInterest: form.careerInterest || null,
           meetingFreqPref: form.meetingFreqPref || null,
@@ -318,6 +319,7 @@ export default function ProfilePage() {
               <>
                 <ViewField label="Background" value={form.background} visible={form.profileVisible} />
                 <ViewField label="Goals" value={form.goals} visible={form.profileVisible} />
+                <ViewField label="Affiliation" value={form.affiliation} visible={form.profileVisible} />
                 <ViewField label="Skills" value={form.skills} visible={form.profileVisible} chips />
                 <ViewField label="Interests" value={form.interests} visible={form.profileVisible} chips />
                 <ViewField label="Major" value={form.major} visible={form.profileVisible} />
@@ -485,6 +487,18 @@ export default function ProfilePage() {
                     value={form.goals}
                     onChange={e => handleChange('goals', e.target.value)}
                     placeholder="What do you want to achieve..."
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="form-label">Affiliation</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={form.affiliation}
+                    onChange={e => handleChange('affiliation', e.target.value)}
+                    placeholder="e.g. Boğaziçi University"
+                    maxLength={200}
                   />
                 </div>
 
