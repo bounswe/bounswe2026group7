@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import FeedPostCard from '../components/FeedPostCard'
 import FeedImageUploader from '../components/FeedImageUploader'
-import { getFeedPostById, updateFeedPost, deleteFeedPost } from '../services/api'
+import { getFeedPostById, updateFeedPost, deleteFeedPost, restoreFeedPost } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { showUndoToast } from '../utils/toast'
 import '../styles/main.css'
 
 export default function FeedPostDetailPage() {
@@ -71,11 +72,23 @@ export default function FeedPostDetailPage() {
 
   async function handleDelete(p) {
     if (!p) return
-    const confirmed = window.confirm('Delete this post? This cannot be undone.')
+    const confirmed = window.confirm(
+      'Hide this post? You can restore it within 30 days from the toast on the feed page.'
+    )
     if (!confirmed) return
     try {
       await deleteFeedPost(p.id)
       navigate('/feed')
+      // Drop the toast on the feed route the user just landed on. The async
+      // restore re-routes them to the detail page on success.
+      showUndoToast('Post hidden.', async () => {
+        try {
+          const restored = await restoreFeedPost(p.id)
+          navigate(`/feed/${restored.id}`)
+        } catch (err) {
+          window.alert(err?.message || 'Failed to restore post')
+        }
+      })
     } catch (err) {
       window.alert(err?.message || 'Failed to delete post')
     }

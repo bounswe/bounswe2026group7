@@ -795,6 +795,25 @@ export async function deleteFeedPost(id) {
   return handleResponse(res)
 }
 
+// #544 / backend #487: restore a soft-deleted post within the 30-day window.
+// 410 means the window expired; surfaced as a regular Error from handleResponse.
+export async function restoreFeedPost(id) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}/restore`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #544 / backend #487: edit-history entries for a post, newest-first.
+// Author or admin only; non-author callers get 403.
+export async function getFeedPostHistory(id, limit = 50) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}/history?limit=${limit}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 export async function getForYouFeed(page = 0, size = 20) {
   const res = await fetch(`${BASE_URL}/feed/for-you?page=${page}&size=${size}`, {
     headers: authHeaders(),

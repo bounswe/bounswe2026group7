@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MoreHorizontal, Pencil, Trash2, Share2, Bookmark, Heart, MessageCircle } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, History, Share2, Bookmark, Heart, MessageCircle } from 'lucide-react'
 import Avatar from './Avatar'
 import FeedAttachmentGrid from './FeedAttachmentGrid'
+import EditHistoryModal from './EditHistoryModal'
 import { linkify } from '../utils/linkify'
 import {
   toggleBookmarkOnPost,
@@ -56,6 +57,7 @@ export default function FeedPostCard({
 }) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const menuRef = useRef(null)
 
   // Local state mirrors viewer-relative interaction toggles + counts; backend
@@ -133,7 +135,7 @@ export default function FeedPostCard({
   if (!post) return null
 
   const initials = (post.authorFirstName?.[0] || '?').toUpperCase()
-  const showOverflow = isAuthor && (onEdit || onDelete)
+  const showOverflow = isAuthor && (onEdit || onDelete || post?.isEdited)
 
   function openDetail() {
     if (clickable) navigate(`/feed/${post.id}`)
@@ -349,6 +351,16 @@ export default function FeedPostCard({
                     <Pencil size={14} strokeWidth={1.75} /> Edit
                   </button>
                 )}
+                {post?.isEdited && (
+                  <button
+                    type="button"
+                    className="feed-card-menu-item"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpen(false); setHistoryOpen(true) }}
+                    role="menuitem"
+                  >
+                    <History size={14} strokeWidth={1.75} /> View edit history
+                  </button>
+                )}
                 {onDelete && (
                   <button
                     type="button"
@@ -510,6 +522,12 @@ export default function FeedPostCard({
           {commentError && <div className="feed-comment-error">{commentError}</div>}
         </div>
       )}
+
+      <EditHistoryModal
+        open={historyOpen}
+        postId={post.id}
+        onClose={() => setHistoryOpen(false)}
+      />
     </article>
   )
 }
