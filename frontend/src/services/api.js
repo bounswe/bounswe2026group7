@@ -1061,6 +1061,81 @@ export async function sendAdminDirectMessage(userId, content) {
   return handleResponse(res)
 }
 
+// #279 / backend #569 + #280: admin user listing, drill-in, ban/unban,
+// and clear-bot-flag. All gated server-side by hasRole('ADMIN').
+export async function listAdminUsers({ role, banStatus, q, page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  if (role) params.set('role', role)
+  if (banStatus) params.set('banStatus', banStatus)
+  if (q) params.set('q', q)
+  const res = await fetch(`${BASE_URL}/admin/users?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getAdminUserDetail(id) {
+  const res = await fetch(`${BASE_URL}/admin/users/${id}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function banAdminUser(userId, { reason, durationHours }) {
+  const res = await fetch(`${BASE_URL}/admin/users/${userId}/ban`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ reason, durationHours }),
+  })
+  return handleResponse(res)
+}
+
+export async function unbanAdminUser(userId) {
+  const res = await fetch(`${BASE_URL}/admin/users/${userId}/unban`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function clearBotFlag(userId) {
+  const res = await fetch(`${BASE_URL}/admin/users/${userId}/clear-bot-flag`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  if (res.status === 204) return null
+  return handleResponse(res)
+}
+
+// #279 / backend #135: admin report queue + status transitions.
+// Allowed transitions: OPEN → UNDER_REVIEW / RESOLVED / DISMISSED;
+// UNDER_REVIEW → RESOLVED / DISMISSED. Terminal states reject with 400.
+export async function listAdminReports({ status, targetType, page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  if (status) params.set('status', status)
+  if (targetType) params.set('targetType', targetType)
+  const res = await fetch(`${BASE_URL}/admin/reports?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getAdminReport(id) {
+  const res = await fetch(`${BASE_URL}/admin/reports/${id}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function updateAdminReportStatus(id, status) {
+  const res = await fetch(`${BASE_URL}/admin/reports/${id}`, {
+    method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ status }),
+  })
+  return handleResponse(res)
+}
+
 export async function getMenteeAvailability() {
   const res = await fetch(`${BASE_URL}/mentee-availability`, {
     headers: authHeaders(),
