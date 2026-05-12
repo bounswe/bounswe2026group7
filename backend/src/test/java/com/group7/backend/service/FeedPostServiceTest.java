@@ -7,11 +7,12 @@ import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.AttachmentRepository;
+import com.group7.backend.repository.FeedPostEditHistoryRepository;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -42,7 +43,27 @@ class FeedPostServiceTest {
     @Mock private HashtagNormalizer hashtagNormalizer;
     @Mock private FeedPostMapper feedPostMapper;
     @Mock private FeedPostEventPublisher feedPostEventPublisher;
-    @InjectMocks private FeedPostService feedPostService;
+    @Mock private FeedPostEditHistoryRepository historyRepository;
+
+    private FeedPostService feedPostService;
+
+    @BeforeEach
+    void setUp() {
+        // Manual construction (not @InjectMocks): the service's
+        // restoreWindowDays primitive parameter cannot be auto-wired
+        // by Mockito. Pass 30 — matches the production default and
+        // is irrelevant to the create/getById/update/delete tests
+        // covered here (restore behaviour lives in FeedPostServiceRestoreTest).
+        feedPostService = new FeedPostService(
+                feedPostRepository,
+                userRepository,
+                attachmentRepository,
+                hashtagNormalizer,
+                feedPostMapper,
+                feedPostEventPublisher,
+                historyRepository,
+                30);
+    }
 
     // ── create ─────────────────────────────────────────────────────────────
 

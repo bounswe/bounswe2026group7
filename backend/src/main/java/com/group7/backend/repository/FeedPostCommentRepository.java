@@ -5,10 +5,12 @@ import com.group7.backend.repository.projection.PostCountTuple;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -47,4 +49,17 @@ public interface FeedPostCommentRepository extends JpaRepository<FeedPostComment
             GROUP BY c.postId
             """)
     List<PostCountTuple> countVisibleByPostIdIn(@Param("postIds") Collection<Long> postIds);
+
+    /**
+     * Hard-deletes comments soft-deleted earlier than {@code cutoff}
+     * (#487). Symmetric to {@code FeedPostRepository.hardDeletePostsSoftDeletedBefore};
+     * exists so comments soft-deleted independently of their parent
+     * post (a future moderator-comment-delete feature) still get
+     * reaped on the same schedule. Comments whose parent post is
+     * hard-deleted are already reaped via the FK
+     * {@code ON DELETE CASCADE} on {@code post_id}.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = false)
+    @Query("DELETE FROM FeedPostComment c WHERE c.deletedAt IS NOT NULL AND c.deletedAt < :cutoff")
+    int hardDeleteCommentsSoftDeletedBefore(@Param("cutoff") OffsetDateTime cutoff);
 }
