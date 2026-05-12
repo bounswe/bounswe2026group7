@@ -269,6 +269,18 @@ export default function UserProfilePage() {
                 <div className="psr-num">{profile.currentMenteeCount ?? 0}/{profile.maxMenteeCapacity ?? '∞'}</div>
                 <div className="psr-lbl">Mentees</div>
               </div>
+              <div className="psr-item" title={profile.ratingCount ? `${profile.ratingCount} rating${profile.ratingCount === 1 ? '' : 's'}` : 'No ratings yet'}>
+                <div className="psr-num">
+                  {profile.averageRating != null
+                    ? `★ ${profile.averageRating.toFixed(1)}`
+                    : '—'}
+                </div>
+                <div className="psr-lbl">
+                  {profile.ratingCount
+                    ? `${profile.ratingCount} rating${profile.ratingCount === 1 ? '' : 's'}`
+                    : 'Rating'}
+                </div>
+              </div>
             </div>
           )}
 
