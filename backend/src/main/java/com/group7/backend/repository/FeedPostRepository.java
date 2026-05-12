@@ -4,10 +4,12 @@ import com.group7.backend.entity.FeedPost;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,6 +50,15 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
     Optional<FeedPost> findByIdAndDeletedAtIsNull(Long id);
 
     /**
+     * Batched public-visibility lookup. Used by {@code ReportMapper} to
+     * resolve POST-target excerpts in one query when paging the admin
+     * report queue. Soft-deleted posts are excluded so the mapper falls
+     * back to {@code [post deleted or unavailable]} for any id missing
+     * from the result.
+     */
+    java.util.List<FeedPost> findAllByIdInAndDeletedAtIsNull(java.util.Collection<Long> ids);
+
+    /**
      * Following-feed query (#350). Returns posts authored by users the
      * viewer follows (via the {@code follows} graph in #343), excluding
      * soft-deleted posts. Chronological by {@code created_at DESC}; the
@@ -60,23 +71,80 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
      * countQuery} is provided so Spring Data does not attempt to derive
      * one from the native query (which it cannot do reliably).
      */
+    /**
+     * Following-feed read. UNIONs two branches:
+     * <ul>
+     *   <li>Original posts authored by users the viewer follows.</li>
+     *   <li>Posts reposted (is_repost = TRUE) by users the viewer follows.</li>
+     * </ul>
+     *
+     * <p>Both branches filter {@code p.deleted_at IS NULL}, so a soft-
+     * deleted post never surfaces — its share rows are silently dropped.
+     *
+     * <p>Sort key is {@code sort_at} (post-creation time on the original
+     * branch, share-creation time on the repost branch) so reposts
+     * inserted today rank above untouched posts from earlier. The
+     * {@code share_row_id DESC NULLS LAST} tiebreaker guarantees stable
+     * pagination when two reposts of the same post share a millisecond
+     * — without it, page boundaries could drop or duplicate rows.
+     *
+     * <p>The same post can surface twice if the viewer follows both the
+     * post's author and a separate user who reposted it. Frontend may
+     * collapse if desired; this is documented contract behaviour, not a
+     * bug.
+     */
     @Query(value = """
-            SELECT * FROM feed_posts p
-            WHERE p.deleted_at IS NULL
-              AND p.author_id IN (
-                  SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
-              )
-            ORDER BY p.created_at DESC, p.id DESC
+            SELECT * FROM (
+                SELECT p.id, p.author_id, p.body, p.created_at,
+                       NULL::BIGINT      AS shared_by_id,
+                       NULL::TEXT        AS share_commentary,
+                       NULL::BIGINT      AS share_row_id,
+                       NULL::TIMESTAMPTZ AS shared_at,
+                       p.created_at      AS sort_at
+                FROM feed_posts p
+                WHERE p.deleted_at IS NULL
+                  AND p.author_id IN (
+                      SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
+                  )
+                UNION ALL
+                SELECT p.id, p.author_id, p.body, p.created_at,
+                       s.sharer_id  AS shared_by_id,
+                       s.body       AS share_commentary,
+                       s.id         AS share_row_id,
+                       s.created_at AS shared_at,
+                       s.created_at AS sort_at
+                FROM feed_post_shares s
+                JOIN feed_posts p ON p.id = s.post_id
+                WHERE s.is_repost = TRUE
+                  AND p.deleted_at IS NULL
+                  AND s.sharer_id IN (
+                      SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
+                  )
+            ) merged
+            ORDER BY sort_at DESC, id DESC, share_row_id DESC NULLS LAST
             """,
             countQuery = """
-            SELECT COUNT(*) FROM feed_posts p
-            WHERE p.deleted_at IS NULL
-              AND p.author_id IN (
-                  SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
-              )
+            SELECT COUNT(*) FROM (
+                SELECT 1
+                FROM feed_posts p
+                WHERE p.deleted_at IS NULL
+                  AND p.author_id IN (
+                      SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
+                  )
+                UNION ALL
+                SELECT 1
+                FROM feed_post_shares s
+                JOIN feed_posts p ON p.id = s.post_id
+                WHERE s.is_repost = TRUE
+                  AND p.deleted_at IS NULL
+                  AND s.sharer_id IN (
+                      SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
+                  )
+            ) merged
             """,
             nativeQuery = true)
-    Page<FeedPost> findFollowingFeed(@Param("viewerId") Long viewerId, Pageable pageable);
+    Page<com.group7.backend.repository.projection.FollowingFeedRow> findFollowingFeed(
+            @Param("viewerId") Long viewerId, Pageable pageable);
 
     /**
      * Author-profile feed query (#471). Returns non-deleted posts for a
@@ -142,6 +210,9 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             WHERE p.deleted_at IS NULL
               AND (:keyword IS NULL OR LOWER(p.body) LIKE '%' || :keyword || '%' ESCAPE '\\')
               AND (:hashtag IS NULL OR h.tag = :hashtag)
+              AND (CAST(:since AS timestamptz) IS NULL OR p.created_at >= CAST(:since AS timestamptz))
+              AND (CAST(:until AS timestamptz) IS NULL OR p.created_at <  CAST(:until AS timestamptz))
+              AND (:lang IS NULL OR p.lang = :lang)
             ORDER BY p.created_at DESC, p.id DESC
             """,
             countQuery = """
@@ -150,10 +221,16 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             WHERE p.deleted_at IS NULL
               AND (:keyword IS NULL OR LOWER(p.body) LIKE '%' || :keyword || '%' ESCAPE '\\')
               AND (:hashtag IS NULL OR h.tag = :hashtag)
+              AND (CAST(:since AS timestamptz) IS NULL OR p.created_at >= CAST(:since AS timestamptz))
+              AND (CAST(:until AS timestamptz) IS NULL OR p.created_at <  CAST(:until AS timestamptz))
+              AND (:lang IS NULL OR p.lang = :lang)
             """,
             nativeQuery = true)
     Page<FeedPost> searchPosts(@Param("keyword") String keyword,
                                 @Param("hashtag") String hashtag,
+                                @Param("since") OffsetDateTime since,
+                                @Param("until") OffsetDateTime until,
+                                @Param("lang") String lang,
                                 Pageable pageable);
 
     /**
@@ -186,4 +263,28 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
     long countUnreadFollowingPostsCapped(@Param("viewerId") Long viewerId,
                                           @Param("since") java.time.OffsetDateTime since,
                                           @Param("capPlusOne") int capPlusOne);
+
+    /**
+     * Hard-deletes feed posts soft-deleted earlier than {@code cutoff}
+     * (#487). Used by {@code FeedSoftDeleteCleanupScheduler}; backed
+     * by the partial index {@code idx_feed_posts_deleted_at_pending_cleanup}
+     * (V43) so the scan walks only matching rows.
+     *
+     * <p>Hibernate's bulk delete bypasses entity lifecycle callbacks
+     * but Postgres still honours the {@code ON DELETE CASCADE} FKs
+     * on {@code feed_post_likes}, {@code feed_post_bookmarks},
+     * {@code feed_post_shares}, {@code feed_post_comments}, and
+     * {@code feed_post_edit_history}, so all child rows are reaped
+     * atomically.
+     *
+     * <p>{@code flushAutomatically = true} flushes any pending JPA
+     * writes before the bulk delete runs — matches the project
+     * convention used in {@code FollowRepository.upsertFollow}.
+     * {@code clearAutomatically = false} keeps unrelated entities
+     * cached in the persistence context (the scheduler is the only
+     * mutator in its transaction, so cache eviction would be wasteful).
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = false)
+    @Query("DELETE FROM FeedPost p WHERE p.deletedAt IS NOT NULL AND p.deletedAt < :cutoff")
+    int hardDeletePostsSoftDeletedBefore(@Param("cutoff") OffsetDateTime cutoff);
 }

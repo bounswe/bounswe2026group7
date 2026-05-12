@@ -14,6 +14,8 @@ import {
   getMentorPairMessages,
   sendMentorPairMessage,
   markMentorPairMessagesRead,
+  getAdminDirectInbox,
+  getAdminDirectMessages,
 } from '../services/api'
 import { uploadMessageAttachment } from '../services/attachmentService'
 import useConversationSubscription from '../hooks/useConversationSubscription'
@@ -76,6 +78,7 @@ export default function MessagesPage() {
   const [params] = useSearchParams()
   const mentorshipId = params.get('mentorshipId')
   const peerId = params.get('peerId')
+  const adminUserId = params.get('adminUserId')
   const navigate = useNavigate()
   const { role, userId } = useAuth()
   const isMentor = role === 'MENTOR'
@@ -107,8 +110,23 @@ export default function MessagesPage() {
         backLabel: '← Back to profile',
       }
     }
+    if (adminUserId) {
+      // #410: admin-direct read surface. One-way conversation (admin → user)
+      // — backend has no POST for the recipient to reply, so `send` returns
+      // a rejected promise to surface a clear error if the UI ever tries.
+      return {
+        kind: 'ADMIN_DIRECT',
+        key: adminUserId,
+        loadMessages: (k, page, size) => getAdminDirectMessages(k, page, size),
+        send: () => Promise.reject(new Error('Admin-direct conversations are read-only on this surface.')),
+        markRead: () => Promise.resolve(),
+        backHref: '/messages',
+        backLabel: '← Back to inbox',
+        readOnly: true,
+      }
+    }
     return null
-  }, [mentorshipId, peerId])
+  }, [mentorshipId, peerId, adminUserId])
 
   // Thread state
   const [messages, setMessages] = useState([])
@@ -213,9 +231,30 @@ export default function MessagesPage() {
       }
     }
 
-    Promise.all([loadMentorshipConvs(), loadMentorPairConvs()])
-      .then(([mentorships, pairs]) => {
-        const merged = [...mentorships, ...pairs]
+    async function loadAdminDirectConvs() {
+      // #410: admin-direct conversations. Surfaces in every user's inbox
+      // (a regular user sees messages from admins; an admin sees DMs to
+      // users). Backend gates by participant, so both shapes come back
+      // from the same endpoint.
+      try {
+        const inbox = await getAdminDirectInbox(0, 50)
+        return (inbox?.content || []).map(item => ({
+          kind: 'ADMIN_DIRECT',
+          id: `admin-${item.peerId}`,
+          href: `/messages?adminUserId=${item.peerId}`,
+          name: item.peerFirstName || '—',
+          preview: item.lastMessageContent || '',
+          lastAt: item.lastMessageSentAt || null,
+          fromAdmin: Boolean(item.peerIsAdmin),
+        }))
+      } catch {
+        return []
+      }
+    }
+
+    Promise.all([loadMentorshipConvs(), loadMentorPairConvs(), loadAdminDirectConvs()])
+      .then(([mentorships, pairs, adminConvs]) => {
+        const merged = [...mentorships, ...pairs, ...adminConvs]
           .sort((a, b) => new Date(b.lastAt || 0) - new Date(a.lastAt || 0))
         if (!cancelled) setConversations(merged)
       })
@@ -267,6 +306,7 @@ export default function MessagesPage() {
                   key={c.id}
                   className="md-conv-item"
                   onClick={() => navigate(c.href)}
+                  data-testid={`messages-conversation-${c.id}`}
                 >
                   <Avatar initials={initials} size="md" />
                   <div className="md-conv-info">
@@ -274,6 +314,12 @@ export default function MessagesPage() {
                       <span className="md-conv-name">{c.name}</span>
                       {c.kind === 'MENTOR_PAIR' && (
                         <span className="md-conv-badge">Mentor</span>
+                      )}
+                      {c.kind === 'ADMIN_DIRECT' && c.fromAdmin && (
+                        <span className="md-conv-badge md-conv-badge--admin">From admin</span>
+                      )}
+                      {c.kind === 'ADMIN_DIRECT' && !c.fromAdmin && (
+                        <span className="md-conv-badge md-conv-badge--admin">Admin DM</span>
                       )}
                       {c.lastAt && <span className="md-conv-time">{relativeTime(c.lastAt)}</span>}
                     </div>
@@ -334,11 +380,17 @@ export default function MessagesPage() {
               )
             })}
           </div>
-          <ChatComposer
-            onSend={handleSend}
-            onUpload={uploadMessageAttachment}
-            placeholder="Type a message…"
-          />
+          {chatRoute.readOnly ? (
+            <div className="md-readonly-notice">
+              This conversation is read-only — admin announcements cannot be replied to here.
+            </div>
+          ) : (
+            <ChatComposer
+              onSend={handleSend}
+              onUpload={uploadMessageAttachment}
+              placeholder="Type a message…"
+            />
+          )}
         </>
       )}
     </MainLayout>

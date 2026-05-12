@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import FeedPostCard from '../components/FeedPostCard'
-import { getFeedPostById, updateFeedPost, deleteFeedPost } from '../services/api'
+import FeedImageUploader from '../components/FeedImageUploader'
+import { getFeedPostById, updateFeedPost, deleteFeedPost, restoreFeedPost } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { showUndoToast } from '../utils/toast'
+import useFeedSubscription from '../hooks/useFeedSubscription'
 import '../styles/main.css'
 
 export default function FeedPostDetailPage() {
@@ -15,11 +18,28 @@ export default function FeedPostDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // #563: subscribe to the viewer's feed topic so a like / comment / share
+  // on the post being viewed updates the counts in place. Engagement frames
+  // for other posts are ignored. New-post and repost frames are ignored on
+  // the detail surface — there's no list to insert them into.
+  useFeedSubscription(userId, {
+    onEngagement: (payload) => {
+      if (!post || String(post.id) !== String(payload.postId)) return
+      setPost(prev => prev ? {
+        ...prev,
+        likeCount: payload.likeCount,
+        commentCount: payload.commentCount,
+        shareCount: payload.shareCount,
+      } : prev)
+    },
+  })
+
   // Edit modal state — same pattern as FeedPage; would extract a shared
   // <EditPostModal /> if/when a third caller appears.
   const [editing, setEditing] = useState(null)
   const [editBody, setEditBody] = useState('')
   const [editHashtags, setEditHashtags] = useState('')
+  const [editAttachments, setEditAttachments] = useState([])
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState(null)
 
@@ -38,6 +58,7 @@ export default function FeedPostDetailPage() {
     setEditing(p)
     setEditBody(p.body || '')
     setEditHashtags((p.hashtags || []).join(' '))
+    setEditAttachments(Array.isArray(p.attachments) ? p.attachments : [])
     setEditError(null)
   }
 
@@ -52,7 +73,11 @@ export default function FeedPostDetailPage() {
         .split(/\s+/)
         .map(t => t.replace(/^#/, '').trim())
         .filter(Boolean)
-      const updated = await updateFeedPost(editing.id, { body, hashtags: tags })
+      const updated = await updateFeedPost(editing.id, {
+        body,
+        hashtags: tags,
+        attachmentIds: editAttachments.map(a => a.id),
+      })
       setPost(updated)
       setEditing(null)
     } catch (err) {
@@ -64,11 +89,23 @@ export default function FeedPostDetailPage() {
 
   async function handleDelete(p) {
     if (!p) return
-    const confirmed = window.confirm('Delete this post? This cannot be undone.')
+    const confirmed = window.confirm(
+      'Hide this post? You can restore it within 30 days from the toast on the feed page.'
+    )
     if (!confirmed) return
     try {
       await deleteFeedPost(p.id)
       navigate('/feed')
+      // Drop the toast on the feed route the user just landed on. The async
+      // restore re-routes them to the detail page on success.
+      showUndoToast('Post hidden.', async () => {
+        try {
+          const restored = await restoreFeedPost(p.id)
+          navigate(`/feed/${restored.id}`)
+        } catch (err) {
+          window.alert(err?.message || 'Failed to restore post')
+        }
+      })
     } catch (err) {
       window.alert(err?.message || 'Failed to delete post')
     }
@@ -127,6 +164,12 @@ export default function FeedPostDetailPage() {
               placeholder="design react ux"
               disabled={editBusy}
               style={{ minHeight: 'auto', height: '40px' }}
+            />
+            <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Images</label>
+            <FeedImageUploader
+              value={editAttachments}
+              onChange={setEditAttachments}
+              disabled={editBusy}
             />
             {editError && <div className="md-composer-error" style={{ marginTop: '8px' }}>{editError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>

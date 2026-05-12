@@ -23,6 +23,8 @@ public class UserNotificationPreferencesResponse {
     private boolean requestsEnabled;
     private boolean taskDeadlineRemindersEnabled;
     private boolean milestoneRemindersEnabled;
+    private boolean feedEngagementEnabled;
+    private boolean newFollowerEnabled;
     private OffsetDateTime updatedAt;
 
     public static UserNotificationPreferencesResponse from(UserNotificationPreferences prefs) {
@@ -34,6 +36,8 @@ public class UserNotificationPreferencesResponse {
                 prefs.isRequestsEnabled(),
                 prefs.isTaskDeadlineRemindersEnabled(),
                 prefs.isMilestoneRemindersEnabled(),
+                prefs.isFeedEngagementEnabled(),
+                prefs.isNewFollowerEnabled(),
                 prefs.getUpdatedAt());
     }
 }

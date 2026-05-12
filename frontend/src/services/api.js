@@ -18,21 +18,50 @@ async function handleResponse(res) {
     return text ? JSON.parse(text) : null
   }
   let message
+  let parsedBody = null
   try {
-    const body = JSON.parse(await res.text())
-    message = body.message || body.error || JSON.stringify(body)
+    parsedBody = JSON.parse(await res.text())
+    message = parsedBody.message || parsedBody.error || JSON.stringify(parsedBody)
   } catch {
     message = res.statusText
+  }
+  // Cross-cutting concern: when the server reports the caller is banned, surface
+  // the structured payload to whoever cares (AuthProvider listens) without
+  // coupling this module to React. Listeners observe via window events; the
+  // throw still happens so existing `.catch` handlers behave unchanged.
+  if (res.status === 403 && parsedBody && parsedBody.code === 'BANNED_UNTIL'
+      && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    try {
+      window.dispatchEvent(new CustomEvent('auth:banned', { detail: parsedBody }))
+    } catch {
+      // ignore — older browsers / jsdom edge cases
+    }
   }
   throw new Error(message)
 }
 
-export async function registerUser({ firstName, lastName, email, password, isMentor }) {
+export async function registerUser({ firstName, lastName, email, password, isMentor, formToken, website }) {
+  // formToken + website (honeypot) are part of the spam-bot defence (#345).
+  // Backend rejects registrations with `app.spam.enabled=true` (the default
+  // in production) unless formToken round-trips through the form, so we
+  // forward them when the caller supplies them. Older callers that omit
+  // both still work in dev / test where the defence is off.
+  const body = { firstName, lastName, email, password, isMentor }
+  if (formToken) body.formToken = formToken
+  if (website !== undefined) body.website = website
   const res = await fetch(`${BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ firstName, lastName, email, password, isMentor }),
+    body: JSON.stringify(body),
   })
+  return handleResponse(res)
+}
+
+// #345 spam-bot defence: short-lived HMAC-signed timestamp the backend
+// expects round-tripped on register. Issued by GET /api/auth/form-token,
+// TTL 15 min by default.
+export async function getRegisterFormToken() {
+  const res = await fetch(`${BASE_URL}/auth/form-token`)
   return handleResponse(res)
 }
 
@@ -82,9 +111,27 @@ export async function resetPassword({ token, newPassword }) {
   return handleResponse(res)
 }
 
-export async function getMatchingMentors(keyword) {
-  const url = keyword
-    ? `${BASE_URL}/matching/mentors/all?keyword=${encodeURIComponent(keyword)}`
+// #139 / backend #571: matching/mentors/all accepts a bunch of optional
+// filters. Keyword stays positional for backward compatibility with the
+// existing call sites that pass just a string. Extra filters go into the
+// second options object so adding more never grows the signature again.
+export async function getMatchingMentors(keyword, options = {}) {
+  const params = new URLSearchParams()
+  if (keyword) params.set('keyword', keyword)
+  const { maxDistanceKm, availabilityDays, mentorshipDuration, minMatchScore } = options
+  if (maxDistanceKm != null) params.set('maxDistanceKm', String(maxDistanceKm))
+  // Sets are serialised as repeated keys (?availabilityDays=MONDAY&availabilityDays=TUESDAY)
+  // which Spring binds into a Set<DayOfWeek> via its standard collection binder.
+  if (Array.isArray(availabilityDays)) {
+    for (const d of availabilityDays) if (d) params.append('availabilityDays', d)
+  }
+  if (Array.isArray(mentorshipDuration)) {
+    for (const n of mentorshipDuration) if (n != null) params.append('mentorshipDuration', String(n))
+  }
+  if (minMatchScore != null) params.set('minMatchScore', String(minMatchScore))
+  const qs = params.toString()
+  const url = qs
+    ? `${BASE_URL}/matching/mentors/all?${qs}`
     : `${BASE_URL}/matching/mentors/all`
   const res = await fetch(url, { headers: authHeaders() })
   return handleResponse(res)
@@ -157,6 +204,47 @@ export async function getUserById(id) {
   return handleResponse(res)
 }
 
+// ── Follow graph (#343) ─────────────────────────────────────────────────
+
+export async function followUser(id) {
+  const res = await fetch(`${BASE_URL}/users/${id}/follow`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function unfollowUser(id) {
+  const res = await fetch(`${BASE_URL}/users/${id}/follow`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getFollowers(id, page = 0, size = 20) {
+  const res = await fetch(`${BASE_URL}/users/${id}/followers?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getFollowing(id, page = 0, size = 20) {
+  const res = await fetch(`${BASE_URL}/users/${id}/following?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// ── Follow recommendations (#344) ───────────────────────────────────────
+
+export async function getFollowRecommendations(page = 0, size = 12) {
+  const res = await fetch(`${BASE_URL}/users/me/follow-recommendations?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 export async function getNotifications(unreadOnly = false) {
   const res = await fetch(`${BASE_URL}/notifications?unreadOnly=${unreadOnly}`, {
     headers: authHeaders(),
@@ -221,6 +309,49 @@ export async function getActiveMentorships() {
   return handleResponse(res)
 }
 
+// Author posts feed (#546 / backend #471). Paginated list of posts authored
+// by `authorId`. Returns Page<FeedPostListItem>; backend caps size at 100.
+export async function getUserFeedPosts(authorId, page = 0, size = 10) {
+  const res = await fetch(`${BASE_URL}/feed/users/${authorId}/posts?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// Thin wrapper around the paginated mentorship history endpoint kept separate
+// from getActiveMentorships() because HomePage + MentorshipContext rely on the
+// older list-shaped response and shouldn't shift to Page<> semantics.
+export async function listMentorships({ status = 'ALL', page = 0, size = 50 } = {}) {
+  const params = new URLSearchParams({ status, page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/mentorships?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// Trending hashtags (#545 / backend #487). Materialized-view aggregate over
+// the last 24h, refreshed hourly server-side. Returns at most `limit`
+// entries sorted by composite engagement score, each carrying { tag,
+// postCount, score, ... }.
+export async function getTrendingHashtags(limit = 10) {
+  const res = await fetch(`${BASE_URL}/feed/trending/hashtags?limit=${limit}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// Paginated mentorship history filter (#408 / backend #521). status accepts
+// 'ALL' or any MentorshipStatus name (ACTIVE / COMPLETED / CANCELLED /
+// TERMINATED). Backend caps size at 100. Returns a Spring Page<>:
+//   { content, totalPages, totalElements, number, size, last, ... }
+export async function getMentorshipsByStatus({ status = 'ALL', page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ status, page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/mentorships?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 // Backend has no GET /api/mentorships/{id} yet — fetch the user's list and
 // filter client-side. If the id isn't in the list, the caller treats it as 403.
 export async function getMentorshipById(id) {
@@ -253,6 +384,75 @@ export async function endMentorship(id, reason) {
   const body = reason ? { reason } : {}
   const res = await fetch(`${BASE_URL}/mentorships/${id}/end`, {
     method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+// Mentor-only extend (#276 / 1.1.1.2.13). additionalMonths must be 1, 3, or 6
+// per backend ExtendMentorshipRequest validator. Returns the updated mentorship.
+export async function extendMentorship(id, additionalMonths) {
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/extend`, {
+    method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ additionalMonths }),
+  })
+  return handleResponse(res)
+}
+
+// User notification preferences (#289 / 1.1.5.8). Backend lazily creates the
+// row with all toggles enabled on first GET. PATCH is partial — omitted
+// fields keep their current value, so the client only sends the toggle
+// being flipped.
+export async function getNotificationPreferences() {
+  const res = await fetch(`${BASE_URL}/users/me/notification-preferences`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function updateNotificationPreferences(patch) {
+  const res = await fetch(`${BASE_URL}/users/me/notification-preferences`, {
+    method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify(patch),
+  })
+  return handleResponse(res)
+}
+
+// Read the rating for a mentorship (#556 / backend #534 / #518). Visible to
+// both participants. Returns 404 when no rating exists yet — wrappers throw
+// an Error with a status field so callers can branch cleanly on first paint.
+export async function getMentorshipRating(id) {
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/rating`, {
+    headers: authHeaders(),
+  })
+  if (res.status === 404) {
+    const err = new Error('Not rated yet')
+    err.status = 404
+    throw err
+  }
+  return handleResponse(res)
+}
+
+// Paginated mentor ratings list (#556 / backend #534 / #518). Newest-first.
+// Returns Spring Page<MentorRatingResponse>. Size capped at 50 server-side.
+export async function getMentorRatings(userId, page = 0, size = 10) {
+  const res = await fetch(`${BASE_URL}/users/${userId}/ratings?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// Mentee-only rating (#278 / 1.1.1.1.11). Backend rejects with 409 if the
+// mentorship is still ACTIVE or already rated; 403 if a mentor calls it.
+// Score must be 1..5; comment is optional and capped at 1000 chars.
+export async function rateMentor(id, score, comment) {
+  const body = { score }
+  if (comment) body.comment = comment
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/rating`, {
+    method: 'POST',
     headers: authJsonHeaders(),
     body: JSON.stringify(body),
   })
@@ -612,11 +812,13 @@ export async function markMentorPairMessagesRead(otherMentorId) {
 // ── Social feed ───────────────────────────────────────────────────────────
 // Backend: FeedPostController + FeedReadController (+ FeedInteractionController in #340)
 
-export async function createFeedPost({ body, hashtags = [] }) {
+export async function createFeedPost({ body, hashtags = [], attachmentIds = [] }) {
+  const payload = { body, hashtags }
+  if (attachmentIds.length > 0) payload.attachmentIds = attachmentIds
   const res = await fetch(`${BASE_URL}/feed/posts`, {
     method: 'POST',
     headers: authJsonHeaders(),
-    body: JSON.stringify({ body, hashtags }),
+    body: JSON.stringify(payload),
   })
   return handleResponse(res)
 }
@@ -628,10 +830,13 @@ export async function getFeedPostById(id) {
   return handleResponse(res)
 }
 
-export async function updateFeedPost(id, { body, hashtags }) {
+export async function updateFeedPost(id, { body, hashtags, attachmentIds }) {
   const payload = {}
   if (body !== undefined) payload.body = body
   if (hashtags !== undefined) payload.hashtags = hashtags
+  // attachmentIds: omit to leave attachments untouched; pass [] to clear them;
+  // pass an array to replace the post's attachment list (backend semantics).
+  if (attachmentIds !== undefined) payload.attachmentIds = attachmentIds
   const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
     method: 'PATCH',
     headers: authJsonHeaders(),
@@ -643,6 +848,106 @@ export async function updateFeedPost(id, { body, hashtags }) {
 export async function deleteFeedPost(id) {
   const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
     method: 'DELETE',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #128 / #358 / #411 / backend #135: submit a polymorphic report.
+// targetType ∈ {POST, MENTORSHIP, USER}; the backend rejects self-reports
+// (USER target with reporter_id == target_id), non-participant mentorship
+// reports (403), and duplicate active reports (409 — same reporter +
+// same target while still-open).
+export async function submitReport({ targetType, targetId, problemType, description }) {
+  const res = await fetch(`${BASE_URL}/reports`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ targetType, targetId, problemType, description }),
+  })
+  return handleResponse(res)
+}
+
+// #356 / backend #349: feed read-state cursor + companion unread count.
+// `markFeedRead` is idempotent — backend sets the cursor to clock_timestamp.
+// `getFeedUnreadCount` returns { count, cappedAtMax } capped at 99 by default.
+export async function markFeedRead() {
+  const res = await fetch(`${BASE_URL}/feed/mark-read`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  if (res.status === 204) return null
+  return handleResponse(res)
+}
+
+export async function getFeedUnreadCount() {
+  const res = await fetch(`${BASE_URL}/feed/unread-count`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #448 / backend #320: taxonomy autocomplete endpoints. Each returns a
+// list of { label, identifierUri } pairs from a canonical source — ESCO
+// for skills, ISCED-F for fields of study, Wikidata for hobbies.
+//
+// The `lang` parameter is a BCP-47 short tag (e.g. "en", "tr") and falls
+// back to the request's Accept-Language server-side when omitted.
+export async function searchTaxonomySkills(q, { lang, limit = 10 } = {}) {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  if (lang) params.set('lang', lang)
+  const res = await fetch(`${BASE_URL}/taxonomies/skills?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function searchTaxonomyFields(q, { lang, limit = 10 } = {}) {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  if (lang) params.set('lang', lang)
+  const res = await fetch(`${BASE_URL}/taxonomies/fields?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function searchTaxonomyHobbies(q, { lang, limit = 10 } = {}) {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  if (lang) params.set('lang', lang)
+  const res = await fetch(`${BASE_URL}/taxonomies/hobbies?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #542 / backend #484: repost or quote-share a feed post. body is optional —
+// null/blank produces a bare repost, non-blank (up to 2000 chars) attaches
+// commentary. Backend dedupes repeated payloads within ~60s. Returns the
+// updated FeedPostInteractionState for the original post so the share count
+// can refresh in place.
+export async function repostPost(postId, body) {
+  const payload = body && body.trim() ? { body: body.trim() } : {}
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/reposts`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(res)
+}
+
+// #544 / backend #487: restore a soft-deleted post within the 30-day window.
+// 410 means the window expired; surfaced as a regular Error from handleResponse.
+export async function restoreFeedPost(id) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}/restore`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #544 / backend #487: edit-history entries for a post, newest-first.
+// Author or admin only; non-author callers get 403.
+export async function getFeedPostHistory(id, limit = 50) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}/history?limit=${limit}`, {
     headers: authHeaders(),
   })
   return handleResponse(res)
@@ -662,15 +967,50 @@ export async function getFollowingFeed(page = 0, size = 20) {
   return handleResponse(res)
 }
 
-export async function searchFeed({ q, hashtag, page = 0, size = 20 }) {
+// #543 / backend #486: feed search accepts q + hashtag + since + until + lang.
+// since is inclusive, until is exclusive (both ISO 8601). lang is a BCP-47
+// short tag (e.g. "en", "tr-TR"). Backend requires at least one filter and
+// returns 400 if all are null; the UI gates the request when needed.
+export async function searchFeed({ q, hashtag, since, until, lang, page = 0, size = 20 }) {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (hashtag) params.set('hashtag', hashtag)
+  if (since) params.set('since', since)
+  if (until) params.set('until', until)
+  if (lang) params.set('lang', lang)
   params.set('page', String(page))
   params.set('size', String(size))
   const res = await fetch(`${BASE_URL}/feed/search?${params.toString()}`, {
     headers: authHeaders(),
   })
+  return handleResponse(res)
+}
+
+// Per-user keyword mutes (#543 / backend #486). Server lowercases + validates
+// charset on add. Add returns 201; remove returns 204. Mutes are applied
+// transparently by every feed read path on the server side.
+export async function getMutedKeywords() {
+  const res = await fetch(`${BASE_URL}/users/me/keyword-mutes`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function addMutedKeyword(keyword) {
+  const res = await fetch(`${BASE_URL}/users/me/keyword-mutes`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ keyword }),
+  })
+  return handleResponse(res)
+}
+
+export async function removeMutedKeyword(id) {
+  const res = await fetch(`${BASE_URL}/users/me/keyword-mutes/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (res.status === 204) return null
   return handleResponse(res)
 }
 
@@ -682,6 +1022,38 @@ export async function searchFeed({ q, hashtag, page = 0, size = 20 }) {
 
 export async function getPostInteractions(postId) {
   const res = await fetch(`${BASE_URL}/feed/posts/${postId}/interactions`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function toggleLikeOnPost(postId) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/like`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getPostComments(postId, page = 0, size = 20) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/comments?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function addCommentToPost(postId, body) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/comments`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ body }),
+  })
+  return handleResponse(res)
+}
+
+export async function toggleLikeOnComment(commentId) {
+  const res = await fetch(`${BASE_URL}/feed/comments/${commentId}/like`, {
+    method: 'POST',
     headers: authHeaders(),
   })
   return handleResponse(res)
@@ -706,6 +1078,132 @@ export async function recordShareOnPost(postId) {
 export async function getMyBookmarks(page = 0, size = 20) {
   const res = await fetch(`${BASE_URL}/feed/me/bookmarks?page=${page}&size=${size}`, {
     headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// Admin-only direct-message endpoint. Backend route: POST
+// /api/admin/messages/direct/{userId} accepting a SendMessageRequest with a
+// `content` body. The 403 path is handled by the shared handleResponse
+// interceptor (BANNED_UNTIL events) — admins ban-immune, but the same shape.
+export async function sendAdminDirectMessage(userId, content) {
+  const res = await fetch(`${BASE_URL}/admin/messages/direct/${userId}`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ content }),
+  })
+  return handleResponse(res)
+}
+
+// #410 / backend #561: admin-direct read paths. Inbox list is auth'd to any
+// participant (admin OR recipient user). Thread is one-way — backend exposes
+// no POST for the recipient to reply; the conversation flows admin → user.
+export async function getAdminDirectInbox(page = 0, size = 20) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/conversations/admin-direct?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getAdminDirectMessages(otherUserId, page = 0, size = 20) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/conversations/admin-direct/${otherUserId}/messages?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #410 / backend #280: admin-to-admin broadcast (singleton ADMIN_BROADCAST
+// thread). Admin-only on both write and read; non-admin callers get 403.
+export async function broadcastAdminMessage(content) {
+  const res = await fetch(`${BASE_URL}/admin/messages/broadcast`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ content }),
+  })
+  return handleResponse(res)
+}
+
+export async function listAdminBroadcasts(page = 0, size = 20) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/admin/messages/broadcast?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #279 / backend #569 + #280: admin user listing, drill-in, ban/unban,
+// and clear-bot-flag. All gated server-side by hasRole('ADMIN').
+export async function listAdminUsers({ role, banStatus, q, page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  if (role) params.set('role', role)
+  if (banStatus) params.set('banStatus', banStatus)
+  if (q) params.set('q', q)
+  const res = await fetch(`${BASE_URL}/admin/users?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getAdminUserDetail(id) {
+  const res = await fetch(`${BASE_URL}/admin/users/${id}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function banAdminUser(userId, { reason, durationHours }) {
+  const res = await fetch(`${BASE_URL}/admin/users/${userId}/ban`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ reason, durationHours }),
+  })
+  return handleResponse(res)
+}
+
+export async function unbanAdminUser(userId) {
+  const res = await fetch(`${BASE_URL}/admin/users/${userId}/unban`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function clearBotFlag(userId) {
+  const res = await fetch(`${BASE_URL}/admin/users/${userId}/clear-bot-flag`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  if (res.status === 204) return null
+  return handleResponse(res)
+}
+
+// #279 / backend #135: admin report queue + status transitions.
+// Allowed transitions: OPEN → UNDER_REVIEW / RESOLVED / DISMISSED;
+// UNDER_REVIEW → RESOLVED / DISMISSED. Terminal states reject with 400.
+export async function listAdminReports({ status, targetType, page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  if (status) params.set('status', status)
+  if (targetType) params.set('targetType', targetType)
+  const res = await fetch(`${BASE_URL}/admin/reports?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getAdminReport(id) {
+  const res = await fetch(`${BASE_URL}/admin/reports/${id}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function updateAdminReportStatus(id, status) {
+  const res = await fetch(`${BASE_URL}/admin/reports/${id}`, {
+    method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ status }),
   })
   return handleResponse(res)
 }

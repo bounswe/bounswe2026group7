@@ -5,10 +5,12 @@ import com.group7.backend.dto.request.MenteeProfileRequest;
 import com.group7.backend.dto.request.MentorProfileRequest;
 import com.group7.backend.dto.request.SearchRole;
 import com.group7.backend.dto.response.MenteeResponse;
+import com.group7.backend.dto.response.MentorRatingResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
 import com.group7.backend.dto.response.UserProfileResponse;
 import com.group7.backend.exception.ProfileNotVisibleException;
+import com.group7.backend.service.MentorRatingService;
 import com.group7.backend.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -27,7 +29,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.DayOfWeek;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/users")
@@ -35,9 +39,11 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final MentorRatingService mentorRatingService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, MentorRatingService mentorRatingService) {
         this.userService = userService;
+        this.mentorRatingService = mentorRatingService;
     }
 
     // ── Get own profile ─────────────────────────────────────
@@ -161,34 +167,62 @@ public class UserController {
         return ResponseEntity.ok(userService.getUserProfile(id, requesterId));
     }
 
+    @GetMapping("/{id:\\d+}/ratings")
+    @Operation(summary = "Paginated mentor ratings list (#518)",
+            description = "Returns the ratings a mentor has received, newest-first. Powers the "
+                    + "'Recent feedback' block on the public mentor profile. Includes ratings "
+                    + "with and without comments — the client decides what to display. "
+                    + "menteeId surfaces in the response as the rater's user id; the client "
+                    + "batch-resolves names via the existing user-summary endpoint when it "
+                    + "wants to render attribution. Authenticated callers only — there is no "
+                    + "anonymous read of the ratings list.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paginated rating list (newest first)"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
+    })
+    public ResponseEntity<Page<MentorRatingResponse>> getMentorRatings(
+            @Parameter(description = "Mentor user id") @PathVariable Long id,
+            @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size; clamped to [1, 50]") @RequestParam(defaultValue = "10") int size) {
+        // Reuse the project's existing clamp helper (same one feeding /mentors etc.) —
+        // Spring Data caps size at PageableSupport's policy and keeps page >= 0.
+        Pageable pageable = PageableSupport.clampPageable(page, Math.min(size, 50));
+        return ResponseEntity.ok(mentorRatingService.getMentorRatings(id, pageable));
+    }
+
     @GetMapping("/mentors")
     @Operation(summary = "List mentors",
             description = "Returns paginated mentor profiles. Supports page and size query parameters.")
     @ApiResponse(responseCode = "200", description = "Paginated list of mentors")
     public ResponseEntity<Page<MentorResponse>> getAllMentors(
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        return ResponseEntity.ok(userService.getAllMentors(pageable));
+        return ResponseEntity.ok(userService.getAllMentors(requesterId, pageable));
     }
 
     @GetMapping("/mentors/all")
     @Operation(summary = "List all mentors (unpaginated)",
             description = "Returns all mentor profiles as a plain list. Use /mentors for paginated results.")
     @ApiResponse(responseCode = "200", description = "List of all mentors")
-    public ResponseEntity<List<MentorResponse>> getAllMentorsUnpaginated() {
-        return ResponseEntity.ok(userService.getAllMentorsList());
+    public ResponseEntity<List<MentorResponse>> getAllMentorsUnpaginated(Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(userService.getAllMentorsList(requesterId));
     }
 
     @GetMapping("/search")
     @Operation(summary = "Search users by keyword and filters",
             description = "DB-level search across the user directory with composable filters "
-                    + "(#262). Mentees may search MENTOR only; mentors may search MENTEE only; "
-                    + "admins may search either role. Same-role search returns 403. "
-                    + "Short keyword (length < 3 after trim) is treated as no-keyword "
-                    + "(pg_trgm requires ≥3 alphanumerics for index acceleration). "
+                    + "(#262, extended in #571). Mentees may search MENTOR only; mentors may "
+                    + "search MENTEE only; admins may search either role. Same-role search "
+                    + "returns 403. Short keyword (length < 3 after trim) is treated as "
+                    + "no-keyword (pg_trgm requires ≥3 alphanumerics for index acceleration). "
                     + "hasAvailability=true requires the requester to have at least one "
-                    + "availability slot of their own; admins cannot use this filter.")
+                    + "availability slot of their own; admins cannot use this filter. "
+                    + "availabilityDays and mentorshipDuration apply to MENTOR searches only "
+                    + "and are silently ignored when role=MENTEE.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paginated search results"),
             @ApiResponse(responseCode = "400",
@@ -213,6 +247,14 @@ public class UserController {
             @RequestParam(required = false) String major,
             @Parameter(description = "Restrict to candidates whose availability overlaps the requester's slots")
             @RequestParam(defaultValue = "false") boolean hasAvailability,
+            @Parameter(description = "Filter mentors by availability day-of-week (OR semantics). "
+                    + "Accepts comma-separated or repeated values. Mentor searches only.",
+                    example = "MONDAY,WEDNESDAY")
+            @RequestParam(required = false) Set<DayOfWeek> availabilityDays,
+            @Parameter(description = "Filter mentors by mentorship duration in months "
+                    + "(IN list semantics). Mentor searches only.",
+                    example = "3")
+            @RequestParam(required = false) Set<Integer> mentorshipDuration,
             @Parameter(description = "Page number (0-based)")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size; clamped to [1, 100]")
@@ -221,7 +263,8 @@ public class UserController {
         Long requesterId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(userService.searchUsers(
-                role, q, interests, skills, major, hasAvailability, requesterId, pageable));
+                role, q, interests, skills, major, hasAvailability,
+                availabilityDays, mentorshipDuration, requesterId, pageable));
     }
 
     @GetMapping("/mentees")
@@ -231,9 +274,11 @@ public class UserController {
     @ApiResponse(responseCode = "200", description = "Paginated list of mentees")
     public ResponseEntity<Page<MenteeResponse>> getAllMentees(
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        return ResponseEntity.ok(userService.getAllMentees(pageable));
+        return ResponseEntity.ok(userService.getAllMentees(requesterId, pageable));
     }
 
     // ── Delete ──────────────────────────────────────────────

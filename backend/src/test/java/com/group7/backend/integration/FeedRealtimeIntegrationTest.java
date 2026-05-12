@@ -3,7 +3,9 @@ package com.group7.backend.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
+import com.group7.backend.dto.response.FeedEngagementPushPayload;
 import com.group7.backend.dto.response.FeedPostPushPayload;
+import com.group7.backend.dto.response.FeedSharePushPayload;
 import com.group7.backend.dto.response.FeedUnreadCountResponse;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.FollowRepository;
@@ -48,6 +50,7 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -178,6 +181,111 @@ class FeedRealtimeIntegrationTest {
     }
 
     @Test
+    void followerReceivesFeedSharePushPayload_onBareRepost() throws Exception {
+        // Author posts; follower follows the sharer (a third party); sharer
+        // reposts the post. Follower receives FeedSharePushPayload on
+        // /topic/feed.{followerId}.
+        Pair pair = setupAuthorAndFollower();
+        // Re-purpose: sharer = follower here (they are a follower of the
+        // author and ALSO the sharer of the resulting repost). The setup
+        // suffices.
+        String authorToken = pair.authorToken();
+        String sharerToken = pair.followerToken();
+        Long sharerId = pair.followerId();
+
+        // Register a third party who follows the sharer so the fanout fires.
+        String observerToken = registerAndLogin("ws_repost_observer@test.com", false, "Observer");
+        Long observerId = userRepository.findByEmail("ws_repost_observer@test.com").orElseThrow().getId();
+        ResponseEntity<String> followResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/users/" + sharerId + "/follow",
+                HttpMethod.POST, authedJson(observerToken, null), String.class);
+        assertThat(followResponse.getStatusCode().is2xxSuccessful()).isTrue();
+
+        StompSession session = connect(observerToken);
+        LinkedBlockingDeque<FeedSharePushPayload> received = new LinkedBlockingDeque<>();
+        session.subscribe("/topic/feed." + observerId, new StompFrameHandler() {
+            @Override public Type getPayloadType(StompHeaders headers) { return FeedSharePushPayload.class; }
+            @Override public void handleFrame(StompHeaders headers, Object payload) {
+                if (payload instanceof FeedSharePushPayload p) {
+                    received.add(p);
+                }
+            }
+        });
+        Thread.sleep(2000);
+
+        // Author posts.
+        ResponseEntity<String> createResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts",
+                HttpMethod.POST,
+                authedJson(authorToken, Map.of(
+                        "body", "Reposted via STOMP",
+                        "hashtags", java.util.List.of())),
+                String.class);
+        assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
+        Long postId = objectMapper.readTree(createResponse.getBody()).get("id").asLong();
+
+        // Sharer reposts.
+        ResponseEntity<String> repostResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + postId + "/reposts",
+                HttpMethod.POST, authedJson(sharerToken, java.util.Map.of()), String.class);
+        assertThat(repostResponse.getStatusCode().value()).isEqualTo(200);
+
+        FeedSharePushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.postId()).isEqualTo(postId);
+        assertThat(delivered.sharerId()).isEqualTo(sharerId);
+        assertThat(delivered.sharerFirstName()).isEqualTo("Follower");  // setupAuthorAndFollower names the follower "Follower"
+        assertThat(delivered.commentary()).isNull();   // bare repost
+        assertThat(delivered.sharedAt()).isNotNull();
+
+        session.disconnect();
+    }
+
+    @Test
+    void followerReceivesFeedSharePushPayload_onQuoteShareWithCommentary() throws Exception {
+        Pair pair = setupAuthorAndFollower();
+        String authorToken = pair.authorToken();
+        String sharerToken = pair.followerToken();
+        Long sharerId = pair.followerId();
+
+        String observerToken = registerAndLogin("ws_quote_observer@test.com", false, "Observer");
+        Long observerId = userRepository.findByEmail("ws_quote_observer@test.com").orElseThrow().getId();
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/users/" + sharerId + "/follow",
+                HttpMethod.POST, authedJson(observerToken, null), String.class);
+
+        StompSession session = connect(observerToken);
+        LinkedBlockingDeque<FeedSharePushPayload> received = new LinkedBlockingDeque<>();
+        session.subscribe("/topic/feed." + observerId, new StompFrameHandler() {
+            @Override public Type getPayloadType(StompHeaders headers) { return FeedSharePushPayload.class; }
+            @Override public void handleFrame(StompHeaders headers, Object payload) {
+                if (payload instanceof FeedSharePushPayload p) {
+                    received.add(p);
+                }
+            }
+        });
+        Thread.sleep(2000);
+
+        ResponseEntity<String> createResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts",
+                HttpMethod.POST,
+                authedJson(authorToken, Map.of("body", "to be quoted", "hashtags", java.util.List.of())),
+                String.class);
+        Long postId = objectMapper.readTree(createResponse.getBody()).get("id").asLong();
+
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + postId + "/reposts",
+                HttpMethod.POST, authedJson(sharerToken, Map.of("body", "my added commentary")),
+                String.class);
+
+        FeedSharePushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.commentary()).isEqualTo("my added commentary");
+
+        session.disconnect();
+    }
+
+    @Test
     void markReadAndUnreadCount_endToEndShape() throws Exception {
         Pair pair = setupAuthorAndFollower();
         // Initial state: no cursor row yet → unread-count counts everything.
@@ -223,7 +331,350 @@ class FeedRealtimeIntegrationTest {
         assertThat(third.getBody().count()).isZero();
     }
 
+    // ── Engagement push payload (#562) ────────────────────────────────────────
+
+    @Test
+    void followerReceivesEngagementPush_onLike() throws Exception {
+        EngagementFixture fx = setupEngagementFixture("like");
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        // Actor likes the author's post; the push fires to the author's
+        // followers (and the author themselves).
+        ResponseEntity<String> resp = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/like",
+                HttpMethod.POST, authedJson(fx.actorToken(), null), String.class);
+        assertThat(resp.getStatusCode().is2xxSuccessful()).isTrue();
+
+        FeedEngagementPushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.postId()).isEqualTo(fx.postId());
+        assertThat(delivered.likeCount()).isEqualTo(1L);
+        assertThat(delivered.commentCount()).isZero();
+        assertThat(delivered.shareCount()).isZero();
+        assertThat(delivered.updatedAt()).isNotNull();
+
+        session.disconnect();
+    }
+
+    @Test
+    void followerReceivesEngagementPush_onUnlike() throws Exception {
+        EngagementFixture fx = setupEngagementFixture("unlike");
+        // Actor likes BEFORE the follower subscribes — that first push is
+        // dropped by the broker. Subscribe, then actor unlikes; the unlike
+        // push must arrive with likeCount=0.
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/like",
+                HttpMethod.POST, authedJson(fx.actorToken(), null), String.class);
+
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/like",
+                HttpMethod.POST, authedJson(fx.actorToken(), null), String.class);
+
+        FeedEngagementPushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.likeCount()).isZero();
+
+        session.disconnect();
+    }
+
+    @Test
+    void followerReceivesEngagementPush_onComment() throws Exception {
+        EngagementFixture fx = setupEngagementFixture("comment");
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/comments",
+                HttpMethod.POST,
+                authedJson(fx.actorToken(), Map.of("body", "engagement comment")),
+                String.class);
+
+        FeedEngagementPushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.commentCount()).isEqualTo(1L);
+        assertThat(delivered.likeCount()).isZero();
+        assertThat(delivered.shareCount()).isZero();
+
+        session.disconnect();
+    }
+
+    @Test
+    void followerReceivesEngagementPush_onCommentDelete() throws Exception {
+        EngagementFixture fx = setupEngagementFixture("comment-delete");
+        // Comment exists BEFORE the follower subscribes (creation push is dropped).
+        ResponseEntity<String> commentResp = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/comments",
+                HttpMethod.POST,
+                authedJson(fx.actorToken(), Map.of("body", "to be deleted")),
+                String.class);
+        Long commentId = objectMapper.readTree(commentResp.getBody()).get("id").asLong();
+
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/comments/" + commentId,
+                HttpMethod.DELETE, authedJson(fx.actorToken(), null), String.class);
+
+        FeedEngagementPushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        // Soft-deleted comments fall out of the visible commentCount.
+        assertThat(delivered.commentCount()).isZero();
+
+        session.disconnect();
+    }
+
+    @Test
+    void followerReceivesEngagementPush_onShare() throws Exception {
+        EngagementFixture fx = setupEngagementFixture("share");
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/share",
+                HttpMethod.POST, authedJson(fx.actorToken(), null), String.class);
+
+        FeedEngagementPushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.shareCount()).isEqualTo(1L);
+
+        session.disconnect();
+    }
+
+    @Test
+    void followerReceivesEngagementPush_onRepost() throws Exception {
+        EngagementFixture fx = setupEngagementFixture("repost");
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        // Actor (no followers) reposts; FeedSharePushPayload fanout finds zero
+        // recipients, so only the engagement push reaches the follower.
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/reposts",
+                HttpMethod.POST, authedJson(fx.actorToken(), Map.of()), String.class);
+
+        FeedEngagementPushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.shareCount()).isEqualTo(1L);
+
+        session.disconnect();
+    }
+
+    @Test
+    void followerReceivesEngagementPush_onCommentLike() throws Exception {
+        EngagementFixture fx = setupEngagementFixture("comment-like");
+        // Author writes a comment so the actor has something to like. This
+        // addComment fires a push that is dropped (no subscriber yet).
+        ResponseEntity<String> commentResp = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/comments",
+                HttpMethod.POST,
+                authedJson(fx.authorToken(), Map.of("body", "comment by author")),
+                String.class);
+        Long commentId = objectMapper.readTree(commentResp.getBody()).get("id").asLong();
+
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/comments/" + commentId + "/like",
+                HttpMethod.POST, authedJson(fx.actorToken(), null), String.class);
+
+        // Heartbeat: post.commentCount is unchanged (1), but the push still
+        // fires so the frontend's comment-detail view can refresh comment-likes.
+        FeedEngagementPushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.postId()).isEqualTo(fx.postId());
+        assertThat(delivered.commentCount()).isEqualTo(1L);
+        assertThat(delivered.likeCount()).isZero();
+
+        session.disconnect();
+    }
+
+    @Test
+    void authorAlsoReceivesEngagementPush_onOwnPostLiked() throws Exception {
+        // Author isn't in their own follower set (you can't follow yourself),
+        // so the routing rule explicitly adds the author. Verifies that branch.
+        EngagementFixture fx = setupEngagementFixture("author-self");
+        StompSession session = connect(fx.authorToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.authorId());
+        Thread.sleep(2000);
+
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/like",
+                HttpMethod.POST, authedJson(fx.actorToken(), null), String.class);
+
+        FeedEngagementPushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.likeCount()).isEqualTo(1L);
+
+        session.disconnect();
+    }
+
+    @Test
+    void engagementPush_carriesAuthoritativeCounts() throws Exception {
+        // Three different likers in sequence — each push must carry the
+        // absolute count (1, then 2, then 3), not a delta.
+        EngagementFixture fx = setupEngagementFixture("authoritative");
+        String liker2Token = registerAndLogin("ws_engage_liker2_authoritative@test.com", false, "Liker2");
+        String liker3Token = registerAndLogin("ws_engage_liker3_authoritative@test.com", false, "Liker3");
+
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        for (String token : java.util.List.of(fx.actorToken(), liker2Token, liker3Token)) {
+            ResponseEntity<String> resp = restTemplate.exchange(
+                    "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/like",
+                    HttpMethod.POST, authedJson(token, null), String.class);
+            assertThat(resp.getStatusCode().is2xxSuccessful()).isTrue();
+        }
+
+        FeedEngagementPushPayload first = received.poll(5, TimeUnit.SECONDS);
+        FeedEngagementPushPayload second = received.poll(5, TimeUnit.SECONDS);
+        FeedEngagementPushPayload third = received.poll(5, TimeUnit.SECONDS);
+        assertThat(first).isNotNull();
+        assertThat(second).isNotNull();
+        assertThat(third).isNotNull();
+        assertThat(first.likeCount()).isEqualTo(1L);
+        assertThat(second.likeCount()).isEqualTo(2L);
+        assertThat(third.likeCount()).isEqualTo(3L);
+
+        session.disconnect();
+    }
+
+    @Test
+    void engagementPush_skippedOnEditComment() throws Exception {
+        // Comment edit changes updatedAt but no count — must NOT push. We
+        // confirm by editing first, then triggering a known like push and
+        // asserting only one frame arrives (the like) with commentCount=1.
+        EngagementFixture fx = setupEngagementFixture("edit-comment-skip");
+        ResponseEntity<String> commentResp = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/comments",
+                HttpMethod.POST,
+                authedJson(fx.actorToken(), Map.of("body", "original")),
+                String.class);
+        Long commentId = objectMapper.readTree(commentResp.getBody()).get("id").asLong();
+
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        // Edit — no push expected. mockMvc because the default
+        // TestRestTemplate request factory rejects PATCH.
+        mockMvc.perform(patch("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + fx.actorToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("body", "edited"))))
+                .andExpect(status().isOk());
+
+        // Forcing a known push.
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/like",
+                HttpMethod.POST, authedJson(fx.actorToken(), null), String.class);
+
+        FeedEngagementPushPayload first = received.poll(5, TimeUnit.SECONDS);
+        assertThat(first).isNotNull();
+        assertThat(first.likeCount()).isEqualTo(1L);
+        assertThat(first.commentCount()).isEqualTo(1L);
+        // No second frame from the earlier edit.
+        FeedEngagementPushPayload extra = received.poll(1, TimeUnit.SECONDS);
+        assertThat(extra).isNull();
+
+        session.disconnect();
+    }
+
+    @Test
+    void engagementPush_skippedOnBookmark() throws Exception {
+        // Bookmark is private-state; per the issue's "(bookmark is optional)"
+        // caveat we deliberately don't fire the push. Same two-phase shape as
+        // the edit-comment-skip test.
+        EngagementFixture fx = setupEngagementFixture("bookmark-skip");
+        StompSession session = connect(fx.followerToken());
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = subscribeEngagement(session, fx.followerId());
+        Thread.sleep(2000);
+
+        // Bookmark — no push expected.
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/bookmark",
+                HttpMethod.POST, authedJson(fx.actorToken(), null), String.class);
+
+        // Forcing a known push.
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + fx.postId() + "/like",
+                HttpMethod.POST, authedJson(fx.actorToken(), null), String.class);
+
+        FeedEngagementPushPayload first = received.poll(5, TimeUnit.SECONDS);
+        assertThat(first).isNotNull();
+        assertThat(first.likeCount()).isEqualTo(1L);
+        FeedEngagementPushPayload extra = received.poll(1, TimeUnit.SECONDS);
+        assertThat(extra).isNull();
+
+        session.disconnect();
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
+
+    private record EngagementFixture(String authorToken, String followerToken, String actorToken,
+                                      Long authorId, Long followerId, Long actorId,
+                                      Long postId) {
+    }
+
+    /**
+     * Standard fixture for engagement-push tests: author + follower (follows
+     * the author) + actor (the third party who performs the engagement) +
+     * a freshly-created post by the author. The post is created BEFORE any
+     * STOMP subscription so the post-creation FeedPostPushPayload broadcast
+     * is dropped by the broker and does not contaminate engagement assertions.
+     */
+    private EngagementFixture setupEngagementFixture(String suffix) throws Exception {
+        String authorToken = registerAndLogin("ws_engage_author_" + suffix + "@test.com", true, "Author");
+        String followerToken = registerAndLogin("ws_engage_follower_" + suffix + "@test.com", false, "Follower");
+        String actorToken = registerAndLogin("ws_engage_actor_" + suffix + "@test.com", false, "Actor");
+        Long authorId = userRepository.findByEmail("ws_engage_author_" + suffix + "@test.com").orElseThrow().getId();
+        Long followerId = userRepository.findByEmail("ws_engage_follower_" + suffix + "@test.com").orElseThrow().getId();
+        Long actorId = userRepository.findByEmail("ws_engage_actor_" + suffix + "@test.com").orElseThrow().getId();
+
+        ResponseEntity<String> followResp = restTemplate.exchange(
+                "http://localhost:" + port + "/api/users/" + authorId + "/follow",
+                HttpMethod.POST, authedJson(followerToken, null), String.class);
+        assertThat(followResp.getStatusCode().is2xxSuccessful()).isTrue();
+
+        ResponseEntity<String> createResp = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts",
+                HttpMethod.POST,
+                authedJson(authorToken, Map.of("body", "engagement post " + suffix, "hashtags", java.util.List.of())),
+                String.class);
+        assertThat(createResp.getStatusCode().value()).isEqualTo(201);
+        Long postId = objectMapper.readTree(createResp.getBody()).get("id").asLong();
+
+        return new EngagementFixture(authorToken, followerToken, actorToken,
+                authorId, followerId, actorId, postId);
+    }
+
+    private LinkedBlockingDeque<FeedEngagementPushPayload> subscribeEngagement(StompSession session,
+                                                                                Long topicUserId) {
+        LinkedBlockingDeque<FeedEngagementPushPayload> received = new LinkedBlockingDeque<>();
+        session.subscribe("/topic/feed." + topicUserId, new StompFrameHandler() {
+            @Override public Type getPayloadType(StompHeaders headers) { return FeedEngagementPushPayload.class; }
+            @Override public void handleFrame(StompHeaders headers, Object payload) {
+                if (payload instanceof FeedEngagementPushPayload p) {
+                    received.add(p);
+                }
+            }
+        });
+        return received;
+    }
 
     private record Pair(String authorToken, String followerToken,
                          Long authorId, Long followerId) {

@@ -3,34 +3,40 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Avatar from './Avatar'
 import NotificationBell from './NotificationBell'
+import BannedStateBanner from './BannedStateBanner'
 import { useMentorship } from '../context/MentorshipContext'
 import usePresence from '../hooks/usePresence'
+import { getFeedUnreadCount } from '../services/api'
 import {
   Home, Compass, MessageCircle, CheckSquare, CalendarDays,
-  Clock, User, Newspaper,
+  Clock, User, Newspaper, Users, Shield,
 } from 'lucide-react'
 import '../styles/main.css'
 
 const SOON = new Set()
 
-const NAV_TABS = [
+const BASE_NAV_TABS = [
   { label: 'Home', path: '/home' },
   { label: 'Explore', path: '/explore' },
   { label: 'Feed', path: '/feed' },
   { label: 'Messages', path: '/messages' },
+  { label: 'My Mentorships', path: '/mentorships' },
   { label: 'Tasks', path: '/tasks' },
   { label: 'Schedule', path: '/schedule' },
+  { label: 'Calendar', path: '/calendar' },
   { label: 'Availability', path: '/availability' },
   { label: 'Profile', path: '/profile' },
 ]
 
-const SIDEBAR_LINKS = [
+const BASE_SIDEBAR_LINKS = [
   { label: 'Home', path: '/home', icon: Home },
   { label: 'Explore', path: '/explore', icon: Compass },
   { label: 'Feed', path: '/feed', icon: Newspaper },
   { label: 'Messages', path: '/messages', icon: MessageCircle },
+  { label: 'My Mentorships', path: '/mentorships', icon: Users },
   { label: 'My Tasks', path: '/tasks', icon: CheckSquare },
   { label: 'Schedule', path: '/schedule', icon: CalendarDays },
+  { label: 'Calendar', path: '/calendar', icon: CalendarDays },
   { label: 'Availability', path: '/availability', icon: Clock },
   { label: 'Profile', path: '/profile', icon: User },
 ]
@@ -41,11 +47,42 @@ export default function MainLayout({ children }) {
 
 
   const { role, logout, firstName, lastName, profilePhoto } = useAuth()
-  const { pendingCount, activeMenteeCount, activeMentorshipCount, tasksCount, sessionsCount } = useMentorship()
+  const isAdmin = role === 'ADMIN'
+  const NAV_TABS = isAdmin
+    ? [...BASE_NAV_TABS, { label: 'Admin', path: '/admin' }]
+    : BASE_NAV_TABS
+  const SIDEBAR_LINKS = isAdmin
+    ? [...BASE_SIDEBAR_LINKS, { label: 'Admin', path: '/admin', icon: Shield }]
+    : BASE_SIDEBAR_LINKS
+  const {
+    pendingCount, activeMenteeCount, activeMentorshipCount,
+    tasksCount, sessionsCount, statsLoading
+  } = useMentorship()
   const presence = usePresence()
   const currentPath = location.pathname
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
+
+  // #356: unread-feed badge driven by the new /api/feed/unread-count
+  // endpoint. Polled every 30s while authenticated; quietly fails if the
+  // user isn't logged in (the endpoint returns 403 in that case). We
+  // refetch immediately when the user navigates away from /feed so the
+  // badge updates after a mark-read fires on the feed mount. The async
+  // wrapper guards against the wrapper being auto-mocked to undefined in
+  // tests (the page sometimes mounts under a vi.mock('services/api')).
+  const [feedUnread, setFeedUnread] = useState({ count: 0, cappedAtMax: false })
+  useEffect(() => {
+    let cancelled = false
+    const fetchOnce = async () => {
+      try {
+        const r = await getFeedUnreadCount()
+        if (!cancelled && r) setFeedUnread(r)
+      } catch { /* swallow — likely unauthenticated */ }
+    }
+    fetchOnce()
+    const id = setInterval(fetchOnce, 30_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [currentPath])
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -71,6 +108,7 @@ export default function MainLayout({ children }) {
 
   return (
     <>
+      <BannedStateBanner />
       <nav className="topnav">
         <div className="logo" onClick={() => navigate('/home')}>
           <span>Mentor</span>Net
@@ -78,6 +116,7 @@ export default function MainLayout({ children }) {
         <div className="nav-tabs">
           {NAV_TABS.map(tab => {
             const soon = SOON.has(tab.path)
+            const showFeedBadge = tab.path === '/feed' && feedUnread.count > 0
             return (
               <button
                 key={tab.path}
@@ -88,6 +127,11 @@ export default function MainLayout({ children }) {
               >
                 {tab.label}
                 {soon && <span className="soon-badge">Soon</span>}
+                {showFeedBadge && (
+                  <span className="feed-unread-badge" aria-label={`${feedUnread.count} unread feed posts`}>
+                    {feedUnread.cappedAtMax ? '99+' : feedUnread.count}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -128,7 +172,7 @@ export default function MainLayout({ children }) {
                   { num: sessionsCount, label: 'Sessions' },
                 ]).map((s, i) => (
                   <div key={s.label} className={`ud-stat${i > 0 ? ' ud-stat--sep' : ''}`}>
-                    <span className="ud-stat-num">{s.num}</span>
+                    <span className="ud-stat-num">{statsLoading ? '...' : s.num}</span>
                     <span className="ud-stat-lbl">{s.label}</span>
                   </div>
                 ))}
@@ -176,6 +220,7 @@ export default function MainLayout({ children }) {
           <nav className="sidebar-nav">
             {SIDEBAR_LINKS.map(link => {
               const soon = SOON.has(link.path)
+              const showFeedBadge = link.path === '/feed' && feedUnread.count > 0
               return (
                 <button
                   key={link.path}
@@ -186,6 +231,11 @@ export default function MainLayout({ children }) {
                 >
                   <link.icon size={16} strokeWidth={1.75} className="icon" /> {link.label}
                   {soon && <span className="soon-badge">Soon</span>}
+                  {showFeedBadge && (
+                    <span className="feed-unread-badge" aria-label={`${feedUnread.count} unread feed posts`}>
+                      {feedUnread.cappedAtMax ? '99+' : feedUnread.count}
+                    </span>
+                  )}
                 </button>
               )
             })}

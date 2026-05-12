@@ -4,7 +4,6 @@ import com.group7.backend.dto.response.MatchSummary;
 import com.group7.backend.entity.LastMatchNotification;
 import com.group7.backend.repository.LastMatchNotificationRepository;
 import com.group7.backend.repository.MenteeRepository;
-import com.group7.backend.repository.MentorRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -21,11 +20,11 @@ import java.util.function.Predicate;
 
 /**
  * Per-user transactional unit for the scheduled match-found notification path
- * (#273). Driven by {@code MatchNotificationScheduler}: for each eligible user
- * the scheduler invokes {@link #processMentee(Long)} or {@link #processMentor(Long)},
- * which re-ranks the user's matches, compares the current top match's id to
- * the persisted dedup state, and publishes a {@code MATCH_FOUND} event only
- * when the value changed.
+ * (#273). Driven by {@code MatchNotificationScheduler}: for each eligible
+ * mentee the scheduler invokes {@link #processMentee(Long)}, which re-ranks
+ * the mentee's top mentors, compares the current top match's id to the
+ * persisted dedup state, and publishes a {@code MATCH_FOUND} event only when
+ * the value changed.
  *
  * <p><b>System component.</b> Bypasses controller-layer authorization
  * deliberately — the scheduler is not invoked in any authenticated user's
@@ -38,7 +37,7 @@ import java.util.function.Predicate;
  * a separate bean (this one) and having the scheduler invoke it across the
  * proxy boundary is what makes the propagation hint actually take effect.
  *
- * <p><b>Failure isolation.</b> Each public method runs in its own
+ * <p><b>Failure isolation.</b> {@link #processMentee} runs in its own
  * {@code REQUIRES_NEW} transaction. If processing user A throws, A's
  * transaction rolls back (state row not updated, AFTER_COMMIT skipped, no
  * notification persisted), and the scheduler's per-user try/catch logs and
@@ -59,13 +58,11 @@ import java.util.function.Predicate;
  *       (e.g., a same-firstName collision across distinct counterparts).</li>
  * </ol>
  *
- * <p><b>Implementation note.</b> The mentee and mentor sides run the same
- * change-detection algorithm against different entity types. The shared
- * algorithm lives in {@link #processUser}; the public {@code processMentee}
- * / {@code processMentor} are thin adapters that supply the load /
- * eligibility / rank functions per side. Keeping the algorithm in one
- * place means a future addition (metrics, tracing, alternative dedup) is
- * applied once.
+ * <p><b>Implementation note.</b> The change-detection algorithm lives in the
+ * generic {@link #processUser}; {@code processMentee} is a thin adapter that
+ * supplies the load / eligibility / rank functions. The generic shape is
+ * retained because it keeps any future addition (metrics, tracing,
+ * alternative dedup) confined to a single place.
  */
 @Service
 public class MatchNotificationProcessor {
@@ -74,20 +71,17 @@ public class MatchNotificationProcessor {
 
     private final MatchingService matchingService;
     private final MenteeRepository menteeRepository;
-    private final MentorRepository mentorRepository;
     private final LastMatchNotificationRepository stateRepository;
     private final NotificationEventPublisher notificationEventPublisher;
     private final Clock clock;
 
     public MatchNotificationProcessor(MatchingService matchingService,
                                       MenteeRepository menteeRepository,
-                                      MentorRepository mentorRepository,
                                       LastMatchNotificationRepository stateRepository,
                                       NotificationEventPublisher notificationEventPublisher,
                                       Clock clock) {
         this.matchingService = matchingService;
         this.menteeRepository = menteeRepository;
-        this.mentorRepository = mentorRepository;
         this.stateRepository = stateRepository;
         this.notificationEventPublisher = notificationEventPublisher;
         this.clock = clock;
@@ -111,26 +105,12 @@ public class MatchNotificationProcessor {
     }
 
     /**
-     * Symmetric to {@link #processMentee} for the mentor side. Re-ranks the
-     * mentor's candidate-mentees, fires only when the top candidate changed.
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean processMentor(Long mentorId) {
-        return processUser(
-                mentorId,
-                "mentee",
-                mentorRepository::findById,
-                m -> m.getCurrentMenteeCount() < m.getMaxMenteeCapacity(),
-                m -> matchingService.findCandidateMenteesFor(m, null));
-    }
-
-    /**
      * Generic change-detection: load the user, re-check eligibility (race
      * window since the scheduler's snapshot), rank, compare top match's id
      * against the persisted state, and fire-and-upsert if it changed.
      *
-     * @param userId       recipient id (mentee for mentor-matches, mentor for mentee-matches).
-     * @param matchLabel   human-readable role of the matched user ({@code "mentor"} / {@code "mentee"}),
+     * @param userId       recipient id (mentee, in the only current caller).
+     * @param matchLabel   human-readable role of the matched user ({@code "mentor"}),
      *                     used in the null-id error log.
      * @param loader       entity loader keyed by {@code userId}.
      * @param isEligible   second-chance eligibility predicate (race re-check).
@@ -159,10 +139,10 @@ public class MatchNotificationProcessor {
         MatchSummary top = ranked.get(0);
         Long topId = top.getId();
         if (topId == null) {
-            // The DTO factory (MentorMatchResponse.from / MenteeCandidateResponse.from)
-            // explicitly sets id from the entity. A null here means the ranker
-            // contract is broken — surface loudly so monitoring catches it,
-            // and skip so the rest of the batch keeps moving.
+            // The DTO factory (MentorMatchResponse.from) explicitly sets id
+            // from the entity. A null here means the ranker contract is
+            // broken — surface loudly so monitoring catches it, and skip so
+            // the rest of the batch keeps moving.
             log.error("Top {} for user {} has null id; skipping (DTO mapping bug)", matchLabel, userId);
             return false;
         }

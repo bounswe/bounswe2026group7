@@ -17,6 +17,30 @@ services:
     networks:
       - group7_net
 
+  neo4j:
+    # Custom image that bakes the GDS plugin jar in at build time. The
+    # upstream NEO4J_PLUGINS=["graph-data-science"] approach downloaded the
+    # JAR from the Neo4j plugin marketplace during container start, which
+    # was unreliable on CI runners (Bolt opened before the download
+    # completed; gds.* procedures returned "procedure not found"). Baking
+    # the JAR into an image layer removes that race for every consumer.
+    build: ./backend/docker/neo4j-gds
+    environment:
+      NEO4J_AUTH: ${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:-group7pass}
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_plugins:/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - group7_net
+
   backend:
     build: ./backend
     ports:
@@ -26,6 +50,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-group7db}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-group7}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-group7pass}
+      NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
+      NEO4J_USERNAME: ${NEO4J_USERNAME:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-group7pass}
       JWT_SECRET: ${JWT_SECRET:-bXlTdXBlclNlY3JldEtleUZvckdyb3VwN0JhY2tlbmRBcHBsaWNhdGlvbjIwMjY=}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
       APP_FRONTEND_URL: ${APP_FRONTEND_URL:-http://localhost:5173}
@@ -38,10 +65,36 @@ services:
       APP_ADMIN_BOOTSTRAP_PASSWORD: ${APP_ADMIN_BOOTSTRAP_PASSWORD:-}
       APP_ADMIN_BOOTSTRAP_FIRST_NAME: ${APP_ADMIN_BOOTSTRAP_FIRST_NAME:-System}
       APP_ADMIN_BOOTSTRAP_LAST_NAME: ${APP_ADMIN_BOOTSTRAP_LAST_NAME:-Admin}
+      # Advanced mentor ranker (#436). Defaults keep the LLM/embedding paths
+      # off; flip the flags in .env to enable.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-placeholder-disabled-set-OPENAI_API_KEY-to-enable}
+      MENTOR_ADVANCED_RANKER: ${MENTOR_ADVANCED_RANKER:-false}
+      MENTOR_EXPLANATION_ENABLED: ${MENTOR_EXPLANATION_ENABLED:-false}
+      MENTOR_EXPLANATION_TIMEOUT_MS: ${MENTOR_EXPLANATION_TIMEOUT_MS:-3000}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      # Advanced For-You feed ranker (#438). Default off; flip
+      # FEED_ADVANCED_RANKER=true in .env to swap the InterestOverlapFeedRanker
+      # for AdvancedForYouFeedRanker (+ pipeline). FEED_BANDIT_ENABLED stays
+      # off until the impression-tracking follow-up PR lands.
+      FEED_ADVANCED_RANKER: ${FEED_ADVANCED_RANKER:-false}
+      FEED_BANDIT_ENABLED: ${FEED_BANDIT_ENABLED:-false}
+      # E2E / Playwright fixtures rely on /api/test/* seed-and-reset
+      # endpoints and on the spam-bot defences being off so registrations
+      # don't need a real form-token round-trip. Default off in production;
+      # CI / local Playwright runs flip them on via .env.
+      APP_TEST_ENDPOINTS_ENABLED: ${APP_TEST_ENDPOINTS_ENABLED:-false}
+      APP_SPAM_ENABLED: ${APP_SPAM_ENABLED:-true}
+      # Verification-email send swaps to NoOpEmailService when off — used by
+      # Playwright so /api/test/users registrations don't fail with Resend
+      # 401 when the API key is the placeholder.
+      APP_EMAIL_ENABLED: ${APP_EMAIL_ENABLED:-true}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
       db:
+        condition: service_healthy
+      neo4j:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q 'UP'"]
@@ -66,6 +119,8 @@ services:
 volumes:
   db_data:
   uploads_data:
+  neo4j_data:
+  neo4j_plugins:
 
 networks:
   group7_net:

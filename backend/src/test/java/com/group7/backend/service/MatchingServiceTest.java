@@ -11,7 +11,16 @@ import com.group7.backend.repository.AvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.group7.backend.config.MentorRecommendationProperties;
+import com.group7.backend.config.SemanticSimilarityProperties;
+import com.group7.backend.service.embedding.SemanticSimilarityService;
+import com.group7.backend.service.explanation.MatchExplanationService;
+import com.group7.backend.service.ranking.MentorScoringPipeline;
+import com.group7.backend.service.ranking.MmrReranker;
 import com.group7.backend.service.ranking.RuleBasedMentorRanker;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -70,10 +79,57 @@ class MatchingServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Real RuleBasedMentorRanker — pure function over already-loaded entities.
+        // The pipeline wraps it with a no-op MMR (mmr.enabled=false) so scoring
+        // stays byte-identical to the pre-decomposition behaviour these tests
+        // were originally written against.
+        var recProps = new MentorRecommendationProperties(
+                new MentorRecommendationProperties.Advanced(false),
+                new MentorRecommendationProperties.Weights(0, 0, 0, 0, 0, 0, 0),
+                new MentorRecommendationProperties.Signals(false, false, false, false, false, false),
+                new MentorRecommendationProperties.Proximity(100, 0.0),
+                null);
+        var simProps = new SemanticSimilarityProperties(
+                "text-embedding-3-small",
+                new SemanticSimilarityProperties.Cache(64, 1),
+                true);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<org.springframework.ai.embedding.EmbeddingModel> noEmbeddingModel =
+                org.mockito.Mockito.mock(ObjectProvider.class);
+        lenient().when(noEmbeddingModel.getIfAvailable()).thenReturn(null);
+        var sim = new SemanticSimilarityService(noEmbeddingModel, simProps, new SimpleMeterRegistry());
+
+        var noCentroidStats = org.mockito.Mockito.mock(
+                com.group7.backend.service.embedding.MentorPopulationStats.class);
+        lenient().when(noCentroidStats.centroid()).thenReturn(java.util.Optional.empty());
+
+        var pipeline = new MentorScoringPipeline(
+                new RuleBasedMentorRanker(),
+                recProps,
+                sim,
+                java.util.Optional.of(noCentroidStats));
+
+        @SuppressWarnings("unchecked")
+        ObjectProvider<org.springframework.ai.chat.model.ChatModel> noChatModel =
+                org.mockito.Mockito.mock(ObjectProvider.class);
+        lenient().when(noChatModel.getIfAvailable()).thenReturn(null);
+        var explanationService = new MatchExplanationService(
+                noChatModel, new ObjectMapper(), recProps, new SimpleMeterRegistry());
+
+        // Stub PlatformTransactionManager so TransactionTemplate.execute(...)
+        // runs the callback inline — these are pure unit tests with no real
+        // JPA session, so the transaction boundary doesn't matter. The
+        // SimpleTransactionStatus stub lets commit() pass cleanly.
+        var txManager = org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class);
+        lenient().when(txManager.getTransaction(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
+
         matchingService = new MatchingService(
                 menteeRepository, mentorRepository,
                 availabilitySlotRepository, menteeAvailabilitySlotRepository,
-                new RuleBasedMentorRanker(),  // real ranker — pure function over already-loaded entities
+                pipeline,
+                explanationService,
+                txManager,
                 /*rankingWindow*/ 200);
 
         pageable = PageRequest.of(0, 20);
@@ -139,7 +195,7 @@ class MatchingServiceTest {
 
         // Verify the SQL filter pushes capacity, not in-memory.
         verify(mentorRepository).findRankingCandidates(
-                any(), any(), any(), any(), eq(true), any(), any(Pageable.class));
+                any(), any(), any(), any(), eq(true), anyBoolean(), any(), any(), any(), any(Pageable.class));
     }
 
     // ── Pagination ────────────────────────────────────────────────────────
@@ -222,7 +278,7 @@ class MatchingServiceTest {
 
         // Service normaliseKeyword: trim + lowercase + escape + wrap %...%.
         verify(mentorRepository).findRankingCandidates(
-                eq("%java%"), any(), any(), any(), anyBoolean(), any(), any());
+                eq("%java%"), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any());
     }
 
     @Test
@@ -234,7 +290,7 @@ class MatchingServiceTest {
         matchingService.getTopMentors(1L, "ab", pageable);
 
         verify(mentorRepository).findRankingCandidates(
-                eq(null), any(), any(), any(), anyBoolean(), any(), any());
+                eq(null), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any());
     }
 
     @Test
@@ -245,7 +301,7 @@ class MatchingServiceTest {
         matchingService.getTopMentors(1L, "   ", pageable);
 
         verify(mentorRepository).findRankingCandidates(
-                eq(null), any(), any(), any(), anyBoolean(), any(), any());
+                eq(null), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any());
     }
 
     @Test
@@ -256,7 +312,7 @@ class MatchingServiceTest {
         matchingService.getTopMentors(1L, null, pageable);
 
         verify(mentorRepository).findRankingCandidates(
-                eq(null), any(), any(), any(), anyBoolean(), any(), any());
+                eq(null), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any());
     }
 
     @Test
@@ -268,7 +324,7 @@ class MatchingServiceTest {
 
         // Escape order: pipe first, then % and _. Result: "%abc|%def%".
         verify(mentorRepository).findRankingCandidates(
-                eq("%abc|%def%"), any(), any(), any(), anyBoolean(), any(), any());
+                eq("%abc|%def%"), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any());
     }
 
     // ── Ordering ──────────────────────────────────────────────────────────
@@ -446,7 +502,7 @@ class MatchingServiceTest {
         // overlap is part of scoring, not filtering, and the mentee path here
         // doesn't score.
         verify(menteeRepository).findRankingCandidates(
-                any(), any(), any(), any(), eq(true),
+                any(), any(), any(), any(), eq(true), anyBoolean(),
                 org.mockito.ArgumentMatchers.isNull(), any(Pageable.class));
     }
 
@@ -458,7 +514,7 @@ class MatchingServiceTest {
         matchingService.getCandidateMentees(1L, "machine", pageable);
 
         verify(menteeRepository).findRankingCandidates(
-                eq("%machine%"), any(), any(), any(), anyBoolean(), any(), any());
+                eq("%machine%"), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any());
     }
 
     @Test
@@ -532,7 +588,7 @@ class MatchingServiceTest {
         assertThat(result).hasSize(1);
         // Same 200-cap as the paginated path (verified via PageRequest.of(0, 200)).
         verify(mentorRepository).findRankingCandidates(
-                any(), any(), any(), any(), anyBoolean(), any(), eq(PageRequest.of(0, 200)));
+                any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), eq(PageRequest.of(0, 200)));
     }
 
     @Test
@@ -681,6 +737,92 @@ class MatchingServiceTest {
         assertThat(result.get(0).getId()).isEqualTo(mentee.getId());
     }
 
+    // ── #571: advanced filter passthrough + minMatchScore post-rank ───────
+
+    @Test
+    void availabilityDays_passedThroughToRepository() {
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
+
+        java.util.Set<DayOfWeek> days =
+                java.util.Set.of(DayOfWeek.MONDAY, DayOfWeek.FRIDAY);
+        java.util.Set<Integer> durations = java.util.Set.of(3, 6);
+        matchingService.getTopMentors(
+                1L, null, /*maxDistanceKm*/ null, days, durations,
+                /*minMatchScore*/ null, pageable);
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<java.util.Set<DayOfWeek>> daysCaptor =
+                org.mockito.ArgumentCaptor.forClass(java.util.Set.class);
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<java.util.Set<Integer>> durCaptor =
+                org.mockito.ArgumentCaptor.forClass(java.util.Set.class);
+        verify(mentorRepository).findRankingCandidates(
+                any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(),
+                daysCaptor.capture(), durCaptor.capture(), any(Pageable.class));
+        assertThat(daysCaptor.getValue())
+                .containsExactlyInAnyOrder(DayOfWeek.MONDAY, DayOfWeek.FRIDAY);
+        assertThat(durCaptor.getValue()).containsExactlyInAnyOrder(3, 6);
+    }
+
+    @Test
+    void availabilityDays_emptySetCoercedToNullBeforeRepository() {
+        // Empty Set<DayOfWeek> must be coerced to null at the service layer so
+        // Postgres doesn't reject the underlying `IN ()` for an empty parameter
+        // — same rule as the existing string-list filters.
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(mentor));
+
+        matchingService.getTopMentors(
+                1L, null, null, java.util.Set.of(), java.util.Set.of(),
+                null, pageable);
+
+        verify(mentorRepository).findRankingCandidates(
+                any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull(),
+                any(Pageable.class));
+    }
+
+    @Test
+    void minMatchScore_excludesBelowThresholdAndAdjustsTotal() {
+        // Two mentors with markedly different fit. The mentor fixture matches
+        // the mentee on field, expertise, major, etc.; lowScore has no overlap
+        // so the ranker scores it 0. Setting minMatchScore=1 must drop the
+        // zero-scoring mentor AND lower totalElements to reflect the
+        // thresholded ranking.
+        Mentor lowScore = new Mentor();
+        lowScore.setId(7L);
+        lowScore.setMaxMenteeCapacity(3);
+        lowScore.setCurrentMenteeCount(0);
+
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(lowScore, mentor));
+
+        Page<MentorMatchResponse> withThreshold = matchingService.getTopMentors(
+                1L, null, null, null, null, /*minMatchScore*/ 1, pageable);
+
+        assertThat(withThreshold.getContent()).extracting(MentorMatchResponse::getId)
+                .containsExactly(mentor.getId());
+        assertThat(withThreshold.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void minMatchScore_nullPreservesAllCandidates() {
+        Mentor lowScore = new Mentor();
+        lowScore.setId(7L);
+        lowScore.setMaxMenteeCapacity(3);
+        lowScore.setCurrentMenteeCount(0);
+
+        when(menteeRepository.findById(1L)).thenReturn(Optional.of(mentee));
+        stubMentorSearch(List.of(lowScore, mentor));
+
+        Page<MentorMatchResponse> noThreshold = matchingService.getTopMentors(
+                1L, null, null, null, null, /*minMatchScore*/ null, pageable);
+
+        assertThat(noThreshold.getTotalElements()).isEqualTo(2);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     // The matching path uses findRankingCandidates (List, no count) — see
@@ -691,13 +833,13 @@ class MatchingServiceTest {
 
     private void stubMentorSearch(List<Mentor> mentors) {
         when(mentorRepository.findRankingCandidates(
-                any(), any(), any(), any(), anyBoolean(), any(), any(Pageable.class)))
+                any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(mentors);
     }
 
     private void stubMenteeSearch(List<Mentee> mentees) {
         when(menteeRepository.findRankingCandidates(
-                any(), any(), any(), any(), anyBoolean(), any(), any(Pageable.class)))
+                any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(Pageable.class)))
                 .thenReturn(mentees);
     }
 }

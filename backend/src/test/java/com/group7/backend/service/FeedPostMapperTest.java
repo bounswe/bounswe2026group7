@@ -4,6 +4,8 @@ import com.group7.backend.dto.response.FeedPostResponse;
 import com.group7.backend.entity.FeedPost;
 import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.entity.Mentor;
+import com.group7.backend.repository.FeedPostBookmarkRepository;
+import com.group7.backend.repository.FeedPostLikeRepository;
 import com.group7.backend.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +32,9 @@ import static org.mockito.Mockito.when;
 class FeedPostMapperTest {
 
     @Mock private UserRepository userRepository;
+    @Mock private AttachmentUrlBuilder attachmentUrlBuilder;
+    @Mock private FeedPostLikeRepository likeRepository;
+    @Mock private FeedPostBookmarkRepository bookmarkRepository;
     @InjectMocks private FeedPostMapper feedPostMapper;
 
     @Test

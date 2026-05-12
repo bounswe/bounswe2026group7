@@ -1,23 +1,30 @@
 package com.group7.backend.controller;
 
 import com.group7.backend.controller.support.PageableSupport;
+import com.group7.backend.docs.feed.FeedApiExamples;
 import com.group7.backend.dto.response.FeedPostListItem;
 import com.group7.backend.service.FeedReadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.OffsetDateTime;
 
 /**
  * Read surface for the social feed (#350). Three sibling endpoints
@@ -40,6 +47,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/feed")
+@Validated
 @Tag(name = "Feed Read",
         description = "For-You, Following, and search read surfaces over the social feed (#350).")
 public class FeedReadController {
@@ -60,7 +68,10 @@ public class FeedReadController {
                     + "not the global post count — the For-You feed deliberately ranks a "
                     + "rolling window of recent candidates and caps at that size.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Paged ranked posts"),
+            @ApiResponse(responseCode = "200", description = "Paged ranked posts",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.FOR_YOU_RESPONSE))),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
     })
     public ResponseEntity<Page<FeedPostListItem>> forYou(
@@ -77,7 +88,10 @@ public class FeedReadController {
             description = "Returns posts authored by users the viewer follows, ordered by "
                     + "creation time descending. Empty when the viewer follows nobody.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Paged followed-author posts"),
+            @ApiResponse(responseCode = "200", description = "Paged followed-author posts",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.FOLLOWING_RESPONSE))),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
     })
     public ResponseEntity<Page<FeedPostListItem>> following(
@@ -94,29 +108,37 @@ public class FeedReadController {
             description = "Returns non-deleted posts authored by the given user id, "
                     + "ordered by creation time descending.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Paged author posts"),
+            @ApiResponse(responseCode = "200", description = "Paged author posts",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.POSTS_BY_AUTHOR_RESPONSE))),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
     })
     public ResponseEntity<Page<FeedPostListItem>> postsByAuthor(
             @Parameter(description = "Author user id") @PathVariable Long authorId,
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long viewerId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        return ResponseEntity.ok(feedReadService.postsByAuthor(authorId, pageable));
+        return ResponseEntity.ok(feedReadService.postsByAuthor(authorId, viewerId, pageable));
     }
 
     @GetMapping("/search")
-    @Operation(summary = "Search feed posts by keyword and / or hashtag",
-            description = "At least one of `q` or `hashtag` is required — both null returns "
-                    + "400. Use `/api/feed/for-you` or `/api/feed/following` for the full "
-                    + "feed without a filter. Keyword uses pg_trgm-accelerated LIKE on the "
-                    + "body and is escaped at the service boundary so `%` and `_` cannot act "
-                    + "as wildcards. Hashtag matches the normalised tag value (lowercased, "
-                    + "leading-# stripped); a hashtag that fails normalisation returns an "
-                    + "empty page rather than 400. Combined queries AND the two predicates.")
+    @Operation(summary = "Search feed posts by keyword, hashtag, date range, and / or language",
+            description = "At least one of `q`, `hashtag`, `since`, `until`, or `lang` is required — "
+                    + "all null returns 400. Date range is half-open: `since` inclusive, `until` exclusive. "
+                    + "Keyword uses pg_trgm-accelerated LIKE on the body and is escaped at the service "
+                    + "boundary so `%` and `_` cannot act as wildcards. Hashtag matches the normalised "
+                    + "tag value; a hashtag that fails normalisation returns an empty page. Filters are "
+                    + "ANDed. Viewer keyword-mutes are applied after the SQL fetch, so the visible page "
+                    + "may surface fewer than `size` items.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Paged matching posts"),
-            @ApiResponse(responseCode = "400", description = "Both `q` and `hashtag` missing", content = @Content),
+            @ApiResponse(responseCode = "200", description = "Paged matching posts",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.SEARCH_RESPONSE))),
+            @ApiResponse(responseCode = "400", description = "All filters missing, since≥until, or out-of-window dates", content = @Content),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
     })
     public ResponseEntity<Page<FeedPostListItem>> search(
@@ -124,9 +146,22 @@ public class FeedReadController {
             @RequestParam(name = "q", required = false) String keyword,
             @Parameter(description = "Single hashtag, with or without leading '#'")
             @RequestParam(name = "hashtag", required = false) String hashtag,
+            @Parameter(description = "Inclusive lower bound on `created_at` (ISO 8601)")
+            @RequestParam(name = "since", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime since,
+            @Parameter(description = "Exclusive upper bound on `created_at` (ISO 8601)")
+            @RequestParam(name = "until", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime until,
+            @Parameter(description = "BCP-47 short language tag (e.g. en, tr-TR)")
+            @RequestParam(name = "lang", required = false)
+            @Pattern(regexp = "^[a-z]{2,3}(-[A-Z]{2})?$", message = "lang must be a BCP-47 short tag like 'en' or 'tr-TR'")
+            String lang,
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Page size; clamped to [1, 100]") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long viewerId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        return ResponseEntity.ok(feedReadService.search(keyword, hashtag, pageable));
+        return ResponseEntity.ok(feedReadService.search(
+                keyword, hashtag, since, until, lang, viewerId, pageable));
     }
 }

@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -72,6 +73,24 @@ public class GlobalExceptionHandler {
                 "This action conflicted with a concurrent update. Please retry.");
     }
 
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(DataIntegrityViolationException ex,
+                                                                            HttpServletRequest request) {
+        // Database integrity violations — UNIQUE collisions, FK or CHECK
+        // breaches — surface as 409 Conflict. The specific case driving this
+        // handler is the {@code feed_post_attachments_unique_attachment}
+        // constraint (#485): claiming an attachment id that is already
+        // referenced by another feed post. Service-layer pre-checks short-
+        // circuit the common case with cleaner messages; this handler is the
+        // race-window backstop and the uniform response for any other
+        // integrity violation that bubbles past the service.
+        log.warn("Data integrity violation: method={}, path={}, mostSpecificCause={}",
+                request.getMethod(), request.getRequestURI(),
+                ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict",
+                "This action conflicts with the current state of the resource (constraint violation).");
+    }
+
     @ExceptionHandler(OverlappingSlotException.class)
     public ResponseEntity<Map<String, String>> handleOverlappingSlot(OverlappingSlotException ex,
                                                                      HttpServletRequest request) {
@@ -129,6 +148,14 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
+    @ExceptionHandler(DuplicateReportException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicateReport(DuplicateReportException ex,
+                                                                     HttpServletRequest request) {
+        log.warn("Duplicate report rejected: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
+    }
+
     @ExceptionHandler(InvalidTokenException.class)
     public ResponseEntity<Map<String, String>> handleInvalidToken(InvalidTokenException ex,
                                                                   HttpServletRequest request) {
@@ -150,6 +177,30 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleSelfFollow(SelfFollowException ex,
                                                                 HttpServletRequest request) {
         log.warn("Self-follow rejected: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    @ExceptionHandler(SelfReportException.class)
+    public ResponseEntity<Map<String, String>> handleSelfReport(SelfReportException ex,
+                                                                HttpServletRequest request) {
+        log.warn("Self-report rejected: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidReportTransitionException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidReportTransition(
+            InvalidReportTransitionException ex, HttpServletRequest request) {
+        log.warn("Invalid report transition rejected: method={}, path={}, from={}, to={}",
+                request.getMethod(), request.getRequestURI(), ex.getFrom(), ex.getTo());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    @ExceptionHandler(ReportNotPermittedException.class)
+    public ResponseEntity<Map<String, String>> handleReportNotPermitted(
+            ReportNotPermittedException ex, HttpServletRequest request) {
+        log.warn("Report rejected (not permitted): method={}, path={}, message={}",
                 request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
     }
@@ -216,11 +267,72 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
+    /**
+     * Handles {@code @Min}/{@code @Max}/{@code @Pattern} (and similar)
+     * violations on controller method parameters guarded by
+     * {@code @Validated}. Without this entry, the violation propagates
+     * as an unhandled 500. The cousin handler
+     * {@link #handleValidationErrors} covers {@code @Valid} on
+     * {@code @RequestBody}; this handler covers the corresponding
+     * shape for {@code @RequestParam} / {@code @PathVariable}.
+     *
+     * <p>Returns the same per-field
+     * {@code {"error": "Validation Failed", "messages": {field: msg, ...}}}
+     * shape as {@link #handleValidationErrors} so the frontend has one
+     * code path for both bind-time and parameter-level validation.
+     */
+    @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleConstraintViolations(
+            jakarta.validation.ConstraintViolationException ex,
+            HttpServletRequest request) {
+        Map<String, String> fieldErrors = new HashMap<>();
+        ex.getConstraintViolations().forEach(v -> {
+            // propertyPath looks like "search.lang" — keep the last segment so
+            // the client sees the param name without the controller method.
+            String path = v.getPropertyPath().toString();
+            int dot = path.lastIndexOf('.');
+            String field = dot >= 0 ? path.substring(dot + 1) : path;
+            fieldErrors.put(field, v.getMessage());
+        });
+        log.warn("Constraint violation: method={}, path={}, fieldErrorCount={}",
+                request.getMethod(), request.getRequestURI(), fieldErrors.size());
+        Map<String, Object> body = Map.of("error", "Validation Failed", "messages", fieldErrors);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, String>> handleAccessDenied(AccessDeniedException ex,
                                                                    HttpServletRequest request) {
         log.warn("Access denied: method={}, path={}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", "Access denied");
+    }
+
+    /**
+     * Restore window expired (#487). The post was soft-deleted longer
+     * ago than {@code app.feed.cleanup.restore-window-days}, so it is
+     * unrecoverable via the restore endpoint. 410 Gone differentiates
+     * "expired" from {@link FeedPostNotDeletedException}'s 409 ("not
+     * deleted") and from a plain 404 ("never existed").
+     */
+    @ExceptionHandler(FeedPostExpiredRestoreException.class)
+    public ResponseEntity<Map<String, String>> handleExpiredRestore(
+            FeedPostExpiredRestoreException ex, HttpServletRequest request) {
+        log.info("Expired restore: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.GONE, "Gone", ex.getMessage());
+    }
+
+    /**
+     * Restore was requested on a live (non-deleted) post (#487).
+     * 409 Conflict is the precise semantic: the resource is in a
+     * state incompatible with the requested operation.
+     */
+    @ExceptionHandler(FeedPostNotDeletedException.class)
+    public ResponseEntity<Map<String, String>> handleNotDeleted(
+            FeedPostNotDeletedException ex, HttpServletRequest request) {
+        log.info("Restore on live post: method={}, path={}, message={}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+        return buildErrorResponse(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
     private ResponseEntity<Map<String, String>> buildErrorResponse(HttpStatus status, String error, String message) {

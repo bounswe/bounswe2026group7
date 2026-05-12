@@ -6,6 +6,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.Locale;
 
 @Service
 public class NotificationEventPublisher {
@@ -274,6 +275,72 @@ public class NotificationEventPublisher {
                 "Mentorship completed",
                 "Your mentorship with " + counterpartFirstName
                         + " has reached its end date and is now complete."
+        );
+    }
+
+    /** Fires FEED_LIKE to the post author. Body collapses cross-post likes per actor under the 24h dedup gate. */
+    public void publishFeedLike(Long recipientId, String actorFirstName, Long postId) {
+        applicationEventPublisher.publishEvent(new NotificationCreatedEvent(
+                recipientId,
+                NotificationType.FEED_LIKE,
+                "New like",
+                actorFirstName + " liked your post.",
+                postId,
+                null
+        ));
+    }
+
+    /** Fires FEED_COMMENT to the post author for each new visible comment. */
+    public void publishFeedComment(Long recipientId, String actorFirstName, Long postId) {
+        applicationEventPublisher.publishEvent(new NotificationCreatedEvent(
+                recipientId,
+                NotificationType.FEED_COMMENT,
+                "New comment",
+                actorFirstName + " commented on your post.",
+                postId,
+                null
+        ));
+    }
+
+    /** Fires FEED_SHARE to the post author whenever someone shares the post. */
+    public void publishFeedShare(Long recipientId, String actorFirstName, Long postId) {
+        applicationEventPublisher.publishEvent(new NotificationCreatedEvent(
+                recipientId,
+                NotificationType.FEED_SHARE,
+                "Post shared",
+                actorFirstName + " shared your post.",
+                postId,
+                null
+        ));
+    }
+
+    /** Fires NEW_FOLLOWER to the followee. entityId carries the follower's user id for deep-link context. */
+    public void publishNewFollower(Long recipientId, String followerFirstName, Long followerId) {
+        applicationEventPublisher.publishEvent(new NotificationCreatedEvent(
+                recipientId,
+                NotificationType.NEW_FOLLOWER,
+                "New follower",
+                followerFirstName + " started following you.",
+                followerId,
+                null
+        ));
+    }
+
+    /**
+     * Notify an admin that a new report has been submitted. Title and
+     * body are deliberately generic — the admin clicks through to the
+     * queue at /api/admin/reports for full context. Body never contains
+     * the reporter's free-text description (potential PII).
+     */
+    public void publishReportReceived(Long adminId,
+                                       String reporterFirstName,
+                                       com.group7.backend.entity.ReportTargetType targetType) {
+        publish(
+                adminId,
+                NotificationType.REPORT_RECEIVED,
+                "New report received",
+                reporterFirstName + " submitted a report against a "
+                        + targetType.name().toLowerCase(Locale.ROOT) + "."
         );
     }
 

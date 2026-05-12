@@ -1,7 +1,7 @@
 import apiClient from '../api/client';
 
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
   View,
@@ -23,7 +23,18 @@ export default function RegisterScreen() {
   const [interests, setInterests] = useState<string[]>([]);
   const [interestInput, setInterestInput] = useState('');
   const [image, setImage] = useState<string | null>(null);
+  const [formToken, setFormToken] = useState<string | null>(null);
+  const formTokenIssuedAt = useRef<number | null>(null);
 
+  useEffect(() => {
+    apiClient.get('/auth/form-token').then((res) => {
+      const token = res.data?.token ?? null;
+      if (token) {
+        setFormToken(token);
+        formTokenIssuedAt.current = Date.now();
+      }
+    }).catch(() => {});
+  }, []);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -67,14 +78,24 @@ export default function RegisterScreen() {
       fullName.trim().length > 0 &&
       email.trim().length > 0 &&
       password.trim().length > 0 &&
-      interests.length > 0
+      interests.length > 0 &&
+      formToken !== null
     );
-  }, [fullName, email, password, interests]);
+  }, [fullName, email, password, interests, formToken]);
 
   const handleRegister = async () => {
     if (!isFormValid) {
       Alert.alert("Error", "Please fill in all required fields and add at least one interest.");
       return;
+    }
+
+    // Backend requires token to be at least 1.5s old; wait up to 2s if needed
+    if (formTokenIssuedAt.current !== null) {
+      const elapsed = Date.now() - formTokenIssuedAt.current;
+      const MIN_MS = 2000;
+      if (elapsed < MIN_MS) {
+        await new Promise<void>((resolve) => setTimeout(resolve, MIN_MS - elapsed));
+      }
     }
 
     try {
@@ -88,6 +109,7 @@ export default function RegisterScreen() {
         email: email,
         password: password,
         isMentor: selectedRole === 'Mentor',
+        formToken,
       });
 
       // Kayıt başarılı — bio ve interests'i profile patch et

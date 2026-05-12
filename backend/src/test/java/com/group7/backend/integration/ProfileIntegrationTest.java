@@ -138,7 +138,10 @@ class ProfileIntegrationTest {
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertNull(body.get("profileVisibility"), "Mentor should not have profileVisibility");
+        // #570 added profileVisibility to MentorResponse; field is present and defaults to true.
+        assertNotNull(body.get("profileVisibility"), "Mentor profileVisibility should be present after #570");
+        assertEquals(true, body.get("profileVisibility").asBoolean(),
+                "Mentor profileVisibility default should be true");
         assertNull(body.get("cancelCount"), "Mentor should not have cancelCount");
         assertNull(body.get("meetingFreqPref"), "Mentor should not have meetingFreqPref");
     }
@@ -287,6 +290,7 @@ class ProfileIntegrationTest {
         update.setSkills(List.of("Python", "Go", "Docker", "Kubernetes"));
         update.setMeetingFreqPref("Bi-weekly");
         update.setBackgroundInfo("3rd year student with internship at a cloud company");
+        update.setAffiliation("Bogazici University");
         update.setProfileVisibility(false);
 
         mockMvc.perform(patch("/api/users/me/mentee")
@@ -301,13 +305,62 @@ class ProfileIntegrationTest {
                 .andExpect(jsonPath("$.skills.length()").value(4))
                 .andExpect(jsonPath("$.meetingFreqPref").value("Bi-weekly"))
                 .andExpect(jsonPath("$.backgroundInfo").value("3rd year student with internship at a cloud company"))
+                .andExpect(jsonPath("$.affiliation").value("Bogazici University"))
                 .andExpect(jsonPath("$.profileVisibility").value(false));
 
         // Verify persisted via GET
         mockMvc.perform(get("/api/users/me")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(jsonPath("$.skills.length()").value(4))
+                .andExpect(jsonPath("$.affiliation").value("Bogazici University"))
                 .andExpect(jsonPath("$.profileVisibility").value(false));
+    }
+
+    @Test
+    void updateMenteeProfile_affiliationOnly_persistsAndSurfacesOnPublicProfile() throws Exception {
+        // V51 added the column / DTO field / service mapping in lockstep.
+        // This test pins the round-trip through PATCH /api/users/me/mentee
+        // → GET /api/users/me → GET /api/users/{id} so a regression that
+        // drops the field on any leg fails loudly. Mentors had this since
+        // V1; mentees were silently missing it until now.
+        String token = registerAndLogin("affiliation-mentee@test.com", false);
+
+        MenteeProfileRequest update = new MenteeProfileRequest();
+        update.setAffiliation("Istanbul Technical University");
+
+        mockMvc.perform(patch("/api/users/me/mentee")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.affiliation").value("Istanbul Technical University"));
+
+        long menteeId = userRepository
+                .findByEmail("affiliation-mentee@test.com").orElseThrow().getId();
+
+        mockMvc.perform(get("/api/users/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.affiliation").value("Istanbul Technical University"));
+
+        mockMvc.perform(get("/api/users/" + menteeId).header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.affiliation").value("Istanbul Technical University"));
+    }
+
+    @Test
+    void updateMenteeProfile_affiliationOver200Chars_rejectedAt400() throws Exception {
+        // Mirrors MentorProfileRequest's @Size(max = 200) cap. DB column is
+        // VARCHAR(255) as defence in depth, but the API contract is 200.
+        String token = registerAndLogin("aff-validation@test.com", false);
+
+        MenteeProfileRequest update = new MenteeProfileRequest();
+        update.setAffiliation("X".repeat(201));
+
+        mockMvc.perform(patch("/api/users/me/mentee")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isBadRequest());
     }
 
     // ── Common field updates ────────────────────────────────
@@ -491,14 +544,20 @@ class ProfileIntegrationTest {
 
     @Test
     void getProfileById_mentorViewsMentee_returns200() throws Exception {
-        String mentorToken = registerAndLogin("mentor@test.com", true);
-        String menteeToken = registerAndLogin("mentee@test.com", false);
+        // #570 (1.1.2.5) — mentors see mentees with lastName and profilePhoto
+        // masked to null. Field shape unchanged; values redacted.
+        String mentorToken = registerAndLogin("Mira", "Demir", "mentor@test.com", true);
+        String menteeToken = registerAndLogin("Ali", "Yilmaz", "mentee@test.com", false);
         Long menteeId = getUserId(menteeToken);
 
         mockMvc.perform(get("/api/users/" + menteeId)
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("MENTEE"));
+                .andExpect(jsonPath("$.role").value("MENTEE"))
+                .andExpect(jsonPath("$.firstName").value("Ali"))
+                // lastName and profilePhoto are masked for mentor viewers (1.1.2.5).
+                .andExpect(jsonPath("$.lastName").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.profilePhoto").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

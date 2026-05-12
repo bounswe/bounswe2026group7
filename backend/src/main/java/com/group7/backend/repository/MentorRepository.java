@@ -7,19 +7,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.DayOfWeek;
 import java.util.List;
+import java.util.Set;
 
 public interface MentorRepository extends JpaRepository<Mentor, Long> {
-
-    /**
-     * IDs of all mentors with spare capacity, ordered for test determinism.
-     * Used by {@code MatchNotificationScheduler} as the eligibility list —
-     * only mentors who can accept new mentees are candidates for a "match
-     * found" notification. Returns just IDs to keep the per-tick memory
-     * bounded; the processor re-loads each mentor in its own transaction.
-     */
-    @Query("SELECT m.id FROM Mentor m WHERE m.currentMenteeCount < m.maxMenteeCapacity ORDER BY m.id")
-    List<Long> findIdsWithCapacity();
 
     /**
      * Shared JPQL for {@link #searchByFilters} (Page, with count) and
@@ -47,6 +39,7 @@ public interface MentorRepository extends JpaRepository<Mentor, Long> {
                  LOWER(m.preferredMenteeMajor) = :major OR
                  LOWER(m.field) = :major)
             AND (:requireCapacity = false OR m.currentMenteeCount < m.maxMenteeCapacity)
+            AND (:bypassVisibility = true OR m.profileVisibility = true)
             AND (:requesterMenteeId IS NULL OR
                  EXISTS (SELECT 1 FROM AvailabilitySlot ms, MenteeAvailabilitySlot mes
                          WHERE ms.mentor.id = m.id
@@ -54,6 +47,11 @@ public interface MentorRepository extends JpaRepository<Mentor, Long> {
                            AND ms.dayOfWeek = mes.dayOfWeek
                            AND ms.startTime < mes.endTime
                            AND mes.startTime < ms.endTime))
+            AND (:availabilityDays IS NULL OR
+                 EXISTS (SELECT 1 FROM AvailabilitySlot s
+                         WHERE s.mentor.id = m.id
+                           AND s.dayOfWeek IN :availabilityDays))
+            AND (:mentorshipDuration IS NULL OR m.mentorshipDuration IN :mentorshipDuration)
             ORDER BY m.id DESC
             """;
 
@@ -81,6 +79,14 @@ public interface MentorRepository extends JpaRepository<Mentor, Long> {
      *       mentors whose availability slots overlap that mentee's slots
      *       (day-of-week + strict-inequality time overlap). Backed by the
      *       {@code idx_mentor_avail_mentor_day} composite index.</li>
+     *   <li>{@code availabilityDays}: when non-null, restricts to mentors
+     *       whose availability slots fall on any of the requested days
+     *       (OR semantics across days). Empty sets must be coalesced to
+     *       {@code null} at the service layer for the same Postgres reason
+     *       as the lists above.</li>
+     *   <li>{@code mentorshipDuration}: when non-null, restricts to mentors
+     *       whose {@code mentorshipDuration} (months) is in the requested
+     *       set. Same empty-set rule applies.</li>
      * </ul>
      *
      * <p>Used by {@code GET /api/users/search} where {@code totalElements} is
@@ -94,7 +100,10 @@ public interface MentorRepository extends JpaRepository<Mentor, Long> {
             @Param("skills") List<String> skills,
             @Param("major") String major,
             @Param("requireCapacity") boolean requireCapacity,
+            @Param("bypassVisibility") boolean bypassVisibility,
             @Param("requesterMenteeId") Long requesterMenteeId,
+            @Param("availabilityDays") Set<DayOfWeek> availabilityDays,
+            @Param("mentorshipDuration") Set<Integer> mentorshipDuration,
             Pageable pageable);
 
     /**
@@ -112,6 +121,9 @@ public interface MentorRepository extends JpaRepository<Mentor, Long> {
             @Param("skills") List<String> skills,
             @Param("major") String major,
             @Param("requireCapacity") boolean requireCapacity,
+            @Param("bypassVisibility") boolean bypassVisibility,
             @Param("requesterMenteeId") Long requesterMenteeId,
+            @Param("availabilityDays") Set<DayOfWeek> availabilityDays,
+            @Param("mentorshipDuration") Set<Integer> mentorshipDuration,
             Pageable pageable);
 }

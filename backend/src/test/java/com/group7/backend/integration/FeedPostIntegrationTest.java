@@ -69,8 +69,15 @@ class FeedPostIntegrationTest {
     void cleanDb() {
         // Children first by FK, then parents. Cascade would handle this,
         // but explicit ordering is more debuggable when something goes wrong.
+        // feed_post_attachments references attachments with NO ACTION, so any
+        // junction rows must be cleared before the attachments DELETE.
+        jdbcTemplate.update("DELETE FROM feed_post_attachments");
         jdbcTemplate.update("DELETE FROM feed_post_hashtags");
         jdbcTemplate.update("DELETE FROM feed_posts");
+        // Messages reference attachments via SET NULL — clearing messages
+        // first ensures attachment-row deletes don't trip the FK.
+        jdbcTemplate.update("DELETE FROM messages");
+        jdbcTemplate.update("DELETE FROM attachments");
         verificationTokenRepository.deleteAll();
         userRepository.deleteAll();
         doNothing().when(emailService).sendVerificationEmail(any(), anyString());
@@ -296,10 +303,16 @@ class FeedPostIntegrationTest {
         assertThat(tagsAfter).isZero();    // cascade-of-cascade feed_posts → feed_post_hashtags
     }
 
-    // ── JSON-LD silent downgrade ────────────────────────────────────────────
+    // ── JSON-LD content negotiation ─────────────────────────────────────────
 
     @Test
-    void getById_withLdJsonAccept_silentlyDowngradesToApplicationJson() throws Exception {
+    void getById_withLdJsonAccept_returnsAS2NoteSocialMediaPosting() throws Exception {
+        // Before #490 this endpoint silently downgraded ld+json requests
+        // to plain application/json because no JsonLdMapping handled
+        // FeedPostResponse. Now FeedPostJsonLdMapping wraps the response
+        // as a Note + SocialMediaPosting document with the AS 2.0 dual
+        // @context, so the negotiated Content-Type is preserved and the
+        // body carries the JSON-LD envelope.
         String token = registerAndLogin("ld@test.com", true);
         long pid = createPost(token, "ld test", List.of("ld"));
 
@@ -307,8 +320,10 @@ class FeedPostIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .accept(MediaType.parseMediaType("application/ld+json")))
                 .andExpect(status().isOk())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.id").value(pid));
+                .andExpect(content().contentTypeCompatibleWith(MediaType.parseMediaType("application/ld+json")))
+                .andExpect(jsonPath("$.@context").isArray())
+                .andExpect(jsonPath("$.@type[0]").value("Note"))
+                .andExpect(jsonPath("$.@type[1]").value("SocialMediaPosting"));
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

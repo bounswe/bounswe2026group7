@@ -1,16 +1,73 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import MentorshipMilestones from '../components/MentorshipMilestones'
 import MentorshipProgressTimeline from '../components/MentorshipProgressTimeline'
 import MentorMenteesProgress from '../components/MentorMenteesProgress'
-import { getMentorshipById, getUserById, updateSharedGoal, cancelMentorship, endMentorship } from '../services/api'
-import { getNextUpcomingMeeting } from '../services/mentorshipMocks'
+import ReportModal from '../components/ReportModal'
+import { showTransientToast } from '../utils/toast'
+import {
+  getMentorshipById,
+  getUserById,
+  updateSharedGoal,
+  cancelMentorship,
+  endMentorship,
+  extendMentorship,
+  rateMentor,
+  getMentorshipRating,
+  listMentorshipMeetings,
+} from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
 import '../styles/modal.css'
+
+/**
+ * Derive the "next upcoming meeting" card payload from the real meetings
+ * list — replaces the legacy `getNextUpcomingMeeting` mock (#506).
+ *
+ * Picks the meeting with the smallest startTime ≥ now whose status is
+ * PENDING_CONFIRMATION or CONFIRMED. Returns the meeting with two derived
+ * fields the existing card markup expects:
+ *   - `date`: alias of startTime so existing JSX keeps working
+ *   - `durationMin`: computed from (endTime − startTime)
+ *   - `status`: passes through; the badge renderer normalises display
+ */
+function deriveNextUpcomingMeeting(meetings) {
+  if (!Array.isArray(meetings) || meetings.length === 0) return null
+  const now = Date.now()
+  const upcoming = meetings.filter(m => {
+    if (m?.status !== 'PENDING_CONFIRMATION' && m?.status !== 'CONFIRMED') return false
+    const start = new Date(m.startTime).getTime()
+    return Number.isFinite(start) && start >= now
+  })
+  if (upcoming.length === 0) return null
+  upcoming.sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
+  const next = upcoming[0]
+  const start = new Date(next.startTime).getTime()
+  const end = new Date(next.endTime).getTime()
+  const durationMin = Number.isFinite(start) && Number.isFinite(end) && end > start
+    ? Math.round((end - start) / 60000)
+    : null
+  return { ...next, date: next.startTime, durationMin }
+}
+
+// Map a backend MeetingStatus to the existing CSS class suffix + display label.
+// Existing classes: confirmed, pending, completed. PENDING_CONFIRMATION
+// collapses to `pending`; declined/expired/cancelled won't appear in the
+// upcoming bucket but are rendered defensively.
+function meetingStatusUi(status) {
+  switch (status) {
+    case 'CONFIRMED':            return { cls: 'confirmed', label: 'Confirmed' }
+    case 'PENDING_CONFIRMATION': return { cls: 'pending', label: 'Pending' }
+    case 'COMPLETED':            return { cls: 'completed', label: 'Completed' }
+    case 'DECLINED':             return { cls: 'pending', label: 'Declined' }
+    case 'EXPIRED':              return { cls: 'pending', label: 'Expired' }
+    case 'CANCELLED':            return { cls: 'pending', label: 'Cancelled' }
+    default:                     return { cls: 'pending', label: status || '—' }
+  }
+}
 
 function formatDate(iso, opts = { day: 'numeric', month: 'short', year: 'numeric' }) {
   if (!iso) return '—'
@@ -104,6 +161,207 @@ function EndMentorshipModal({ open, onClose, onConfirm, loading, otherName }) {
             disabled={loading}
           >
             {loading ? 'Ending…' : 'End Mentorship'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Mentor-side extension modal (#276 / 1.1.1.2.13). Backend requires
+ * additionalMonths ∈ {1, 3, 6}; we render the choice as a 3-up segmented
+ * picker rather than a free-form input so we never send an invalid value.
+ */
+function ExtendMentorshipModal({ open, onClose, onConfirm, loading, otherName, currentEndDate }) {
+  const overlayRef = useRef(null)
+  const [months, setMonths] = useState(3)
+
+  useEffect(() => {
+    if (open) setMonths(3)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose, loading])
+
+  if (!open) return null
+
+  const projectedEnd = currentEndDate
+    ? (() => {
+        const d = new Date(currentEndDate)
+        if (isNaN(d.getTime())) return null
+        d.setMonth(d.getMonth() + months)
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+      })()
+    : null
+
+  return (
+    <div
+      className="modal-overlay"
+      ref={overlayRef}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
+    >
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="extendMentorshipTitle" data-testid="mentorship-extend-modal">
+        <div className="modal-header">
+          <div>
+            <h2 id="extendMentorshipTitle">Extend mentorship?</h2>
+            <p className="modal-subtitle">
+              Push the end date of your mentorship with {otherName || 'this mentee'} forward.
+              Your mentee will be notified.
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>
+          Add to current end date
+        </label>
+        <div className="md-extend-options">
+          {[1, 3, 6].map(m => (
+            <button
+              key={m}
+              type="button"
+              className={`md-extend-option${months === m ? ' md-extend-option--active' : ''}`}
+              onClick={() => setMonths(m)}
+              disabled={loading}
+              aria-pressed={months === m}
+              data-testid={`mentorship-extend-option-${m}`}
+            >
+              +{m} month{m !== 1 ? 's' : ''}
+            </button>
+          ))}
+        </div>
+
+        {projectedEnd && (
+          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '12px' }}>
+            New end date: <strong style={{ color: 'var(--text)' }}>{projectedEnd}</strong>
+          </div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
+          <button
+            type="button"
+            className="modal-btn-primary"
+            onClick={() => onConfirm(months)}
+            disabled={loading}
+            data-testid="mentorship-extend-confirm"
+          >
+            {loading ? 'Extending…' : `Extend by ${months} month${months !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Mentee-side mentor rating modal (#278 / 1.1.1.1.11). Backend caps the
+ * score at 1..5 and the optional comment at 1000 chars. One-shot per
+ * mentorship — duplicate POST returns 409, surfaced here as an error.
+ */
+function RateMentorModal({ open, onClose, onConfirm, loading, mentorName }) {
+  const overlayRef = useRef(null)
+  const [score, setScore] = useState(0)
+  const [hoverScore, setHoverScore] = useState(0)
+  const [comment, setComment] = useState('')
+
+  useEffect(() => {
+    if (open) { setScore(0); setHoverScore(0); setComment('') }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose, loading])
+
+  if (!open) return null
+
+  const displayScore = hoverScore || score
+
+  return (
+    <div
+      className="modal-overlay"
+      ref={overlayRef}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
+    >
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="rateMentorTitle">
+        <div className="modal-header">
+          <div>
+            <h2 id="rateMentorTitle">Rate {mentorName || 'your mentor'}</h2>
+            <p className="modal-subtitle">
+              Your rating helps other mentees find a great match. Only the average and rating
+              count are shown publicly — your comment may appear without your name attached.
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>
+          Score (required)
+        </label>
+        <div
+          className="md-rating-stars"
+          role="radiogroup"
+          aria-label="Score from 1 to 5 stars"
+          onMouseLeave={() => setHoverScore(0)}
+        >
+          {[1, 2, 3, 4, 5].map(n => (
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={score === n}
+              aria-label={`${n} star${n !== 1 ? 's' : ''}`}
+              className={`md-rating-star${displayScore >= n ? ' md-rating-star--filled' : ''}`}
+              onClick={() => setScore(n)}
+              onMouseEnter={() => setHoverScore(n)}
+              onFocus={() => setHoverScore(n)}
+              onBlur={() => setHoverScore(0)}
+              disabled={loading}
+            >
+              ★
+            </button>
+          ))}
+          <span className="md-rating-value">
+            {displayScore > 0 ? `${displayScore} / 5` : 'Pick a score'}
+          </span>
+        </div>
+
+        <label className="section-label" style={{ marginTop: '14px', display: 'block' }} htmlFor="rateComment">
+          Comment (optional)
+        </label>
+        <textarea
+          id="rateComment"
+          className="modal-textarea"
+          rows={4}
+          maxLength={1000}
+          value={comment}
+          onChange={e => setComment(e.target.value)}
+          placeholder="Tell future mentees what made working with this mentor valuable."
+          disabled={loading}
+        />
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+          {comment.length}/1000
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="modal-btn-primary"
+            onClick={() => onConfirm(score, comment.trim() || undefined)}
+            disabled={loading || score < 1}
+          >
+            {loading ? 'Submitting…' : 'Submit rating'}
           </button>
         </div>
       </div>
@@ -303,10 +561,41 @@ export default function MentorshipDetailPage() {
   const [endOpen, setEndOpen] = useState(false)
   const [endLoading, setEndLoading] = useState(false)
   const [endError, setEndError] = useState(null)
+  const [extendOpen, setExtendOpen] = useState(false)
+  const [extendLoading, setExtendLoading] = useState(false)
+  const [extendError, setExtendError] = useState(null)
+  const [rateOpen, setRateOpen] = useState(false)
+  const [rateLoading, setRateLoading] = useState(false)
+  const [rateError, setRateError] = useState(null)
+  // #556: hydrated from the backend rating-read endpoint (#534). Null means
+  // either "still loading" or "no rating yet" — we treat them the same since
+  // we only render the prompt once the page is visible and the mentorship is
+  // already non-ACTIVE; an empty hydration is the no-rating case.
+  const [submittedRating, setSubmittedRating] = useState(null)
 
   const [cancelOpen, setCancelOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelError, setCancelError] = useState(null)
+
+  // Bumped by MentorshipMilestones after every mutation so the progress
+  // timeline refetches without a remount (which would reset its loading and
+  // scroll state). Passed as a prop, NOT React `key`, for that reason.
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
+  const bumpTimeline = useCallback(() => setTimelineRefreshKey(k => k + 1), [])
+
+  // Hydrate any existing rating from the backend so the prompt doesn't flash
+  // before the read-only block on revisit. 404 = no rating yet (expected
+  // first-time path). Any other error is silent — worst case the user gets
+  // the prompt and the duplicate-POST 409 path below catches it.
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    getMentorshipRating(id)
+      .then(r => { if (!cancelled) setSubmittedRating(r) })
+      .catch(err => { if (!cancelled && err?.status !== 404) { /* swallow */ } })
+    return () => { cancelled = true }
+  }, [id])
 
   useEffect(() => {
     let cancelled = false
@@ -321,14 +610,14 @@ export default function MentorshipDetailPage() {
         const otherId = viewerIsMentor ? m.menteeId : m.mentorId
         return Promise.all([
           getUserById(otherId).catch(() => null),
-          getNextUpcomingMeeting(m.id).catch(() => null),
+          listMentorshipMeetings(m.id).catch(() => []),
         ])
       })
       .then(pair => {
         if (cancelled || !pair) return
-        const [user, meeting] = pair
+        const [user, meetings] = pair
         setOtherUser(user)
-        setUpcoming(meeting)
+        setUpcoming(deriveNextUpcomingMeeting(meetings))
         setLoading(false)
       })
       .catch(err => {
@@ -370,6 +659,51 @@ export default function MentorshipDetailPage() {
       setEndError(err?.message || 'Failed to end mentorship')
     } finally {
       setEndLoading(false)
+    }
+  }
+
+  async function handleRateConfirm(score, comment) {
+    setRateLoading(true)
+    setRateError(null)
+    try {
+      const created = await rateMentor(mentorship.id, score, comment)
+      setSubmittedRating(created)
+      setRateOpen(false)
+    } catch (err) {
+      const msg = err?.message || ''
+      // Duplicate-rating path: backend returns 409 with "already rated" wording.
+      // Refetch the canonical rating so we display whatever the user actually
+      // submitted previously, not the new attempt's score.
+      if (msg.includes('409') || /already.*rated/i.test(msg)) {
+        try {
+          const existing = await getMentorshipRating(mentorship.id)
+          setSubmittedRating(existing)
+        } catch {
+          // 404 shouldn't happen after a 409, but fall back to the attempt
+          // so the user isn't stuck on the prompt.
+          setSubmittedRating({ score, comment, createdAt: new Date().toISOString() })
+        }
+        setRateOpen(false)
+      } else {
+        setRateError(msg || 'Failed to submit rating')
+      }
+    } finally {
+      setRateLoading(false)
+    }
+  }
+
+  async function handleExtendConfirm(additionalMonths) {
+    setExtendLoading(true)
+    setExtendError(null)
+    try {
+      const updated = await extendMentorship(mentorship.id, additionalMonths)
+      setMentorship(updated)
+      setExtendOpen(false)
+      refresh()
+    } catch (err) {
+      setExtendError(err?.message || 'Failed to extend mentorship')
+    } finally {
+      setExtendLoading(false)
     }
   }
 
@@ -469,6 +803,44 @@ export default function MentorshipDetailPage() {
         </div>
       </div>
 
+      {!isActive && !viewerIsMentor && (
+        submittedRating ? (
+          <div className="md-rating-card md-rating-card--done" role="status">
+            <div className="md-rating-card-head">
+              <strong>You rated {otherFirstName || 'your mentor'}</strong>
+              <span className="md-rating-stars md-rating-stars--readonly" aria-hidden="true">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <span
+                    key={n}
+                    className={`md-rating-star${submittedRating.score >= n ? ' md-rating-star--filled' : ''}`}
+                  >★</span>
+                ))}
+                <span className="md-rating-value">{submittedRating.score} / 5</span>
+              </span>
+            </div>
+            {submittedRating.comment && (
+              <p className="md-rating-card-comment">"{submittedRating.comment}"</p>
+            )}
+          </div>
+        ) : (
+          <div className="md-rating-card" role="region" aria-label="Rate your mentor">
+            <div className="md-rating-card-head">
+              <strong>Rate {otherFirstName || 'your mentor'}</strong>
+              <span className="md-rating-card-sub">
+                Help future mentees by sharing your experience.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="md-action-btn md-action-primary"
+              onClick={() => setRateOpen(true)}
+            >
+              Rate your mentor
+            </button>
+          </div>
+        )
+      )}
+
       {!isActive && (
         <div className="md-ended-banner" role="status">
           <strong>{endedLabel}</strong>
@@ -561,7 +933,10 @@ export default function MentorshipDetailPage() {
 
       {/* Progress + Timeline (#126 + #333, gated in #277) */}
       {mentorship.sharedGoal && (
-        <MentorshipProgressTimeline mentorshipId={mentorship.id} />
+        <MentorshipProgressTimeline
+          mentorshipId={mentorship.id}
+          refreshKey={timelineRefreshKey}
+        />
       )}
 
       {/* Milestones (#288, gated by goal in #277) */}
@@ -570,6 +945,7 @@ export default function MentorshipDetailPage() {
         isMentor={viewerIsMentor}
         isActive={isActive}
         hasSharedGoal={!!mentorship.sharedGoal}
+        onMutate={bumpTimeline}
       />
 
       {/* Mentor cross-mentee comparison (#126). Self-hides when viewer is a
@@ -639,9 +1015,14 @@ export default function MentorshipDetailPage() {
                 {upcoming.durationMin} min
               </div>
             </div>
-            <span className={`md-meeting-status md-meeting-status-${upcoming.status.toLowerCase()}`}>
-              {upcoming.status.charAt(0) + upcoming.status.slice(1).toLowerCase()}
-            </span>
+            {(() => {
+              const ui = meetingStatusUi(upcoming.status)
+              return (
+                <span className={`md-meeting-status md-meeting-status-${ui.cls}`}>
+                  {ui.label}
+                </span>
+              )
+            })()}
           </div>
         ) : (
           <div className="md-goal-empty">No upcoming meetings. Schedule one from the Schedule page.</div>
@@ -668,6 +1049,17 @@ export default function MentorshipDetailPage() {
         >
           My Tasks
         </button>
+        {viewerIsMentor && (
+          <button
+            className="md-action-btn"
+            onClick={() => setExtendOpen(true)}
+            disabled={!isActive}
+            title={isActive ? 'Add 1, 3, or 6 months to the end date' : 'This mentorship has already ended'}
+            data-testid="mentorship-extend-open"
+          >
+            Extend Duration
+          </button>
+        )}
         {viewerIsMentor ? (
           <button
             className="md-action-btn md-action-danger"
@@ -687,6 +1079,16 @@ export default function MentorshipDetailPage() {
             Cancel Mentorship
           </button>
         )}
+        {/* #411: either participant can report the mentorship — distinct from
+            reporting the other user (#128) or a feed post (#358). Visible on
+            both ACTIVE and ENDED mentorships per the issue. */}
+        <button
+          className="md-action-btn"
+          onClick={() => setReportOpen(true)}
+          title="Report this mentorship to platform admins"
+        >
+          Report Mentorship
+        </button>
       </div>
 
       {cancelError && (
@@ -700,6 +1102,37 @@ export default function MentorshipDetailPage() {
         <div className="md-error-card" style={{ marginTop: '12px' }}>
           <div className="md-error-title">Couldn’t end mentorship</div>
           <div className="md-error-sub">{endError}</div>
+        </div>
+      )}
+
+      {extendError && (
+        <div className="md-error-card" style={{ marginTop: '12px' }}>
+          <div className="md-error-title">Couldn’t extend mentorship</div>
+          <div className="md-error-sub">{extendError}</div>
+        </div>
+      )}
+
+      <ExtendMentorshipModal
+        open={extendOpen}
+        onClose={() => !extendLoading && setExtendOpen(false)}
+        onConfirm={handleExtendConfirm}
+        loading={extendLoading}
+        otherName={displayName || otherFirstName}
+        currentEndDate={mentorship.endDate}
+      />
+
+      <RateMentorModal
+        open={rateOpen}
+        onClose={() => !rateLoading && setRateOpen(false)}
+        onConfirm={handleRateConfirm}
+        loading={rateLoading}
+        mentorName={mentorship.mentorFirstName || otherFirstName}
+      />
+
+      {rateError && (
+        <div className="md-error-card" style={{ marginTop: '12px' }}>
+          <div className="md-error-title">Couldn’t submit rating</div>
+          <div className="md-error-sub">{rateError}</div>
         </div>
       )}
 
@@ -726,6 +1159,15 @@ export default function MentorshipDetailPage() {
         onSubmit={handleSaveGoal}
         loading={goalSaving}
         error={goalError}
+      />
+
+      <ReportModal
+        open={reportOpen}
+        targetType="MENTORSHIP"
+        targetId={mentorship?.id}
+        targetLabel="this mentorship"
+        onClose={() => setReportOpen(false)}
+        onSubmitted={() => showTransientToast('Report submitted. Admins will review it.')}
       />
     </MainLayout>
   )

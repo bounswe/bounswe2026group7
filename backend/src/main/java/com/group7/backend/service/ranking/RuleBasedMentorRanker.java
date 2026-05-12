@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -32,40 +33,58 @@ import java.util.List;
 @Component
 public class RuleBasedMentorRanker implements MentorRanker {
 
+    /** Display cap so the factor list stays readable on the card. */
+    private static final int FACTOR_DISPLAY_CAP = 3;
+
     @Override
-    public int score(Mentor mentor,
-                     Mentee mentee,
-                     List<AvailabilitySlot> mentorSlots,
-                     List<MenteeAvailabilitySlot> menteeSlots) {
-        return profileScore(mentor, mentee) + availabilityScore(mentorSlots, menteeSlots);
+    public ScoreResult score(Mentor mentor,
+                             Mentee mentee,
+                             List<AvailabilitySlot> mentorSlots,
+                             List<MenteeAvailabilitySlot> menteeSlots) {
+        List<String> factors = new ArrayList<>();
+        int score = profileScore(mentor, mentee, factors)
+                  + availabilityScore(mentorSlots, menteeSlots, factors);
+        return new ScoreResult(score, List.copyOf(factors));
     }
 
-    private static int profileScore(Mentor mentor, Mentee mentee) {
+    private static int profileScore(Mentor mentor, Mentee mentee, List<String> factors) {
         int score = 0;
 
         List<String> mentorInterests = nullSafe(mentor.getInterests());
         List<String> menteeInterests = nullSafe(mentee.getInterests());
+        int interestFactorCount = 0;
         for (String interest : menteeInterests) {
             if (containsIgnoreCase(mentorInterests, interest)) {
                 score += 3;
+                if (interestFactorCount < FACTOR_DISPLAY_CAP) {
+                    factors.add("interest-match:" + interest);
+                    interestFactorCount++;
+                }
             }
         }
 
         List<String> preferredSkills = nullSafe(mentor.getPreferredMenteeSkills());
+        int skillFactorCount = 0;
         for (String skill : nullSafe(mentee.getSkills())) {
             if (containsIgnoreCase(preferredSkills, skill)) {
                 score += 3;
+                if (skillFactorCount < FACTOR_DISPLAY_CAP) {
+                    factors.add("skill-match:" + skill);
+                    skillFactorCount++;
+                }
             }
         }
 
         if (mentee.getMajor() != null && mentor.getPreferredMenteeMajor() != null
                 && mentee.getMajor().equalsIgnoreCase(mentor.getPreferredMenteeMajor())) {
             score += 5;
+            factors.add("major-exact");
         }
 
         if (mentee.getMajor() != null && mentor.getField() != null
                 && mentee.getMajor().equalsIgnoreCase(mentor.getField())) {
             score += 3;
+            factors.add("major-field");
         }
 
         if (mentee.getGoals() != null && mentor.getMentoringGoals() != null) {
@@ -92,7 +111,8 @@ public class RuleBasedMentorRanker implements MentorRanker {
     }
 
     private static int availabilityScore(List<AvailabilitySlot> mentorSlots,
-                                         List<MenteeAvailabilitySlot> menteeSlots) {
+                                         List<MenteeAvailabilitySlot> menteeSlots,
+                                         List<String> factors) {
         if (mentorSlots.isEmpty() || menteeSlots.isEmpty()) {
             return 0;
         }
@@ -109,6 +129,9 @@ public class RuleBasedMentorRanker implements MentorRanker {
             }
         }
 
+        if (overlapMinutes > 0) {
+            factors.add("availability:" + (overlapMinutes / 60) + "h");
+        }
         return (int) Math.min(12, overlapMinutes / 30);
     }
 

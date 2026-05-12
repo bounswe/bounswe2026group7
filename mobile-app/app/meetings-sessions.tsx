@@ -3,12 +3,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
   RefreshControl,
   Linking,
+  Alert,
 } from 'react-native';
 import apiClient from '../api/client';
 
@@ -25,6 +27,7 @@ type Meeting = {
   meetingType: string;
   meetingLink?: string;
   recurring: boolean;
+  notes?: string | null;
 };
 
 function fmtDay(iso: string) {
@@ -65,15 +68,22 @@ export default function MeetingsSessionsScreen() {
   const params = useLocalSearchParams();
   const connectedUserName = parseString(params.connectedUserName) || 'Your Connection';
   const mentorshipId = parseString(params.mentorshipId);
+  const mentorshipStatus = parseString(params.mentorshipStatus) || 'ACTIVE';
+  const isActive = mentorshipStatus === 'ACTIVE';
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [notesDraft, setNotesDraft] = useState('');
+  const [notesEditing, setNotesEditing] = useState(false);
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesLoading, setNotesLoading] = useState(false);
 
   const loadMeetings = useCallback(async () => {
     if (!mentorshipId) { setLoading(false); return; }
     try {
-      const res = await apiClient.get(`/mentorships/${mentorshipId}/meetings`);
+      const res = await apiClient.get(`/mentorships/${mentorshipId}/meetings`, { silent: true });
       setMeetings(res.data ?? []);
     } catch {
       // silently show empty state
@@ -89,6 +99,42 @@ export default function MeetingsSessionsScreen() {
   const upcoming = [...meetings]
     .filter(m => new Date(m.startTime) > now && m.status !== 'CANCELLED' && m.status !== 'DECLINED')
     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())[0];
+
+  const toggleExpand = async (meeting: Meeting) => {
+    if (expandedId === meeting.id) {
+      setExpandedId(null);
+      setNotesEditing(false);
+      return;
+    }
+    setExpandedId(meeting.id);
+    setNotesEditing(false);
+    setNotesDraft('');
+    setNotesLoading(true);
+    try {
+      const res = await apiClient.get(`/meetings/${meeting.id}`);
+      const fetchedNotes = res.data?.notes ?? '';
+      setMeetings((prev) => prev.map((m) => m.id === meeting.id ? { ...m, notes: fetchedNotes } : m));
+    } catch {
+      // keep card open with whatever we have
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  const saveNotes = async (meetingId: number) => {
+    setNotesSaving(true);
+    try {
+      const res = await apiClient.patch(`/meetings/${meetingId}/notes`, { notes: notesDraft });
+      const saved = res.data?.notes ?? notesDraft;
+      setMeetings((prev) => prev.map((m) => m.id === meetingId ? { ...m, notes: saved } : m));
+      setNotesEditing(false);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Could not save notes.';
+      Alert.alert('Error', msg);
+    } finally {
+      setNotesSaving(false);
+    }
+  };
 
   const openSchedule = () => {
     router.push({
@@ -109,10 +155,10 @@ export default function MeetingsSessionsScreen() {
         </View>
 
         <View style={styles.headerTopRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()} testID="meetings.back">
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={openSchedule}>
+          <TouchableOpacity onPress={openSchedule} testID="meetings.schedule-button">
             <Text style={styles.scheduleText}>+ Schedule</Text>
           </TouchableOpacity>
         </View>
@@ -135,7 +181,15 @@ export default function MeetingsSessionsScreen() {
           />
         }
       >
-        {upcoming && (
+        {!isActive && (
+          <View style={styles.endedBanner}>
+            <Text style={styles.endedBannerText}>
+              {mentorshipStatus === 'COMPLETED' ? 'This mentorship has been completed.' : 'This mentorship has ended.'}
+            </Text>
+          </View>
+        )}
+
+        {isActive && upcoming && (
           <View style={styles.upcomingCard}>
             <View style={styles.upcomingCircle} />
             <Text style={styles.upcomingLabel}>UPCOMING</Text>
@@ -152,6 +206,7 @@ export default function MeetingsSessionsScreen() {
                 <TouchableOpacity
                   style={styles.joinButton}
                   onPress={() => upcoming.meetingLink && Linking.openURL(upcoming.meetingLink)}
+                  testID="meetings.upcoming-join"
                 >
                   <Text style={styles.joinButtonText}>Join Now</Text>
                 </TouchableOpacity>
@@ -169,37 +224,106 @@ export default function MeetingsSessionsScreen() {
         ) : meetings.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No meetings yet.</Text>
-            <TouchableOpacity style={styles.scheduleEmptyButton} onPress={openSchedule}>
-              <Text style={styles.scheduleEmptyButtonText}>Schedule a Meeting</Text>
-            </TouchableOpacity>
+            {isActive && (
+              <TouchableOpacity style={styles.scheduleEmptyButton} onPress={openSchedule}>
+                <Text style={styles.scheduleEmptyButtonText}>Schedule a Meeting</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           [...meetings]
             .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
             .map((meeting) => {
               const meta = statusMeta(meeting.status);
+              const isExpanded = expandedId === meeting.id;
               return (
-                <View key={meeting.id} style={styles.meetingCard}>
-                  <View style={styles.timeBlock}>
-                    <Text style={styles.dayText}>{fmtDay(meeting.startTime)}</Text>
-                    <Text style={styles.timeText}>{fmtTime(meeting.startTime)}</Text>
-                  </View>
+                <View key={meeting.id} style={styles.meetingCard} testID={`meetings.card.${meeting.id}`}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => toggleExpand(meeting)}
+                    style={styles.meetingCardHeader}
+                  >
+                    <View style={styles.timeBlock}>
+                      <Text style={styles.dayText}>{fmtDay(meeting.startTime)}</Text>
+                      <Text style={styles.timeText}>{fmtTime(meeting.startTime)}</Text>
+                    </View>
 
-                  <View style={styles.cardDivider} />
+                    <View style={styles.cardDivider} />
 
-                  <View style={styles.meetingInfo}>
-                    <Text style={styles.meetingTitle}>{meeting.title}</Text>
-                    <Text style={styles.meetingMentor}>{connectedUserName}</Text>
-                    {meeting.meetingLink ? (
-                      <TouchableOpacity onPress={() => meeting.meetingLink && Linking.openURL(meeting.meetingLink)}>
-                        <Text style={styles.meetingLinkText}>Join link ↗</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
+                    <View style={styles.meetingInfo}>
+                      <Text style={styles.meetingTitle}>{meeting.title}</Text>
+                      <Text style={styles.meetingMentor}>{connectedUserName}</Text>
+                      {meeting.meetingLink ? (
+                        <TouchableOpacity onPress={() => meeting.meetingLink && Linking.openURL(meeting.meetingLink)}>
+                          <Text style={styles.meetingLinkText}>Join link ↗</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
 
-                  <View style={[styles.statusBadge, meta.badgeStyle]}>
-                    <Text style={[styles.statusBadgeText, meta.textStyle]}>{meta.label}</Text>
-                  </View>
+                    <View style={[styles.statusBadge, meta.badgeStyle]}>
+                      <Text style={[styles.statusBadgeText, meta.textStyle]}>{meta.label}</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {isExpanded && (
+                    <View style={styles.notesSection}>
+                      <Text style={styles.notesLabel}>NOTES</Text>
+                      {notesLoading ? (
+                        <ActivityIndicator size="small" color="#456B50" />
+                      ) : notesEditing ? (
+                        <>
+                          <TextInput
+                            style={styles.notesInput}
+                            value={notesDraft}
+                            onChangeText={setNotesDraft}
+                            placeholder="Add notes from this meeting..."
+                            placeholderTextColor="#B0A89E"
+                            multiline
+                            maxLength={2000}
+                            autoFocus
+                          />
+                          <Text style={styles.notesCharCount}>{notesDraft.length}/2000</Text>
+                          <View style={styles.notesButtonRow}>
+                            <TouchableOpacity
+                              style={styles.notesCancelButton}
+                              onPress={() => setNotesEditing(false)}
+                              disabled={notesSaving}
+                            >
+                              <Text style={styles.notesCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.notesSaveButton, notesSaving && { opacity: 0.5 }]}
+                              onPress={() => saveNotes(meeting.id)}
+                              disabled={notesSaving}
+                              testID="meetings.notes-save"
+                            >
+                              {notesSaving
+                                ? <ActivityIndicator size="small" color="#F8F6F2" />
+                                : <Text style={styles.notesSaveText}>Save</Text>}
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.notesText}>
+                            {meeting.notes && meeting.notes.trim().length > 0
+                              ? meeting.notes
+                              : 'No notes yet. Tap Edit to add notes from this meeting.'}
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.notesEditButton}
+                            onPress={() => {
+                              setNotesDraft(meeting.notes ?? '');
+                              setNotesEditing(true);
+                            }}
+                            testID={`meetings.notes-edit.${meeting.id}`}
+                          >
+                            <Text style={styles.notesEditText}>{meeting.notes ? 'Edit Notes' : 'Add Notes'}</Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
+                  )}
                 </View>
               );
             })
@@ -309,6 +433,19 @@ const styles = StyleSheet.create({
     color: '#8B8176',
     marginBottom: 18,
   },
+  endedBanner: {
+    backgroundColor: '#F2E4C9',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  endedBannerText: {
+    color: '#9B6A1B',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   emptyState: { paddingVertical: 32, alignItems: 'center' },
   emptyText: { color: '#9A8F82', fontSize: 15, fontWeight: '500', marginBottom: 16 },
   scheduleEmptyButton: {
@@ -321,11 +458,96 @@ const styles = StyleSheet.create({
   meetingCard: {
     backgroundColor: '#F8F6F2',
     borderRadius: 26,
+    marginBottom: 18,
+    overflow: 'hidden',
+  },
+  meetingCardHeader: {
     paddingVertical: 24,
     paddingHorizontal: 20,
-    marginBottom: 18,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  notesSection: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 22,
+    borderTopWidth: 1,
+    borderTopColor: '#E5DDD1',
+  },
+  notesLabel: {
+    color: '#8B8176',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginTop: 14,
+    marginBottom: 12,
+  },
+  notesText: {
+    color: '#23372B',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  notesInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E1D9CF',
+    padding: 14,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    color: '#23372B',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  notesCharCount: {
+    color: '#9A8F82',
+    fontSize: 12,
+    fontWeight: '500',
+    alignSelf: 'flex-end',
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  notesButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  notesCancelButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    backgroundColor: '#F0EDE8',
+  },
+  notesCancelText: {
+    color: '#7E7368',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  notesSaveButton: {
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: '#456B50',
+  },
+  notesSaveText: {
+    color: '#F8F6F2',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  notesEditButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#D7E8DA',
+  },
+  notesEditText: {
+    color: '#2F563C',
+    fontSize: 13,
+    fontWeight: '700',
   },
   timeBlock: { width: 90, alignItems: 'center', justifyContent: 'center' },
   dayText: { fontSize: 14, color: '#9A8F82', marginBottom: 6, fontWeight: '500' },

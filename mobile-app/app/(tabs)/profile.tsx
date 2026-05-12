@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import apiClient from '../../api/client'; // Klasör yapına göre kontrol et (api/client.ts)
 
 import { router } from 'expo-router';
@@ -21,8 +21,13 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Location from 'expo-location';
 import ActionModal from '../../components/ActionModal';
 
 type AppRole = 'mentor' | 'mentee';
@@ -32,6 +37,13 @@ type NotificationPreferences = {
   meetingsEnabled: boolean;
   tasksEnabled: boolean;
   requestsEnabled: boolean;
+};
+
+type LocationSuggestion = {
+  name: string;
+  displayName: string;
+  lat: number;
+  lon: number;
 };
 
 // İsme göre baş harfleri hesaplayan yardımcı fonksiyon
@@ -181,6 +193,15 @@ type SentRequest = {
   createdAt: string;
 };
 
+type PastMentorship = {
+  id: number;
+  mentorFirstName: string;
+  menteeFirstName: string;
+  status: string;
+  startDate?: string;
+  endDate?: string;
+};
+
 async function pickAvatar(): Promise<string | null> {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (status !== 'granted') {
@@ -205,6 +226,32 @@ async function loadCachedAvatar(role: AppRole, userId: string) {
 
 async function cacheAvatar(role: AppRole, userId: string, uri: string) {
   await SecureStore.setItemAsync(getAvatarStorageKey(role, userId), uri);
+}
+
+async function fetchAuthPhotoUri(serverUrl: string): Promise<string | null> {
+  try {
+    const token = await SecureStore.getItemAsync('userToken');
+    if (!token) return null;
+    const filename = serverUrl.split('/').pop() ?? 'avatar.jpg';
+    const targetPath = `${FileSystem.documentDirectory}profile_${filename}`;
+    const info = await FileSystem.getInfoAsync(targetPath);
+    if (info.exists) return targetPath;
+    // Replace server host with current API host (backend may return localhost in URLs)
+    let resolvedUrl = serverUrl;
+    try {
+      const clientBase = (apiClient.defaults.baseURL ?? '').replace(/\/api\/?$/, '');
+      const parsed = new URL(serverUrl);
+      resolvedUrl = clientBase + parsed.pathname + parsed.search;
+    } catch {
+      // keep original if URL parsing fails
+    }
+    const result = await FileSystem.downloadAsync(resolvedUrl, targetPath, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return result.uri;
+  } catch {
+    return null;
+  }
 }
 
 async function uploadProfilePhoto(uri: string) {
@@ -253,12 +300,10 @@ function openAvatarActions(
         try {
           const saved = await uploadProfilePhoto(uri);
           await cacheAvatar(role, userId, saved);
-          setProfilePhoto(saved);
         } catch {
-          await cacheAvatar(role, userId, uri);
-          setProfilePhoto(uri);
-          Alert.alert('Warning', 'Photo updated locally but could not be uploaded.');
+          // upload failed, cached locally
         }
+        setProfilePhoto(uri);
       },
     },
   ];
@@ -484,6 +529,7 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
   const [fullName, setFullName] = useState('');
   const [department, setDepartment] = useState('');
   const [aboutMe, setAboutMe] = useState('');
+  const [affiliation, setAffiliation] = useState('');
   const [goals, setGoals] = useState('');
   const [careerInterest, setCareerInterest] = useState('');
   const [meetingFreqPref, setMeetingFreqPref] = useState('');
@@ -495,6 +541,80 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [sentRequests, setSentRequests] = useState<SentRequest[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
+  const [pastMentorships, setPastMentorships] = useState<PastMentorship[]>([]);
+  const [pastLoading, setPastLoading] = useState(true);
+  const [ratingTarget, setRatingTarget] = useState<PastMentorship | null>(null);
+  const [ratingScore, setRatingScore] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [ratingSending, setRatingSending] = useState(false);
+  const [ratedIds, setRatedIds] = useState<Set<number>>(new Set());
+  const [city, setCity] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [citySuggestions, setCitySuggestions] = useState<LocationSuggestion[]>([]);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const skipLocationSearch = useRef(false);
+
+  const submitRating = async () => {
+    if (!ratingTarget || ratingScore === 0 || ratingSending) return;
+    setRatingSending(true);
+    try {
+      await apiClient.post(`/mentorships/${ratingTarget.id}/rating`, {
+        score: ratingScore,
+        ...(ratingComment.trim() ? { comment: ratingComment.trim() } : {}),
+      });
+      setRatedIds((prev) => new Set([...prev, ratingTarget.id]));
+      setRatingTarget(null);
+      Alert.alert('Thank you!', 'Your rating has been submitted.');
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        setRatedIds((prev) => new Set([...prev, ratingTarget.id]));
+        setRatingTarget(null);
+      } else {
+        Alert.alert('Error', 'Could not submit rating.');
+      }
+    } finally {
+      setRatingSending(false);
+    }
+  };
+
+  const fetchCurrentLocation = async () => {
+    setLocationLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Location access is required to use this feature.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const lat = Math.round(loc.coords.latitude * 100) / 100;
+      const lon = Math.round(loc.coords.longitude * 100) / 100;
+      setLatitude(lat);
+      setLongitude(lon);
+      const rev = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+      if (rev.length > 0) {
+        const a = rev[0];
+        const name = a.city || a.district || a.subregion || a.region || '';
+        if (name) {
+          skipLocationSearch.current = true;
+          setCity(name);
+          setCitySuggestions([]);
+        }
+      }
+    } catch {
+      Alert.alert('Error', 'Could not get your current location.');
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const selectLocationSuggestion = (s: LocationSuggestion) => {
+    skipLocationSearch.current = true;
+    setCity(s.name);
+    setLatitude(Math.round(s.lat * 100) / 100);
+    setLongitude(Math.round(s.lon * 100) / 100);
+    setCitySuggestions([]);
+  };
 
   const handleSave = async () => {
     try {
@@ -506,12 +626,14 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
         lastName: fullNameParts.length > 1 ? fullNameParts.slice(1).join(' ') : '',
         major: department,
         backgroundInfo: aboutMe,
+        affiliation,
         goals,
         careerInterest,
         meetingFreqPref: meetingFreqPref || undefined,
         profileVisibility,
         interests,
         skills,
+        ...(city.trim() ? { city: city.trim(), latitude, longitude } : {}),
       };
 
       await apiClient.patch('/users/me/mentee', updateData);
@@ -531,18 +653,26 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
         setFullName([data.firstName, data.lastName].filter(Boolean).join(' '));
         setDepartment(data.major || '');
         setAboutMe(data.backgroundInfo || '');
+        setAffiliation(data.affiliation || '');
         setGoals(data.goals || '');
         setCareerInterest(data.careerInterest || '');
         setMeetingFreqPref(data.meetingFreqPref || '');
         if (data.profileVisibility != null) setProfileVisibility(data.profileVisibility);
         if (data.interests) setInterests(data.interests);
         if (data.skills) setSkills(data.skills);
+        if (data.city) { skipLocationSearch.current = true; setCity(data.city); }
+        if (data.latitude != null) setLatitude(data.latitude);
+        if (data.longitude != null) setLongitude(data.longitude);
         if (data.profilePhoto) {
-          setProfilePhoto(data.profilePhoto);
           await cacheAvatar('mentee', sessionUserId, data.profilePhoto);
+          const localUri = await fetchAuthPhotoUri(data.profilePhoto);
+          if (localUri) setProfilePhoto(localUri);
         } else if (sessionUserId) {
-          const local = await loadCachedAvatar('mentee', sessionUserId);
-          if (local) setProfilePhoto(local);
+          const cached = await loadCachedAvatar('mentee', sessionUserId);
+          if (cached) {
+            const localUri = await fetchAuthPhotoUri(cached);
+            if (localUri) setProfilePhoto(localUri);
+          }
         }
       } catch (error) {
         console.error('Error fetching mentee profile:', error);
@@ -571,9 +701,62 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
       } finally {
         setRequestsLoading(false);
       }
+
     };
     fetchAll();
   }, [sessionUserId]);
+
+  useEffect(() => {
+    const fetchPastMentorships = async () => {
+      try {
+        const [completedRes, cancelledRes] = await Promise.all([
+          apiClient.get('/mentorships?status=COMPLETED&page=0&size=50'),
+          apiClient.get('/mentorships?status=CANCELLED&page=0&size=50'),
+        ]);
+        const completed: PastMentorship[] = completedRes.data?.content ?? completedRes.data ?? [];
+        const cancelled: PastMentorship[] = cancelledRes.data?.content ?? cancelledRes.data ?? [];
+        const seen = new Set<number>();
+        const unique = [...completed, ...cancelled].filter((m) => {
+          if (m.status === 'ACTIVE') return false;
+          if (seen.has(m.id)) return false;
+          seen.add(m.id);
+          return true;
+        });
+        setPastMentorships(unique);
+      } catch {
+        // ignore
+      } finally {
+        setPastLoading(false);
+      }
+    };
+    fetchPastMentorships();
+  }, [sessionUserId]);
+
+  useEffect(() => {
+    if (skipLocationSearch.current) {
+      skipLocationSearch.current = false;
+      setCitySuggestions([]);
+      return;
+    }
+    setCitySuggestions([]);
+    if (city.trim().length < 3) return;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=5&addressdetails=1`,
+          { headers: { 'User-Agent': 'BounsweGroup7MentorshipApp/1.0' } }
+        );
+        const items: any[] = await res.json();
+        setCitySuggestions(items.map((item) => ({
+          name: item.address?.city || item.address?.town || item.address?.municipality || item.address?.county || item.name || city,
+          displayName: item.display_name,
+          lat: parseFloat(item.lat),
+          lon: parseFloat(item.lon),
+        })));
+      } catch {}
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [city]);
 
   return (
     <View style={styles.container}>
@@ -601,6 +784,7 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
           </TouchableOpacity>
           <Text style={styles.name}>{fullName || 'Loading...'}</Text>
           <Text style={styles.roleText}>Mentee • {department}</Text>
+          {affiliation ? <Text style={styles.roleText}>{affiliation}</Text> : null}
         </View>
 
         <View style={styles.body}>
@@ -617,21 +801,30 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.quickActionButton}
-              onPress={() => router.navigate('/explore')}
-              accessibilityRole="button"
-              accessibilityLabel="Find mentor"
-            >
-              <Text style={styles.quickActionIcon}>🔍</Text>
-              <Text style={styles.quickActionText}>Find Mentor</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.quickActionButton}
               onPress={() => router.push('/availability-scheduling')}
               accessibilityRole="button"
               accessibilityLabel="Availability"
             >
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Availability</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push({ pathname: '/my-blog', params: { authorId: sessionUserId } } as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Blog"
+            >
+              <Text style={styles.quickActionIcon}>📝</Text>
+              <Text style={styles.quickActionText}>Blog</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/bookmarks' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Bookmarks"
+            >
+              <Text style={styles.quickActionIcon}>🔖</Text>
+              <Text style={styles.quickActionText}>Saved</Text>
             </TouchableOpacity>
           </View>
 
@@ -666,6 +859,44 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
               onAdd={() => { if (skillInput.trim()) setSkills([...skills, skillInput.trim()]); setSkillInput(''); }}
               onRemove={(t) => setSkills(skills.filter(s => s !== t))}
             />
+            <Text style={styles.inputLabel}>Location</Text>
+            <TouchableOpacity
+              style={[styles.locationGpsButton, locationLoading && { opacity: 0.6 }]}
+              onPress={fetchCurrentLocation}
+              disabled={locationLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Use my current location"
+            >
+              <Text style={styles.locationGpsText}>
+                {locationLoading ? '⌛ Locating...' : '📡 Use my current location'}
+              </Text>
+            </TouchableOpacity>
+            <TextInput
+              style={styles.input}
+              value={city}
+              onChangeText={(text) => {
+                setCity(text);
+                if (!text) { setLatitude(null); setLongitude(null); }
+              }}
+              placeholder="Or type a city name..."
+              placeholderTextColor="#B5ADA3"
+            />
+            {citySuggestions.length > 0 && (
+              <View style={styles.suggestionsBox}>
+                {citySuggestions.map((s, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.suggestionItem, i < citySuggestions.length - 1 && styles.suggestionItemBorder]}
+                    onPress={() => selectLocationSuggestion(s)}
+                  >
+                    <Text style={styles.suggestionText} numberOfLines={2}>{s.displayName}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <Text style={styles.locationPrivacyNote}>
+              📍 Only your city is shown publicly. Coordinates are rounded to ~1 km for privacy.
+            </Text>
             <View style={styles.visibilityRow}>
               <Text style={styles.inputLabel}>Profile Visibility</Text>
               <TouchableOpacity
@@ -720,6 +951,45 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
             })
           )}
 
+          <Text style={styles.sectionHeaderText}>PAST MENTORSHIPS</Text>
+          {pastLoading ? (
+            <ActivityIndicator color="#456B50" style={{ marginVertical: 12 }} />
+          ) : pastMentorships.length === 0 ? (
+            <View style={styles.emptyRequestsCard}>
+              <Text style={styles.emptyRequestsText}>No past mentorships yet.</Text>
+            </View>
+          ) : (
+            pastMentorships.map((m) => {
+              const isCompleted = m.status === 'COMPLETED';
+              const statusColor = isCompleted ? '#2F563C' : '#D9534F';
+              const statusBg = isCompleted ? '#D7E8DA' : '#FDF0EF';
+              const canRate = !ratedIds.has(m.id);
+              return (
+                <View key={m.id} style={styles.requestCard}>
+                  <View style={styles.requestCardRow}>
+                    <Text style={styles.requestCardName}>{m.mentorFirstName}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
+                      <Text style={[styles.statusBadgeText, { color: statusColor }]}>{m.status}</Text>
+                    </View>
+                  </View>
+                  {m.endDate && (
+                    <Text style={styles.requestCardMessage}>
+                      Ended: {new Date(m.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </Text>
+                  )}
+                  {canRate && (
+                    <TouchableOpacity
+                      style={styles.rateButton}
+                      onPress={() => { setRatingTarget(m); setRatingScore(0); setRatingComment(''); }}
+                    >
+                      <Text style={styles.rateButtonText}>⭐ Rate Mentor</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })
+          )}
+
           <TouchableOpacity
             style={styles.logoutButton}
             onPress={onLogout}
@@ -730,6 +1000,42 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal visible={!!ratingTarget} transparent animationType="slide" onRequestClose={() => setRatingTarget(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.ratingOverlay}>
+          <View style={styles.ratingSheet}>
+            <Text style={styles.ratingTitle}>Rate {ratingTarget?.mentorFirstName}</Text>
+            <Text style={styles.ratingSubtitle}>How was your mentorship experience?</Text>
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <TouchableOpacity key={n} onPress={() => setRatingScore(n)} style={styles.starBtn}>
+                  <Text style={[styles.starText, n <= ratingScore && styles.starTextFilled]}>{n <= ratingScore ? '★' : '☆'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={styles.ratingInput}
+              placeholder="Optional comment..."
+              placeholderTextColor="#B0A898"
+              value={ratingComment}
+              onChangeText={setRatingComment}
+              multiline
+            />
+            <View style={styles.ratingActions}>
+              <TouchableOpacity style={styles.ratingCancel} onPress={() => setRatingTarget(null)}>
+                <Text style={styles.ratingCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.ratingSubmit, (ratingScore === 0 || ratingSending) && { opacity: 0.4 }]}
+                onPress={submitRating}
+                disabled={ratingScore === 0 || ratingSending}
+              >
+                <Text style={styles.ratingSubmitText}>{ratingSending ? 'Sending…' : 'Submit'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -750,6 +1056,14 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
   const [maxMenteeCapacity, setMaxMenteeCapacity] = useState('3');
   const [mentorshipDuration, setMentorshipDuration] = useState('');
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [pastMentorships, setPastMentorships] = useState<PastMentorship[]>([]);
+  const [pastLoading, setPastLoading] = useState(true);
+  const [city, setCity] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [citySuggestions, setCitySuggestions] = useState<LocationSuggestion[]>([]);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const skipLocationSearch = useRef(false);
 
   useEffect(() => {
     const fetchProfileData = async () => {
@@ -767,12 +1081,19 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
         if (data.interests) setInterests(data.interests);
         if (data.maxMenteeCapacity != null) setMaxMenteeCapacity(String(data.maxMenteeCapacity));
         if (data.mentorshipDuration != null) setMentorshipDuration(String(data.mentorshipDuration));
+        if (data.city) { skipLocationSearch.current = true; setCity(data.city); }
+        if (data.latitude != null) setLatitude(data.latitude);
+        if (data.longitude != null) setLongitude(data.longitude);
         if (data.profilePhoto) {
-          setProfilePhoto(data.profilePhoto);
           await cacheAvatar('mentor', sessionUserId, data.profilePhoto);
+          const localUri = await fetchAuthPhotoUri(data.profilePhoto);
+          if (localUri) setProfilePhoto(localUri);
         } else if (sessionUserId) {
-          const local = await loadCachedAvatar('mentor', sessionUserId);
-          if (local) setProfilePhoto(local);
+          const cached = await loadCachedAvatar('mentor', sessionUserId);
+          if (cached) {
+            const localUri = await fetchAuthPhotoUri(cached);
+            if (localUri) setProfilePhoto(localUri);
+          }
         }
       } catch (error) {
         console.error('Error fetching mentor profile:', error);
@@ -781,9 +1102,74 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
           if (local) setProfilePhoto(local);
         }
       }
+
     };
     fetchProfileData();
   }, [sessionUserId]);
+
+  useEffect(() => {
+    const fetchPastMentorships = async () => {
+      try {
+        const [completedRes, cancelledRes] = await Promise.all([
+          apiClient.get('/mentorships?status=COMPLETED&page=0&size=50'),
+          apiClient.get('/mentorships?status=CANCELLED&page=0&size=50'),
+        ]);
+        const completed: PastMentorship[] = completedRes.data?.content ?? completedRes.data ?? [];
+        const cancelled: PastMentorship[] = cancelledRes.data?.content ?? cancelledRes.data ?? [];
+        const seen = new Set<number>();
+        const unique = [...completed, ...cancelled].filter((m) => {
+          if (m.status === 'ACTIVE') return false;
+          if (seen.has(m.id)) return false;
+          seen.add(m.id);
+          return true;
+        });
+        setPastMentorships(unique);
+      } catch {
+        // ignore
+      } finally {
+        setPastLoading(false);
+      }
+    };
+    fetchPastMentorships();
+  }, [sessionUserId]);
+
+  const fetchCurrentLocation = async () => {
+    setLocationLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Location access is required to use this feature.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const lat = Math.round(loc.coords.latitude * 100) / 100;
+      const lon = Math.round(loc.coords.longitude * 100) / 100;
+      setLatitude(lat);
+      setLongitude(lon);
+      const rev = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+      if (rev.length > 0) {
+        const a = rev[0];
+        const name = a.city || a.district || a.subregion || a.region || '';
+        if (name) {
+          skipLocationSearch.current = true;
+          setCity(name);
+          setCitySuggestions([]);
+        }
+      }
+    } catch {
+      Alert.alert('Error', 'Could not get your current location.');
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const selectLocationSuggestion = (s: LocationSuggestion) => {
+    skipLocationSearch.current = true;
+    setCity(s.name);
+    setLatitude(Math.round(s.lat * 100) / 100);
+    setLongitude(Math.round(s.lon * 100) / 100);
+    setCitySuggestions([]);
+  };
 
   const handleSave = async () => {
     const capacity = parseInt(maxMenteeCapacity, 10);
@@ -807,6 +1193,7 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
         interests,
         maxMenteeCapacity: capacity,
         ...(mentorshipDuration && !isNaN(duration) ? { mentorshipDuration: duration } : {}),
+        ...(city.trim() ? { city: city.trim(), latitude, longitude } : {}),
       });
       Alert.alert('Başarılı', 'Profilin güncellendi!');
     } catch (error: any) {
@@ -814,6 +1201,32 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
       Alert.alert('Güncelleme Başarısız', serverMessage);
     }
   };
+
+  useEffect(() => {
+    if (skipLocationSearch.current) {
+      skipLocationSearch.current = false;
+      setCitySuggestions([]);
+      return;
+    }
+    setCitySuggestions([]);
+    if (city.trim().length < 3) return;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=5&addressdetails=1`,
+          { headers: { 'User-Agent': 'BounsweGroup7MentorshipApp/1.0' } }
+        );
+        const items: any[] = await res.json();
+        setCitySuggestions(items.map((item) => ({
+          name: item.address?.city || item.address?.town || item.address?.municipality || item.address?.county || item.name || city,
+          displayName: item.display_name,
+          lat: parseFloat(item.lat),
+          lon: parseFloat(item.lon),
+        })));
+      } catch {}
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [city]);
 
   return (
     <View style={styles.container}>
@@ -865,6 +1278,24 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Availability</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push({ pathname: '/my-blog', params: { authorId: sessionUserId } } as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Blog"
+            >
+              <Text style={styles.quickActionIcon}>📝</Text>
+              <Text style={styles.quickActionText}>Blog</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push('/bookmarks' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Bookmarks"
+            >
+              <Text style={styles.quickActionIcon}>🔖</Text>
+              <Text style={styles.quickActionText}>Saved</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.formCardMentor}>
@@ -900,6 +1331,44 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
               onAdd={() => { if (interestInput.trim()) setInterests([...interests, interestInput.trim()]); setInterestInput(''); }}
               onRemove={(t) => setInterests(interests.filter(i => i !== t))}
             />
+            <Text style={styles.inputLabel}>Location</Text>
+            <TouchableOpacity
+              style={[styles.locationGpsButton, locationLoading && { opacity: 0.6 }]}
+              onPress={fetchCurrentLocation}
+              disabled={locationLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Use my current location"
+            >
+              <Text style={styles.locationGpsText}>
+                {locationLoading ? '⌛ Locating...' : '📡 Use my current location'}
+              </Text>
+            </TouchableOpacity>
+            <TextInput
+              style={styles.input}
+              value={city}
+              onChangeText={(text) => {
+                setCity(text);
+                if (!text) { setLatitude(null); setLongitude(null); }
+              }}
+              placeholder="Or type a city name..."
+              placeholderTextColor="#B5ADA3"
+            />
+            {citySuggestions.length > 0 && (
+              <View style={styles.suggestionsBox}>
+                {citySuggestions.map((s, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.suggestionItem, i < citySuggestions.length - 1 && styles.suggestionItemBorder]}
+                    onPress={() => selectLocationSuggestion(s)}
+                  >
+                    <Text style={styles.suggestionText} numberOfLines={2}>{s.displayName}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <Text style={styles.locationPrivacyNote}>
+              📍 Only your city is shown publicly. Coordinates are rounded to ~1 km for privacy.
+            </Text>
             <Text style={styles.inputLabel}>Max Mentee Capacity</Text>
             <TextInput
               style={styles.input}
@@ -927,6 +1396,37 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
           >
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
+
+          <Text style={styles.sectionHeaderText}>PAST MENTORSHIPS</Text>
+          {pastLoading ? (
+            <ActivityIndicator color="#456B50" style={{ marginVertical: 12 }} />
+          ) : pastMentorships.length === 0 ? (
+            <View style={styles.emptyRequestsCard}>
+              <Text style={styles.emptyRequestsText}>No past mentorships yet.</Text>
+            </View>
+          ) : (
+            pastMentorships.map((m) => {
+              const isCompleted = m.status === 'COMPLETED';
+              const statusColor = isCompleted ? '#2F563C' : '#D9534F';
+              const statusBg = isCompleted ? '#D7E8DA' : '#FDF0EF';
+              return (
+                <View key={m.id} style={styles.requestCard}>
+                  <View style={styles.requestCardRow}>
+                    <Text style={styles.requestCardName}>{m.menteeFirstName}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
+                      <Text style={[styles.statusBadgeText, { color: statusColor }]}>{m.status}</Text>
+                    </View>
+                  </View>
+                  {m.endDate && (
+                    <Text style={styles.requestCardMessage}>
+                      Ended: {new Date(m.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </Text>
+                  )}
+                </View>
+              );
+            })
+          )}
+
           <TouchableOpacity
             style={styles.logoutButton}
             onPress={onLogout}
@@ -1214,18 +1714,19 @@ const styles = StyleSheet.create({
   notificationLabel: { color: '#4A4138', fontSize: 14, fontWeight: '600' },
   logoutButton: { backgroundColor: '#FDF0EF', borderWidth: 1, borderColor: '#FAD4D4', borderRadius: 20, paddingVertical: 15, alignItems: 'center', marginTop: 12 },
   logoutButtonText: { color: '#D9534F', fontSize: 16, fontWeight: '700' },
-  quickActionsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  quickActionsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   quickActionButton: {
     flex: 1,
     backgroundColor: '#F8F6F2',
     borderRadius: 20,
-    paddingVertical: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 4,
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: '#D7E8DA',
   },
-  quickActionIcon: { fontSize: 24, marginBottom: 6 },
-  quickActionText: { color: '#2F563C', fontSize: 13, fontWeight: '700' },
+  quickActionIcon: { fontSize: 22, marginBottom: 6 },
+  quickActionText: { color: '#2F563C', fontSize: 12, fontWeight: '700', textAlign: 'center' },
   sectionHeaderText: { fontSize: 12, fontWeight: '700', letterSpacing: 2, color: '#8B8176', marginTop: 8, marginBottom: 12 },
   emptyRequestsCard: { backgroundColor: '#F8F6F2', borderRadius: 18, padding: 18, alignItems: 'center', marginBottom: 16 },
   emptyRequestsText: { color: '#9A8F82', fontSize: 14, fontWeight: '500' },
@@ -1235,6 +1736,23 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
   statusBadgeText: { fontSize: 12, fontWeight: '700' },
   requestCardMessage: { color: '#7E7368', fontSize: 13, marginTop: 8, lineHeight: 18 },
+  rateButton: { marginTop: 10, backgroundColor: '#EEF3EE', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, alignSelf: 'flex-start' },
+  rateButtonText: { color: '#2F563C', fontSize: 13, fontWeight: '700' },
+
+  ratingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  ratingSheet: { backgroundColor: '#F8F6F2', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 },
+  ratingTitle: { fontSize: 18, fontWeight: '700', color: '#23372B', marginBottom: 4 },
+  ratingSubtitle: { fontSize: 14, color: '#7E7368', marginBottom: 20 },
+  starRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  starBtn: { padding: 4 },
+  starText: { fontSize: 36, color: '#DDD5CA' },
+  starTextFilled: { color: '#F5A623' },
+  ratingInput: { backgroundColor: '#FCFBF8', borderRadius: 14, borderWidth: 1.5, borderColor: '#DDD5CA', padding: 14, fontSize: 14, color: '#23372B', minHeight: 80, textAlignVertical: 'top', marginBottom: 20 },
+  ratingActions: { flexDirection: 'row', gap: 12 },
+  ratingCancel: { flex: 1, borderRadius: 16, borderWidth: 1.5, borderColor: '#DDD5CA', paddingVertical: 14, alignItems: 'center' },
+  ratingCancelText: { color: '#7E7368', fontSize: 15, fontWeight: '600' },
+  ratingSubmit: { flex: 1, borderRadius: 16, backgroundColor: '#456B50', paddingVertical: 14, alignItems: 'center' },
+  ratingSubmitText: { color: '#F7F4EE', fontSize: 15, fontWeight: '700' },
 
   saveButtonMentee: {
     backgroundColor: '#4B7B57',
@@ -1290,5 +1808,47 @@ const styles = StyleSheet.create({
     color: '#2F563C',
     fontSize: 13,
     fontWeight: '700',
+  },
+  locationGpsButton: {
+    backgroundColor: '#EEF3EE',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#D7E8DA',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  locationGpsText: {
+    color: '#2F563C',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  suggestionsBox: {
+    backgroundColor: '#FCFBF8',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  suggestionItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDE8E0',
+  },
+  suggestionText: {
+    color: '#4A4138',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  locationPrivacyNote: {
+    color: '#9A8F82',
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 15,
   },
 });

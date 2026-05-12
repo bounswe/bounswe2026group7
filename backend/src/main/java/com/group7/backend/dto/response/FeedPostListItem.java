@@ -43,6 +43,54 @@ public record FeedPostListItem(
         long likeCount,
 
         @Schema(description = "Number of comments (placeholder 0 until #347)", example = "0")
-        long commentCount
+        long commentCount,
+
+        @Schema(description = "Short codes explaining why the For-You ranker placed this post. "
+                + "Empty for non-ranked feeds (Following, search, author profile). "
+                + "Codes from the advanced ranker are namespaced with a `feed:` prefix; the "
+                + "frontend strips the prefix and maps each code to a localized chip.",
+                example = "[\"feed:semantic-match:0.82\", \"feed:fresh\", \"feed:follow-boost\"]")
+        List<String> factors,
+
+        @Schema(description = "Image attachments on the post, in author-specified order. Empty when "
+                + "the post has no media.")
+        List<AttachmentSummary> attachments,
+
+        @Schema(description = "True if the authenticated viewer has liked this post. Always "
+                + "false for anonymous reads. Lets the UI render the heart-icon toggle state "
+                + "without a follow-up GET /interactions call per item.")
+        boolean viewerHasLiked,
+
+        @Schema(description = "True if the authenticated viewer has bookmarked this post. "
+                + "Always false for anonymous reads. Lets the UI render the bookmark-icon "
+                + "toggle state without a follow-up GET /interactions call per item.")
+        boolean viewerHasBookmarked,
+
+        @Schema(description = "User id of the follower who reposted this post into the viewer's "
+                + "Following feed. Null when the row originates from the post's own author "
+                + "(i.e., not a repost surface).",
+                nullable = true, example = "42")
+        Long sharedById,
+
+        @Schema(description = "First name of the reposting follower, denormalised for the UI. "
+                + "Null on non-repost rows.",
+                nullable = true, example = "Ada")
+        String sharedByFirstName,
+
+        @Schema(description = "Quote-share commentary; null on bare reposts and on non-repost rows.",
+                nullable = true, example = "Great take — fully agree.")
+        String shareCommentary,
+
+        @Schema(description = "Server-side timestamp of the repost (feed_post_shares.created_at). "
+                + "Used by the UI to render \"reposted N minutes ago\" alongside the post's own "
+                + "createdAt. Null on non-repost rows.",
+                nullable = true)
+        OffsetDateTime sharedAt,
+
+        @Schema(description = "Optional BCP-47 language tag for the body. Null for legacy posts. "
+                + "Drives the AS 2.0 contentMap / inLanguage fields in the JSON-LD list "
+                + "representation of this post.",
+                example = "en", nullable = true)
+        String lang
 ) {
 }

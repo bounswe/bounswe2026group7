@@ -147,7 +147,7 @@ export default function ConnectionRequestScreen() {
           <Text style={styles.statusText}>
             {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
           </Text>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.back()} testID="connection-request.back">
             <Text style={styles.backText}>‹ Back</Text>
           </TouchableOpacity>
 
@@ -167,6 +167,7 @@ export default function ConnectionRequestScreen() {
             onChangeText={setTitle}
             placeholder={isMeetingMode ? 'e.g. Weekly Sync' : 'Request title'}
             placeholderTextColor="#B5ADA3"
+            testID="connection-request.title-input"
           />
 
           {isMeetingMode ? (
@@ -178,6 +179,7 @@ export default function ConnectionRequestScreen() {
                 onChangeText={setStartTime}
                 placeholder="e.g. 2026-05-20 10:00"
                 placeholderTextColor="#B5ADA3"
+                testID="connection-request.start-time-input"
               />
 
               <Text style={styles.label}>END TIME (optional, defaults to +1h)</Text>
@@ -187,6 +189,7 @@ export default function ConnectionRequestScreen() {
                 onChangeText={setEndTime}
                 placeholder="e.g. 2026-05-20 11:00"
                 placeholderTextColor="#B5ADA3"
+                testID="connection-request.end-time-input"
               />
 
               <Text style={styles.label}>MEETING TYPE</Text>
@@ -194,6 +197,7 @@ export default function ConnectionRequestScreen() {
                 <TouchableOpacity
                   style={[styles.toggleOption, meetingType === 'ONLINE' && styles.toggleOptionActive]}
                   onPress={() => setMeetingType('ONLINE')}
+                  testID="connection-request.type-online"
                 >
                   <Text style={[styles.toggleOptionText, meetingType === 'ONLINE' && styles.toggleOptionTextActive]}>
                     Online
@@ -202,6 +206,7 @@ export default function ConnectionRequestScreen() {
                 <TouchableOpacity
                   style={[styles.toggleOption, meetingType === 'IN_PERSON' && styles.toggleOptionActive]}
                   onPress={() => setMeetingType('IN_PERSON')}
+                  testID="connection-request.type-in-person"
                 >
                   <Text style={[styles.toggleOptionText, meetingType === 'IN_PERSON' && styles.toggleOptionTextActive]}>
                     In Person
@@ -220,6 +225,7 @@ export default function ConnectionRequestScreen() {
                     placeholderTextColor="#B5ADA3"
                     autoCapitalize="none"
                     keyboardType="url"
+                    testID="connection-request.link-input"
                   />
                 </>
               )}
@@ -246,6 +252,7 @@ export default function ConnectionRequestScreen() {
             placeholderTextColor="#B5ADA3"
             multiline
             textAlignVertical="top"
+            testID="connection-request.details-input"
           />
         </View>
 
@@ -253,6 +260,7 @@ export default function ConnectionRequestScreen() {
           style={[styles.primaryButton, submitting && { opacity: 0.6 }]}
           onPress={handleSubmit}
           disabled={submitting}
+          testID="connection-request.submit-button"
         >
           {submitting ? (
             <ActivityIndicator color="#F8F6F2" />

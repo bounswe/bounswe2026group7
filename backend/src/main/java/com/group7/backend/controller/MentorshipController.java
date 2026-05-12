@@ -22,9 +22,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
@@ -32,6 +37,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/mentorships")
+@Validated  // enables MethodValidationPostProcessor for @Min/@Max on @RequestParam
 @Tag(name = "Mentorships", description = "Active mentorship management")
 public class MentorshipController {
 
@@ -53,7 +59,8 @@ public class MentorshipController {
     @GetMapping
     @Operation(
             summary = "List active mentorships",
-            description = "Returns all active mentorships for the authenticated user, whether they are a mentor or mentee."
+            description = "Returns all active mentorships for the authenticated user, whether they are a mentor or mentee. "
+                    + "For paginated history view across all statuses, use ?status=ALL (#521)."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Active mentorships",
@@ -62,6 +69,33 @@ public class MentorshipController {
     public ResponseEntity<List<MentorshipResponse>> getActiveMentorships(Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(mentorshipService.getActiveMentorships(userId));
+    }
+
+    @GetMapping(params = "status")
+    @Operation(
+            summary = "Paginated mentorship history filtered by status (#521)",
+            description = "Returns mentorships for the authenticated user filtered by status. "
+                    + "Use status=ALL for every state (history view powering the My Mentorships "
+                    + "page #408), or any MentorshipStatus name (ACTIVE, COMPLETED, CANCELLED, "
+                    + "TERMINATED) for a single-state view. Sorted endDate DESC NULLS LAST so "
+                    + "active mentorships appear first, then most-recently terminated. "
+                    + "Page size capped at 100; default 20."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paged mentorships",
+                    content = @Content(schema = @Schema(implementation = Page.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid status filter (not ALL or a known MentorshipStatus)",
+                    content = @Content),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
+    })
+    public ResponseEntity<Page<MentorshipResponse>> getMentorshipsByStatus(
+            @RequestParam("status") String status,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(mentorshipService.getMentorshipsByStatus(
+                userId, status, PageRequest.of(page, size)));
     }
 
     @GetMapping("/{id}")
@@ -231,6 +265,30 @@ public class MentorshipController {
         return ResponseEntity.ok(mentorshipService.extendMentorship(userId, id, request));
     }
 
+    @GetMapping("/{id}/rating")
+    @Operation(
+            summary = "Get the rating for this mentorship (mentor or mentee, #518)",
+            description = "Returns the rating row submitted by this mentorship's mentee, "
+                    + "if any. Visible to both the mentor and the mentee — non-participants "
+                    + "get 404 (uniform with the rest of the mentorship surface). 404 also "
+                    + "when the mentorship has no rating yet — lets the web client "
+                    + "deterministically render the 'You rated …' block on first paint "
+                    + "without depending on localStorage or a duplicate-POST probe."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Rating found",
+                    content = @Content(schema = @Schema(implementation = MentorRatingResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentorship not found, caller is not a participant, "
+                    + "or no rating exists yet", content = @Content)
+    })
+    public ResponseEntity<MentorRatingResponse> getMentorshipRating(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(mentorRatingService.getMentorshipRating(userId, id));
+    }
+
     @PostMapping("/{id}/rating")
     @Operation(
             summary = "Submit a mentor rating (mentee-only, #237)",
@@ -280,5 +338,27 @@ public class MentorshipController {
             Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(mentorshipService.getAuditTrail(userId, id));
+    }
+
+    @DeleteMapping("/{id}/data")
+    @Operation(
+            summary = "Delete mentorship timeline/progress data for a past mentorship (#478)",
+            description = "Deletes mentorship-scoped timeline/progress artifacts (tasks, milestones, meetings and "
+                    + "their children). Only participants may call this endpoint, and only after the mentorship is "
+                    + "no longer ACTIVE."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Mentorship data deleted"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Mentorship not found or caller is not a participant",
+                    content = @Content),
+            @ApiResponse(responseCode = "409", description = "Mentorship is still ACTIVE", content = @Content)
+    })
+    public ResponseEntity<Void> deleteMentorshipData(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        mentorshipService.deleteMentorshipData(userId, id);
+        return ResponseEntity.noContent().build();
     }
 }

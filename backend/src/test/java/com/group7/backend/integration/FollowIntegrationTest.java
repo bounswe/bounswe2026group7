@@ -4,12 +4,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.entity.User;
+import com.group7.backend.entity.Notification;
+import com.group7.backend.entity.NotificationType;
 import com.group7.backend.repository.FollowRepository;
+import com.group7.backend.repository.NotificationRepository;
 import com.group7.backend.repository.UserRepository;
 import com.group7.backend.repository.VerificationTokenRepository;
 import com.group7.backend.service.EmailService;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,6 +41,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -64,6 +71,7 @@ class FollowIntegrationTest {
     @Autowired private UserRepository userRepository;
     @Autowired private VerificationTokenRepository verificationTokenRepository;
     @Autowired private FollowRepository followRepository;
+    @Autowired private NotificationRepository notificationRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
     @MockitoBean private EmailService emailService;
 
@@ -122,6 +130,24 @@ class FollowIntegrationTest {
                         .header("Authorization", "Bearer " + p.tokenA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    // ── X-Total-Count project-wide smoke (#489) ───────────────────────────
+
+    @Test
+    void followersList_carriesXTotalCountHeader() throws Exception {
+        // Proves PageTotalCountHeaderAdvice fires on non-feed paged
+        // endpoints — guards against a regression that scopes the advice
+        // to feed routes silently.
+        Pair p = registerTwo("xtc_a@test.com", "xtc_b@test.com");
+        mockMvc.perform(post("/api/users/" + p.idB + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/users/" + p.idB + "/followers")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "1"));
     }
 
     // ── Self-follow: project-standard {error, message} body ───────────────
@@ -196,6 +222,53 @@ class FollowIntegrationTest {
                 .andExpect(jsonPath("$.id").value(p.idA))
                 .andExpect(jsonPath("$.followerCount").value(0))
                 .andExpect(jsonPath("$.followingCount").value(1));
+    }
+
+    @Test
+    void isFollowingFlag_falseBeforeFollow_trueAfter_falseAfterUnfollow() throws Exception {
+        Pair p = registerTwo("isf_a@test.com", "isf_b@test.com");
+
+        // Before any follow edge exists, the viewer's read of B's profile
+        // reports isFollowing=false.
+        assertIsFollowing(p.tokenA, p.idB, false);
+
+        // After A follows B, the same read flips to true.
+        mockMvc.perform(post("/api/users/" + p.idB + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isCreated());
+        assertIsFollowing(p.tokenA, p.idB, true);
+
+        // After unfollow, back to false.
+        mockMvc.perform(delete("/api/users/" + p.idB + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isNoContent());
+        assertIsFollowing(p.tokenA, p.idB, false);
+    }
+
+    @Test
+    void isFollowingFlag_isAlwaysFalseOnOwnProfile_evenWithLargeFollowingList() throws Exception {
+        Pair p = registerTwo("isfself_a@test.com", "isfself_b@test.com");
+
+        // Establish a follow edge in the OTHER direction so the viewer is in
+        // somebody's "followers" set — this would trip a naive implementation
+        // that consults the wrong column.
+        mockMvc.perform(post("/api/users/" + p.idA + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenB))
+                .andExpect(status().isCreated());
+
+        // Self-read via numeric id and via /me both report isFollowing=false.
+        assertIsFollowing(p.tokenA, p.idA, false);
+        mockMvc.perform(get("/api/users/me")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isFollowing").value(false));
+    }
+
+    private void assertIsFollowing(String token, Long targetId, boolean expected) throws Exception {
+        mockMvc.perform(get("/api/users/" + targetId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isFollowing").value(expected));
     }
 
     // ── DB-level cascade via raw JDBC delete (not userRepository.delete) ───
@@ -332,6 +405,38 @@ class FollowIntegrationTest {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    // ── Engagement notifications ───────────────────────────────────────────
+
+    @Test
+    void follow_publishesNewFollowerNotification_andSkipsOnIdempotentReFollow() throws Exception {
+        Pair p = registerTwo("notif_follow_a@test.com", "notif_follow_b@test.com");
+
+        // First follow → NEW_FOLLOWER row appears on user B.
+        mockMvc.perform(post("/api/users/" + p.idB() + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA()))
+                .andExpect(status().is2xxSuccessful());
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(5))
+                .pollInterval(Duration.ofMillis(50))
+                .untilAsserted(() -> {
+                    List<Notification> rows = notificationRepository.findForUser(p.idB(), false).stream()
+                            .filter(n -> n.getType() == NotificationType.NEW_FOLLOWER)
+                            .toList();
+                    assertThat(rows).hasSize(1);
+                    assertThat(rows.get(0).getBody()).contains("started following you.");
+                });
+
+        // Re-follow (idempotent) → no second row.
+        mockMvc.perform(post("/api/users/" + p.idB() + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA()))
+                .andExpect(status().is2xxSuccessful());
+        Thread.sleep(300);
+        List<Notification> after2 = notificationRepository.findForUser(p.idB(), false).stream()
+                .filter(n -> n.getType() == NotificationType.NEW_FOLLOWER)
+                .toList();
+        assertThat(after2).hasSize(1);
+    }
 
     private record Pair(String tokenA, String tokenB, Long idA, Long idB) {
     }

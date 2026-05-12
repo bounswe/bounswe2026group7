@@ -1,50 +1,117 @@
-# Welcome to your Expo app 👋
+# MentorMatch Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+React Native / Expo application for the MentorMatch platform (CMPE 354 Group 7).
 
-## Get started
+---
 
-1. Install dependencies
+## Prerequisites
 
-   ```bash
-   npm install
-   ```
+- Node.js 18+
+- npm 9+
+- [Expo Go](https://expo.dev/go) installed on your physical device **or** an Android/iOS emulator
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## Development Setup
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### 1. Install dependencies
 
 ```bash
-npm run reset-project
+cd mobile-app
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Configure environment
 
-## Learn more
+```bash
+cp .env.example .env
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Open `.env` and set `EXPO_PUBLIC_API_URL` to point at the backend:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+| Scenario | Value |
+|---|---|
+| Android emulator (AVD) | `http://10.0.2.2:8080` |
+| Physical device on same Wi-Fi | `http://<your-machine-ip>:8080` |
+| Production server | `http://<server-ip-or-domain>:8080` |
 
-## Join the community
+> **Why not `localhost`?** On a physical device or Android emulator, `localhost` refers to the device itself, not your development machine. Use the machine's LAN IP instead (e.g. `192.168.x.x`).
 
-Join our community of developers creating universal apps.
+### 3. Start the backend
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+The mobile app requires the backend to be running. From the project root:
+
+```bash
+cp .env.example .env   # configure backend env vars
+docker compose up --build
+```
+
+Backend will be available at `http://localhost:8080`.
+
+### 4. Start the Expo dev server
+
+```bash
+npx expo start
+```
+
+- Scan the QR code with **Expo Go** on your phone, or
+- Press `a` to open on a connected Android device/emulator, or
+- Press `i` to open on an iOS simulator (macOS only).
+
+---
+
+## Production Build (APK)
+
+### Prerequisites
+
+- [EAS CLI](https://docs.expo.dev/build/setup/): `npm install -g eas-cli`
+- An [Expo account](https://expo.dev/signup)
+
+### Build
+
+```bash
+cd mobile-app
+eas build -p android --profile production
+```
+
+This submits a cloud build on Expo's servers and produces a signed `.apk` / `.aab`. The download link is shown in the EAS dashboard when the build completes.
+
+### Local APK (without EAS)
+
+If you have the Android SDK and Java 17+ installed:
+
+```bash
+npx expo run:android --variant release
+```
+
+The APK will be output to `android/app/build/outputs/apk/release/app-release.apk`.
+
+---
+
+## Network Configuration Summary
+
+The app reads `EXPO_PUBLIC_API_URL` at bundle time. All API calls go to `$EXPO_PUBLIC_API_URL/api`.
+
+- **Do not** use `localhost` — it resolves to the device, not the host machine.
+- **Android emulator**: the special alias `10.0.2.2` maps to the host machine's loopback.
+- **Physical device**: find your machine's IP with `ipconfig` (Windows) or `ifconfig` (macOS/Linux) and use that.
+- **Production**: set the variable to the deployed server's address before building the APK.
+
+---
+
+## Default Credentials
+
+| Role | Username / Email | Password |
+|---|---|---|
+| Admin | admin@group7.com | Admin1234! |
+| Mentor | mentor@group7.com | Mentor1234! |
+| Mentee | mentee@group7.com | Mentee1234! |
+
+---
+
+## Running Tests
+
+```bash
+cd mobile-app
+npm test
+```

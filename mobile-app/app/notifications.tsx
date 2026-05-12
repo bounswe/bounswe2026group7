@@ -116,6 +116,7 @@ export default function NotificationsScreen() {
             onPress={() => router.back()}
             accessibilityRole="button"
             accessibilityLabel="Go back"
+            testID="notifications.back"
           >
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
@@ -125,6 +126,7 @@ export default function NotificationsScreen() {
               onPress={markAllAsRead}
               accessibilityRole="button"
               accessibilityLabel={`Mark all ${unreadCount} notifications as read`}
+              testID="notifications.mark-all"
             >
               <Text style={styles.markAllText}>Mark all read</Text>
             </TouchableOpacity>
@@ -157,7 +159,7 @@ export default function NotificationsScreen() {
           }
         >
           {notifications.length === 0 ? (
-            <View style={styles.emptyState}>
+            <View style={styles.emptyState} testID="notifications.empty-state">
               <Text style={styles.emptyIcon}>🔔</Text>
               <Text style={styles.emptyText}>No notifications yet.</Text>
             </View>
@@ -171,6 +173,7 @@ export default function NotificationsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`${n.title}. ${n.body}. ${n.isRead ? 'Read' : 'Unread'}. ${timeAgo(n.createdAt)}`}
                 accessibilityHint="Opens the relevant screen for this notification"
+                testID={`notifications.item.${n.id}`}
               >
                 <View style={styles.cardLeft}>
                   <Text style={styles.cardIcon}>{TYPE_ICON[n.type] ?? '🔔'}</Text>

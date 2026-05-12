@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   View,
@@ -9,6 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { useRole } from '../components/RoleContext';
 import { useProtectedSession } from '../components/useProtectedSession';
@@ -29,6 +30,30 @@ type MilestoneSummary = {
   targetDate: string | null;
   status: MilestoneStatus;
   orderIndex: number;
+};
+
+type MeetingSummary = {
+  id: number;
+  title: string;
+  startTime: string | null;
+  status: string;
+};
+
+type TaskSummary = {
+  id: number;
+  title: string;
+  dueDate: string | null;
+  status: string;
+};
+
+type TimelineEventKind = 'start' | 'end' | 'today' | 'milestone' | 'meeting' | 'task';
+
+type TimelineEvent = {
+  kind: TimelineEventKind;
+  date: string; // YYYY-MM-DD
+  label: string;
+  refId?: number;
+  status?: string;
 };
 
 type MilestoneActionItem = {
@@ -121,8 +146,13 @@ export default function ConnectionProfileScreen() {
   const [mentorSlots, setMentorSlots] = useState<AvailabilitySlot[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
 
-  const [sharedGoal, setSharedGoal] = useState(parseString(params.subtitle));
+  const [sharedGoal, setSharedGoal] = useState('');
   const [goalDraft, setGoalDraft] = useState('');
+  const [mentorshipStartDate, setMentorshipStartDate] = useState<string | null>(null);
+  const [mentorshipEndDate, setMentorshipEndDate] = useState<string | null>(null);
+  const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [timelineModalEvent, setTimelineModalEvent] = useState<TimelineEvent | null>(null);
   const [goalEditing, setGoalEditing] = useState(false);
   const [goalSaving, setGoalSaving] = useState(false);
   const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
@@ -142,6 +172,7 @@ export default function ConnectionProfileScreen() {
   const [mentorshipActionLoading, setMentorshipActionLoading] = useState(false);
   const [endModalVisible, setEndModalVisible] = useState(false);
   const [endReason, setEndReason] = useState('');
+  const [mentorshipStatus, setMentorshipStatus] = useState('');
 
   useEffect(() => {
     console.log('[connection-profile] route context', {
@@ -184,12 +215,33 @@ export default function ConnectionProfileScreen() {
     if (!mentorshipId) return;
     apiClient.get(`/mentorships/${mentorshipId}`).then((res) => {
       if (res.data.sharedGoal) setSharedGoal(res.data.sharedGoal);
+      if (res.data.startDate) setMentorshipStartDate(String(res.data.startDate).slice(0, 10));
+      if (res.data.endDate) setMentorshipEndDate(String(res.data.endDate).slice(0, 10));
+      if (res.data.status) setMentorshipStatus(res.data.status);
     }).catch(() => {});
+
+    apiClient.get(`/mentorships/${mentorshipId}/meetings`, { silent: true })
+      .then((res) => setMeetings((res.data ?? []) as MeetingSummary[]))
+      .catch(() => setMeetings([]));
+
+    apiClient.get(`/mentorships/${mentorshipId}/tasks`, { silent: true })
+      .then((res) => setTasks((res.data ?? []) as TaskSummary[]))
+      .catch(() => setTasks([]));
   }, [mentorshipId, session, sessionLoading]);
 
   const fetchMilestoneDetail = async (milestoneId: number) => {
     const res = await apiClient.get(`/milestones/${milestoneId}`);
-    return res.data as MilestoneDetail;
+    const data = res.data as MilestoneDetail;
+    return {
+      ...data,
+      actionItems: (data.actionItems ?? []).map((raw) => {
+        const item = raw as MilestoneActionItem & { completed?: boolean };
+        return {
+          ...item,
+          isCompleted: item.isCompleted ?? item.completed ?? false,
+        };
+      }),
+    } as MilestoneDetail;
   };
 
   const loadMilestones = useCallback(async (keepSelection = true) => {
@@ -285,7 +337,75 @@ export default function ConnectionProfileScreen() {
   const stat3Value = parseString(params.stat3Value);
 
   const isViewingMentor = type === 'mentor';
+  const isActive = !mentorshipStatus || mentorshipStatus === 'ACTIVE';
   const selectedMilestone = selectedMilestoneId ? milestoneDetails[selectedMilestoneId] : null;
+
+  const timelineEvents: TimelineEvent[] = useMemo(() => {
+    if (!mentorshipStartDate || !mentorshipEndDate) return [];
+    const list: TimelineEvent[] = [
+      { kind: 'start', date: mentorshipStartDate, label: 'Program Start' },
+      { kind: 'end', date: mentorshipEndDate, label: 'Program Completion' },
+    ];
+    const today = new Date().toISOString().slice(0, 10);
+    if (today >= mentorshipStartDate && today <= mentorshipEndDate) {
+      list.push({ kind: 'today', date: today, label: 'Today' });
+    }
+    milestones.forEach((m) => {
+      if (m.targetDate) {
+        list.push({
+          kind: 'milestone',
+          date: String(m.targetDate).slice(0, 10),
+          label: m.title,
+          refId: m.id,
+          status: m.status,
+        });
+      }
+    });
+    meetings.forEach((m) => {
+      if (m.startTime) {
+        list.push({
+          kind: 'meeting',
+          date: String(m.startTime).slice(0, 10),
+          label: m.title || 'Meeting',
+          refId: m.id,
+          status: m.status,
+        });
+      }
+    });
+    tasks.forEach((t) => {
+      if (t.dueDate) {
+        list.push({
+          kind: 'task',
+          date: String(t.dueDate).slice(0, 10),
+          label: t.title || 'Task',
+          refId: t.id,
+          status: t.status,
+        });
+      }
+    });
+    list.sort((a, b) => a.date.localeCompare(b.date));
+    return list;
+  }, [mentorshipStartDate, mentorshipEndDate, milestones, meetings, tasks]);
+
+  const handleTimelineEventPress = (event: TimelineEvent) => {
+    if (event.kind === 'milestone' && event.refId) {
+      setSelectedMilestoneId(event.refId);
+      setTimelineModalEvent(null);
+      openMilestonesScreen(event.refId);
+      return;
+    }
+    if (event.kind === 'meeting') {
+      setTimelineModalEvent(null);
+      openMeetings();
+      return;
+    }
+    if (event.kind === 'task') {
+      setTimelineModalEvent(null);
+      openTasks();
+      return;
+    }
+    setTimelineModalEvent(event);
+  };
   const totalActionItems = Object.values(milestoneDetails).reduce(
     (sum, milestone) => sum + milestone.actionItems.length,
     0
@@ -378,7 +498,7 @@ export default function ConnectionProfileScreen() {
     });
     router.push({
       pathname: '/meetings-sessions',
-      params: { connectedUserName: name, connectedUserType: type, mentorshipId, sourceScreen: 'connection-profile' },
+      params: { connectedUserName: name, connectedUserType: type, mentorshipId, mentorshipStatus, sourceScreen: 'connection-profile' },
     });
   };
 
@@ -401,6 +521,19 @@ export default function ConnectionProfileScreen() {
     });
   };
 
+  const openMilestonesScreen = (milestoneId?: number) => {
+    router.push({
+      pathname: '/milestones',
+      params: {
+        connectedUserName: name,
+        connectedUserType: type,
+        mentorshipId,
+        sourceScreen: 'connection-profile',
+        ...(milestoneId ? { focusMilestoneId: String(milestoneId) } : {}),
+      },
+    });
+  };
+
   const openMessages = () => {
     console.log('[navigation] opening messages', {
       sourceScreen: 'connection-profile',
@@ -418,20 +551,30 @@ export default function ConnectionProfileScreen() {
 
   const createMilestone = async () => {
     if (!mentorshipId || !milestoneTitleDraft.trim()) return;
+    const targetDate = toIsoDateOrNull(milestoneDateDraft);
+    if (targetDate && mentorshipStartDate && mentorshipEndDate
+        && (targetDate < mentorshipStartDate || targetDate > mentorshipEndDate)) {
+      Alert.alert(
+        'Invalid date',
+        `Target date must be between ${mentorshipStartDate} and ${mentorshipEndDate}.`
+      );
+      return;
+    }
     setMilestoneCreating(true);
     try {
       await apiClient.post(`/mentorships/${mentorshipId}/milestones`, {
         title: milestoneTitleDraft.trim(),
         description: milestoneDescriptionDraft.trim() || null,
-        targetDate: toIsoDateOrNull(milestoneDateDraft),
+        targetDate,
       });
       setMilestoneTitleDraft('');
       setMilestoneDescriptionDraft('');
       setMilestoneDateDraft('');
       setMilestoneComposerOpen(false);
       await loadMilestones(false);
-    } catch {
-      Alert.alert('Error', 'Could not create the milestone.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Could not create the milestone.';
+      Alert.alert('Error', msg);
     } finally {
       setMilestoneCreating(false);
     }
@@ -528,7 +671,7 @@ export default function ConnectionProfileScreen() {
             <Text style={styles.statusIcons}>▲ ▮</Text>
           </View>
 
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton} testID="connection-profile.back">
             <Text style={styles.backText}>‹</Text>
           </TouchableOpacity>
 
@@ -556,22 +699,30 @@ export default function ConnectionProfileScreen() {
 
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stat1Value || '-'}</Text>
+            <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{stat1Value || '-'}</Text>
             <Text style={styles.statLabel}>{stat1Label || 'Stat'}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stat2Value || '-'}</Text>
+            <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{stat2Value || '-'}</Text>
             <Text style={styles.statLabel}>{stat2Label || 'Stat'}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{stat3Value || '-'}</Text>
+            <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{stat3Value || '-'}</Text>
             <Text style={styles.statLabel}>{stat3Label || 'Stat'}</Text>
           </View>
         </View>
 
         <View style={styles.body}>
+          {!isActive && (
+            <View style={styles.historyBanner}>
+              <Text style={styles.historyBannerText}>
+                {`${mentorshipStatus === 'COMPLETED' ? 'Completed Mentorship' : 'Cancelled Mentorship'} — view only`}
+              </Text>
+            </View>
+          )}
+
           <Text style={styles.sectionTitle}>PROFILE</Text>
 
           <View style={styles.card}>
@@ -633,6 +784,72 @@ export default function ConnectionProfileScreen() {
             )}
           </View>
 
+          {timelineEvents.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>PROGRESS TIMELINE</Text>
+              <View style={styles.card}>
+                <Text style={styles.timelineSubtitle}>
+                  Program duration: {mentorshipStartDate} – {mentorshipEndDate}
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.timelineScroll}
+                >
+                  <View style={[styles.timelineContainer, { minWidth: Math.max(600, timelineEvents.length * 140) }]}>
+                    <View style={styles.timelineTrack} />
+                    {timelineEvents.map((event, idx) => {
+                      const total = timelineEvents.length;
+                      const left = total > 1 ? (idx / (total - 1)) * 100 : 50;
+                      const color =
+                        event.kind === 'today' ? '#E5A035'
+                        : event.kind === 'milestone' ? '#3B7DD8'
+                        : event.kind === 'meeting' ? '#2F563C'
+                        : event.kind === 'task' ? '#8A5D12'
+                        : '#23372B';
+                      const dateLabel = new Date(event.date).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric',
+                      });
+                      return (
+                        <View key={`${event.kind}-${event.refId ?? idx}`} style={[styles.timelineSlot, { left: `${left}%` }]} testID={`connection-profile.timeline.${event.kind}-${event.refId ?? idx}`}>
+                          <TouchableOpacity
+                            style={[styles.timelinePill, { backgroundColor: color }]}
+                            onPress={() => handleTimelineEventPress(event)}
+                          >
+                            <Text style={styles.timelinePillText} numberOfLines={2}>{event.label}</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.timelineDateLabel}>{dateLabel}</Text>
+                          <TouchableOpacity
+                            style={[styles.timelineDot, { backgroundColor: color }]}
+                            onPress={() => handleTimelineEventPress(event)}
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+                <View style={styles.timelineLegend}>
+                  <View style={styles.timelineLegendItem}>
+                    <View style={[styles.timelineLegendDot, { backgroundColor: '#3B7DD8' }]} />
+                    <Text style={styles.timelineLegendText}>Milestone</Text>
+                  </View>
+                  <View style={styles.timelineLegendItem}>
+                    <View style={[styles.timelineLegendDot, { backgroundColor: '#2F563C' }]} />
+                    <Text style={styles.timelineLegendText}>Meeting</Text>
+                  </View>
+                  <View style={styles.timelineLegendItem}>
+                    <View style={[styles.timelineLegendDot, { backgroundColor: '#8A5D12' }]} />
+                    <Text style={styles.timelineLegendText}>Task</Text>
+                  </View>
+                  <View style={styles.timelineLegendItem}>
+                    <View style={[styles.timelineLegendDot, { backgroundColor: '#E5A035' }]} />
+                    <Text style={styles.timelineLegendText}>Today</Text>
+                  </View>
+                </View>
+              </View>
+            </>
+          )}
+
           <Text style={styles.sectionTitle}>SHARED GOAL</Text>
 
           <View style={styles.card}>
@@ -661,6 +878,7 @@ export default function ConnectionProfileScreen() {
                     style={[styles.goalSaveButton, (!goalDraft.trim() || goalSaving) && { opacity: 0.5 }]}
                     onPress={saveSharedGoal}
                     disabled={!goalDraft.trim() || goalSaving}
+                    testID="connection-profile.goal-save"
                   >
                     {goalSaving
                       ? <ActivityIndicator size="small" color="#F8F6F2" />
@@ -671,11 +889,12 @@ export default function ConnectionProfileScreen() {
             ) : (
               <>
                 <Text style={styles.cardText}>
-                  {sharedGoal || 'No shared goal set yet. Tap Edit to define one together.'}
+                  {sharedGoal || (isActive ? 'No shared goal set yet. Tap Edit to define one together.' : 'No shared goal was set.')}
                 </Text>
                 <TouchableOpacity
                   style={styles.goalEditButton}
                   onPress={() => { setGoalDraft(sharedGoal); setGoalEditing(true); }}
+                  testID="connection-profile.goal-edit"
                 >
                   <Text style={styles.goalEditText}>Edit Goal</Text>
                 </TouchableOpacity>
@@ -710,11 +929,12 @@ export default function ConnectionProfileScreen() {
               <View style={[styles.progressFill, { width: `${overallProgressPercent}%` }]} />
             </View>
 
-            {isMentorViewer && (
+            {isActive && isMentorViewer && (
               <>
                 <TouchableOpacity
                   style={styles.actionButtonSecondary}
                   onPress={() => setMilestoneComposerOpen((current) => !current)}
+                  testID="connection-profile.milestone-add"
                 >
                   <Text style={styles.actionButtonSecondaryText}>
                     {milestoneComposerOpen ? 'Hide Milestone Form' : '+ Add Milestone'}
@@ -742,7 +962,11 @@ export default function ConnectionProfileScreen() {
                       style={styles.milestoneInput}
                       value={milestoneDateDraft}
                       onChangeText={setMilestoneDateDraft}
-                      placeholder="Target date (YYYY-MM-DD)"
+                      placeholder={
+                        mentorshipStartDate && mentorshipEndDate
+                          ? `Target date (${mentorshipStartDate} – ${mentorshipEndDate})`
+                          : 'Target date (YYYY-MM-DD)'
+                      }
                       placeholderTextColor="#B0A89E"
                       autoCapitalize="none"
                     />
@@ -786,6 +1010,7 @@ export default function ConnectionProfileScreen() {
                           selectedMilestoneId === milestone.id && styles.milestoneCardActive,
                         ]}
                         onPress={() => setSelectedMilestoneId(milestone.id)}
+                        testID={`connection-profile.milestone-card.${milestone.id}`}
                       >
                         <View style={styles.milestoneCardHeader}>
                           <Text style={styles.milestoneCardTitle}>{milestone.title}</Text>
@@ -827,7 +1052,7 @@ export default function ConnectionProfileScreen() {
                       <View style={[styles.progressFill, { width: `${selectedMilestoneProgressPercent}%` }]} />
                     </View>
 
-                    {isMentorViewer && (
+                    {isActive && isMentorViewer && (
                       <View style={styles.statusFilterRow}>
                         {(['PENDING', 'IN_PROGRESS', 'COMPLETED'] as MilestoneStatus[]).map((status) => (
                           <TouchableOpacity
@@ -888,7 +1113,7 @@ export default function ConnectionProfileScreen() {
                         ))
                     )}
 
-                    {isMentorViewer && (
+                    {isActive && isMentorViewer && (
                       <View style={styles.actionItemComposer}>
                         <TextInput
                           style={styles.milestoneInput}
@@ -984,30 +1209,78 @@ export default function ConnectionProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('meeting')}>
-              <Text style={styles.actionButtonSecondaryText}>Setup Meeting Request</Text>
-            </TouchableOpacity>
+            {isActive && (
+              <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('meeting')}>
+                <Text style={styles.actionButtonSecondaryText}>Setup Meeting Request</Text>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('change')}>
-              <Text style={styles.actionButtonSecondaryText}>Change Request</Text>
-            </TouchableOpacity>
+            {isActive && (
+              <TouchableOpacity style={styles.actionButtonSecondary} onPress={() => openRequest('change')}>
+                <Text style={styles.actionButtonSecondaryText}>Change Request</Text>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity
-              style={[styles.actionButtonDanger, mentorshipActionLoading && { opacity: 0.6 }]}
-              onPress={handleEndMentorship}
-              disabled={mentorshipActionLoading}
-            >
-              <Text style={styles.actionButtonDangerText}>
-                {mentorshipActionLoading
-                  ? 'Please wait...'
-                  : isMentorViewer
-                  ? 'End Mentorship'
-                  : 'Cancel Mentorship'}
-              </Text>
-            </TouchableOpacity>
+            {isActive && (
+              <TouchableOpacity
+                style={[styles.actionButtonDanger, mentorshipActionLoading && { opacity: 0.6 }]}
+                onPress={handleEndMentorship}
+                disabled={mentorshipActionLoading}
+              >
+                <Text style={styles.actionButtonDangerText}>
+                  {mentorshipActionLoading
+                    ? 'Please wait...'
+                    : isMentorViewer
+                    ? 'End Mentorship'
+                    : 'Cancel Mentorship'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={timelineModalEvent !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTimelineModalEvent(null)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.timelineModalBackdrop}
+          onPress={() => setTimelineModalEvent(null)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.timelineModalSheet}>
+            <Text style={styles.timelineModalKind}>
+              {timelineModalEvent?.kind.toUpperCase()}
+            </Text>
+            <Text style={styles.timelineModalTitle}>
+              {timelineModalEvent?.label}
+            </Text>
+            <Text style={styles.timelineModalDate}>
+              {timelineModalEvent?.date}
+              {timelineModalEvent?.status ? `  ·  ${timelineModalEvent.status}` : ''}
+            </Text>
+            {timelineModalEvent?.kind === 'meeting' && (
+              <Text style={[styles.cardText, { marginBottom: 18 }]}>
+                Open the Meetings & Sessions screen to manage this meeting.
+              </Text>
+            )}
+            {timelineModalEvent?.kind === 'task' && (
+              <Text style={[styles.cardText, { marginBottom: 18 }]}>
+                Open the Task Tracker screen to manage this task.
+              </Text>
+            )}
+            <TouchableOpacity
+              style={styles.timelineModalCloseButton}
+              onPress={() => setTimelineModalEvent(null)}
+            >
+              <Text style={styles.timelineModalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1158,6 +1431,134 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 2,
     marginBottom: 18,
+  },
+  timelineSubtitle: {
+    color: '#7E7368',
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 18,
+  },
+  timelineScroll: {
+    paddingHorizontal: 8,
+    paddingTop: 50,
+    paddingBottom: 8,
+  },
+  timelineContainer: {
+    position: 'relative',
+    minWidth: 600,
+    height: 110,
+  },
+  timelineTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 84,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5DDD1',
+  },
+  timelineSlot: {
+    position: 'absolute',
+    top: 0,
+    width: 130,
+    marginLeft: -65,
+    alignItems: 'center',
+  },
+  timelinePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    marginBottom: 6,
+    maxWidth: 124,
+  },
+  timelinePillText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  timelineDot: {
+    position: 'absolute',
+    top: 79,
+    alignSelf: 'center',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#F8F6F2',
+    zIndex: 2,
+  },
+  timelineDateLabel: {
+    color: '#9A8F82',
+    fontSize: 10,
+    fontWeight: '500',
+    marginTop: 0,
+  },
+  timelineLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5DDD1',
+  },
+  timelineLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timelineLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  timelineLegendText: {
+    color: '#7E7368',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  timelineModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  timelineModalSheet: {
+    backgroundColor: '#F8F6F2',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  timelineModalKind: {
+    color: '#8B8176',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginBottom: 8,
+  },
+  timelineModalTitle: {
+    color: '#23372B',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  timelineModalDate: {
+    color: '#7E7368',
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 18,
+  },
+  timelineModalCloseButton: {
+    backgroundColor: '#456B50',
+    paddingVertical: 14,
+    borderRadius: 18,
+    alignItems: 'center',
+  },
+  timelineModalCloseText: {
+    color: '#F8F6F2',
+    fontSize: 15,
+    fontWeight: '700',
   },
   card: {
     backgroundColor: '#F8F6F2',
@@ -1608,5 +2009,20 @@ const styles = StyleSheet.create({
   },
   actionItemComposer: {
     marginTop: 16,
+  },
+  historyBanner: {
+    backgroundColor: '#F5E8CC',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E8D4A8',
+  },
+  historyBannerText: {
+    color: '#7A5010',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });

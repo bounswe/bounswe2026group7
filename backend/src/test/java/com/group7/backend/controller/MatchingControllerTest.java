@@ -60,7 +60,7 @@ class MatchingControllerTest {
         MentorMatchResponse match = new MentorMatchResponse();
         match.setFirstName("Ahmet");
         match.setMatchScore(10);
-        when(matchingService.getTopMentors(eq(1L), any(), any(Pageable.class)))
+        when(matchingService.getTopMentors(eq(1L), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(match)));
 
         mockMvc.perform(get("/api/matching/mentors")
@@ -74,7 +74,7 @@ class MatchingControllerTest {
     @Test
     void getTopMentorsWithKeywordReturns200() throws Exception {
         mockValidMenteeJwt("mentee-token", 1L);
-        when(matchingService.getTopMentors(eq(1L), eq("java"), any(Pageable.class)))
+        when(matchingService.getTopMentors(eq(1L), eq("java"), any(), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/matching/mentors?keyword=java")
@@ -99,9 +99,98 @@ class MatchingControllerTest {
     }
 
     @Test
+    void getTopMentorsForwardsMaxDistanceKmParam() throws Exception {
+        mockValidMenteeJwt("mentee-token", 1L);
+        when(matchingService.getTopMentors(eq(1L), any(), eq(50.0), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/matching/mentors?maxDistanceKm=50")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk());
+
+        // And the unconstrained call still routes through the null-maxDistance path.
+        when(matchingService.getTopMentors(eq(1L), any(), eq((Double) null), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        mockMvc.perform(get("/api/matching/mentors")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void getTopMentors_privateMentorAbsent_serviceReturnsEmptyPage() throws Exception {
+        // #570 — MatchingService.rankMentorsFor passes bypassVisibility=false,
+        // so private mentors never reach the controller. Controller test
+        // verifies the empty-page contract end-to-end. Mock matches the
+        // post-#571 7-arg getTopMentors signature.
+        mockValidMenteeJwt("mentee-token", 1L);
+        when(matchingService.getTopMentors(eq(1L), any(), any(),
+                any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/matching/mentors")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void getTopMentorsForwardsAvailabilityDays() throws Exception {
+        mockValidMenteeJwt("mentee-token", 1L);
+        when(matchingService.getTopMentors(eq(1L), any(), any(),
+                any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/matching/mentors?availabilityDays=MONDAY,WEDNESDAY")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk());
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<java.util.Set<java.time.DayOfWeek>> days =
+                org.mockito.ArgumentCaptor.forClass(java.util.Set.class);
+        org.mockito.Mockito.verify(matchingService).getTopMentors(
+                eq(1L), any(), any(), days.capture(), any(), any(), any(Pageable.class));
+        org.assertj.core.api.Assertions.assertThat(days.getValue())
+                .containsExactlyInAnyOrder(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.WEDNESDAY);
+    }
+
+    @Test
+    void getTopMentorsForwardsMentorshipDuration() throws Exception {
+        mockValidMenteeJwt("mentee-token", 1L);
+        when(matchingService.getTopMentors(eq(1L), any(), any(),
+                any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/matching/mentors?mentorshipDuration=3&mentorshipDuration=6")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk());
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<java.util.Set<Integer>> duration =
+                org.mockito.ArgumentCaptor.forClass(java.util.Set.class);
+        org.mockito.Mockito.verify(matchingService).getTopMentors(
+                eq(1L), any(), any(), any(), duration.capture(), any(), any(Pageable.class));
+        org.assertj.core.api.Assertions.assertThat(duration.getValue())
+                .containsExactlyInAnyOrder(3, 6);
+    }
+
+    @Test
+    void getTopMentorsForwardsMinMatchScore() throws Exception {
+        mockValidMenteeJwt("mentee-token", 1L);
+        when(matchingService.getTopMentors(eq(1L), any(), any(),
+                any(), any(), eq(60), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/matching/mentors?minMatchScore=60")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void getTopMentorsReturns403WhenAlreadyHasMentor() throws Exception {
         mockValidMenteeJwt("mentee-token", 1L);
-        when(matchingService.getTopMentors(eq(1L), any(), any(Pageable.class)))
+        when(matchingService.getTopMentors(eq(1L), any(), any(), any(), any(), any(), any(Pageable.class)))
                 .thenThrow(new com.group7.backend.exception.MatchingNotAllowedException(
                         "You already have an active mentor"));
 

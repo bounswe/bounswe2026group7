@@ -6,6 +6,7 @@ import com.group7.backend.config.SecurityConfig;
 import com.group7.backend.dto.request.EditProfileRequest;
 import com.group7.backend.dto.request.MentorProfileRequest;
 import com.group7.backend.dto.request.MenteeProfileRequest;
+import com.group7.backend.dto.response.AdminResponse;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.UserProfileResponse;
@@ -47,6 +48,10 @@ class ProfileControllerTest {
     @MockitoBean
     private UserService userService;
 
+    // #518: UserController constructor now also depends on MentorRatingService.
+    @MockitoBean
+    private com.group7.backend.service.MentorRatingService mentorRatingService;
+
     @MockitoBean
     private JwtService jwtService;
 
@@ -69,11 +74,28 @@ class ProfileControllerTest {
      * the assertion JSON paths.
      */
     private UserProfileResponse wrapMentor() {
-        return new UserProfileResponse(buildMentorResponse(), 0L, 0L);
+        return new UserProfileResponse(buildMentorResponse(), 0L, 0L, false);
     }
 
     private UserProfileResponse wrapMentee() {
-        return new UserProfileResponse(buildMenteeResponse(), 0L, 0L);
+        return new UserProfileResponse(buildMenteeResponse(), 0L, 0L, false);
+    }
+
+    private UserProfileResponse wrapAdmin() {
+        return new UserProfileResponse(buildAdminResponse(), 0L, 0L, false);
+    }
+
+    private AdminResponse buildAdminResponse() {
+        AdminResponse response = new AdminResponse();
+        response.setId(3L);
+        response.setFirstName("Root");
+        response.setLastName("Admin");
+        response.setEmail("admin@example.com");
+        response.setProfilePhoto(null);
+        response.setIsEmailVerified(true);
+        response.setCreatedAt(OffsetDateTime.of(2026, 3, 17, 10, 0, 0, 0, ZoneOffset.UTC));
+        response.setRole("ADMIN");
+        return response;
     }
 
     private MentorResponse buildMentorResponse() {
@@ -205,6 +227,35 @@ class ProfileControllerTest {
                 .andExpect(jsonPath("$.bio").doesNotExist())
                 .andExpect(jsonPath("$.expertise").doesNotExist())
                 .andExpect(jsonPath("$.maxMenteeCapacity").doesNotExist());
+    }
+
+    // ── GET /api/users/me — Admin (#553) ─────────────────────
+
+    @Test
+    void getOwnProfile_admin_returns200WithRoleADMIN() throws Exception {
+        // Prior to #553 the admin self-view returned 403 because
+        // UserService.mapToResponse threw unconditionally on Admin
+        // entities. The fix carves out the /me path: admins get an
+        // AdminResponse with the common UserResponse envelope and
+        // role="ADMIN". Admin opacity to third parties stays intact;
+        // see UserServiceTest.getProfileById_thirdPartyAdminLookup_stillReturns403.
+        mockValidToken(3L, "ADMIN");
+        when(userService.getOwnUserProfile(3L)).thenReturn(wrapAdmin());
+
+        mockMvc.perform(get("/api/users/me")
+                        .header("Authorization", "Bearer " + TEST_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(3))
+                .andExpect(jsonPath("$.firstName").value("Root"))
+                .andExpect(jsonPath("$.lastName").value("Admin"))
+                .andExpect(jsonPath("$.email").value("admin@example.com"))
+                .andExpect(jsonPath("$.role").value("ADMIN"))
+                .andExpect(jsonPath("$.isEmailVerified").value(true))
+                // No role-specific fields leak from Mentor/Mentee responses.
+                .andExpect(jsonPath("$.bio").doesNotExist())
+                .andExpect(jsonPath("$.maxMenteeCapacity").doesNotExist())
+                .andExpect(jsonPath("$.skills").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
     }
 
     // ── GET /api/users/me — Auth ────────────────────────────
@@ -635,7 +686,7 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MentorResponse mentorResp = buildMentorResponse();
-        when(userService.getAllMentors(any(Pageable.class)))
+        when(userService.getAllMentors(eq(1L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(mentorResp)));
 
         mockMvc.perform(get("/api/users/mentors")
@@ -651,7 +702,7 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MenteeResponse menteeResp = buildMenteeResponse();
-        when(userService.getAllMentees(any(Pageable.class)))
+        when(userService.getAllMentees(eq(1L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(menteeResp)));
 
         mockMvc.perform(get("/api/users/mentees")

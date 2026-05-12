@@ -6,11 +6,13 @@ import com.group7.backend.entity.FeedPost;
 import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.exception.ResourceNotFoundException;
+import com.group7.backend.repository.AttachmentRepository;
+import com.group7.backend.repository.FeedPostEditHistoryRepository;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -37,10 +39,31 @@ class FeedPostServiceTest {
 
     @Mock private FeedPostRepository feedPostRepository;
     @Mock private UserRepository userRepository;
+    @Mock private AttachmentRepository attachmentRepository;
     @Mock private HashtagNormalizer hashtagNormalizer;
     @Mock private FeedPostMapper feedPostMapper;
     @Mock private FeedPostEventPublisher feedPostEventPublisher;
-    @InjectMocks private FeedPostService feedPostService;
+    @Mock private FeedPostEditHistoryRepository historyRepository;
+
+    private FeedPostService feedPostService;
+
+    @BeforeEach
+    void setUp() {
+        // Manual construction (not @InjectMocks): the service's
+        // restoreWindowDays primitive parameter cannot be auto-wired
+        // by Mockito. Pass 30 — matches the production default and
+        // is irrelevant to the create/getById/update/delete tests
+        // covered here (restore behaviour lives in FeedPostServiceRestoreTest).
+        feedPostService = new FeedPostService(
+                feedPostRepository,
+                userRepository,
+                attachmentRepository,
+                hashtagNormalizer,
+                feedPostMapper,
+                feedPostEventPublisher,
+                historyRepository,
+                30);
+    }
 
     // ── create ─────────────────────────────────────────────────────────────
 
@@ -49,7 +72,7 @@ class FeedPostServiceTest {
         Admin admin = admin(99L);
         when(userRepository.findById(99L)).thenReturn(Optional.of(admin));
 
-        assertThatThrownBy(() -> feedPostService.create(99L, "Hello", List.of()))
+        assertThatThrownBy(() -> feedPostService.create(99L, "Hello", List.of(), null, null))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("Admins cannot create");
 
@@ -61,7 +84,7 @@ class FeedPostServiceTest {
         Mentor author = mentor(1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(author));
 
-        assertThatThrownBy(() -> feedPostService.create(1L, "   ", List.of()))
+        assertThatThrownBy(() -> feedPostService.create(1L, "   ", List.of(), null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("body must not be blank");
 
@@ -73,7 +96,7 @@ class FeedPostServiceTest {
         Mentor author = mentor(1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(author));
 
-        assertThatThrownBy(() -> feedPostService.create(1L, null, List.of()))
+        assertThatThrownBy(() -> feedPostService.create(1L, null, List.of(), null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -81,7 +104,7 @@ class FeedPostServiceTest {
     void create_rejectsMissingAuthor_with404() {
         when(userRepository.findById(404L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> feedPostService.create(404L, "ok", List.of()))
+        assertThatThrownBy(() -> feedPostService.create(404L, "ok", List.of(), null, null))
                 .isInstanceOf(ResourceNotFoundException.class);
 
         verify(feedPostRepository, never()).save(any(FeedPost.class));
@@ -100,7 +123,7 @@ class FeedPostServiceTest {
         FeedPostResponse expected = stubResponse(42L, 1L);
         when(feedPostMapper.toResponse(any(FeedPost.class), any())).thenReturn(expected);
 
-        FeedPostResponse result = feedPostService.create(1L, "Hello", List.of("DATA", "ai"));
+        FeedPostResponse result = feedPostService.create(1L, "Hello", List.of("DATA", "ai"), null, null);
 
         assertThat(result).isSameAs(expected);
         verify(feedPostRepository).save(any(FeedPost.class));
@@ -118,7 +141,7 @@ class FeedPostServiceTest {
         });
         when(feedPostMapper.toResponse(any(FeedPost.class), any())).thenReturn(stubResponse(42L, 1L));
 
-        feedPostService.create(1L, "Hello", List.of());
+        feedPostService.create(1L, "Hello", List.of(), null, null);
 
         // Verify the facade is invoked with the saved post + author. The
         // FeedPostEventPublisherTest pins the event-shape contract; here
@@ -137,7 +160,7 @@ class FeedPostServiceTest {
         when(feedPostRepository.save(any(FeedPost.class)))
                 .thenThrow(new RuntimeException("DB down"));
 
-        assertThatThrownBy(() -> feedPostService.create(1L, "Hello", List.of()))
+        assertThatThrownBy(() -> feedPostService.create(1L, "Hello", List.of(), null, null))
                 .isInstanceOf(RuntimeException.class);
 
         verify(feedPostEventPublisher, never()).publishCreated(any(), any());
@@ -171,7 +194,7 @@ class FeedPostServiceTest {
     void update_throws404_whenPostMissing() {
         when(feedPostRepository.findById(404L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> feedPostService.update(404L, 1L, "new body", null))
+        assertThatThrownBy(() -> feedPostService.update(404L, 1L, "new body", null, null))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -180,7 +203,7 @@ class FeedPostServiceTest {
         FeedPost post = freshPost(7L, 1L, "Body");
         when(feedPostRepository.findById(7L)).thenReturn(Optional.of(post));
 
-        assertThatThrownBy(() -> feedPostService.update(7L, 999L, "hostile", null))
+        assertThatThrownBy(() -> feedPostService.update(7L, 999L, "hostile", null, null))
                 .isInstanceOf(AccessDeniedException.class);
 
         verify(feedPostRepository, never()).save(any(FeedPost.class));
@@ -192,7 +215,7 @@ class FeedPostServiceTest {
         post.setDeletedAt(OffsetDateTime.now());
         when(feedPostRepository.findById(7L)).thenReturn(Optional.of(post));
 
-        assertThatThrownBy(() -> feedPostService.update(7L, 1L, "new", null))
+        assertThatThrownBy(() -> feedPostService.update(7L, 1L, "new", null, null))
                 .isInstanceOf(ResourceNotFoundException.class);
 
         verify(feedPostRepository, never()).save(any(FeedPost.class));
@@ -206,7 +229,7 @@ class FeedPostServiceTest {
         when(feedPostRepository.save(post)).thenReturn(post);
         when(feedPostMapper.toResponse(post, 1L)).thenReturn(stubResponse(7L, 1L));
 
-        feedPostService.update(7L, 1L, null, null);
+        feedPostService.update(7L, 1L, null, null, null);
 
         // Both fields null = no modification = updatedAt unchanged
         assertThat(post.getBody()).isEqualTo("Original");
@@ -218,7 +241,7 @@ class FeedPostServiceTest {
         FeedPost post = freshPost(7L, 1L, "Original");
         when(feedPostRepository.findById(7L)).thenReturn(Optional.of(post));
 
-        assertThatThrownBy(() -> feedPostService.update(7L, 1L, "   ", null))
+        assertThatThrownBy(() -> feedPostService.update(7L, 1L, "   ", null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -231,7 +254,7 @@ class FeedPostServiceTest {
         when(feedPostRepository.save(post)).thenReturn(post);
         when(feedPostMapper.toResponse(post, 1L)).thenReturn(stubResponse(7L, 1L));
 
-        feedPostService.update(7L, 1L, null, List.of("new"));
+        feedPostService.update(7L, 1L, null, List.of("new"), null);
 
         assertThat(post.getUpdatedAt()).isAfterOrEqualTo(origUpdated);
         // Hashtags were touched — the LinkedHashSet has the new tag.
@@ -310,6 +333,7 @@ class FeedPostServiceTest {
 
     private static FeedPostResponse stubResponse(Long id, Long authorId) {
         return new FeedPostResponse(id, authorId, "U" + authorId, "body", List.of(),
-                OffsetDateTime.now(), OffsetDateTime.now(), false, true);
+                OffsetDateTime.now(), OffsetDateTime.now(), false, true, List.of(),
+                false, false, null);
     }
 }

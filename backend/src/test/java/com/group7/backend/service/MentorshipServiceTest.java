@@ -448,7 +448,7 @@ class MentorshipServiceTest {
     }
 
     @Test
-    void cancelMentorshipByMenteeMarksCancelledAndCleansUp() {
+    void cancelMentorshipByMenteeMarksCancelledAndPreservesDataByDefault() {
         Mentorship mentorship = activeMentorship();
         mentee.setActiveMentorId(mentor.getId());
         when(mentorshipRepository.findByIdAndParticipant(100L, 2L)).thenReturn(Optional.of(mentorship));
@@ -462,7 +462,7 @@ class MentorshipServiceTest {
         assertThat(mentorship.getTerminatedByUserId()).isEqualTo(2L);
         assertThat(mentee.getActiveMentorId()).isNull();
         assertThat(mentor.getCurrentMenteeCount()).isEqualTo(0);
-        verify(mentorshipCleanupService).cleanupChildren(100L);
+        verify(mentorshipCleanupService, never()).cleanupChildren(any());
         verify(notificationEventPublisher).publishMentorshipCancelled(1L, "Elif", "Schedule clash");
         verify(banService).recordCancellation(2L, "Cancelled active mentorship: Schedule clash");
 
@@ -534,7 +534,7 @@ class MentorshipServiceTest {
     }
 
     @Test
-    void endMentorshipByMentorSetsCompletedAndCleansUp() {
+    void endMentorshipByMentorSetsCompletedAndPreservesDataByDefault() {
         Mentorship mentorship = activeMentorship();
         mentee.setActiveMentorId(mentor.getId());
         when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
@@ -548,7 +548,7 @@ class MentorshipServiceTest {
         assertThat(mentorship.getEndDate()).isEqualTo(mentorship.getTerminatedAt());
         assertThat(mentee.getActiveMentorId()).isNull();
         assertThat(mentor.getCurrentMenteeCount()).isEqualTo(0);
-        verify(mentorshipCleanupService).cleanupChildren(100L);
+        verify(mentorshipCleanupService, never()).cleanupChildren(any());
         verify(notificationEventPublisher).publishMentorshipEnded(2L, "Ahmet", "Goal achieved");
         verify(banService, never()).recordCancellation(any(), any());
 
@@ -580,6 +580,28 @@ class MentorshipServiceTest {
         assertThatThrownBy(() -> mentorshipService.endMentorship(1L, 100L, endDto(null)))
                 .isInstanceOf(MentorshipRequestException.class)
                 .hasMessageContaining("not active");
+    }
+
+    @Test
+    void deleteMentorshipDataForPastMentorshipRunsCleanup() {
+        Mentorship mentorship = activeMentorship();
+        mentorship.setStatus(MentorshipStatus.COMPLETED);
+        when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
+
+        mentorshipService.deleteMentorshipData(1L, 100L);
+
+        verify(mentorshipCleanupService).cleanupChildren(100L);
+    }
+
+    @Test
+    void deleteMentorshipDataRejectsActiveMentorship() {
+        Mentorship mentorship = activeMentorship();
+        when(mentorshipRepository.findByIdAndParticipant(100L, 1L)).thenReturn(Optional.of(mentorship));
+
+        assertThatThrownBy(() -> mentorshipService.deleteMentorshipData(1L, 100L))
+                .isInstanceOf(MentorshipRequestException.class)
+                .hasMessageContaining("no longer active");
+        verify(mentorshipCleanupService, never()).cleanupChildren(any());
     }
 
     // ── Extend mentorship (#237) ────────────────────────────────────────────

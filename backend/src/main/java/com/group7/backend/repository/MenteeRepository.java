@@ -39,6 +39,7 @@ public interface MenteeRepository extends JpaRepository<Mentee, Long> {
                  EXISTS (SELECT 1 FROM m.skills s WHERE LOWER(s.label) IN :skills))
             AND (:major IS NULL OR LOWER(m.major) = :major)
             AND (:requireUnattached = false OR m.activeMentorId IS NULL)
+            AND (:bypassVisibility = true OR m.profileVisibility = true)
             AND (:requesterMentorId IS NULL OR
                  EXISTS (SELECT 1 FROM AvailabilitySlot ms, MenteeAvailabilitySlot mes
                          WHERE mes.mentee.id = m.id
@@ -67,6 +68,7 @@ public interface MenteeRepository extends JpaRepository<Mentee, Long> {
             @Param("skills") List<String> skills,
             @Param("major") String major,
             @Param("requireUnattached") boolean requireUnattached,
+            @Param("bypassVisibility") boolean bypassVisibility,
             @Param("requesterMentorId") Long requesterMentorId,
             Pageable pageable);
 
@@ -82,6 +84,7 @@ public interface MenteeRepository extends JpaRepository<Mentee, Long> {
             @Param("skills") List<String> skills,
             @Param("major") String major,
             @Param("requireUnattached") boolean requireUnattached,
+            @Param("bypassVisibility") boolean bypassVisibility,
             @Param("requesterMentorId") Long requesterMentorId,
             Pageable pageable);
 }

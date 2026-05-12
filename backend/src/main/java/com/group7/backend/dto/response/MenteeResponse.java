@@ -52,6 +52,9 @@ public final class MenteeResponse extends UserResponse implements ProfileRespons
     @Schema(description = "Background information", example = "2nd year student interested in AI research")
     private String backgroundInfo;
 
+    @Schema(description = "Affiliation (university/company)", example = "Bogazici University")
+    private String affiliation;
+
     @Schema(description = "Number of cancelled mentorships", example = "0")
     private Integer cancelCount;
 

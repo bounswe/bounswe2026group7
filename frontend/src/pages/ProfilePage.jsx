@@ -1,43 +1,78 @@
 import { useState, useEffect } from 'react'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
+import NotificationPreferences from '../components/NotificationPreferences'
+import MutedKeywords from '../components/MutedKeywords'
+import LocationPicker from '../components/LocationPicker'
+import TaxonomyAutocomplete from '../components/TaxonomyAutocomplete'
+import TaxonomyChipPicker from '../components/TaxonomyChipPicker'
+import {
+  searchTaxonomySkills,
+  searchTaxonomyFields,
+  searchTaxonomyHobbies,
+} from '../services/api'
 import usePresence from '../hooks/usePresence'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
 import { getOwnProfile, updateOwnProfile, uploadProfilePhoto, deleteProfilePhoto } from '../services/api'
 import '../styles/main.css'
 
+// #448: zip parallel label + URI arrays into the chip-picker's {label, uri}
+// shape. Backend's contract is: URI list nullable, otherwise same length as
+// the label list, with per-entry nulls allowed.
+function zipLabelsAndUris(labels = [], uris = []) {
+  return (labels || []).map((label, i) => ({
+    label,
+    uri: uris && uris[i] != null ? uris[i] : '',
+  }))
+}
+
 function mapResponseToForm(data) {
   const isMentor = data.role === 'MENTOR'
   const base = {
     name: [data.firstName, data.lastName].filter(Boolean).join(' '),
     profilePhoto: data.profilePhoto || '',
-    interests: (data.interests || []).join(', '),
+    // #448: chip pickers manage labels + URIs together. Persist parallel
+    // arrays into a single [{label, uri}] form value per concept.
+    interests: zipLabelsAndUris(data.interests, data.interestUris),
+    // #519 / backend #528: affiliation is on both roles (mentor since V1,
+    // mentee since V52). Persist on the shared base so a mentee save round-
+    // trips the value instead of wiping it back to null.
+    affiliation: data.affiliation || '',
+    // #461: shared location fields, available on both roles
+    city: data.city || '',
+    latitude: data.latitude ?? null,
+    longitude: data.longitude ?? null,
   }
+  // #359 / backend #579: profileVisibility now exists on both Mentor and
+  // Mentee. Lifted onto the shared base so both branches save/load it the
+  // same way. Default true on a missing value (matches backend default).
+  base.profileVisible = data.profileVisibility !== false
   if (isMentor) {
     return {
       ...base,
       bio: data.bio || '',
       field: data.field || '',
+      fieldUri: data.fieldUri || '',
       expertise: data.expertise || '',
-      affiliation: data.affiliation || '',
       maxMenteeCapacity: data.maxMenteeCapacity != null ? String(data.maxMenteeCapacity) : '',
       currentMenteeCount: data.currentMenteeCount ?? 0,
       preferredMenteeMajor: data.preferredMenteeMajor || '',
       mentoringGoals: data.mentoringGoals || '',
       mentorshipDuration: data.mentorshipDuration != null ? String(data.mentorshipDuration) : '',
-      preferredMenteeSkills: (data.preferredMenteeSkills || []).join(', '),
+      preferredMenteeSkills: zipLabelsAndUris(data.preferredMenteeSkills, data.preferredMenteeSkillUris),
     }
   }
   return {
     ...base,
     background: data.backgroundInfo || '',
     goals: data.goals || '',
-    skills: (data.skills || []).join(', '),
+    skills: zipLabelsAndUris(data.skills, data.skillUris),
     major: data.major || '',
+    majorUri: data.majorUri || '',
     careerInterest: data.careerInterest || '',
+    careerInterestUri: data.careerInterestUri || '',
     meetingFreqPref: data.meetingFreqPref || '',
-    profileVisible: data.profileVisibility !== false,
   }
 }
 
@@ -59,7 +94,18 @@ function PrivacyBadge({ visible }) {
 }
 
 function ViewField({ label, value, visible, chips = false }) {
-  const items = chips && value ? value.split(',').map(s => s.trim()).filter(Boolean) : []
+  // chips support three shapes: array of {label,uri} (taxonomy chips), array
+  // of strings (legacy), or a comma-separated string (back-compat).
+  let items = []
+  if (chips && value) {
+    if (Array.isArray(value)) {
+      items = value
+        .map(v => (v && typeof v === 'object' ? v.label : v))
+        .filter(Boolean)
+    } else if (typeof value === 'string') {
+      items = value.split(',').map(s => s.trim()).filter(Boolean)
+    }
+  }
   return (
     <div style={{ marginBottom: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
@@ -144,30 +190,60 @@ export default function ProfilePage() {
       const firstName = nameParts[0]
       const lastName = nameParts.slice(1).join(' ') || nameParts[0]
 
-      const toList = str => str ? str.split(',').map(s => s.trim()).filter(Boolean) : null
+      // #448: chip pickers store [{label, uri}]; the backend takes two
+      // parallel arrays. Empty list → null so we don't clobber the column
+      // unintentionally. URI list is nullable on the wire — only sent when
+      // we have at least one URI to surface; per-entry nulls are kept where
+      // the user typed free text without picking a suggestion.
+      const splitChips = (chips) => {
+        if (!Array.isArray(chips) || chips.length === 0) return { labels: null, uris: null }
+        const labels = chips.map(c => c.label)
+        const uris = chips.map(c => c.uri || null)
+        const allUriNull = uris.every(u => u == null)
+        return { labels, uris: allUriNull ? null : uris }
+      }
+      const interestsSplit = splitChips(form.interests)
+      const skillsSplit = !isMentor ? splitChips(form.skills) : null
+      const prefSkillsSplit = isMentor ? splitChips(form.preferredMenteeSkills) : null
 
       const payload = {
         firstName,
         lastName,
-        interests: toList(form.interests),
+        interests: interestsSplit.labels,
+        interestUris: interestsSplit.uris,
+        // #461: location fields are common across roles. Backend EditProfileRequest
+        // enforces pair-completeness on lat/lng via a DB CHECK constraint, so we
+        // send all three together. Null clears all three; partial null is rejected.
+        city: form.city || null,
+        latitude: form.latitude ?? null,
+        longitude: form.longitude ?? null,
+        // Shared between both roles (backend MentorProfileRequest and
+        // MenteeProfileRequest both expose them via the shared EditProfileRequest).
+        affiliation: form.affiliation || null,
+        // #359 / backend #579: profileVisibility lives on both Mentor and
+        // Mentee request DTOs now; send it from the shared base.
+        profileVisibility: form.profileVisible,
         ...(isMentor ? {
           bio: form.bio || null,
           field: form.field || null,
+          fieldUri: form.fieldUri || null,
           expertise: form.expertise || null,
-          affiliation: form.affiliation || null,
           maxMenteeCapacity: form.maxMenteeCapacity !== '' ? parseInt(form.maxMenteeCapacity) : null,
           preferredMenteeMajor: form.preferredMenteeMajor || null,
           mentoringGoals: form.mentoringGoals || null,
           mentorshipDuration: form.mentorshipDuration !== '' ? parseInt(form.mentorshipDuration) : null,
-          preferredMenteeSkills: toList(form.preferredMenteeSkills),
+          preferredMenteeSkills: prefSkillsSplit.labels,
+          preferredMenteeSkillUris: prefSkillsSplit.uris,
         } : {
           backgroundInfo: form.background || null,
           goals: form.goals || null,
           major: form.major || null,
+          majorUri: form.majorUri || null,
           careerInterest: form.careerInterest || null,
+          careerInterestUri: form.careerInterestUri || null,
           meetingFreqPref: form.meetingFreqPref || null,
-          skills: toList(form.skills),
-          profileVisibility: form.profileVisible,
+          skills: skillsSplit.labels,
+          skillUris: skillsSplit.uris,
         }),
       }
 
@@ -306,6 +382,7 @@ export default function ProfilePage() {
                 <ViewField label="Field" value={form.field} />
                 <ViewField label="Expertise" value={form.expertise} />
                 <ViewField label="Affiliation" value={form.affiliation} />
+                <ViewField label="Location" value={form.city} />
                 <ViewField label="Interests" value={form.interests} chips />
                 <ViewField label="Mentoring Goals" value={form.mentoringGoals} />
                 <ViewField label="Preferred Mentee Major" value={form.preferredMenteeMajor} />
@@ -317,6 +394,8 @@ export default function ProfilePage() {
               <>
                 <ViewField label="Background" value={form.background} visible={form.profileVisible} />
                 <ViewField label="Goals" value={form.goals} visible={form.profileVisible} />
+                <ViewField label="Affiliation" value={form.affiliation} visible={form.profileVisible} />
+                <ViewField label="Location" value={form.city} visible={form.profileVisible} />
                 <ViewField label="Skills" value={form.skills} visible={form.profileVisible} chips />
                 <ViewField label="Interests" value={form.interests} visible={form.profileVisible} chips />
                 <ViewField label="Major" value={form.major} visible={form.profileVisible} />
@@ -347,13 +426,29 @@ export default function ProfilePage() {
 
             <div className="form-field">
               <label className="form-label">Interests</label>
-              <input
-                className="form-input"
-                type="text"
-                value={form.interests}
-                onChange={e => handleChange('interests', e.target.value)}
-                placeholder="e.g. Mobile Development, AI/ML"
-                data-testid="profile-interests"
+              <TaxonomyChipPicker
+                values={form.interests || []}
+                onChange={(next) => handleChange('interests', next)}
+                search={searchTaxonomyHobbies}
+                placeholder="Search hobbies (Wikidata) or type your own"
+                disabled={saving}
+                dataTestId="profile-interests"
+              />
+            </div>
+
+            <div className="form-field">
+              <label className="form-label">Location</label>
+              <LocationPicker
+                city={form.city}
+                latitude={form.latitude}
+                longitude={form.longitude}
+                disabled={saving}
+                onChange={({ city, latitude, longitude }) => {
+                  // Picker hands back all three together so the pair-completeness
+                  // constraint always holds. Apply as a batch so we don't trip
+                  // any single-field validators in between.
+                  setForm(prev => ({ ...prev, city: city ?? '', latitude, longitude }))
+                }}
               />
             </div>
 
@@ -372,12 +467,15 @@ export default function ProfilePage() {
 
                 <div className="form-field">
                   <label className="form-label">Field</label>
-                  <input
-                    className="form-input"
-                    type="text"
-                    value={form.field}
-                    onChange={e => handleChange('field', e.target.value)}
-                    placeholder="e.g. Computer Science"
+                  <TaxonomyAutocomplete
+                    label={form.field}
+                    uri={form.fieldUri}
+                    onChange={({ label, uri }) => {
+                      setForm(prev => ({ ...prev, field: label, fieldUri: uri }))
+                    }}
+                    search={searchTaxonomyFields}
+                    placeholder="e.g. Computer Science (ISCED-F)"
+                    disabled={saving}
                   />
                 </div>
 
@@ -426,12 +524,12 @@ export default function ProfilePage() {
 
                 <div className="form-field">
                   <label className="form-label">Preferred Mentee Skills</label>
-                  <input
-                    className="form-input"
-                    type="text"
-                    value={form.preferredMenteeSkills}
-                    onChange={e => handleChange('preferredMenteeSkills', e.target.value)}
-                    placeholder="e.g. Java, Python"
+                  <TaxonomyChipPicker
+                    values={form.preferredMenteeSkills || []}
+                    onChange={(next) => handleChange('preferredMenteeSkills', next)}
+                    search={searchTaxonomySkills}
+                    placeholder="Search ESCO skills or type your own"
+                    disabled={saving}
                   />
                 </div>
 
@@ -445,6 +543,7 @@ export default function ProfilePage() {
                     value={form.maxMenteeCapacity}
                     onChange={e => handleChange('maxMenteeCapacity', e.target.value)}
                     placeholder="e.g. 3"
+                    data-testid="profile-max-mentee-capacity"
                   />
                   {errors.maxMenteeCapacity && (
                     <div style={{ color: 'var(--red-text)', fontSize: '13px', marginTop: '4px' }}>
@@ -488,35 +587,53 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="form-field">
-                  <label className="form-label">Skills</label>
+                  <label className="form-label">Affiliation</label>
                   <input
                     className="form-input"
                     type="text"
-                    value={form.skills}
-                    onChange={e => handleChange('skills', e.target.value)}
-                    placeholder="e.g. JavaScript, React, Python"
+                    value={form.affiliation}
+                    onChange={e => handleChange('affiliation', e.target.value)}
+                    placeholder="e.g. Boğaziçi University"
+                    maxLength={200}
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="form-label">Skills</label>
+                  <TaxonomyChipPicker
+                    values={form.skills || []}
+                    onChange={(next) => handleChange('skills', next)}
+                    search={searchTaxonomySkills}
+                    placeholder="Search ESCO skills or type your own"
+                    disabled={saving}
                   />
                 </div>
 
                 <div className="form-field">
                   <label className="form-label">Major</label>
-                  <input
-                    className="form-input"
-                    type="text"
-                    value={form.major}
-                    onChange={e => handleChange('major', e.target.value)}
-                    placeholder="e.g. Computer Engineering"
+                  <TaxonomyAutocomplete
+                    label={form.major}
+                    uri={form.majorUri}
+                    onChange={({ label, uri }) => {
+                      setForm(prev => ({ ...prev, major: label, majorUri: uri }))
+                    }}
+                    search={searchTaxonomyFields}
+                    placeholder="e.g. Computer Engineering (ISCED-F)"
+                    disabled={saving}
                   />
                 </div>
 
                 <div className="form-field">
                   <label className="form-label">Career Interest</label>
-                  <input
-                    className="form-input"
-                    type="text"
-                    value={form.careerInterest}
-                    onChange={e => handleChange('careerInterest', e.target.value)}
-                    placeholder="e.g. Data Science"
+                  <TaxonomyAutocomplete
+                    label={form.careerInterest}
+                    uri={form.careerInterestUri}
+                    onChange={({ label, uri }) => {
+                      setForm(prev => ({ ...prev, careerInterest: label, careerInterestUri: uri }))
+                    }}
+                    search={searchTaxonomySkills}
+                    placeholder="e.g. Data Science (ESCO)"
+                    disabled={saving}
                   />
                 </div>
 
@@ -534,25 +651,31 @@ export default function ProfilePage() {
                   </select>
                 </div>
 
-                <div className="divider" />
-
-                <div className="section-label">Privacy Settings</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0' }}>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 500 }}>Profile Visibility</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {form.profileVisible ? 'Your profile is visible to matched users' : 'Your profile is hidden'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={`toggle${form.profileVisible ? '' : ' off'}`}
-                    onClick={() => handleChange('profileVisible', !form.profileVisible)}
-                    aria-label="Toggle profile visibility"
-                  />
-                </div>
               </>
             )}
+
+            {/* #359 / backend #579: shared by both roles now. Private profiles
+                return 403 to non-owner non-admin viewers and the masking matrix
+                redacts mentee surname + photo when a mentor views them. */}
+            <div className="divider" />
+
+            <div className="section-label">Privacy Settings</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 500 }}>Profile Visibility</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {form.profileVisible
+                    ? 'Public — other authenticated users can see your profile.'
+                    : 'Private — your profile is hidden from non-admin viewers.'}
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`toggle${form.profileVisible ? '' : ' off'}`}
+                onClick={() => handleChange('profileVisible', !form.profileVisible)}
+                aria-label="Toggle profile visibility"
+              />
+            </div>
 
             {saveSuccess && (
               <div data-testid="profile-save-success" style={{ color: 'var(--green-dark)', fontSize: '13px', marginBottom: '8px' }}>
@@ -569,6 +692,10 @@ export default function ProfilePage() {
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </form>
+
+          <NotificationPreferences />
+
+          <MutedKeywords />
         </div>
 
       </div>

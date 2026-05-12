@@ -41,6 +41,12 @@ public record FeedCommentResponse(
         boolean isAuthor,
 
         @Schema(description = "True if the comment was soft-deleted")
-        boolean isDeleted
+        boolean isDeleted,
+
+        @Schema(description = "Total likes on this comment", example = "12")
+        long likeCount,
+
+        @Schema(description = "True if the viewer has liked this comment")
+        boolean viewerHasLiked
 ) {
 }

@@ -1,11 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { resetDb, seedMentor, seedMentee } from '../fixtures/apiClient.js';
 import {
-  resetDb,
-  seedMentor,
-  seedMentee,
-  login,
-} from '../fixtures/apiClient.js';
-import {
+  resetRateLimits,
   createMeeting,
   confirmMeeting,
   createTask,
@@ -16,9 +12,8 @@ import {
   listIncomingRequests,
   listActiveMentorships,
   setSharedGoal,
-  resetRateLimits,
 } from '../fixtures/mentorshipApi.js';
-import { LoginPage } from '../pages/LoginPage.js';
+import { newAuthenticatedContext } from '../fixtures/session.js';
 import { ExplorePage } from '../pages/ExplorePage.js';
 import { RequestMentorshipModal } from '../pages/RequestMentorshipModal.js';
 import { MentorshipInbox } from '../pages/MentorshipInbox.js';
@@ -26,183 +21,194 @@ import { SchedulePage } from '../pages/SchedulePage.js';
 import { TasksPage } from '../pages/TasksPage.js';
 
 /**
- * AT-02: discover mentor → request → accept → schedule → meeting → task
- * assign / submit / feedback → blog publish.
+ * AT-02 — Mentor runs a complete mentorship lifecycle and publishes blog
+ * content. Per the wiki spec (Acceptance-Tests.md § AT-02), the prerequisite
+ * is "A verified mentor account ... The mentor is logged in" — login is
+ * NOT a test step. We therefore authenticate via the seed endpoint's
+ * pre-minted JWT and inject it into storage, which is the Playwright-
+ * recommended pattern for tests where login is a prerequisite, not the
+ * feature under test. See https://playwright.dev/docs/auth.
  *
- * Hybrid spec by necessity:
- *   - Discover / request / accept run through the real UI (the only legs that
- *     actually have interactive screens today).
- *   - Schedule, task assign/submit/feedback, and blog publish go through the
- *     backend HTTP API directly — the corresponding pages are either
- *     mock-driven (SchedulePage, TasksPage source data from
- *     `services/mentorshipMocks.js`) or unbuilt (no blog/feed publish UI).
- *     The backend endpoints exist and are exercised end-to-end; only the UI
- *     verb is missing.
- *
- * Two browser contexts are used so the mentor and mentee can be active
- * simultaneously without juggling logout/login on a single context. Each
- * spec resets the DB up front so the run is order-independent across the
- * three browser projects.
+ * Coverage map (wiki steps -> implementation):
+ *   1  availability       — backend has no availability-write API surfaced
+ *                           through the test seed yet; skipped with TODO
+ *   2  candidate review   — mentee opens /explore, mentor card visible
+ *   3  accept + duration  — UI (mentor inbox)
+ *   4  schedule recurring — API (no create UI on /schedule yet)
+ *   5  shared goal + ms.  — API (goal); milestone create UI not yet on the
+ *                           detail page in a stable form, so we set the
+ *                           shared goal which is the goal contract step
+ *   6  task + feedback    — API (assign / submit / review)
+ *   7  progress tracking  — smoke-render /tasks for mentee
+ *   8  end mentorship     — out-of-scope until termination UI lands
+ *   9  publish blog       — API (no blog-publish UI yet)
+ *   10 like + comment     — covered by feed engagement specs, not duplicated
+ *                           here; we assert the blog post is fetchable as the
+ *                           "visible to authenticated users" contract
  */
 
-async function loginViaUi(page, { email, password }) {
-  const loginPage = new LoginPage(page);
-  await loginPage.goto();
-  // Capture the /api/auth/login response opportunistically so a 401/429 on
-  // the backend gives us a useful diagnostic. We don't await this directly
-  // (webkit + framer-motion entrance animation can delay the request enough
-  // that a tight 10s wait fires before the POST goes out, even though the
-  // login itself succeeds shortly after); the swallow on the catch keeps
-  // the timeout from masking the real navigation outcome below.
-  // Budget tracks the navigation wait below: response-fallback must outlive
-  // the nav assertion so a slow webkit POST surfaces its real status code
-  // instead of degrading to a generic "stuck on /login" message.
-  const loginResponsePromise = page
-    .waitForResponse(
-      res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',
-      { timeout: 45_000 },
-    )
-    .catch(() => null);
-  await loginPage.signIn({ email, password });
-  // Successful login navigates to /home; on failure we stay on /login. Wait
-  // on the navigation as the source of truth — if it doesn't happen, fall
-  // back to the captured response (if any) for a useful error message.
-  // 40s here absorbs CI webkit slowness: AT-01 webkit takes ~10s for the
-  // same login navigation against ~4s on chromium, so the previous 20s
-  // budget left no headroom once first-paint slack and framer-motion
-  // entrance stacked up under load.
-  try {
-    await expect(page).toHaveURL(/\/home$/, { timeout: 40_000 });
-  } catch (navErr) {
-    const loginResponse = await loginResponsePromise;
-    if (loginResponse && !loginResponse.ok()) {
-      const body = await loginResponse.text().catch(() => '');
-      throw new Error(`UI login for ${email} returned ${loginResponse.status()}: ${body}`);
-    }
-    throw navErr;
-  }
-}
-
 test('AT-02 mentorship lifecycle + blog publish', async ({ browser, request }) => {
+  // ---------------------------------------------------------------------------
+  // Setup — API only. Each run starts from a clean DB so the order of
+  // browser projects (chromium / firefox / webkit) doesn't matter; the
+  // shared rate-limit bucket is scrubbed so AT-07's prior 11-login probe
+  // can't leak a 429 into our seed calls.
+  // ---------------------------------------------------------------------------
   await resetDb(request);
-  // The auth-login bucket is per-IP and shared with parallel workers (AT-07's
-  // 11-login probe in particular). Scrub before the UI login leg so a
-  // saturating concurrent test doesn't 429 our login mid-flight and leave the
-  // page stuck on /login waiting for a response that already came back as 429.
   await resetRateLimits(request);
 
   const mentor = await seedMentor(request);
   const mentee = await seedMentee(request);
 
-  // Two isolated browser contexts so both sides stay logged in concurrently.
-  const mentorCtx = await browser.newContext();
-  const menteeCtx = await browser.newContext();
+  const mentorCtx = await newAuthenticatedContext(browser, {
+    sessionToken: mentor.sessionToken,
+    role: mentor.role,
+    id: mentor.id,
+  });
+  const menteeCtx = await newAuthenticatedContext(browser, {
+    sessionToken: mentee.sessionToken,
+    role: mentee.role,
+    id: mentee.id,
+  });
   const mentorPage = await mentorCtx.newPage();
   const menteePage = await menteeCtx.newPage();
 
   try {
-    // 1. Mentee logs in via UI, opens /explore.
-    await loginViaUi(menteePage, mentee);
+    // -------------------------------------------------------------------------
+    // Step 2 — Mentee opens /explore and sees the mentor card.
+    // No /login round-trip: AuthContext reads the injected `auth_token` on
+    // mount and routes directly to the authenticated tree.
+    // -------------------------------------------------------------------------
     const explore = new ExplorePage(menteePage);
     await explore.goto();
+    await expect(explore.mentorCard(mentor.id)).toBeVisible();
 
-    // 2. Send mentorship request through the modal.
+    // -------------------------------------------------------------------------
+    // Step 3 (mentee half) — Mentee submits a mentorship request via UI.
+    // -------------------------------------------------------------------------
     await explore.openRequestForMentor(mentor.id);
     const modal = new RequestMentorshipModal(menteePage);
     await expect(modal.root()).toBeVisible();
     await modal.fillAndSubmit('Hi, I would love your guidance on backend systems.');
-    // Modal closes on success; the "Request Sent" label appears on the card.
-    await expect(menteePage.getByTestId(`explore-send-request-${mentor.id}`)).toContainText(/sent/i);
+    await expect(menteePage.getByTestId(`explore-send-request-${mentor.id}`))
+      .toContainText(/sent/i);
 
-    // 3. Mentor logs in via UI and accepts the pending request.
-    await loginViaUi(mentorPage, mentor);
+    // -------------------------------------------------------------------------
+    // Step 3 (mentor half) — Mentor accepts the pending request with 3 mo.
+    // The page-object's click sequence resolves as soon as the click events
+    // are dispatched; the backend PUT /api/mentorship-requests/{id}/accept
+    // it triggers is still in flight at that point. Without an explicit
+    // wait, the subsequent listActiveMentorships GETs can race the accept
+    // and observe pre-accept state, which surfaced as a deterministic
+    // `toHaveLength(1)` failure when the spec was rewritten to skip the
+    // slow UI-login leg that previously masked this race.
     const inbox = new MentorshipInbox(mentorPage);
     await inbox.goto();
-    await inbox.acceptFirstRequest({ months: 3 });
-
-    // After accept, the active mentorship exists. Pull tokens for direct API work.
-    const mentorAuth = await login(request, mentor.email, mentor.password);
-    const menteeAuth = await login(request, mentee.email, mentee.password);
-
-    // Sanity: both sides see the new ACTIVE mentorship.
-    const [mentorMentorships, menteeMentorships] = await Promise.all([
-      listActiveMentorships(request, mentorAuth.sessionToken),
-      listActiveMentorships(request, menteeAuth.sessionToken),
+    const [acceptResponse] = await Promise.all([
+      mentorPage.waitForResponse(
+        (res) =>
+          /\/api\/mentorship-requests\/\d+\/accept$/.test(res.url())
+          && res.request().method() === 'PUT',
+        { timeout: 15_000 },
+      ),
+      inbox.acceptFirstRequest({ months: 3 }),
     ]);
-    expect(mentorMentorships.length).toBe(1);
-    expect(menteeMentorships.length).toBe(1);
+    if (!acceptResponse.ok()) {
+      const body = await acceptResponse.text().catch(() => '');
+      throw new Error(`accept returned ${acceptResponse.status()}: ${body}`);
+    }
+
+    // Both sides should see the new ACTIVE mentorship; pull through API so
+    // we can drive the remaining backend-only legs.
+    const [mentorMentorships, menteeMentorships] = await Promise.all([
+      listActiveMentorships(request, mentor.sessionToken),
+      listActiveMentorships(request, mentee.sessionToken),
+    ]);
+    expect(mentorMentorships).toHaveLength(1);
+    expect(menteeMentorships).toHaveLength(1);
     const mentorshipId = mentorMentorships[0].id;
     expect(menteeMentorships[0].id).toBe(mentorshipId);
 
-    // (Side check: there are no longer any incoming pending requests for the mentor.)
-    const remainingRequests = await listIncomingRequests(request, mentorAuth.sessionToken);
-    expect(remainingRequests.filter(r => r.status === 'PENDING')).toHaveLength(0);
+    // Confirm the inbox no longer shows the pending request.
+    const remaining = await listIncomingRequests(request, mentor.sessionToken);
+    expect(remaining.filter((r) => r.status === 'PENDING')).toHaveLength(0);
 
-    // Shared goal is the precondition for any meeting / task / milestone write
-    // since #335 added the gate; set it as the mentor before scheduling.
+    // -------------------------------------------------------------------------
+    // Step 5 — Shared goal precondition. The #335 goal gate refuses meeting /
+    // task / milestone creation until the mentorship has a non-blank goal.
+    // -------------------------------------------------------------------------
     await setSharedGoal(
       request,
-      mentorAuth.sessionToken,
+      mentor.sessionToken,
       mentorshipId,
       'Build a portfolio project together end-to-end',
     );
 
-    // 4. Mentor schedules a meeting (API leg — no create UI on /schedule yet).
+    // -------------------------------------------------------------------------
+    // Step 4 — Schedule a meeting (API; create UI is not yet wired).
+    // -------------------------------------------------------------------------
     const inOneWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const meeting = await createMeeting(request, mentorAuth.sessionToken, mentorshipId, {
+    const meeting = await createMeeting(request, mentor.sessionToken, mentorshipId, {
       title: 'Kickoff: project goals',
       date: inOneWeek,
       durationMin: 45,
     });
     expect(meeting.id).toBeDefined();
 
-    // 5. Mentee confirms the meeting.
-    const confirmed = await confirmMeeting(request, menteeAuth.sessionToken, meeting.id);
+    const confirmed = await confirmMeeting(request, mentee.sessionToken, meeting.id);
     expect(confirmed.status).toBe('CONFIRMED');
 
-    // /schedule is mock-driven today, so we only smoke-check it renders for the
-    // mentee. Once the page is wired to /api/mentorships/{id}/meetings, the
-    // assertion below should be promoted to `meetingCard(meeting.id).toBeVisible()`.
+    // Smoke-render /schedule on the mentee side. Promote to a hard
+    // visibility assertion once the page consumes /api/mentorships/{id}/meetings.
     const schedulePage = new SchedulePage(menteePage);
     await schedulePage.goto();
     await expect(menteePage.locator('h1, .page-title').first()).toBeVisible();
 
-    // 6. Mentor assigns a task; mentee submits; mentor reviews.
-    const task = await createTask(request, mentorAuth.sessionToken, mentorshipId, {
+    // -------------------------------------------------------------------------
+    // Step 6 — Task assign / submit / review (API).
+    // -------------------------------------------------------------------------
+    const task = await createTask(request, mentor.sessionToken, mentorshipId, {
       title: 'Read the architecture doc',
       description: 'Skim the high-level overview and note three questions.',
       dueDate: inOneWeek,
     });
     expect(task.status).toBe('PENDING');
 
-    const submitted = await submitTask(request, menteeAuth.sessionToken, task.id, {
+    const submitted = await submitTask(request, mentee.sessionToken, task.id, {
       submissionText: 'Done. Three questions noted in the comment thread.',
     });
     expect(submitted.status).toBe('SUBMITTED');
 
-    const reviewed = await reviewTask(request, mentorAuth.sessionToken, task.id, {
+    const reviewed = await reviewTask(request, mentor.sessionToken, task.id, {
       status: 'COMPLETED',
       feedback: 'Solid questions, well-framed. Marking complete.',
     });
     expect(reviewed.status).toBe('COMPLETED');
 
-    // /tasks is also mock-driven; smoke-render only for now. Same upgrade
-    // path as /schedule once the page consumes the real backend.
+    // Step 7 — Smoke-render /tasks for the mentee.
     const tasksPage = new TasksPage(menteePage);
     await tasksPage.goto();
     await expect(menteePage.locator('h1, .page-title').first()).toBeVisible();
 
-    // 7. Mentor publishes a blog post (POST /api/feed/posts is the closest
-    // surface to "blog publish" today; there's no dedicated blog UI yet).
-    const post = await publishBlogPost(request, mentorAuth.sessionToken, {
+    // -------------------------------------------------------------------------
+    // Step 9 — Publish blog content (API; closest surface is feed-post create).
+    // -------------------------------------------------------------------------
+    const post = await publishBlogPost(request, mentor.sessionToken, {
       body: 'Reflections from a kickoff session — first mentee onboarded today.',
       hashtags: ['mentorship', 'reflection'],
     });
     expect(post.id).toBeDefined();
 
-    const fetched = await getBlogPost(request, mentorAuth.sessionToken, post.id);
+    const fetched = await getBlogPost(request, mentor.sessionToken, post.id);
     expect(fetched.body).toContain('Reflections from a kickoff session');
     expect(fetched.hashtags).toEqual(expect.arrayContaining(['mentorship', 'reflection']));
+
+    // Step 10 (light) — the mentee (a different authenticated user) can also
+    // fetch the post, satisfying the "visible to authenticated users" half of
+    // wiki step 10. Like/comment/profile-listing UI verification is owned by
+    // the feed engagement specs, not duplicated here.
+    const visibleToMentee = await getBlogPost(request, mentee.sessionToken, post.id);
+    expect(visibleToMentee.id).toBe(post.id);
   } finally {
     await mentorCtx.close();
     await menteeCtx.close();

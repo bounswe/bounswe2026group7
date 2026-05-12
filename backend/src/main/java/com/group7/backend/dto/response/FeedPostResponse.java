@@ -49,6 +49,28 @@ public record FeedPostResponse(
         boolean isEdited,
 
         @Schema(description = "True if the viewer is the post author")
-        boolean isAuthor
+        boolean isAuthor,
+
+        @Schema(description = "Image attachments on the post, in author-specified order. Empty when "
+                + "the post has no media. Each downloadUrl resolves to the feed-scoped "
+                + "/api/uploads/feed-media/{id} endpoint, which requires authentication but no "
+                + "per-user ACL.")
+        List<AttachmentSummary> attachments,
+
+        @Schema(description = "True if the authenticated viewer has liked this post. Always "
+                + "false for anonymous reads. Lets the UI render the heart-icon toggle state "
+                + "without a follow-up GET /interactions call per item.")
+        boolean viewerHasLiked,
+
+        @Schema(description = "True if the authenticated viewer has bookmarked this post. "
+                + "Always false for anonymous reads. Lets the UI render the bookmark-icon "
+                + "toggle state without a follow-up GET /interactions call per item.")
+        boolean viewerHasBookmarked,
+
+        @Schema(description = "Optional BCP-47 language tag for the body (e.g. \"en\", \"tr-TR\"). "
+                + "Null for legacy posts that predate the lang column. Drives the AS 2.0 "
+                + "contentMap / inLanguage fields in the JSON-LD representation of this post.",
+                example = "en", nullable = true)
+        String lang
 ) {
 }

@@ -20,9 +20,9 @@ import java.util.Objects;
 
 /**
  * Auto-terminates ACTIVE mentorships whose {@code endDate} has passed
- * (#237). Each row goes through the same cleanup + audit + notification
- * machinery as a mentor /end, but with {@code terminatedByUserId = null}
- * to denote a system-initiated transition.
+ * (#237). Each row records the same status/audit/notification transition as
+ * a mentor /end, but with {@code terminatedByUserId = null} to denote a
+ * system-initiated transition.
  *
  * <p>Invoked by {@link com.group7.backend.scheduler.MentorshipAutoCompletionScheduler}
  * (and directly from tests). Each row is processed in its own
@@ -36,20 +36,17 @@ public class MentorshipAutoCompletionService {
 
     private final MentorshipRepository mentorshipRepository;
     private final MentorshipAuditLogRepository mentorshipAuditLogRepository;
-    private final MentorshipCleanupService mentorshipCleanupService;
     private final NotificationEventPublisher notificationEventPublisher;
     private final Clock clock;
     private final TransactionTemplate perRowTx;
 
     public MentorshipAutoCompletionService(MentorshipRepository mentorshipRepository,
                                            MentorshipAuditLogRepository mentorshipAuditLogRepository,
-                                           MentorshipCleanupService mentorshipCleanupService,
                                            NotificationEventPublisher notificationEventPublisher,
                                            Clock clock,
                                            PlatformTransactionManager transactionManager) {
         this.mentorshipRepository = mentorshipRepository;
         this.mentorshipAuditLogRepository = mentorshipAuditLogRepository;
-        this.mentorshipCleanupService = mentorshipCleanupService;
         this.notificationEventPublisher = notificationEventPublisher;
         this.clock = clock;
         // Per-row REQUIRES_NEW transaction. Keeps the sweep resilient — one
@@ -115,7 +112,6 @@ public class MentorshipAutoCompletionService {
             mentor.setCurrentMenteeCount(mentor.getCurrentMenteeCount() - 1);
         }
 
-        mentorshipCleanupService.cleanupChildren(mentorshipId);
         mentorshipRepository.save(mentorship);
 
         mentorshipAuditLogRepository.save(MentorshipAuditLog.of(
