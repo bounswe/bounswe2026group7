@@ -3218,6 +3218,150 @@
 .md-primary-btn { background: var(--green-dark); }
 .md-primary-btn:hover:not(:disabled) { background: var(--green-mid); }
 
+/* Calendar weekly grid (#123). */
+.cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cal-nav-btn {
+  height: 34px;
+  min-width: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.cal-nav-btn:hover { border-color: var(--green-mid); background: var(--green-pale); }
+.cal-nav-today { padding: 0 14px; }
+.cal-week-label {
+  margin-left: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.cal-grid {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.cal-grid-header {
+  display: grid;
+  grid-template-columns: 64px repeat(7, 1fr);
+  border-bottom: 1px solid var(--border);
+  background: #fafaf9;
+}
+.cal-grid-corner { background: transparent; }
+.cal-day-header {
+  padding: 10px 8px;
+  text-align: center;
+  border-left: 1px solid var(--border);
+}
+.cal-day-header--today {
+  background: var(--green-pale);
+}
+.cal-day-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cal-day-date {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.cal-grid-body {
+  display: grid;
+  grid-template-columns: 64px repeat(7, 1fr);
+}
+.cal-hours-col {
+  border-right: 1px solid var(--border);
+}
+.cal-hour-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 6px;
+  text-align: right;
+  border-bottom: 1px solid #f0efed;
+}
+.cal-day-col {
+  position: relative;
+  border-left: 1px solid var(--border);
+}
+.cal-day-col--today { background: rgba(180, 215, 188, 0.08); }
+.cal-hour-cell {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #f0efed;
+  cursor: pointer;
+  padding: 0;
+}
+.cal-hour-cell:hover { background: rgba(180, 215, 188, 0.18); }
+
+.cal-availability-band {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  background: rgba(93, 141, 102, 0.12);
+  border-left: 3px solid var(--green-mid);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.cal-meeting {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  border-radius: 6px;
+  border: none;
+  text-align: left;
+  padding: 4px 6px;
+  cursor: pointer;
+  overflow: hidden;
+  font-family: 'DM Sans', sans-serif;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 1;
+}
+.cal-meeting--confirmed { background: var(--green-dark, #2e7d4f); }
+.cal-meeting--pending   { background: #d97706; }
+.cal-meeting--past      { background: #6b7280; }
+.cal-meeting--other     { background: #4b5563; }
+.cal-meeting:hover { filter: brightness(0.92); }
+.cal-meeting-title {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.cal-meeting-meta {
+  font-size: 11px;
+  opacity: 0.92;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
 /* Mentor rating modal + post-end prompt (#278). */
 .md-rating-card {
   margin: 12px 0;

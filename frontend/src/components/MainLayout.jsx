@@ -20,6 +20,7 @@ const NAV_TABS = [
   { label: 'Messages', path: '/messages' },
   { label: 'Tasks', path: '/tasks' },
   { label: 'Schedule', path: '/schedule' },
+  { label: 'Calendar', path: '/calendar' },
   { label: 'Availability', path: '/availability' },
   { label: 'Profile', path: '/profile' },
 ]
@@ -31,6 +32,7 @@ const SIDEBAR_LINKS = [
   { label: 'Messages', path: '/messages', icon: MessageCircle },
   { label: 'My Tasks', path: '/tasks', icon: CheckSquare },
   { label: 'Schedule', path: '/schedule', icon: CalendarDays },
+  { label: 'Calendar', path: '/calendar', icon: CalendarDays },
   { label: 'Availability', path: '/availability', icon: Clock },
   { label: 'Profile', path: '/profile', icon: User },
 ]
