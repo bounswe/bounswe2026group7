@@ -79,6 +79,12 @@ services:
       # off until the impression-tracking follow-up PR lands.
       FEED_ADVANCED_RANKER: ${FEED_ADVANCED_RANKER:-false}
       FEED_BANDIT_ENABLED: ${FEED_BANDIT_ENABLED:-false}
+      # Follow-graph Neo4j mirror (#437). When true, FollowGraphSyncListener
+      # writes every follow/unfollow into Neo4j after the SQL commit so the
+      # Personalized PageRank ranker has data to walk. The neo4j service in
+      # this compose file is required when this is true; .env.example
+      # defaults this to true so a fresh-clone seed populates Neo4j.
+      FOLLOW_GRAPH_SYNC_ENABLED: ${FOLLOW_GRAPH_SYNC_ENABLED:-false}
       # E2E / Playwright fixtures rely on /api/test/* seed-and-reset
       # endpoints and on the spam-bot defences being off so registrations
       # don't need a real form-token round-trip. Default off in production;

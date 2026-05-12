@@ -93,9 +93,16 @@ The script is idempotent (re-runnable on an existing database) and creates:
 - **~137 personas** — 50 hand-curated named personas (including six explicitly cross-domain ones in Music Production, Sports Performance, Public Speaking, and Management) plus ~80 bulk-generated personas across tech, design, finance, research, and career-coaching tracks, plus the admin fixture. All seeded accounts share the password `Seed1234!`. Emails follow the pattern `<slugified-first>.<slugified-last>.<id>@seed.test` (e.g. `Dr. Ahmet Bulut` with persona id `2` becomes `dr.ahmet.bulut.2@seed.test`).
 - **Mentorship edges** — accepted requests for the showcase mentee Elif Yilmaz (id=1) with both an *active* mentor (Dr. Ahmet Bulut, id=2) and a gracefully *completed* past mentor (Fikret Ersoy, id=19) so the mentee dashboard renders both current and historical mentorships. Plus eight more accepted mentorships across the rest of the persona pool.
 - **Engagement graph around Elif** — Elif follows her active + past mentors, additional Data Science mentors, peers in her own field, and the new Music / Sports / Public Speaking / Management mentors and peers. Several personas follow her back. She likes and comments on cross-domain feed posts; other personas like and comment on hers. The Following feed, For-You feed, post-detail comment threads, and inbox surfaces are all populated for her account.
+- **Conversation history** — a 4-message thread in Elif's *active* mentorship with Dr. Ahmet, a 5-message thread in Elif's *past* mentorship with Fikret (so the closed mentorship's chat history is browseable), three admin DMs (admin → Elif, admin → the banned-fixture mentee, admin → another mentee), and two admin-broadcast messages so every admin's broadcast inbox is non-empty on first log-in.
 - **Demo ecosystem** — mentorship messages, tasks with due dates, meetings (including a pending reschedule request), and feed posts with hashtags across Data Science, Music, Sports, Public Speaking, Management, and the existing tech/career tracks.
 
-On startup the script also verifies that the bootstrapped admin can log in and prints a clear warning if not.
+On startup the script also verifies that the bootstrapped admin can log in and prints a clear warning if not. The admin session token is then used to seed the admin DMs and broadcast messages above.
+
+### Neo4j follow-graph mirror
+
+The follow-graph mirror is wired by default. `FOLLOW_GRAPH_SYNC_ENABLED=true` in `.env.example` flips on `FollowGraphSyncListener`, which writes every Postgres follow/unfollow into the `neo4j` service after the SQL commit so the Personalized PageRank ranker has data to walk. The `neo4j` service is part of `docker-compose.yml` and the backend `depends_on` it, so the default `docker compose up` flow brings Neo4j up before the backend starts — the seeded follow edges propagate automatically.
+
+If `FOLLOW_GRAPH_SYNC_ENABLED=false` (or Neo4j is unreachable), the legacy follow ranker continues to work; failed sync events are queued and replayed by the nightly `FollowGraphResyncJob`.
 
 The seeder also writes `scripts/personas.json` — a flat fixture used by the mobile/web QA acceptance flows.
 

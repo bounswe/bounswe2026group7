@@ -1338,6 +1338,22 @@ def login_admin(email: str, password: str):
     return http_post(f"{BASE}/auth/login", {"email": email, "password": password})
 
 
+def send_admin_dm(target_user_id: int, token: str, content: str):
+    return http_post(
+        f"{BASE}/admin/messages/direct/{target_user_id}",
+        {"content": content},
+        token,
+    )
+
+
+def send_admin_broadcast(token: str, content: str):
+    return http_post(
+        f"{BASE}/admin/messages/broadcast",
+        {"content": content},
+        token,
+    )
+
+
 def process_persona(persona: dict, index: int) -> Optional[dict]:
     email = build_email(persona)
     print(f"[{index + 1:2}/{len(PERSONAS)}] {persona['first_name']} {persona['last_name']} ({email})", end=" ... ", flush=True)
@@ -1422,7 +1438,7 @@ def seed_mentorship_edges(persona_tokens: dict):
     return created_mentorships
 
 
-def seed_demo_ecosystem(persona_tokens: dict, mentorships: dict):
+def seed_demo_ecosystem(persona_tokens: dict, mentorships: dict, admin_token: Optional[str] = None):
     elif_ahmet = mentorships.get((1, 2))
     mert_ahmet = mentorships.get((7, 2))
 
@@ -1501,11 +1517,29 @@ def seed_demo_ecosystem(persona_tokens: dict, mentorships: dict):
     else:
         print("[DEMO][meeting] skipped because no Dr. Ahmet mentorship exists for another mentee")
 
-    # ── Past mentor for Elif: end the (1, 19) Fikret mentorship gracefully ──
-    # so the mentee dashboard surfaces a "previous mentorships" timeline with
-    # a real COMPLETED row, not just the active Ahmet one.
+    # ── Past mentor for Elif: seed a short chat history with Fikret, then
+    # end the (1, 19) mentorship gracefully so the mentee dashboard surfaces
+    # a "previous mentorships" timeline with both messages and a COMPLETED
+    # status row, not just the active Ahmet one.
     elif_fikret = mentorships.get((1, 19))
     if elif_fikret:
+        past_thread = [
+            (1, "Thanks for taking me on. I want to apply for graduate study within 2 years and would love a realistic roadmap."),
+            (19, "Good. Let's narrow your research interest first — pick one paper this week and write a 1-page summary, including the dataset and the limitation you spot."),
+            (1, "Sent the summary draft. The limitation I keep coming back to is the lack of held-out evaluation."),
+            (19, "Solid catch. That's the kind of observation reviewers reward. Next: read the paper that cites this one most often and compare assumptions."),
+            (1, "Wrapping up the comparison this weekend; my next step is the technical depth side with Dr. Ahmet. Thanks for the early planning push."),
+        ]
+        for sender_id, content in past_thread:
+            sender = persona_tokens.get(sender_id)
+            if not sender:
+                continue
+            status, resp = send_mentorship_message(elif_fikret["mentorship_id"], sender["token"], content)
+            if status not in (200, 201):
+                print(f"[DEMO][messages] past-mentor message failed ({status}): {resp}")
+            else:
+                print(f"[DEMO][messages] seeded past-mentor message {resp.get('id')}")
+
         end_status, end_resp = end_mentorship_gracefully(
             elif_fikret["mentorship_id"],
             persona_tokens[19]["token"],
@@ -1691,26 +1725,63 @@ def seed_demo_ecosystem(persona_tokens: dict, mentorships: dict):
             if comment_body:
                 comment_on_post(post_id, elif_token["token"], comment_body)
 
+    # ── Admin messaging surfaces (#280, #410, #561). One DM to the showcase
+    # mentee Elif, one DM to the banned-fixture mentee Eren (so the
+    # admin → user DM-after-ban surface has real content), and one broadcast
+    # so every admin's broadcast inbox isn't empty on first log-in.
+    if admin_token:
+        admin_messages = [
+            (1,  "Welcome to the platform — let us know via the report flow if anything looks off in your mentor matches."),
+            (5,  "Your account is currently restricted following a community-guidelines review. Reach out here with any questions."),
+            (7,  "Quick check: please confirm your portfolio review link in your profile is still the latest. Thanks!"),
+        ]
+        for target_persona_id, content in admin_messages:
+            target = persona_tokens.get(target_persona_id)
+            if not target:
+                continue
+            status, resp = send_admin_dm(target["user_id"], admin_token, content)
+            if status in (200, 201):
+                print(f"[DEMO][admin-dm] admin → persona {target_persona_id} (msg {resp.get('id')})")
+            else:
+                print(f"[DEMO][admin-dm] admin → persona {target_persona_id} failed ({status}): {resp}")
 
-def verify_admin_exists() -> None:
-    """Verify the AdminBootstrapper created the default admin. If the
-    expected credentials don't log in, print a clear warning with remediation
-    instructions but don't abort — the rest of the seed can still run."""
+        admin_broadcasts = [
+            "Reminder: this week's moderation queue closes at EOD Friday. Please review pending reports before then.",
+            "Heads-up: the new admin-direct read endpoints are live — recipients can now see and reply to your DMs through the standard inbox.",
+        ]
+        for content in admin_broadcasts:
+            status, resp = send_admin_broadcast(admin_token, content)
+            if status in (200, 201):
+                print(f"[DEMO][admin-broadcast] seeded broadcast msg {resp.get('id')}")
+            else:
+                print(f"[DEMO][admin-broadcast] failed ({status}): {resp}")
+    else:
+        print("[DEMO][admin-dm] skipped — no admin token (verify .env.example admin bootstrap)")
+
+
+def verify_admin_exists() -> Optional[str]:
+    """Verify the AdminBootstrapper created the default admin and return a
+    session token for it. If the expected credentials don't log in, print a
+    clear warning with remediation instructions and return None — the rest
+    of the seed can still run, only admin-specific surfaces (DMs, broadcast)
+    are skipped."""
     status, resp = login_admin("admin@group7.com", "Admin1234!")
     if status == 200 and "sessionToken" in resp:
         print("[ADMIN] verified: admin@group7.com is logged-in-able")
-    else:
-        print(f"[ADMIN][WARN] could not log in as admin@group7.com (status={status}). "
-              "Confirm the backend started with APP_ADMIN_BOOTSTRAP_ENABLED=true "
-              "and a matching APP_ADMIN_BOOTSTRAP_PASSWORD (see .env.example). The "
-              "rest of the seed will continue; persona accounts are unaffected.")
+        return resp["sessionToken"]
+    print(f"[ADMIN][WARN] could not log in as admin@group7.com (status={status}). "
+          "Confirm the backend started with APP_ADMIN_BOOTSTRAP_ENABLED=true "
+          "and a matching APP_ADMIN_BOOTSTRAP_PASSWORD (see .env.example). The "
+          "rest of the seed will continue; persona accounts are unaffected; "
+          "admin DMs and the broadcast thread will not be seeded.")
+    return None
 
 
 def main() -> None:
     export_personas()
     print(f"Exported {len(PERSONAS)} personas to {OUTPUT_PATH}")
 
-    verify_admin_exists()
+    admin_token = verify_admin_exists()
 
     persona_tokens = {}
     for index, persona in enumerate(PERSONAS):
@@ -1721,7 +1792,7 @@ def main() -> None:
         persona_tokens[persona["id"]] = auth
 
     mentorships = seed_mentorship_edges(persona_tokens)
-    seed_demo_ecosystem(persona_tokens, mentorships or {})
+    seed_demo_ecosystem(persona_tokens, mentorships or {}, admin_token=admin_token)
 
 
 if __name__ == "__main__":
