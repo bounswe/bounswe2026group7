@@ -260,6 +260,57 @@ public class ConversationService {
     }
 
     /**
+     * Read-only lookup of an existing {@link ConversationKind#ADMIN_DIRECT}
+     * row for the given pair, or empty if none exists. Used by the read
+     * endpoints that must NOT auto-create a conversation on first access —
+     * a recipient opening their inbox should not synthesise a thread.
+     *
+     * @param userIdA one side of the pair (order does not matter; this method
+     *                normalises to {@code min/max})
+     * @param userIdB the other side
+     */
+    public Optional<Conversation> findAdminDirectByPair(Long userIdA, Long userIdB) {
+        if (userIdA == null || userIdB == null || Objects.equals(userIdA, userIdB)) {
+            return Optional.empty();
+        }
+        long lower = Math.min(userIdA, userIdB);
+        long higher = Math.max(userIdA, userIdB);
+        return conversationRepository
+                .findByPairAIdAndPairBIdAndKind(lower, higher, ConversationKind.ADMIN_DIRECT);
+    }
+
+    /**
+     * Read-side resolution of the singleton {@link ConversationKind#ADMIN_BROADCAST}
+     * conversation. Returns {@code Optional.empty()} when no broadcast has ever
+     * been sent — so a fresh-install GET doesn't synthesise a stub row.
+     *
+     * <p>When the singleton exists, runs a targeted "ensure caller is a
+     * participant" check: a single {@code existsByConversationIdAndUserId}
+     * probe, followed by the full participant resync only when the calling
+     * user is missing from the participant list. That keeps the common
+     * already-a-participant GET path at one extra query instead of N (one per
+     * admin), while still adding a newly promoted admin on their first read so
+     * they see the full backlog rather than a 403.
+     *
+     * <p>Callers should be the broadcast read endpoints — the write path
+     * continues to call {@link #findOrCreateAdminBroadcast} which both creates
+     * the singleton on first send and unconditionally resyncs.
+     */
+    public Optional<Conversation> findAdminBroadcastForReader(Long callerId) {
+        Optional<Conversation> existing = conversationRepository.findFirstByKind(
+                ConversationKind.ADMIN_BROADCAST);
+        if (existing.isEmpty() || callerId == null) {
+            return existing;
+        }
+        Conversation broadcast = existing.get();
+        if (!participantRepository.existsByConversationIdAndUserId(
+                broadcast.getId(), callerId)) {
+            syncAdminBroadcastParticipants(broadcast);
+        }
+        return existing;
+    }
+
+    /**
      * Returns the singleton {@link ConversationKind#ADMIN_BROADCAST}
      * conversation, creating it on first call and re-syncing its participant
      * list to include every current admin. Re-syncing on each access is what

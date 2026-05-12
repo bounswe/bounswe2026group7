@@ -11,11 +11,15 @@ import {
   createFeedPost,
   updateFeedPost,
   deleteFeedPost,
+  restoreFeedPost,
   getFollowRecommendations,
   followUser,
   getTrendingHashtags,
+  markFeedRead,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { showUndoToast } from '../utils/toast'
+import useFeedSubscription from '../hooks/useFeedSubscription'
 import '../styles/main.css'
 
 const TABS = [
@@ -72,8 +76,21 @@ export default function FeedPage() {
   // data. Hidden during active search to avoid double-filtering the view.
   const [trending, setTrending] = useState([])
 
+  // Live-feed buffer (#356). When the STOMP push arrives while the user is
+  // scrolled away from the top or on a different tab, we surface a "X new
+  // posts" pill instead of yanking the list. Clicking the pill reloads.
+  // We keep just the count, not the slim payloads, since the reload path
+  // fetches the canonical full FeedPostListItem from the REST endpoint.
+  const [newPostsCount, setNewPostsCount] = useState(0)
+
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag? } or null
+  const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag?, since?, until?, lang? } or null
+  // #543: advanced filters. Open state is a toggle; values persist across
+  // searches so users don't lose a date range when they refine the keyword.
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filterSince, setFilterSince] = useState('')
+  const [filterUntil, setFilterUntil] = useState('')
+  const [filterLang, setFilterLang] = useState('')
 
   // Minimal compose — full UI lands in #353
   const [composeOpen, setComposeOpen] = useState(false)
@@ -113,6 +130,35 @@ export default function FeedPage() {
   }, [tab, activeSearch])
 
   useEffect(() => { reload() }, [reload])
+
+  // #356: subscribe to /topic/feed.{userId} so a new post from someone the
+  // user follows surfaces a "X new posts" pill without a refresh. The pill
+  // only fires on the For-You / Following tabs without an active search —
+  // a hashtag-search view shouldn't pretend a new post arrived for it.
+  useFeedSubscription(userId, {
+    onPost: () => {
+      if (activeSearch || loading) return
+      setNewPostsCount(c => c + 1)
+    },
+    onShare: () => {
+      if (activeSearch || loading) return
+      setNewPostsCount(c => c + 1)
+    },
+  })
+
+  // #356: mark the feed read whenever the page loads with results. Cheap on
+  // backend (single UPDATE) and idempotent, so re-firing on tab change is
+  // harmless. Triggers only when posts > 0 — empty feed has nothing to read.
+  useEffect(() => {
+    if (loading || activeSearch || posts.length === 0) return
+    markFeedRead().catch(() => { /* swallow — best-effort */ })
+  }, [loading, activeSearch, posts.length])
+
+  function handleClickNewPosts() {
+    setNewPostsCount(0)
+    reload()
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -155,20 +201,35 @@ export default function FeedPage() {
   function handleSearchSubmit(e) {
     e.preventDefault()
     const trimmed = searchQuery.trim()
-    if (!trimmed) {
+    // Date inputs are LocalDate (YYYY-MM-DD). Backend wants ISO-8601 datetime.
+    // since = start of day inclusive, until = start of next day exclusive
+    // (matches backend's half-open semantics).
+    const sinceIso = filterSince ? new Date(`${filterSince}T00:00:00Z`).toISOString() : undefined
+    const untilIso = filterUntil ? (() => {
+      const d = new Date(`${filterUntil}T00:00:00Z`)
+      d.setUTCDate(d.getUTCDate() + 1)
+      return d.toISOString()
+    })() : undefined
+    const lang = filterLang || undefined
+
+    const hasKeyword = trimmed.length > 0
+    const hasHashtag = hasKeyword && /^#?\w+$/.test(trimmed) && trimmed.startsWith('#')
+    const hasAnyFilter = hasKeyword || sinceIso || untilIso || lang
+    if (!hasAnyFilter) {
       setActiveSearch(null)
       return
     }
-    // Treat any leading "#word" as a hashtag query
-    if (/^#?\w+$/.test(trimmed) && trimmed.startsWith('#')) {
-      setActiveSearch({ hashtag: trimmed.slice(1) })
-    } else {
-      setActiveSearch({ q: trimmed })
-    }
+    const next = { since: sinceIso, until: untilIso, lang }
+    if (hasHashtag) next.hashtag = trimmed.slice(1)
+    else if (hasKeyword) next.q = trimmed
+    setActiveSearch(next)
   }
 
   function clearSearch() {
     setSearchQuery('')
+    setFilterSince('')
+    setFilterUntil('')
+    setFilterLang('')
     setActiveSearch(null)
   }
 
@@ -236,13 +297,28 @@ export default function FeedPage() {
   }
 
   // ── Delete ────────────────────────────────────────────────────────────
+  // Backend soft-deletes posts (#487 / #544); restoring is possible within
+  // a 30-day window via POST /api/feed/posts/{id}/restore. The confirm copy
+  // reflects that, and a successful delete drops an undo toast that calls
+  // restoreFeedPost on click.
   async function handleDelete(post) {
     if (!post) return
-    const confirmed = window.confirm('Delete this post? This cannot be undone.')
+    const confirmed = window.confirm(
+      'Hide this post? You can restore it within 30 days from the toast below.'
+    )
     if (!confirmed) return
     try {
       await deleteFeedPost(post.id)
       setPosts(prev => prev.filter(p => p.id !== post.id))
+      showUndoToast('Post hidden.', async () => {
+        try {
+          const restored = await restoreFeedPost(post.id)
+          // Reinsert at the original index if we still have the list around.
+          setPosts(prev => [restored, ...prev])
+        } catch (err) {
+          window.alert(err?.message || 'Failed to restore post')
+        }
+      })
     } catch (err) {
       window.alert(err?.message || 'Failed to delete post')
     }
@@ -341,10 +417,74 @@ export default function FeedPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           <button type="submit" className="action-btn">Search</button>
+          <button
+            type="button"
+            className={`action-btn${filtersOpen || filterSince || filterUntil || filterLang ? ' action-btn--active' : ''}`}
+            onClick={() => setFiltersOpen(v => !v)}
+            aria-expanded={filtersOpen}
+            aria-controls="feed-filters-panel"
+          >
+            Filters{(filterSince || filterUntil || filterLang) ? ' •' : ''}
+          </button>
           {activeSearch && (
             <button type="button" className="action-btn" onClick={clearSearch}>Clear</button>
           )}
         </form>
+
+        {filtersOpen && (
+          <div id="feed-filters-panel" className="feed-filters">
+            <div className="feed-filter-field">
+              <label htmlFor="feed-filter-since">From</label>
+              <input
+                id="feed-filter-since"
+                type="date"
+                className="feed-filter-input"
+                value={filterSince}
+                max={filterUntil || undefined}
+                onChange={(e) => setFilterSince(e.target.value)}
+              />
+            </div>
+            <div className="feed-filter-field">
+              <label htmlFor="feed-filter-until">To</label>
+              <input
+                id="feed-filter-until"
+                type="date"
+                className="feed-filter-input"
+                value={filterUntil}
+                min={filterSince || undefined}
+                onChange={(e) => setFilterUntil(e.target.value)}
+              />
+            </div>
+            <div className="feed-filter-field">
+              <label htmlFor="feed-filter-lang">Language</label>
+              <select
+                id="feed-filter-lang"
+                className="feed-filter-input"
+                value={filterLang}
+                onChange={(e) => setFilterLang(e.target.value)}
+              >
+                <option value="">Any</option>
+                <option value="en">English</option>
+                <option value="tr">Türkçe</option>
+                <option value="de">Deutsch</option>
+                <option value="fr">Français</option>
+                <option value="es">Español</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => {
+                setFilterSince('')
+                setFilterUntil('')
+                setFilterLang('')
+              }}
+              disabled={!filterSince && !filterUntil && !filterLang}
+            >
+              Reset
+            </button>
+          </div>
+        )}
 
         {!activeSearch && trending.length > 0 && (
           <div className="feed-trending" aria-label="Trending hashtags">
@@ -369,6 +509,17 @@ export default function FeedPage() {
               ))}
             </div>
           </div>
+        )}
+
+        {newPostsCount > 0 && !loading && !activeSearch && (
+          <button
+            type="button"
+            className="feed-new-pill"
+            onClick={handleClickNewPosts}
+            aria-live="polite"
+          >
+            {newPostsCount} new post{newPostsCount === 1 ? '' : 's'} · click to refresh
+          </button>
         )}
 
         {loading ? (

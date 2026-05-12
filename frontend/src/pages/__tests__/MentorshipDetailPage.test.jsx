@@ -32,6 +32,10 @@ describe('MentorshipDetailPage - Shared Goal Feature', () => {
     // subsequent deriveNextUpcomingMeeting() resolve cleanly in tests that
     // don't care about meeting data.
     api.listMentorshipMeetings.mockResolvedValue([])
+    // #556: page hydrates an existing rating on mount. Reject with a 404-like
+    // error so it falls through to the "not rated yet" path without crashing
+    // on undefined.then().
+    api.getMentorshipRating.mockRejectedValue(Object.assign(new Error('not rated yet'), { status: 404 }))
   })
 
   const renderComponent = async (mentorshipData) => {

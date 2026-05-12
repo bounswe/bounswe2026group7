@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MoreHorizontal, Pencil, Trash2, Share2, Bookmark, Heart, MessageCircle } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, History, Share2, Repeat2, Bookmark, Heart, MessageCircle } from 'lucide-react'
 import Avatar from './Avatar'
 import FeedAttachmentGrid from './FeedAttachmentGrid'
+import EditHistoryModal from './EditHistoryModal'
+import RepostModal from './RepostModal'
 import { linkify } from '../utils/linkify'
 import {
   toggleBookmarkOnPost,
@@ -11,6 +13,8 @@ import {
   getPostInteractions,
   getPostComments,
   addCommentToPost,
+  toggleLikeOnComment,
+  repostPost,
 } from '../services/api'
 
 /**
@@ -55,6 +59,9 @@ export default function FeedPostCard({
 }) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [repostOpen, setRepostOpen] = useState(false)
+  const [repostBusy, setRepostBusy] = useState(false)
   const menuRef = useRef(null)
 
   // Local state mirrors viewer-relative interaction toggles + counts; backend
@@ -132,7 +139,7 @@ export default function FeedPostCard({
   if (!post) return null
 
   const initials = (post.authorFirstName?.[0] || '?').toUpperCase()
-  const showOverflow = isAuthor && (onEdit || onDelete)
+  const showOverflow = isAuthor && (onEdit || onDelete || post?.isEdited)
 
   function openDetail() {
     if (clickable) navigate(`/feed/${post.id}`)
@@ -240,6 +247,67 @@ export default function FeedPostCard({
     }
   }
 
+  async function handleCommentLike(commentId) {
+    // Optimistic update
+    const prevComments = [...comments]
+    const commentIndex = comments.findIndex(c => c.id === commentId)
+    if (commentIndex === -1) return
+
+    const target = comments[commentIndex]
+    const prevLiked = Boolean(target.viewerHasLiked)
+    const prevCount = target.likeCount || 0
+
+    const nextLiked = !prevLiked
+    const nextCount = prevLiked ? Math.max(0, prevCount - 1) : prevCount + 1
+
+    const updatedComments = [...comments]
+    updatedComments[commentIndex] = {
+      ...target,
+      viewerHasLiked: nextLiked,
+      likeCount: nextCount
+    }
+    setComments(updatedComments)
+
+    try {
+      const updated = await toggleLikeOnComment(commentId)
+      // Sync with server response
+      setComments(prev => {
+        const idx = prev.findIndex(c => c.id === commentId)
+        if (idx === -1) return prev
+        const next = [...prev]
+        next[idx] = updated
+        return next
+      })
+    } catch (err) {
+      // Rollback
+      setComments(prevComments)
+      window.alert(err?.message || 'Failed to update comment like')
+    }
+  }
+
+  async function handleRepostConfirm(body) {
+    if (repostBusy) return
+    setRepostBusy(true)
+    try {
+      const state = await repostPost(post.id, body)
+      // Backend returns the original post's updated interaction state; bump
+      // the share count locally so the count next to the Share button matches.
+      if (state?.shareCount != null) setShareCount(state.shareCount)
+      onShared?.(state)
+      setRepostOpen(false)
+    } catch (err) {
+      window.alert(err?.message || 'Failed to repost')
+    } finally {
+      setRepostBusy(false)
+    }
+  }
+
+  function openRepost(e) {
+    e.stopPropagation()
+    e.preventDefault()
+    setRepostOpen(true)
+  }
+
   async function handleShare(e) {
     e.stopPropagation()
     e.preventDefault()
@@ -269,11 +337,31 @@ export default function FeedPostCard({
     }
   }
 
+  // #542: when the Following-feed surfaces a repost, the FeedPostListItem
+  // carries sharedById / sharedByFirstName / commentary / sharedAt. Render
+  // a small "Reposted by X" attribution above the original-post body and,
+  // for quote-shares, a commentary block between the attribution and body.
+  const isRepostSurface = post?.sharedById != null
+
   return (
     <article
       className={`feed-card${clickable ? ' feed-card--clickable' : ''}`}
       onClick={openDetail}
     >
+      {isRepostSurface && (
+        <div className="feed-card-repost-banner">
+          <Repeat2 size={13} strokeWidth={2} />
+          <span>
+            Reposted by <strong>{post.sharedByFirstName || 'someone'}</strong>
+            {post.sharedAt && <span className="feed-card-repost-time"> · {formatPostTime(post.sharedAt)}</span>}
+          </span>
+        </div>
+      )}
+
+      {isRepostSurface && post.commentary && (
+        <div className="feed-card-repost-commentary">{post.commentary}</div>
+      )}
+
       <div className="feed-card-header">
         <button
           type="button"
@@ -308,6 +396,16 @@ export default function FeedPostCard({
                 {onEdit && (
                   <button type="button" className="feed-card-menu-item" onClick={stopAndRun(onEdit)} role="menuitem">
                     <Pencil size={14} strokeWidth={1.75} /> Edit
+                  </button>
+                )}
+                {post?.isEdited && (
+                  <button
+                    type="button"
+                    className="feed-card-menu-item"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpen(false); setHistoryOpen(true) }}
+                    role="menuitem"
+                  >
+                    <History size={14} strokeWidth={1.75} /> View edit history
                   </button>
                 )}
                 {onDelete && (
@@ -363,6 +461,16 @@ export default function FeedPostCard({
           <span>{commentCount}</span>
         </button>
         <span className="feed-card-action-spacer" aria-hidden="true" />
+        <button
+          type="button"
+          className="feed-card-action-btn"
+          onClick={openRepost}
+          disabled={repostBusy}
+          aria-label="Repost or quote-share"
+          title="Repost"
+        >
+          <Repeat2 size={16} strokeWidth={1.75} />
+        </button>
         <button
           type="button"
           className="feed-card-action-btn"
@@ -428,6 +536,22 @@ export default function FeedPostCard({
                         ? <span className="feed-comment-deleted">Comment removed</span>
                         : renderTextWithMentions(comment.body, 'comment')}
                     </div>
+                    {!comment.isDeleted && (
+                      <button
+                        type="button"
+                        className={`feed-comment-like-btn${comment.viewerHasLiked ? ' feed-comment-like-btn--active' : ''}`}
+                        onClick={() => handleCommentLike(comment.id)}
+                        aria-label={comment.viewerHasLiked ? 'Unlike comment' : 'Like comment'}
+                        title={comment.viewerHasLiked ? 'Liked' : 'Like'}
+                      >
+                        <Heart
+                          size={13}
+                          strokeWidth={2}
+                          fill={comment.viewerHasLiked ? 'currentColor' : 'none'}
+                        />
+                        <span>{comment.likeCount || 0}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -455,6 +579,20 @@ export default function FeedPostCard({
           {commentError && <div className="feed-comment-error">{commentError}</div>}
         </div>
       )}
+
+      <EditHistoryModal
+        open={historyOpen}
+        postId={post.id}
+        onClose={() => setHistoryOpen(false)}
+      />
+
+      <RepostModal
+        open={repostOpen}
+        post={post}
+        onClose={() => !repostBusy && setRepostOpen(false)}
+        onConfirm={handleRepostConfirm}
+        loading={repostBusy}
+      />
     </article>
   )
 }

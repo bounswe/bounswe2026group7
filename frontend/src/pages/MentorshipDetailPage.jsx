@@ -13,6 +13,7 @@ import {
   endMentorship,
   extendMentorship,
   rateMentor,
+  getMentorshipRating,
   listMentorshipMeetings,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -562,24 +563,27 @@ export default function MentorshipDetailPage() {
   const [rateOpen, setRateOpen] = useState(false)
   const [rateLoading, setRateLoading] = useState(false)
   const [rateError, setRateError] = useState(null)
-  // Backend doesn't expose a GET-rating endpoint today, so we mirror successful
-  // submissions in localStorage to suppress the prompt on subsequent visits.
-  // The 409-on-duplicate-POST path also flips this so cross-device
-  // resubmission is caught.
+  // #556: hydrated from the backend rating-read endpoint (#534). Null means
+  // either "still loading" or "no rating yet" — we treat them the same since
+  // we only render the prompt once the page is visible and the mentorship is
+  // already non-ACTIVE; an empty hydration is the no-rating case.
   const [submittedRating, setSubmittedRating] = useState(null)
 
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelError, setCancelError] = useState(null)
 
-  // Hydrate already-submitted rating from localStorage so the prompt doesn't
-  // reappear on revisit. Backend has no GET-rating endpoint today (#278 follow-up).
+  // Hydrate any existing rating from the backend so the prompt doesn't flash
+  // before the read-only block on revisit. 404 = no rating yet (expected
+  // first-time path). Any other error is silent — worst case the user gets
+  // the prompt and the duplicate-POST 409 path below catches it.
   useEffect(() => {
     if (!id) return
-    try {
-      const raw = localStorage.getItem(`rated_mentorship_${id}`)
-      if (raw) setSubmittedRating(JSON.parse(raw))
-    } catch { /* malformed entry — ignore */ }
+    let cancelled = false
+    getMentorshipRating(id)
+      .then(r => { if (!cancelled) setSubmittedRating(r) })
+      .catch(err => { if (!cancelled && err?.status !== 404) { /* swallow */ } })
+    return () => { cancelled = true }
   }, [id])
 
   useEffect(() => {
@@ -653,25 +657,21 @@ export default function MentorshipDetailPage() {
     try {
       const created = await rateMentor(mentorship.id, score, comment)
       setSubmittedRating(created)
-      try {
-        localStorage.setItem(`rated_mentorship_${mentorship.id}`, JSON.stringify({
-          score: created.score,
-          comment: created.comment,
-          createdAt: created.createdAt,
-        }))
-      } catch { /* localStorage disabled — fall back to in-memory state */ }
       setRateOpen(false)
     } catch (err) {
       const msg = err?.message || ''
       // Duplicate-rating path: backend returns 409 with "already rated" wording.
-      // Treat as success-ish — flip to the read-only block so the user isn't stuck.
+      // Refetch the canonical rating so we display whatever the user actually
+      // submitted previously, not the new attempt's score.
       if (msg.includes('409') || /already.*rated/i.test(msg)) {
-        setSubmittedRating({ score, comment, createdAt: new Date().toISOString() })
         try {
-          localStorage.setItem(`rated_mentorship_${mentorship.id}`, JSON.stringify({
-            score, comment, createdAt: new Date().toISOString(),
-          }))
-        } catch { /* ignore */ }
+          const existing = await getMentorshipRating(mentorship.id)
+          setSubmittedRating(existing)
+        } catch {
+          // 404 shouldn't happen after a 409, but fall back to the attempt
+          // so the user isn't stuck on the prompt.
+          setSubmittedRating({ score, comment, createdAt: new Date().toISOString() })
+        }
         setRateOpen(false)
       } else {
         setRateError(msg || 'Failed to submit rating')

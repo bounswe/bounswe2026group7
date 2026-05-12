@@ -5,6 +5,7 @@ import Avatar from './Avatar'
 import NotificationBell from './NotificationBell'
 import { useMentorship } from '../context/MentorshipContext'
 import usePresence from '../hooks/usePresence'
+import { getFeedUnreadCount } from '../services/api'
 import {
   Home, Compass, MessageCircle, CheckSquare, CalendarDays,
   Clock, User, Newspaper, Users,
@@ -54,6 +55,27 @@ export default function MainLayout({ children }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
 
+  // #356: unread-feed badge driven by the new /api/feed/unread-count
+  // endpoint. Polled every 30s while authenticated; quietly fails if the
+  // user isn't logged in (the endpoint returns 403 in that case). We
+  // refetch immediately when the user navigates away from /feed so the
+  // badge updates after a mark-read fires on the feed mount. The async
+  // wrapper guards against the wrapper being auto-mocked to undefined in
+  // tests (the page sometimes mounts under a vi.mock('services/api')).
+  const [feedUnread, setFeedUnread] = useState({ count: 0, cappedAtMax: false })
+  useEffect(() => {
+    let cancelled = false
+    const fetchOnce = async () => {
+      try {
+        const r = await getFeedUnreadCount()
+        if (!cancelled && r) setFeedUnread(r)
+      } catch { /* swallow — likely unauthenticated */ }
+    }
+    fetchOnce()
+    const id = setInterval(fetchOnce, 30_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [currentPath])
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -85,6 +107,7 @@ export default function MainLayout({ children }) {
         <div className="nav-tabs">
           {NAV_TABS.map(tab => {
             const soon = SOON.has(tab.path)
+            const showFeedBadge = tab.path === '/feed' && feedUnread.count > 0
             return (
               <button
                 key={tab.path}
@@ -95,6 +118,11 @@ export default function MainLayout({ children }) {
               >
                 {tab.label}
                 {soon && <span className="soon-badge">Soon</span>}
+                {showFeedBadge && (
+                  <span className="feed-unread-badge" aria-label={`${feedUnread.count} unread feed posts`}>
+                    {feedUnread.cappedAtMax ? '99+' : feedUnread.count}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -183,6 +211,7 @@ export default function MainLayout({ children }) {
           <nav className="sidebar-nav">
             {SIDEBAR_LINKS.map(link => {
               const soon = SOON.has(link.path)
+              const showFeedBadge = link.path === '/feed' && feedUnread.count > 0
               return (
                 <button
                   key={link.path}
@@ -193,6 +222,11 @@ export default function MainLayout({ children }) {
                 >
                   <link.icon size={16} strokeWidth={1.75} className="icon" /> {link.label}
                   {soon && <span className="soon-badge">Soon</span>}
+                  {showFeedBadge && (
+                    <span className="feed-unread-badge" aria-label={`${feedUnread.count} unread feed posts`}>
+                      {feedUnread.cappedAtMax ? '99+' : feedUnread.count}
+                    </span>
+                  )}
                 </button>
               )
             })}

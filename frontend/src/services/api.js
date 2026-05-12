@@ -363,6 +363,30 @@ export async function updateNotificationPreferences(patch) {
   return handleResponse(res)
 }
 
+// Read the rating for a mentorship (#556 / backend #534 / #518). Visible to
+// both participants. Returns 404 when no rating exists yet — wrappers throw
+// an Error with a status field so callers can branch cleanly on first paint.
+export async function getMentorshipRating(id) {
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/rating`, {
+    headers: authHeaders(),
+  })
+  if (res.status === 404) {
+    const err = new Error('Not rated yet')
+    err.status = 404
+    throw err
+  }
+  return handleResponse(res)
+}
+
+// Paginated mentor ratings list (#556 / backend #534 / #518). Newest-first.
+// Returns Spring Page<MentorRatingResponse>. Size capped at 50 server-side.
+export async function getMentorRatings(userId, page = 0, size = 10) {
+  const res = await fetch(`${BASE_URL}/users/${userId}/ratings?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 // Mentee-only rating (#278 / 1.1.1.1.11). Backend rejects with 409 if the
 // mentorship is still ACTIVE or already rated; 403 if a mentor calls it.
 // Score must be 1..5; comment is optional and capped at 1000 chars.
@@ -771,6 +795,59 @@ export async function deleteFeedPost(id) {
   return handleResponse(res)
 }
 
+// #356 / backend #349: feed read-state cursor + companion unread count.
+// `markFeedRead` is idempotent — backend sets the cursor to clock_timestamp.
+// `getFeedUnreadCount` returns { count, cappedAtMax } capped at 99 by default.
+export async function markFeedRead() {
+  const res = await fetch(`${BASE_URL}/feed/mark-read`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  if (res.status === 204) return null
+  return handleResponse(res)
+}
+
+export async function getFeedUnreadCount() {
+  const res = await fetch(`${BASE_URL}/feed/unread-count`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #542 / backend #484: repost or quote-share a feed post. body is optional —
+// null/blank produces a bare repost, non-blank (up to 2000 chars) attaches
+// commentary. Backend dedupes repeated payloads within ~60s. Returns the
+// updated FeedPostInteractionState for the original post so the share count
+// can refresh in place.
+export async function repostPost(postId, body) {
+  const payload = body && body.trim() ? { body: body.trim() } : {}
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/reposts`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(res)
+}
+
+// #544 / backend #487: restore a soft-deleted post within the 30-day window.
+// 410 means the window expired; surfaced as a regular Error from handleResponse.
+export async function restoreFeedPost(id) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}/restore`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #544 / backend #487: edit-history entries for a post, newest-first.
+// Author or admin only; non-author callers get 403.
+export async function getFeedPostHistory(id, limit = 50) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${id}/history?limit=${limit}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 export async function getForYouFeed(page = 0, size = 20) {
   const res = await fetch(`${BASE_URL}/feed/for-you?page=${page}&size=${size}`, {
     headers: authHeaders(),
@@ -785,15 +862,50 @@ export async function getFollowingFeed(page = 0, size = 20) {
   return handleResponse(res)
 }
 
-export async function searchFeed({ q, hashtag, page = 0, size = 20 }) {
+// #543 / backend #486: feed search accepts q + hashtag + since + until + lang.
+// since is inclusive, until is exclusive (both ISO 8601). lang is a BCP-47
+// short tag (e.g. "en", "tr-TR"). Backend requires at least one filter and
+// returns 400 if all are null; the UI gates the request when needed.
+export async function searchFeed({ q, hashtag, since, until, lang, page = 0, size = 20 }) {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (hashtag) params.set('hashtag', hashtag)
+  if (since) params.set('since', since)
+  if (until) params.set('until', until)
+  if (lang) params.set('lang', lang)
   params.set('page', String(page))
   params.set('size', String(size))
   const res = await fetch(`${BASE_URL}/feed/search?${params.toString()}`, {
     headers: authHeaders(),
   })
+  return handleResponse(res)
+}
+
+// Per-user keyword mutes (#543 / backend #486). Server lowercases + validates
+// charset on add. Add returns 201; remove returns 204. Mutes are applied
+// transparently by every feed read path on the server side.
+export async function getMutedKeywords() {
+  const res = await fetch(`${BASE_URL}/users/me/keyword-mutes`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function addMutedKeyword(keyword) {
+  const res = await fetch(`${BASE_URL}/users/me/keyword-mutes`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ keyword }),
+  })
+  return handleResponse(res)
+}
+
+export async function removeMutedKeyword(id) {
+  const res = await fetch(`${BASE_URL}/users/me/keyword-mutes/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (res.status === 204) return null
   return handleResponse(res)
 }
 
@@ -830,6 +942,14 @@ export async function addCommentToPost(postId, body) {
     method: 'POST',
     headers: authJsonHeaders(),
     body: JSON.stringify({ body }),
+  })
+  return handleResponse(res)
+}
+
+export async function toggleLikeOnComment(commentId) {
+  const res = await fetch(`${BASE_URL}/feed/comments/${commentId}/like`, {
+    method: 'POST',
+    headers: authHeaders(),
   })
   return handleResponse(res)
 }

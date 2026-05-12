@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import NotificationPreferences from '../components/NotificationPreferences'
+import MutedKeywords from '../components/MutedKeywords'
 import usePresence from '../hooks/usePresence'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
@@ -586,6 +587,8 @@ export default function ProfilePage() {
           </form>
 
           <NotificationPreferences />
+
+          <MutedKeywords />
         </div>
 
       </div>

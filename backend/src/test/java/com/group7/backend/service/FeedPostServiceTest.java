@@ -334,6 +334,6 @@ class FeedPostServiceTest {
     private static FeedPostResponse stubResponse(Long id, Long authorId) {
         return new FeedPostResponse(id, authorId, "U" + authorId, "body", List.of(),
                 OffsetDateTime.now(), OffsetDateTime.now(), false, true, List.of(),
-                false, false);
+                false, false, null);
     }
 }
