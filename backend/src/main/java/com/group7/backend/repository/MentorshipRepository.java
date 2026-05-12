@@ -2,6 +2,8 @@ package com.group7.backend.repository;
 
 import com.group7.backend.entity.Mentorship;
 import com.group7.backend.entity.MentorshipStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +17,51 @@ public interface MentorshipRepository extends JpaRepository<Mentorship, Long> {
     @Query("SELECT m FROM Mentorship m JOIN FETCH m.mentor JOIN FETCH m.mentee "
             + "WHERE (m.mentor.id = :userId OR m.mentee.id = :userId) AND m.status = :status")
     List<Mentorship> findByUserIdAndStatus(Long userId, MentorshipStatus status);
+
+    /**
+     * Paginated history view across every {@link MentorshipStatus} (#521). The
+     * {@code JOIN FETCH} on {@code mentor} and {@code mentee} are to-one
+     * fetches (not collections), so {@code Pageable} stays SQL-native — no
+     * Hibernate {@code HHH000104} in-memory pagination warning.
+     *
+     * <p>Sort is hard-coded in the query rather than driven by
+     * {@link Pageable#getSort()}: ACTIVE rows float to the top
+     * (issue #521 — "active mentorships first"), then ties resolve by
+     * {@code endDate DESC, startDate DESC} (newest-terminated next).
+     * The schema has {@code endDate NOT NULL} on every mentorship
+     * (active ones carry the planned end), so a NULLS LAST sort wouldn't
+     * surface ACTIVE rows the way the issue expects — the explicit
+     * {@code CASE} does.
+     *
+     * <p>Callers should pass an unsorted {@link Pageable}
+     * ({@code PageRequest.of(page, size)}) to avoid emitting a conflicting
+     * {@code ORDER BY} appended by Spring Data.
+     */
+    @Query(value = "SELECT m FROM Mentorship m JOIN FETCH m.mentor JOIN FETCH m.mentee "
+            + "WHERE m.mentor.id = :userId OR m.mentee.id = :userId "
+            + "ORDER BY CASE WHEN m.status = com.group7.backend.entity.MentorshipStatus.ACTIVE THEN 0 ELSE 1 END, "
+            + "m.endDate DESC, m.startDate DESC",
+           countQuery = "SELECT COUNT(m) FROM Mentorship m "
+            + "WHERE m.mentor.id = :userId OR m.mentee.id = :userId")
+    Page<Mentorship> findByUserIdAllStatuses(@Param("userId") Long userId, Pageable pageable);
+
+    /**
+     * Paginated single-status view (#521). Same shape as
+     * {@link #findByUserIdAllStatuses} but filtered to one status; lets
+     * callers ask for e.g. {@code COMPLETED}-only history. Sort matches
+     * the all-statuses query — the {@code CASE} is a no-op when every
+     * row shares the same status, but keeping it identical prevents any
+     * surprise if the filter ever broadens.
+     */
+    @Query(value = "SELECT m FROM Mentorship m JOIN FETCH m.mentor JOIN FETCH m.mentee "
+            + "WHERE (m.mentor.id = :userId OR m.mentee.id = :userId) AND m.status = :status "
+            + "ORDER BY CASE WHEN m.status = com.group7.backend.entity.MentorshipStatus.ACTIVE THEN 0 ELSE 1 END, "
+            + "m.endDate DESC, m.startDate DESC",
+           countQuery = "SELECT COUNT(m) FROM Mentorship m "
+            + "WHERE (m.mentor.id = :userId OR m.mentee.id = :userId) AND m.status = :status")
+    Page<Mentorship> findByUserIdAndStatusPaged(@Param("userId") Long userId,
+                                                 @Param("status") MentorshipStatus status,
+                                                 Pageable pageable);
 
     /**
      * Looks up the mentorship by id, returning it only when {@code userId} is the mentor or
