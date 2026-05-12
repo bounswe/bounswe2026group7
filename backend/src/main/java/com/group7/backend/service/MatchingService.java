@@ -25,8 +25,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.DayOfWeek;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -126,7 +128,12 @@ public class MatchingService {
     }
 
     public Page<MentorMatchResponse> getTopMentors(Long menteeId, String keyword, Pageable pageable) {
-        return getTopMentors(menteeId, keyword, null, pageable);
+        return getTopMentors(menteeId, keyword, null, null, null, null, pageable);
+    }
+
+    public Page<MentorMatchResponse> getTopMentors(Long menteeId, String keyword,
+                                                   Double maxDistanceKm, Pageable pageable) {
+        return getTopMentors(menteeId, keyword, maxDistanceKm, null, null, null, pageable);
     }
 
     /**
@@ -135,12 +142,30 @@ public class MatchingService {
      * Splitting the LLM call out releases the JDBC connection before the
      * (potentially multi-second) OpenAI request — without this, every
      * matching call holds a Postgres connection for the full prose latency.
+     *
+     * <p>{@code availabilityDays} / {@code mentorshipDuration} are SQL-side
+     * filters (pushed to {@code findRankingCandidates}); {@code minMatchScore}
+     * is a post-rank filter applied before {@link #slicePage} so the
+     * paginated totals reflect the thresholded ranking (#571).
      */
     public Page<MentorMatchResponse> getTopMentors(Long menteeId, String keyword,
-                                                   Double maxDistanceKm, Pageable pageable) {
+                                                   Double maxDistanceKm,
+                                                   Set<DayOfWeek> availabilityDays,
+                                                   Set<Integer> mentorshipDuration,
+                                                   Integer minMatchScore,
+                                                   Pageable pageable) {
         var loaded = readOnlyTx.execute(status -> {
             Mentee mentee = loadEligibleMentee(menteeId);
-            List<MentorMatchResponse> ranked = rankMentorsFor(mentee, keyword, maxDistanceKm);
+            List<MentorMatchResponse> ranked = rankMentorsFor(
+                    mentee, keyword, maxDistanceKm, availabilityDays, mentorshipDuration);
+            // minMatchScore is applied AFTER scoring but BEFORE slicePage so
+            // the page's totalElements reflects the thresholded count, not
+            // the pre-threshold ranking size.
+            if (minMatchScore != null) {
+                ranked = ranked.stream()
+                        .filter(r -> r.getMatchScore() >= minMatchScore)
+                        .toList();
+            }
             Page<MentorMatchResponse> page = slicePage(ranked, pageable);
             return new LoadedPage(page, MenteeSnapshot.of(mentee));
         });
@@ -164,10 +189,36 @@ public class MatchingService {
     }
 
     public List<MentorMatchResponse> getTopMentorsList(Long menteeId, String keyword) {
+        return getTopMentorsList(menteeId, keyword, null, null, null);
+    }
+
+    /**
+     * Unpaginated counterpart of {@link #getTopMentors} with the #571 filters.
+     * Applies the SQL-side {@code availabilityDays}/{@code mentorshipDuration}
+     * to the candidate query and the post-rank {@code minMatchScore} ceiling
+     * before returning.
+     *
+     * <p>Mirrors {@link #getTopMentors}'s split-transaction pattern (#585):
+     * the mentee-load + candidate-rank run inside a programmatic read-only
+     * transaction so the entity reads commit before the (potentially slow)
+     * OpenAI prose-attach. Without the split, every matching call holds a
+     * JDBC connection for the full LLM round-trip.
+     */
+    public List<MentorMatchResponse> getTopMentorsList(Long menteeId, String keyword,
+                                                       Set<DayOfWeek> availabilityDays,
+                                                       Set<Integer> mentorshipDuration,
+                                                       Integer minMatchScore) {
         record Loaded(List<MentorMatchResponse> mentors, MenteeSnapshot snapshot) {}
         Loaded loaded = readOnlyTx.execute(status -> {
             Mentee mentee = loadEligibleMentee(menteeId);
-            return new Loaded(rankMentorsFor(mentee, keyword, null), MenteeSnapshot.of(mentee));
+            List<MentorMatchResponse> ranked = rankMentorsFor(
+                    mentee, keyword, null, availabilityDays, mentorshipDuration);
+            if (minMatchScore != null) {
+                ranked = ranked.stream()
+                        .filter(r -> r.getMatchScore() >= minMatchScore)
+                        .toList();
+            }
+            return new Loaded(ranked, MenteeSnapshot.of(mentee));
         });
         explanationService.attach(loaded.mentors(), loaded.snapshot().toDetachedMentee());
         return loaded.mentors();
@@ -203,12 +254,18 @@ public class MatchingService {
      * their own public entry point and pass through.
      */
     List<MentorMatchResponse> rankMentorsForId(Long menteeId, String keyword, Double maxDistanceKm) {
+        return rankMentorsForId(menteeId, keyword, maxDistanceKm, null, null);
+    }
+
+    List<MentorMatchResponse> rankMentorsForId(Long menteeId, String keyword, Double maxDistanceKm,
+                                               Set<DayOfWeek> availabilityDays,
+                                               Set<Integer> mentorshipDuration) {
         Mentee mentee = menteeRepository.findById(menteeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Mentee not found"));
         if (mentee.getActiveMentorId() != null) {
             throw new MatchingNotAllowedException("You already have an active mentor");
         }
-        return rankMentorsFor(mentee, keyword, maxDistanceKm);
+        return rankMentorsFor(mentee, keyword, maxDistanceKm, availabilityDays, mentorshipDuration);
     }
 
     /**
@@ -223,18 +280,34 @@ public class MatchingService {
      *
      * <p>No {@code @Transactional}: package-private method advice is ignored
      * by Spring's proxy. Runs inside the caller's transaction.
+     *
+     * <p>This two-arg overload is retained for
+     * {@code MatchNotificationProcessor} (calls without distance / day /
+     * duration filters). New callers should prefer the five-arg variant.
      */
     List<MentorMatchResponse> rankMentorsFor(Mentee mentee, String keyword) {
-        return rankMentorsFor(mentee, keyword, null);
+        return rankMentorsFor(mentee, keyword, null, null, null);
     }
 
     /**
-     * Pure ranking core with optional max-distance ceiling. The two-arg
-     * overload {@link #rankMentorsFor(Mentee, String)} is kept for
-     * {@code MatchNotificationProcessor}, which still calls the no-distance
-     * variant. New callers should prefer this three-arg method.
+     * Three-arg overload preserved for callers that pre-date the #571
+     * advanced filters but still want a distance ceiling. Delegates to the
+     * five-arg form with {@code null} for day-of-week and duration filters.
      */
     List<MentorMatchResponse> rankMentorsFor(Mentee mentee, String keyword, Double maxDistanceKm) {
+        return rankMentorsFor(mentee, keyword, maxDistanceKm, null, null);
+    }
+
+    /**
+     * Pure ranking core with optional max-distance, day-of-week, and
+     * mentorship-duration filters (#571). The day-of-week and duration sets
+     * are pushed to {@code findRankingCandidates}; max-distance feeds the
+     * scoring pipeline. Empty sets are coerced to null upstream via
+     * {@link SearchNormaliser#nullIfEmpty}.
+     */
+    List<MentorMatchResponse> rankMentorsFor(Mentee mentee, String keyword, Double maxDistanceKm,
+                                             Set<DayOfWeek> availabilityDays,
+                                             Set<Integer> mentorshipDuration) {
         if (mentee == null) {
             throw new IllegalStateException("rankMentorsFor: mentee must not be null");
         }
@@ -250,6 +323,8 @@ public class MatchingService {
                 /*requireCapacity*/ true,
                 /*bypassVisibility*/ false,
                 /*requesterMenteeId*/ null,
+                SearchNormaliser.nullIfEmpty(availabilityDays),
+                SearchNormaliser.nullIfEmpty(mentorshipDuration),
                 fetchPage);
 
         if (raw.isEmpty()) {

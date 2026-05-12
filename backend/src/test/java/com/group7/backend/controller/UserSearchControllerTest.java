@@ -73,7 +73,7 @@ class UserSearchControllerTest {
     void searchAsMentee_searchingMentor_returns200() throws Exception {
         mockValidToken(1L, "MENTEE");
         when(userService.searchUsers(eq(SearchRole.MENTOR), any(), any(), any(), any(),
-                anyBoolean(), eq(1L), any(Pageable.class)))
+                anyBoolean(), any(), any(), eq(1L), any(Pageable.class)))
                 .thenReturn(singletonMentorPage());
 
         mockMvc.perform(get("/api/users/search?role=MENTOR")
@@ -85,7 +85,7 @@ class UserSearchControllerTest {
     void searchAsMentor_searchingMentee_returns200() throws Exception {
         mockValidToken(2L, "MENTOR");
         when(userService.searchUsers(eq(SearchRole.MENTEE), any(), any(), any(), any(),
-                anyBoolean(), eq(2L), any(Pageable.class)))
+                anyBoolean(), any(), any(), eq(2L), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/users/search?role=MENTEE")
@@ -97,7 +97,7 @@ class UserSearchControllerTest {
     void searchAsAdmin_searchingMentor_returns200() throws Exception {
         mockValidToken(3L, "ADMIN");
         when(userService.searchUsers(eq(SearchRole.MENTOR), any(), any(), any(), any(),
-                anyBoolean(), eq(3L), any(Pageable.class)))
+                anyBoolean(), any(), any(), eq(3L), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/users/search?role=MENTOR")
@@ -109,7 +109,7 @@ class UserSearchControllerTest {
     void searchAsAdmin_searchingMentee_returns200() throws Exception {
         mockValidToken(3L, "ADMIN");
         when(userService.searchUsers(eq(SearchRole.MENTEE), any(), any(), any(), any(),
-                anyBoolean(), eq(3L), any(Pageable.class)))
+                anyBoolean(), any(), any(), eq(3L), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/users/search?role=MENTEE")
@@ -123,7 +123,7 @@ class UserSearchControllerTest {
     void searchAsMentee_searchingMentee_returns403() throws Exception {
         mockValidToken(1L, "MENTEE");
         when(userService.searchUsers(eq(SearchRole.MENTEE), any(), any(), any(), any(),
-                anyBoolean(), eq(1L), any(Pageable.class)))
+                anyBoolean(), any(), any(), eq(1L), any(Pageable.class)))
                 .thenThrow(new ProfileNotVisibleException("Mentees cannot search for other mentees"));
 
         mockMvc.perform(get("/api/users/search?role=MENTEE")
@@ -135,7 +135,7 @@ class UserSearchControllerTest {
     void searchAsMentor_searchingMentor_returns403() throws Exception {
         mockValidToken(2L, "MENTOR");
         when(userService.searchUsers(eq(SearchRole.MENTOR), any(), any(), any(), any(),
-                anyBoolean(), eq(2L), any(Pageable.class)))
+                anyBoolean(), any(), any(), eq(2L), any(Pageable.class)))
                 .thenThrow(new ProfileNotVisibleException("Mentors cannot search for other mentors"));
 
         mockMvc.perform(get("/api/users/search?role=MENTOR")
@@ -147,7 +147,7 @@ class UserSearchControllerTest {
     void searchAsAdmin_hasAvailabilityTrue_returns400() throws Exception {
         mockValidToken(3L, "ADMIN");
         when(userService.searchUsers(any(), any(), any(), any(), any(),
-                eq(true), eq(3L), any(Pageable.class)))
+                eq(true), any(), any(), eq(3L), any(Pageable.class)))
                 .thenThrow(new IllegalArgumentException(
                         "hasAvailability filter is not applicable for admin searches"));
 
@@ -160,7 +160,7 @@ class UserSearchControllerTest {
     void searchHasAvailability_requesterMissingSlots_returns400() throws Exception {
         mockValidToken(1L, "MENTEE");
         when(userService.searchUsers(any(), any(), any(), any(), any(),
-                eq(true), eq(1L), any(Pageable.class)))
+                eq(true), any(), any(), eq(1L), any(Pageable.class)))
                 .thenThrow(new IllegalArgumentException(
                         "Set your availability before filtering by overlap"));
 
@@ -201,7 +201,7 @@ class UserSearchControllerTest {
     void searchKeywordTooShort_stillReaches200_serviceTreatsAsNoFilter() throws Exception {
         mockValidToken(1L, "MENTEE");
         when(userService.searchUsers(any(), any(), any(), any(), any(),
-                anyBoolean(), anyLong(), any(Pageable.class)))
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         // q="ab" — service-side normaliser returns null for length<3; controller
@@ -213,7 +213,7 @@ class UserSearchControllerTest {
         // Verify the raw "ab" was forwarded — normalisation is the service's job.
         ArgumentCaptor<String> kw = ArgumentCaptor.forClass(String.class);
         verify(userService).searchUsers(any(), kw.capture(), any(), any(), any(),
-                anyBoolean(), anyLong(), any(Pageable.class));
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class));
         assertThat(kw.getValue()).isEqualTo("ab");
     }
 
@@ -223,7 +223,7 @@ class UserSearchControllerTest {
     void searchPaginationParamsHonored() throws Exception {
         mockValidToken(1L, "MENTEE");
         when(userService.searchUsers(any(), any(), any(), any(), any(),
-                anyBoolean(), anyLong(), any(Pageable.class)))
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/users/search?role=MENTOR&page=2&size=5")
@@ -232,7 +232,7 @@ class UserSearchControllerTest {
 
         ArgumentCaptor<Pageable> pg = ArgumentCaptor.forClass(Pageable.class);
         verify(userService).searchUsers(any(), any(), any(), any(), any(),
-                anyBoolean(), anyLong(), pg.capture());
+                anyBoolean(), any(), any(), anyLong(), pg.capture());
         assertThat(pg.getValue().getPageNumber()).isEqualTo(2);
         assertThat(pg.getValue().getPageSize()).isEqualTo(5);
     }
@@ -241,7 +241,7 @@ class UserSearchControllerTest {
     void searchOversizedPage_clampedTo100() throws Exception {
         mockValidToken(1L, "MENTEE");
         when(userService.searchUsers(any(), any(), any(), any(), any(),
-                anyBoolean(), anyLong(), any(Pageable.class)))
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/users/search?role=MENTOR&size=10000")
@@ -250,7 +250,7 @@ class UserSearchControllerTest {
 
         ArgumentCaptor<Pageable> pg = ArgumentCaptor.forClass(Pageable.class);
         verify(userService).searchUsers(any(), any(), any(), any(), any(),
-                anyBoolean(), anyLong(), pg.capture());
+                anyBoolean(), any(), any(), anyLong(), pg.capture());
         assertThat(pg.getValue().getPageSize()).isEqualTo(100);
     }
 
@@ -258,7 +258,7 @@ class UserSearchControllerTest {
     void searchNegativePage_clampedToZero() throws Exception {
         mockValidToken(1L, "MENTEE");
         when(userService.searchUsers(any(), any(), any(), any(), any(),
-                anyBoolean(), anyLong(), any(Pageable.class)))
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/users/search?role=MENTOR&page=-5")
@@ -267,7 +267,7 @@ class UserSearchControllerTest {
 
         ArgumentCaptor<Pageable> pg = ArgumentCaptor.forClass(Pageable.class);
         verify(userService).searchUsers(any(), any(), any(), any(), any(),
-                anyBoolean(), anyLong(), pg.capture());
+                anyBoolean(), any(), any(), anyLong(), pg.capture());
         assertThat(pg.getValue().getPageNumber()).isEqualTo(0);
     }
 
@@ -277,7 +277,7 @@ class UserSearchControllerTest {
     void searchMultiValueInterests_forwardedAsList() throws Exception {
         mockValidToken(1L, "MENTEE");
         when(userService.searchUsers(any(), any(), any(), any(), any(),
-                anyBoolean(), anyLong(), any(Pageable.class)))
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/users/search?role=MENTOR&interests=AI&interests=Databases")
@@ -287,7 +287,7 @@ class UserSearchControllerTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> interests = ArgumentCaptor.forClass(List.class);
         verify(userService).searchUsers(any(), any(), interests.capture(), any(), any(),
-                anyBoolean(), anyLong(), any(Pageable.class));
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class));
         assertThat(interests.getValue()).containsExactly("AI", "Databases");
     }
 
@@ -298,7 +298,7 @@ class UserSearchControllerTest {
         // service does so (the integration test pins the SQL-side behaviour).
         mockValidToken(1L, "MENTEE");
         when(userService.searchUsers(eq(SearchRole.MENTOR), any(), any(), any(), any(),
-                anyBoolean(), eq(1L), any(Pageable.class)))
+                anyBoolean(), any(), any(), eq(1L), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/users/search?role=MENTOR")
@@ -312,7 +312,7 @@ class UserSearchControllerTest {
     void searchAllParams_forwardedToService() throws Exception {
         mockValidToken(2L, "MENTOR");
         when(userService.searchUsers(any(), any(), any(), any(), any(),
-                anyBoolean(), anyLong(), any(Pageable.class)))
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class)))
                 .thenReturn(emptyPage());
 
         // Use param() rather than inline query string so MockMvc URL-decodes
@@ -334,7 +334,54 @@ class UserSearchControllerTest {
                 eq(List.of("Java")),
                 eq("Computer Science"),
                 eq(false),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.isNull(),
                 eq(2L),
                 any(Pageable.class));
+    }
+
+    // ── #571: availabilityDays / mentorshipDuration param binding ─────────────
+
+    @Test
+    void searchMultiValueAvailabilityDays_forwardedAsSet() throws Exception {
+        mockValidToken(1L, "MENTEE");
+        when(userService.searchUsers(any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class)))
+                .thenReturn(emptyPage());
+
+        mockMvc.perform(get("/api/users/search")
+                        .param("role", "MENTOR")
+                        .param("availabilityDays", "MONDAY", "WEDNESDAY")
+                        .header("Authorization", "Bearer " + TOKEN))
+                .andExpect(status().isOk());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Set<java.time.DayOfWeek>> days =
+                ArgumentCaptor.forClass(java.util.Set.class);
+        verify(userService).searchUsers(any(), any(), any(), any(), any(),
+                anyBoolean(), days.capture(), any(), anyLong(), any(Pageable.class));
+        assertThat(days.getValue())
+                .containsExactlyInAnyOrder(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.WEDNESDAY);
+    }
+
+    @Test
+    void searchMentorshipDuration_forwardedAsSet() throws Exception {
+        mockValidToken(1L, "MENTEE");
+        when(userService.searchUsers(any(), any(), any(), any(), any(),
+                anyBoolean(), any(), any(), anyLong(), any(Pageable.class)))
+                .thenReturn(emptyPage());
+
+        mockMvc.perform(get("/api/users/search")
+                        .param("role", "MENTOR")
+                        .param("mentorshipDuration", "3", "6")
+                        .header("Authorization", "Bearer " + TOKEN))
+                .andExpect(status().isOk());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<java.util.Set<Integer>> duration =
+                ArgumentCaptor.forClass(java.util.Set.class);
+        verify(userService).searchUsers(any(), any(), any(), any(), any(),
+                anyBoolean(), any(), duration.capture(), anyLong(), any(Pageable.class));
+        assertThat(duration.getValue()).containsExactlyInAnyOrder(3, 6);
     }
 }

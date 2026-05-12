@@ -31,8 +31,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.time.DayOfWeek;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.annotation.Transactional;
@@ -99,7 +101,9 @@ public class UserService {
             return mentorRepository.searchByFilters(
                     null, null, null, null,
                     /*requireCapacity*/ false, bypassVisibility,
-                    /*requesterMenteeId*/ null, pageable)
+                    /*requesterMenteeId*/ null,
+                    /*availabilityDays*/ null, /*mentorshipDuration*/ null,
+                    pageable)
                     .map(m -> (ProfileResponse) MentorResponse.from(m));
         }
 
@@ -132,6 +136,12 @@ public class UserService {
      *       slot-presence requirement applies).</li>
      * </ul>
      */
+    /**
+     * Backwards-compatible delegate preserved for callers that predate the
+     * advanced mentor filters in #571. New code should use the 10-arg form
+     * with {@code availabilityDays} / {@code mentorshipDuration}; passing
+     * {@code null} for both reproduces the pre-#571 behaviour.
+     */
     @Transactional(readOnly = true)
     public Page<ProfileResponse> searchUsers(SearchRole role,
                                              String keyword,
@@ -139,6 +149,27 @@ public class UserService {
                                              List<String> skills,
                                              String major,
                                              boolean hasAvailability,
+                                             Long requesterId,
+                                             Pageable pageable) {
+        return searchUsers(role, keyword, interests, skills, major,
+                hasAvailability, null, null, requesterId, pageable);
+    }
+
+    /**
+     * Advanced overload (#571) accepting the day-of-week and mentorship-
+     * duration filters introduced for the mentor search surface. The
+     * {@link MenteeRepository#searchByFilters} side ignores both — the issue
+     * scopes them to mentor results only.
+     */
+    @Transactional(readOnly = true)
+    public Page<ProfileResponse> searchUsers(SearchRole role,
+                                             String keyword,
+                                             List<String> interests,
+                                             List<String> skills,
+                                             String major,
+                                             boolean hasAvailability,
+                                             Set<DayOfWeek> availabilityDays,
+                                             Set<Integer> mentorshipDuration,
                                              Long requesterId,
                                              Pageable pageable) {
         Objects.requireNonNull(role, "role");
@@ -177,6 +208,11 @@ public class UserService {
         List<String> normInterests = SearchNormaliser.list(interests);
         List<String> normSkills = SearchNormaliser.list(skills);
         String normMajor = SearchNormaliser.scalar(major);
+        // Empty Set<DayOfWeek>/Set<Integer> must be coerced to null so the
+        // JPQL `:param IS NULL` gate short-circuits — Postgres rejects
+        // `IN ()` exactly as it does for the list-of-string filters.
+        Set<DayOfWeek> normAvailabilityDays = SearchNormaliser.nullIfEmpty(availabilityDays);
+        Set<Integer> normMentorshipDuration = SearchNormaliser.nullIfEmpty(mentorshipDuration);
 
         boolean bypassVisibility = requester instanceof Admin;
         if (role == SearchRole.MENTOR) {
@@ -184,7 +220,8 @@ public class UserService {
                     ? requesterId : null;
             return mentorRepository.searchByFilters(
                     normKeyword, normInterests, normSkills, normMajor,
-                    /*requireCapacity*/ false, bypassVisibility, requesterMenteeId, pageable)
+                    /*requireCapacity*/ false, bypassVisibility, requesterMenteeId,
+                    normAvailabilityDays, normMentorshipDuration, pageable)
                     .map(m -> (ProfileResponse) MentorResponse.from(m));
         } else {
             Long requesterMentorId = (hasAvailability && requester instanceof Mentor)
@@ -193,6 +230,8 @@ public class UserService {
             // lastName/profilePhoto. Admins bypass via the early-return path inside
             // maskIfMentorViewingMentee (admin viewer does not match `instanceof Mentor`).
             User viewer = requester;
+            // MenteeRepository is intentionally not extended with the
+            // mentor-only filters from #571 — they're silently ignored on this branch.
             return menteeRepository.searchByFilters(
                     normKeyword, normInterests, normSkills, normMajor,
                     /*requireUnattached*/ false, bypassVisibility, requesterMentorId, pageable)
@@ -210,7 +249,9 @@ public class UserService {
         return mentorRepository.searchByFilters(
                 null, null, null, null,
                 /*requireCapacity*/ false, bypassVisibility,
-                /*requesterMenteeId*/ null, pageable)
+                /*requesterMenteeId*/ null,
+                /*availabilityDays*/ null, /*mentorshipDuration*/ null,
+                pageable)
                 .map(MentorResponse::from);
     }
 
@@ -226,6 +267,7 @@ public class UserService {
                 null, null, null, null,
                 /*requireCapacity*/ false, bypassVisibility,
                 /*requesterMenteeId*/ null,
+                /*availabilityDays*/ null, /*mentorshipDuration*/ null,
                 org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE))
                 .getContent().stream()
                 .map(MentorResponse::from)

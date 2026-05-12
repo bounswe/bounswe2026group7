@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.DayOfWeek;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/matching")
@@ -39,7 +41,10 @@ public class MatchingController {
             summary = "Get top mentor matches",
             description = "Returns mentors ranked by compatibility score with pagination support. "
                     + "Excludes full-capacity mentors and requires the caller to be a mentee without an active mentor. "
-                    + "Optionally filter by keyword matched against expertise, field, interests, skills, and goals."
+                    + "Optionally filter by keyword matched against expertise, field, interests, skills, and goals. "
+                    + "#571 adds availabilityDays (mentor offers any of the given days), mentorshipDuration "
+                    + "(months, IN-list), and minMatchScore (post-rank threshold; totalElements reflects the "
+                    + "thresholded count)."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paginated ranked mentor list"),
@@ -51,18 +56,33 @@ public class MatchingController {
             @Parameter(description = "Optional ceiling on great-circle distance (km) between mentor and mentee. "
                     + "Mentors without coordinates are never excluded by this filter (spec 1.1.2.3).")
             @RequestParam(required = false) Double maxDistanceKm,
+            @Parameter(description = "Filter mentors by availability day-of-week (OR semantics). "
+                    + "Accepts comma-separated or repeated values.",
+                    example = "MONDAY,WEDNESDAY")
+            @RequestParam(required = false) Set<DayOfWeek> availabilityDays,
+            @Parameter(description = "Filter mentors by mentorship duration in months (IN list semantics).",
+                    example = "3")
+            @RequestParam(required = false) Set<Integer> mentorshipDuration,
+            @Parameter(description = "Post-rank minimum match score; mentors below the threshold are "
+                    + "excluded from the page and from totalElements.",
+                    example = "60")
+            @RequestParam(required = false) Integer minMatchScore,
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Long menteeId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        return ResponseEntity.ok(matchingService.getTopMentors(menteeId, keyword, maxDistanceKm, pageable));
+        return ResponseEntity.ok(matchingService.getTopMentors(
+                menteeId, keyword, maxDistanceKm,
+                availabilityDays, mentorshipDuration, minMatchScore, pageable));
     }
 
     @GetMapping("/mentors/all")
     @PreAuthorize("hasRole('MENTEE')")
     @Operation(summary = "Get all mentor matches (unpaginated)",
-            description = "Returns all ranked mentors as a plain list. Use /mentors for paginated results.")
+            description = "Returns all ranked mentors as a plain list. Use /mentors for paginated results. "
+                    + "Supports the same #571 filters as /mentors (availabilityDays, mentorshipDuration, "
+                    + "minMatchScore).")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ranked mentor list"),
             @ApiResponse(responseCode = "403", description = "Not a mentee, or mentee already has an active mentor", content = @Content),
@@ -70,9 +90,19 @@ public class MatchingController {
     })
     public ResponseEntity<List<MentorMatchResponse>> getTopMentorsUnpaginated(
             @Parameter(description = "Optional keyword to filter mentors") @RequestParam(required = false) String keyword,
+            @Parameter(description = "Filter mentors by availability day-of-week (OR semantics).",
+                    example = "MONDAY,WEDNESDAY")
+            @RequestParam(required = false) Set<DayOfWeek> availabilityDays,
+            @Parameter(description = "Filter mentors by mentorship duration in months (IN list semantics).",
+                    example = "3")
+            @RequestParam(required = false) Set<Integer> mentorshipDuration,
+            @Parameter(description = "Post-rank minimum match score; mentors below the threshold are excluded.",
+                    example = "60")
+            @RequestParam(required = false) Integer minMatchScore,
             Authentication authentication) {
         Long menteeId = (Long) authentication.getCredentials();
-        return ResponseEntity.ok(matchingService.getTopMentorsList(menteeId, keyword));
+        return ResponseEntity.ok(matchingService.getTopMentorsList(
+                menteeId, keyword, availabilityDays, mentorshipDuration, minMatchScore));
     }
 
     @GetMapping("/mentees")

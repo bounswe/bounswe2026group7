@@ -3,6 +3,7 @@ package com.group7.backend.service;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Shared normalisation for the SQL-side search filters introduced in #262.
@@ -79,5 +80,20 @@ final class SearchNormaliser {
      */
     static String scalar(String raw) {
         return raw == null || raw.isBlank() ? null : raw.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Coerces an empty {@link Set} to {@code null} so the {@code :param IS NULL}
+     * gate in JPQL short-circuits the filter. Same rationale as
+     * {@link #list(List)} — Hibernate translates a non-null empty set to
+     * {@code IN ()} which Postgres rejects.
+     *
+     * <p>Used by typed-collection filters such as {@code Set<DayOfWeek>} or
+     * {@code Set<Integer>} where elementwise normalisation (lowercasing) does
+     * not apply. The set itself is returned unchanged when non-empty — typed
+     * enums and integers are already canonical.
+     */
+    static <T> Set<T> nullIfEmpty(Set<T> raw) {
+        return (raw == null || raw.isEmpty()) ? null : raw;
     }
 }

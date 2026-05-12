@@ -295,6 +295,64 @@ class UserSearchIntegrationTest {
         assertThat(json.get("content").get(0).get("id").asLong()).isEqualTo(a.getId());
     }
 
+    // ── #571: combined availabilityDays + mentorshipDuration happy path ──────
+
+    @Test
+    void advancedFilters_availabilityDaysAndMentorshipDuration_combineAsAnd() throws Exception {
+        // Mentor matches keyword + day + duration — included.
+        registerAndLogin("us_advanced_match@example.com", true);
+        Mentor matching = findMentor("us_advanced_match@example.com");
+        matching.setExpertise("backend java");
+        matching.setMentorshipDuration(3);
+        mentorRepository.save(matching);
+        AvailabilitySlot okSlot = new AvailabilitySlot();
+        okSlot.setMentor(matching);
+        okSlot.setDayOfWeek(DayOfWeek.MONDAY);
+        okSlot.setStartTime(LocalTime.of(9, 0));
+        okSlot.setEndTime(LocalTime.of(10, 0));
+        availabilitySlotRepository.save(okSlot);
+
+        // Right day + keyword but wrong duration — excluded.
+        registerAndLogin("us_advanced_wrong_duration@example.com", true);
+        Mentor wrongDuration = findMentor("us_advanced_wrong_duration@example.com");
+        wrongDuration.setExpertise("backend java");
+        wrongDuration.setMentorshipDuration(12);
+        mentorRepository.save(wrongDuration);
+        AvailabilitySlot wdSlot = new AvailabilitySlot();
+        wdSlot.setMentor(wrongDuration);
+        wdSlot.setDayOfWeek(DayOfWeek.MONDAY);
+        wdSlot.setStartTime(LocalTime.of(9, 0));
+        wdSlot.setEndTime(LocalTime.of(10, 0));
+        availabilitySlotRepository.save(wdSlot);
+
+        // Right duration + keyword but wrong day — excluded.
+        registerAndLogin("us_advanced_wrong_day@example.com", true);
+        Mentor wrongDay = findMentor("us_advanced_wrong_day@example.com");
+        wrongDay.setExpertise("backend java");
+        wrongDay.setMentorshipDuration(3);
+        mentorRepository.save(wrongDay);
+        AvailabilitySlot wdaySlot = new AvailabilitySlot();
+        wdaySlot.setMentor(wrongDay);
+        wdaySlot.setDayOfWeek(DayOfWeek.FRIDAY);
+        wdaySlot.setStartTime(LocalTime.of(9, 0));
+        wdaySlot.setEndTime(LocalTime.of(10, 0));
+        availabilitySlotRepository.save(wdaySlot);
+
+        String menteeToken = registerAndLogin("us_advanced_mentee@example.com", false);
+
+        MvcResult result = mockMvc.perform(get("/api/users/search")
+                        .param("role", "MENTOR")
+                        .param("q", "java")
+                        .param("availabilityDays", "MONDAY", "WEDNESDAY")
+                        .param("mentorshipDuration", "3", "6")
+                        .header("Authorization", "Bearer " + menteeToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(json.get("totalElements").asInt()).isEqualTo(1);
+        assertThat(json.get("content").get(0).get("id").asLong()).isEqualTo(matching.getId());
+    }
+
     // ── Authentication boundary ──────────────────────────────────────────────
 
     @Test
