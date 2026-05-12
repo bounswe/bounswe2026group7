@@ -40,12 +40,28 @@ async function handleResponse(res) {
   throw new Error(message)
 }
 
-export async function registerUser({ firstName, lastName, email, password, isMentor }) {
+export async function registerUser({ firstName, lastName, email, password, isMentor, formToken, website }) {
+  // formToken + website (honeypot) are part of the spam-bot defence (#345).
+  // Backend rejects registrations with `app.spam.enabled=true` (the default
+  // in production) unless formToken round-trips through the form, so we
+  // forward them when the caller supplies them. Older callers that omit
+  // both still work in dev / test where the defence is off.
+  const body = { firstName, lastName, email, password, isMentor }
+  if (formToken) body.formToken = formToken
+  if (website !== undefined) body.website = website
   const res = await fetch(`${BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ firstName, lastName, email, password, isMentor }),
+    body: JSON.stringify(body),
   })
+  return handleResponse(res)
+}
+
+// #345 spam-bot defence: short-lived HMAC-signed timestamp the backend
+// expects round-tripped on register. Issued by GET /api/auth/form-token,
+// TTL 15 min by default.
+export async function getRegisterFormToken() {
+  const res = await fetch(`${BASE_URL}/auth/form-token`)
   return handleResponse(res)
 }
 
