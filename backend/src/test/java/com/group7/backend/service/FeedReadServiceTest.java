@@ -426,6 +426,7 @@ class FeedReadServiceTest {
                 OffsetDateTime.now(), 0L, 0L, List.<String>of(),
                 List.<com.group7.backend.dto.response.AttachmentSummary>of(),
                 false, false,
-                null, null, null, null);
+                null, null, null, null,
+                null);   // lang
     }
 }

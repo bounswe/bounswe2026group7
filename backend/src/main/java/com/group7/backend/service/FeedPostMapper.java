@@ -207,7 +207,8 @@ public class FeedPostMapper {
                 isAuthor,
                 toSummaries(post.getAttachments()),
                 likedPostIds.contains(post.getId()),
-                bookmarkedPostIds.contains(post.getId())
+                bookmarkedPostIds.contains(post.getId()),
+                post.getLang()
         );
     }
 
@@ -240,7 +241,8 @@ public class FeedPostMapper {
                 null,   // sharedById — not a repost surface for this mapper
                 null,   // sharedByFirstName
                 null,   // shareCommentary
-                null    // sharedAt
+                null,   // sharedAt
+                post.getLang()
         );
     }
 

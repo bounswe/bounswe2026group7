@@ -316,7 +316,8 @@ public class FeedReadService {
                 row.getShareCommentary(),
                 row.getSharedAt() == null
                         ? null
-                        : row.getSharedAt().atOffset(java.time.ZoneOffset.UTC));
+                        : row.getSharedAt().atOffset(java.time.ZoneOffset.UTC),
+                post == null ? null : post.getLang());
     }
 
     /**
