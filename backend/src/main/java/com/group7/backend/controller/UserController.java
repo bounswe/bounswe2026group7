@@ -29,7 +29,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.DayOfWeek;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/users")
@@ -213,12 +215,14 @@ public class UserController {
     @GetMapping("/search")
     @Operation(summary = "Search users by keyword and filters",
             description = "DB-level search across the user directory with composable filters "
-                    + "(#262). Mentees may search MENTOR only; mentors may search MENTEE only; "
-                    + "admins may search either role. Same-role search returns 403. "
-                    + "Short keyword (length < 3 after trim) is treated as no-keyword "
-                    + "(pg_trgm requires ≥3 alphanumerics for index acceleration). "
+                    + "(#262, extended in #571). Mentees may search MENTOR only; mentors may "
+                    + "search MENTEE only; admins may search either role. Same-role search "
+                    + "returns 403. Short keyword (length < 3 after trim) is treated as "
+                    + "no-keyword (pg_trgm requires ≥3 alphanumerics for index acceleration). "
                     + "hasAvailability=true requires the requester to have at least one "
-                    + "availability slot of their own; admins cannot use this filter.")
+                    + "availability slot of their own; admins cannot use this filter. "
+                    + "availabilityDays and mentorshipDuration apply to MENTOR searches only "
+                    + "and are silently ignored when role=MENTEE.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Paginated search results"),
             @ApiResponse(responseCode = "400",
@@ -243,6 +247,14 @@ public class UserController {
             @RequestParam(required = false) String major,
             @Parameter(description = "Restrict to candidates whose availability overlaps the requester's slots")
             @RequestParam(defaultValue = "false") boolean hasAvailability,
+            @Parameter(description = "Filter mentors by availability day-of-week (OR semantics). "
+                    + "Accepts comma-separated or repeated values. Mentor searches only.",
+                    example = "MONDAY,WEDNESDAY")
+            @RequestParam(required = false) Set<DayOfWeek> availabilityDays,
+            @Parameter(description = "Filter mentors by mentorship duration in months "
+                    + "(IN list semantics). Mentor searches only.",
+                    example = "3")
+            @RequestParam(required = false) Set<Integer> mentorshipDuration,
             @Parameter(description = "Page number (0-based)")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size; clamped to [1, 100]")
@@ -251,7 +263,8 @@ public class UserController {
         Long requesterId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
         return ResponseEntity.ok(userService.searchUsers(
-                role, q, interests, skills, major, hasAvailability, requesterId, pageable));
+                role, q, interests, skills, major, hasAvailability,
+                availabilityDays, mentorshipDuration, requesterId, pageable));
     }
 
     @GetMapping("/mentees")

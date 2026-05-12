@@ -174,7 +174,7 @@ class TaskServiceTest {
     @Test
     void submitTask_Success() {
         when(taskRepository.findByIdWithMentorship(100L)).thenReturn(Optional.of(pendingTask));
-        when(taskSubmissionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(taskSubmissionRepository.save(any(TaskSubmission.class))).thenAnswer(i -> i.getArgument(0));
 
         TaskSubmissionRequest req = new TaskSubmissionRequest();
         req.setSubmissionText("Here is my work");
