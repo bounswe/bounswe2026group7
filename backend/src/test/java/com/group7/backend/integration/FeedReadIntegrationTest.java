@@ -22,6 +22,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -65,6 +66,7 @@ class FeedReadIntegrationTest {
         jdbcTemplate.update("DELETE FROM feed_post_hashtags");
         jdbcTemplate.update("DELETE FROM feed_posts");
         jdbcTemplate.update("DELETE FROM follows");
+        jdbcTemplate.update("DELETE FROM user_keyword_mutes");
         verificationTokenRepository.deleteAll();
         userRepository.deleteAll();
         doNothing().when(emailService).sendVerificationEmail(any(), anyString());
@@ -633,5 +635,306 @@ class FeedReadIntegrationTest {
         JsonNode post = postFromPage(body, pid);
         assertThat(post.get("likeCount").asLong()).isEqualTo(2L);
         assertThat(post.get("commentCount").asLong()).isEqualTo(1L);
+    }
+
+    // ── Following feed: repost surfacing (#484) ────────────────────────────
+
+    @Test
+    void followingFeed_surfacesReposts_attributedToSharer() throws Exception {
+        String viewerToken = registerAndLogin("repost_view_viewer@test.com", true);
+        String sharerToken = registerAndLogin("repost_view_sharer@test.com", true);
+        String authorToken = registerAndLogin("repost_view_author@test.com", true);
+        Long sharerId = userRepository.findByEmail("repost_view_sharer@test.com").orElseThrow().getId();
+
+        // Viewer follows the sharer (but NOT the original author).
+        mockMvc.perform(post("/api/users/" + sharerId + "/follow")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isCreated());
+
+        long pid = createPost(authorToken, "post that will be reposted", List.of("track"));
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken))
+                .andExpect(status().isOk());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/following")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andReturn();
+
+        JsonNode row = objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("content").get(0);
+        assertThat(row.get("id").asLong()).isEqualTo(pid);
+        assertThat(row.get("sharedById").asLong()).isEqualTo(sharerId);
+        assertThat(row.get("sharedByFirstName").asText()).isEqualTo("Feed");  // helper uses "Feed" as firstName
+        assertThat(row.get("shareCommentary").isNull()).isTrue();
+        assertThat(row.get("sharedAt").isNull()).isFalse();
+    }
+
+    @Test
+    void followingFeed_quoteShare_surfacesCommentary() throws Exception {
+        String viewerToken = registerAndLogin("quote_view_viewer@test.com", true);
+        String sharerToken = registerAndLogin("quote_view_sharer@test.com", true);
+        String authorToken = registerAndLogin("quote_view_author@test.com", true);
+        Long sharerId = userRepository.findByEmail("quote_view_sharer@test.com").orElseThrow().getId();
+
+        mockMvc.perform(post("/api/users/" + sharerId + "/follow")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isCreated());
+
+        long pid = createPost(authorToken, "post that will be quoted", List.of());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"my commentary\"}"))
+                .andExpect(status().isOk());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/following")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode row = objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("content").get(0);
+        assertThat(row.get("shareCommentary").asText()).isEqualTo("my commentary");
+    }
+
+    @Test
+    void followingFeed_silentShares_doNotSurface() throws Exception {
+        String viewerToken = registerAndLogin("silent_view_viewer@test.com", true);
+        String sharerToken = registerAndLogin("silent_view_sharer@test.com", true);
+        String authorToken = registerAndLogin("silent_view_author@test.com", true);
+        Long sharerId = userRepository.findByEmail("silent_view_sharer@test.com").orElseThrow().getId();
+
+        mockMvc.perform(post("/api/users/" + sharerId + "/follow")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isCreated());
+
+        long pid = createPost(authorToken, "silent-share target", List.of());
+        // Sharer hits the SILENT endpoint, not /reposts.
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/share")
+                        .header("Authorization", "Bearer " + sharerToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/feed/following")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    @Test
+    void followingFeed_samePostFromBothBranches_appearsTwice() throws Exception {
+        // Viewer follows BOTH the author and the sharer; the reposted post
+        // surfaces twice — once as an original post (via the author branch)
+        // and once as a repost (via the share branch).
+        String viewerToken = registerAndLogin("dual_view_viewer@test.com", true);
+        String sharerToken = registerAndLogin("dual_view_sharer@test.com", true);
+        String authorToken = registerAndLogin("dual_view_author@test.com", true);
+        Long sharerId = userRepository.findByEmail("dual_view_sharer@test.com").orElseThrow().getId();
+        Long authorId = userRepository.findByEmail("dual_view_author@test.com").orElseThrow().getId();
+
+        mockMvc.perform(post("/api/users/" + authorId + "/follow")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/users/" + sharerId + "/follow")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isCreated());
+
+        long pid = createPost(authorToken, "post followed twice", List.of());
+        Thread.sleep(20);  // ensure share.created_at > post.created_at
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken))
+                .andExpect(status().isOk());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/following")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andReturn();
+        JsonNode content = objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("content");
+        // First row (newer sort_at) is the repost; second is the original post.
+        assertThat(content.get(0).get("sharedById").asLong()).isEqualTo(sharerId);
+        assertThat(content.get(1).get("sharedById").isNull()).isTrue();
+    }
+
+    @Test
+    void followingFeed_paginationStability_acrossRepostTies() throws Exception {
+        // Two distinct sharers repost the same post in rapid succession.
+        // Pagination must not drop or duplicate rows when the merged
+        // ORDER BY sees (sort_at, id) tied between the two repost rows;
+        // share_row_id breaks the tie.
+        String viewerToken = registerAndLogin("ties_view_viewer@test.com", true);
+        String sharer1 = registerAndLogin("ties_view_sharer1@test.com", true);
+        String sharer2 = registerAndLogin("ties_view_sharer2@test.com", true);
+        String authorToken = registerAndLogin("ties_view_author@test.com", true);
+        Long s1 = userRepository.findByEmail("ties_view_sharer1@test.com").orElseThrow().getId();
+        Long s2 = userRepository.findByEmail("ties_view_sharer2@test.com").orElseThrow().getId();
+
+        mockMvc.perform(post("/api/users/" + s1 + "/follow")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/users/" + s2 + "/follow")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isCreated());
+
+        long pid = createPost(authorToken, "ties post", List.of());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharer1))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharer2))
+                .andExpect(status().isOk());
+
+        // size=1 to force pagination; assert page 0 + page 1 together return
+        // exactly {s1, s2} share rows with no duplication or omission.
+        MvcResult page0 = mockMvc.perform(get("/api/feed/following")
+                        .param("size", "1").param("page", "0")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk()).andReturn();
+        MvcResult page1 = mockMvc.perform(get("/api/feed/following")
+                        .param("size", "1").param("page", "1")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk()).andReturn();
+        Long sharedBy0 = objectMapper.readTree(page0.getResponse().getContentAsString())
+                .get("content").get(0).get("sharedById").asLong();
+        Long sharedBy1 = objectMapper.readTree(page1.getResponse().getContentAsString())
+                .get("content").get(0).get("sharedById").asLong();
+        assertThat(java.util.Set.of(sharedBy0, sharedBy1)).containsExactlyInAnyOrder(s1, s2);
+    }
+
+    // ── Search filters: date range and language ─────────────────────────────
+
+    @Test
+    void search_byLang_filtersOnLangColumn() throws Exception {
+        String token = registerAndLogin("search_lang@test.com", true);
+        long pidEn = createPostWithLang(token, "english one", List.of(), "en");
+        long pidTr = createPostWithLang(token, "turkce yazi", List.of(), "tr");
+        long pidNoLang = createPost(token, "no lang here", List.of());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/search").param("lang", "en")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        List<Long> ids = idsFromPage(body);
+        assertThat(ids).containsExactly(pidEn);
+        assertThat(ids).doesNotContain(pidTr, pidNoLang);
+    }
+
+    @Test
+    void search_byDateRange_returnsOnlyPostsInsideWindow() throws Exception {
+        String token = registerAndLogin("search_range@test.com", true);
+        long pid = createPost(token, "post inside window", List.of("range"));
+
+        OffsetDateTime since = OffsetDateTime.now().minusHours(1);
+        OffsetDateTime until = OffsetDateTime.now().plusHours(1);
+
+        MvcResult result = mockMvc.perform(get("/api/feed/search")
+                        .param("since", since.toString())
+                        .param("until", until.toString())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(idsFromPage(body)).contains(pid);
+    }
+
+    @Test
+    void search_withSinceAfterUntil_returns400() throws Exception {
+        String token = registerAndLogin("search_bad_range@test.com", true);
+        createPost(token, "irrelevant", List.of("x"));
+
+        OffsetDateTime later = OffsetDateTime.now().plusHours(1);
+        OffsetDateTime earlier = OffsetDateTime.now().minusHours(1);
+
+        mockMvc.perform(get("/api/feed/search")
+                        .param("since", later.toString())
+                        .param("until", earlier.toString())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void search_withAllFiltersMissing_returns400() throws Exception {
+        String token = registerAndLogin("search_no_filter@test.com", true);
+        mockMvc.perform(get("/api/feed/search")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void search_withInvalidLangPattern_returns400() throws Exception {
+        String token = registerAndLogin("search_bad_lang@test.com", true);
+        mockMvc.perform(get("/api/feed/search").param("lang", "ENGLISH")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ── Keyword-mute filtering on read paths ────────────────────────────────
+
+    @Test
+    void search_dropsPostsContainingMutedKeyword() throws Exception {
+        String viewerToken = registerAndLogin("mute_view@test.com", true);
+        String authorToken = registerAndLogin("mute_author@test.com", true);
+
+        long allowedPost = createPost(authorToken, "post about kittens", List.of("kw"));
+        long mutedPost = createPost(authorToken, "this contains crypto stuff", List.of("kw"));
+
+        mockMvc.perform(post("/api/users/me/keyword-mutes")
+                        .header("Authorization", "Bearer " + viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"keyword\":\"crypto\"}"))
+                .andExpect(status().isCreated());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/search").param("hashtag", "kw")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        List<Long> ids = idsFromPage(body);
+        assertThat(ids).contains(allowedPost);
+        assertThat(ids).doesNotContain(mutedPost);
+    }
+
+    @Test
+    void search_keywordMute_isCaseInsensitive() throws Exception {
+        String viewerToken = registerAndLogin("mute_case@test.com", true);
+        String authorToken = registerAndLogin("mute_case_author@test.com", true);
+
+        long mutedPost = createPost(authorToken, "buying CRYPTO right now", List.of("kw"));
+
+        mockMvc.perform(post("/api/users/me/keyword-mutes")
+                        .header("Authorization", "Bearer " + viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"keyword\":\"crypto\"}"))
+                .andExpect(status().isCreated());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/search").param("hashtag", "kw")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(idsFromPage(body)).doesNotContain(mutedPost);
+    }
+
+    private long createPostWithLang(String token, String body, List<String> hashtags, String lang) throws Exception {
+        Map<String, Object> req = new java.util.HashMap<>();
+        req.put("body", body);
+        req.put("hashtags", hashtags);
+        req.put("lang", lang);
+        MvcResult res = mockMvc.perform(post("/api/feed/posts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asLong();
+    }
+
+    private List<Long> idsFromPage(JsonNode body) {
+        return StreamSupport.stream(body.get("content").spliterator(), false)
+                .map(n -> n.get("id").asLong())
+                .toList();
     }
 }

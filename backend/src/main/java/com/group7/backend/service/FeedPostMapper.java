@@ -153,16 +153,19 @@ public class FeedPostMapper {
     /**
      * One batched lookup per page of posts. Empty set for anonymous reads
      * so the {@code viewerHasLiked} field always serialises to {@code false}
-     * without a wasted DB round-trip.
+     * without a wasted DB round-trip. Public so the Following-feed read in
+     * {@link FeedReadService} (which builds {@link FeedPostListItem}s
+     * directly from a UNION-ALL projection rather than via
+     * {@link #toListItems}) can share the same batch lookup.
      */
-    private Set<Long> resolveLikedPostIds(Long viewerId, Set<Long> postIds) {
+    public Set<Long> resolveLikedPostIds(Long viewerId, Set<Long> postIds) {
         if (viewerId == null || postIds.isEmpty()) {
             return Collections.emptySet();
         }
         return new HashSet<>(likeRepository.findLikedPostIdsByViewer(viewerId, postIds));
     }
 
-    private Set<Long> resolveBookmarkedPostIds(Long viewerId, Set<Long> postIds) {
+    public Set<Long> resolveBookmarkedPostIds(Long viewerId, Set<Long> postIds) {
         if (viewerId == null || postIds.isEmpty()) {
             return Collections.emptySet();
         }
@@ -233,7 +236,11 @@ public class FeedPostMapper {
                 factors.getOrDefault(post.getId(), List.of()),
                 toSummaries(post.getAttachments()),
                 likedPostIds.contains(post.getId()),
-                bookmarkedPostIds.contains(post.getId())
+                bookmarkedPostIds.contains(post.getId()),
+                null,   // sharedById — not a repost surface for this mapper
+                null,   // sharedByFirstName
+                null,   // shareCommentary
+                null    // sharedAt
         );
     }
 
@@ -242,7 +249,7 @@ public class FeedPostMapper {
      * feed-media DTO shape. Returns an immutable empty list for the no-media
      * case so JSON consumers always see a stable type.
      */
-    private List<AttachmentSummary> toSummaries(List<Attachment> attachments) {
+    public List<AttachmentSummary> toSummaries(List<Attachment> attachments) {
         if (attachments == null || attachments.isEmpty()) {
             return List.of();
         }

@@ -22,9 +22,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
@@ -32,6 +37,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/mentorships")
+@Validated  // enables MethodValidationPostProcessor for @Min/@Max on @RequestParam
 @Tag(name = "Mentorships", description = "Active mentorship management")
 public class MentorshipController {
 
@@ -53,7 +59,8 @@ public class MentorshipController {
     @GetMapping
     @Operation(
             summary = "List active mentorships",
-            description = "Returns all active mentorships for the authenticated user, whether they are a mentor or mentee."
+            description = "Returns all active mentorships for the authenticated user, whether they are a mentor or mentee. "
+                    + "For paginated history view across all statuses, use ?status=ALL (#521)."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Active mentorships",
@@ -62,6 +69,33 @@ public class MentorshipController {
     public ResponseEntity<List<MentorshipResponse>> getActiveMentorships(Authentication authentication) {
         Long userId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(mentorshipService.getActiveMentorships(userId));
+    }
+
+    @GetMapping(params = "status")
+    @Operation(
+            summary = "Paginated mentorship history filtered by status (#521)",
+            description = "Returns mentorships for the authenticated user filtered by status. "
+                    + "Use status=ALL for every state (history view powering the My Mentorships "
+                    + "page #408), or any MentorshipStatus name (ACTIVE, COMPLETED, CANCELLED, "
+                    + "TERMINATED) for a single-state view. Sorted endDate DESC NULLS LAST so "
+                    + "active mentorships appear first, then most-recently terminated. "
+                    + "Page size capped at 100; default 20."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paged mentorships",
+                    content = @Content(schema = @Schema(implementation = Page.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid status filter (not ALL or a known MentorshipStatus)",
+                    content = @Content),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
+    })
+    public ResponseEntity<Page<MentorshipResponse>> getMentorshipsByStatus(
+            @RequestParam("status") String status,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(mentorshipService.getMentorshipsByStatus(
+                userId, status, PageRequest.of(page, size)));
     }
 
     @GetMapping("/{id}")

@@ -69,6 +69,11 @@ class FeedInteractionIntegrationTest {
 
     @BeforeEach
     void cleanDb() {
+        // Children before parents — FK CASCADE would handle it but the file's
+        // pattern is explicit-children-first because that's more debuggable
+        // when something goes wrong. Comment likes (#483) are children of
+        // feed_post_comments, so they go first.
+        jdbcTemplate.update("DELETE FROM feed_post_comment_likes");
         jdbcTemplate.update("DELETE FROM feed_post_comments");
         jdbcTemplate.update("DELETE FROM feed_post_shares");
         jdbcTemplate.update("DELETE FROM feed_post_bookmarks");
@@ -252,6 +257,210 @@ class FeedInteractionIntegrationTest {
                         .header("Authorization", "Bearer " + tokenB))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shareCount").value(2));
+    }
+
+    // ── Reposts (#484) ─────────────────────────────────────────────────────
+
+    @Test
+    void repost_bare_createsRow_andNotifiesAuthor() throws Exception {
+        String authorToken = registerAndLogin("repost_bare_author@test.com");
+        String sharerToken = registerAndLogin("repost_bare_sharer@test.com");
+        long pid = createPost(authorToken, "post to bare-repost", List.of());
+        long authorId = userIdByEmail("repost_bare_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shareCount").value(1));
+
+        // DB row: exactly one share, is_repost=TRUE, body=NULL.
+        Integer repostRows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM feed_post_shares WHERE post_id = ? AND is_repost = TRUE AND body IS NULL",
+                Integer.class, pid);
+        assertThat(repostRows).isEqualTo(1);
+
+        // Author notified via the existing FEED_SHARE channel.
+        awaitNotifications(authorId, NotificationType.FEED_SHARE, 1);
+    }
+
+    @Test
+    void repost_quote_persistsCommentary_andNotifiesAuthor() throws Exception {
+        String authorToken = registerAndLogin("repost_quote_author@test.com");
+        String sharerToken = registerAndLogin("repost_quote_sharer@test.com");
+        long pid = createPost(authorToken, "post to quote-share", List.of());
+        long authorId = userIdByEmail("repost_quote_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"great take\"}"))
+                .andExpect(status().isOk());
+
+        String body = jdbcTemplate.queryForObject(
+                "SELECT body FROM feed_post_shares WHERE post_id = ? AND is_repost = TRUE",
+                String.class, pid);
+        assertThat(body).isEqualTo("great take");
+
+        awaitNotifications(authorId, NotificationType.FEED_SHARE, 1);
+    }
+
+    @Test
+    void repost_softDeletedPost_returns404() throws Exception {
+        String authorToken = registerAndLogin("repost_404_author@test.com");
+        String sharerToken = registerAndLogin("repost_404_sharer@test.com");
+        long pid = createPost(authorToken, "to be deleted", List.of());
+
+        mockMvc.perform(delete("/api/feed/posts/" + pid)
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void repost_self_doesNotNotifyAuthor() throws Exception {
+        String authorToken = registerAndLogin("repost_self_author@test.com");
+        long pid = createPost(authorToken, "self-repost", List.of());
+        long authorId = userIdByEmail("repost_self_author@test.com");
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk());
+
+        // Give the AFTER_COMMIT listener a beat; FEED_SHARE count must stay
+        // at zero because the sharer is the author.
+        Thread.sleep(300);
+        assertThat(notificationsFor(authorId, NotificationType.FEED_SHARE)).isEmpty();
+    }
+
+    @Test
+    void repost_idempotencyWindow_secondCallCollapses() throws Exception {
+        String authorToken = registerAndLogin("repost_idem_author@test.com");
+        String sharerToken = registerAndLogin("repost_idem_sharer@test.com");
+        long pid = createPost(authorToken, "post for idempotency", List.of());
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"identical\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"identical\"}"))
+                .andExpect(status().isOk());
+
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM feed_post_shares WHERE post_id = ? AND is_repost = TRUE",
+                Integer.class, pid);
+        assertThat(rows).isEqualTo(1);
+    }
+
+    @Test
+    void repost_idempotencyKeyHeader_acceptedAndIgnored() throws Exception {
+        String authorToken = registerAndLogin("repost_key_author@test.com");
+        String sharerToken = registerAndLogin("repost_key_sharer@test.com");
+        long pid = createPost(authorToken, "post for idempotency key", List.of());
+
+        // With header — must accept normally (no 4xx).
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken)
+                        .header("Idempotency-Key", "00000000-0000-0000-0000-000000000001"))
+                .andExpect(status().isOk());
+
+        // Different sharer, same pattern — header on, but content differs so
+        // the idempotency window does not collapse this independent action.
+        String sharer2 = registerAndLogin("repost_key_sharer2@test.com");
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharer2)
+                        .header("Idempotency-Key", "00000000-0000-0000-0000-000000000002"))
+                .andExpect(status().isOk());
+
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM feed_post_shares WHERE post_id = ? AND is_repost = TRUE",
+                Integer.class, pid);
+        assertThat(rows).isEqualTo(2);
+    }
+
+    @Test
+    void repost_validation_oversizeBody_returns400() throws Exception {
+        String authorToken = registerAndLogin("repost_val_author@test.com");
+        String sharerToken = registerAndLogin("repost_val_sharer@test.com");
+        long pid = createPost(authorToken, "post for validation", List.of());
+
+        String oversize = "x".repeat(2001);
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("body", oversize))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void repost_blankBody_isAcceptedAsBareRepost() throws Exception {
+        String authorToken = registerAndLogin("repost_blank_author@test.com");
+        String sharerToken = registerAndLogin("repost_blank_sharer@test.com");
+        long pid = createPost(authorToken, "blank-body repost", List.of());
+
+        // {"body":"   "} — whitespace-only collapses to NULL via blankToNull;
+        // the DB CHECK feed_post_shares_body_nonblank never fires because
+        // the persisted value is NULL.
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"   \"}"))
+                .andExpect(status().isOk());
+
+        String body = jdbcTemplate.queryForObject(
+                "SELECT body FROM feed_post_shares WHERE post_id = ? AND is_repost = TRUE",
+                String.class, pid);
+        assertThat(body).isNull();
+    }
+
+    @Test
+    void repost_emptyJsonBody_isAcceptedAsBareRepost() throws Exception {
+        String authorToken = registerAndLogin("repost_empty_author@test.com");
+        String sharerToken = registerAndLogin("repost_empty_sharer@test.com");
+        long pid = createPost(authorToken, "empty-json repost", List.of());
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
+        // No request body at all — same outcome.
+        String sharer2 = registerAndLogin("repost_empty_sharer2@test.com");
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/reposts")
+                        .header("Authorization", "Bearer " + sharer2))
+                .andExpect(status().isOk());
+
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM feed_post_shares WHERE post_id = ? AND is_repost = TRUE AND body IS NULL",
+                Integer.class, pid);
+        assertThat(rows).isEqualTo(2);
+    }
+
+    @Test
+    void repost_silentShareUnchanged_doesNotWriteIsRepostFlag() throws Exception {
+        // Regression guard: existing /share contract preserved verbatim.
+        String authorToken = registerAndLogin("repost_silent_author@test.com");
+        String sharerToken = registerAndLogin("repost_silent_sharer@test.com");
+        long pid = createPost(authorToken, "silent share test", List.of());
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/share")
+                        .header("Authorization", "Bearer " + sharerToken))
+                .andExpect(status().isOk());
+
+        Integer silentRows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM feed_post_shares WHERE post_id = ? AND is_repost = FALSE AND body IS NULL",
+                Integer.class, pid);
+        assertThat(silentRows).isEqualTo(1);
+        Integer repostRows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM feed_post_shares WHERE post_id = ? AND is_repost = TRUE",
+                Integer.class, pid);
+        assertThat(repostRows).isZero();
     }
 
     // ── Comments ───────────────────────────────────────────────────────────

@@ -15,6 +15,10 @@ import com.group7.backend.repository.MentorshipRepository;
 import com.group7.backend.repository.MentorshipRequestRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -137,6 +141,47 @@ public class MentorshipService {
         return mentorshipRepository.findByUserIdAndStatus(userId, MentorshipStatus.ACTIVE).stream()
                 .map(MentorshipResponse::from)
                 .toList();
+    }
+
+    /**
+     * Paginated history view for the "My Mentorships" surface (#521).
+     * {@code statusFilter} accepts the literal string {@code "ALL"} to
+     * return every state, or any {@link MentorshipStatus} name (e.g.
+     * {@code "COMPLETED"}) for a single-status view. Sort is hard-coded
+     * in the repository query: ACTIVE first, then {@code endDate DESC,
+     * startDate DESC}.
+     *
+     * <p>The Pageable is passed un-sorted on purpose — Spring Data would
+     * otherwise append its own {@code ORDER BY} after the query's,
+     * producing a conflicting (and on some dialects, syntactically
+     * invalid) compound sort.
+     *
+     * <p>Throws {@link IllegalArgumentException} for unrecognised filter
+     * strings — surfaces as 400 via the global handler.
+     */
+    @Transactional(readOnly = true)
+    public Page<MentorshipResponse> getMentorshipsByStatus(
+            Long userId, String statusFilter, Pageable requested) {
+        Pageable unsorted = PageRequest.of(
+                requested.getPageNumber(),
+                requested.getPageSize());  // sort lives in the repository query
+
+        Page<Mentorship> page;
+        if ("ALL".equalsIgnoreCase(statusFilter)) {
+            page = mentorshipRepository.findByUserIdAllStatuses(userId, unsorted);
+        } else {
+            MentorshipStatus status;
+            try {
+                status = MentorshipStatus.valueOf(statusFilter.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException(
+                        "Invalid status filter: '" + statusFilter
+                                + "'. Expected ALL or one of "
+                                + java.util.Arrays.toString(MentorshipStatus.values()));
+            }
+            page = mentorshipRepository.findByUserIdAndStatusPaged(userId, status, unsorted);
+        }
+        return page.map(MentorshipResponse::from);
     }
 
     @Transactional(readOnly = true)
