@@ -113,7 +113,7 @@ export default function FeedPage() {
     setRecError(null)
     try {
       const page = await getFollowRecommendations(0, 8)
-      const list = (page?.content || []).map(r => ({ ...r, isFollowing: false, busy: false }))
+      const list = (page?.content || []).map(r => ({ ...r, busy: false }))
       setRecommendations(list)
     } catch (err) {
       setRecError(err?.message || 'Failed to load suggestions')
@@ -238,9 +238,12 @@ export default function FeedPage() {
     setRecommendations(prev => prev.map(r => r.id === userId ? { ...r, busy: true } : r))
     try {
       await followUser(userId)
-      setRecommendations(prev => prev.map(r => r.id === userId
-        ? { ...r, busy: false, isFollowing: true }
-        : r))
+      // #512: drop the followed user from the rail entirely. Keeping the card
+      // with the label flipped to "Unfollow" leaves a dead-looking button
+      // (the original click handler short-circuits on isFollowing=true). The
+      // recommendation no longer applies once we're following, so removal is
+      // the cleanest UX.
+      setRecommendations(prev => prev.filter(r => r.id !== userId))
     } catch (err) {
       setRecommendations(prev => prev.map(r => r.id === userId ? { ...r, busy: false } : r))
       window.alert(err?.message || 'Failed to follow user')
@@ -389,12 +392,12 @@ export default function FeedPage() {
                             View Profile
                           </button>
                           <button
-                            className={`follow-btn${rec.isFollowing ? ' follow-btn--active' : ''}`}
+                            className="follow-btn"
                             type="button"
-                            onClick={() => !rec.isFollowing && !rec.busy && handleFollowSuggestion(rec.id)}
-                            disabled={rec.busy || rec.isFollowing}
+                            onClick={() => !rec.busy && handleFollowSuggestion(rec.id)}
+                            disabled={rec.busy}
                           >
-                            {rec.busy ? 'Updating...' : rec.isFollowing ? 'Unfollow' : 'Follow'}
+                            {rec.busy ? 'Following…' : 'Follow'}
                           </button>
                         </div>
                       </div>
