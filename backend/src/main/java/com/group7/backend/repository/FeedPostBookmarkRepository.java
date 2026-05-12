@@ -10,6 +10,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
+
 @Repository
 public interface FeedPostBookmarkRepository
         extends JpaRepository<FeedPostBookmark, FeedPostBookmarkId> {
@@ -44,4 +47,20 @@ public interface FeedPostBookmarkRepository
             """,
             nativeQuery = true)
     Page<Long> findBookmarkedPostIdsByUser(@Param("userId") Long userId, Pageable pageable);
+
+    /**
+     * Returns the subset of {@code postIds} that the given viewer has
+     * bookmarked. Same shape and contract as
+     * {@code FeedPostLikeRepository.findLikedPostIdsByViewer} — feeds
+     * the {@code viewerHasBookmarked} flag on
+     * {@link com.group7.backend.dto.response.FeedPostResponse} via a
+     * single batch query. Hits the composite PK {@code (post_id, user_id)}.
+     */
+    @Query("""
+            SELECT b.id.postId FROM FeedPostBookmark b
+            WHERE b.id.userId = :viewerId
+              AND b.id.postId IN :postIds
+            """)
+    List<Long> findBookmarkedPostIdsByViewer(@Param("viewerId") Long viewerId,
+                                             @Param("postIds") Collection<Long> postIds);
 }

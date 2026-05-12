@@ -7,7 +7,7 @@ import { useMentorship } from '../context/MentorshipContext'
 import usePresence from '../hooks/usePresence'
 import {
   Home, Compass, MessageCircle, CheckSquare, CalendarDays,
-  Clock, User, Newspaper,
+  Clock, User, Newspaper, Users,
 } from 'lucide-react'
 import '../styles/main.css'
 
@@ -18,6 +18,7 @@ const NAV_TABS = [
   { label: 'Explore', path: '/explore' },
   { label: 'Feed', path: '/feed' },
   { label: 'Messages', path: '/messages' },
+  { label: 'Mentorships', path: '/mentorships' },
   { label: 'Tasks', path: '/tasks' },
   { label: 'Schedule', path: '/schedule' },
   { label: 'Calendar', path: '/calendar' },
@@ -30,6 +31,7 @@ const SIDEBAR_LINKS = [
   { label: 'Explore', path: '/explore', icon: Compass },
   { label: 'Feed', path: '/feed', icon: Newspaper },
   { label: 'Messages', path: '/messages', icon: MessageCircle },
+  { label: 'My Mentorships', path: '/mentorships', icon: Users },
   { label: 'My Tasks', path: '/tasks', icon: CheckSquare },
   { label: 'Schedule', path: '/schedule', icon: CalendarDays },
   { label: 'Calendar', path: '/calendar', icon: CalendarDays },

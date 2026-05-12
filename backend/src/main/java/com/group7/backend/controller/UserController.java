@@ -5,10 +5,12 @@ import com.group7.backend.dto.request.MenteeProfileRequest;
 import com.group7.backend.dto.request.MentorProfileRequest;
 import com.group7.backend.dto.request.SearchRole;
 import com.group7.backend.dto.response.MenteeResponse;
+import com.group7.backend.dto.response.MentorRatingResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
 import com.group7.backend.dto.response.UserProfileResponse;
 import com.group7.backend.exception.ProfileNotVisibleException;
+import com.group7.backend.service.MentorRatingService;
 import com.group7.backend.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -35,9 +37,11 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final MentorRatingService mentorRatingService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, MentorRatingService mentorRatingService) {
         this.userService = userService;
+        this.mentorRatingService = mentorRatingService;
     }
 
     // ── Get own profile ─────────────────────────────────────
@@ -159,6 +163,29 @@ public class UserController {
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(userService.getUserProfile(id, requesterId));
+    }
+
+    @GetMapping("/{id:\\d+}/ratings")
+    @Operation(summary = "Paginated mentor ratings list (#518)",
+            description = "Returns the ratings a mentor has received, newest-first. Powers the "
+                    + "'Recent feedback' block on the public mentor profile. Includes ratings "
+                    + "with and without comments — the client decides what to display. "
+                    + "menteeId surfaces in the response as the rater's user id; the client "
+                    + "batch-resolves names via the existing user-summary endpoint when it "
+                    + "wants to render attribution. Authenticated callers only — there is no "
+                    + "anonymous read of the ratings list.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Paginated rating list (newest first)"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content)
+    })
+    public ResponseEntity<Page<MentorRatingResponse>> getMentorRatings(
+            @Parameter(description = "Mentor user id") @PathVariable Long id,
+            @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size; clamped to [1, 50]") @RequestParam(defaultValue = "10") int size) {
+        // Reuse the project's existing clamp helper (same one feeding /mentors etc.) —
+        // Spring Data caps size at PageableSupport's policy and keeps page >= 0.
+        Pageable pageable = PageableSupport.clampPageable(page, Math.min(size, 50));
+        return ResponseEntity.ok(mentorRatingService.getMentorRatings(id, pageable));
     }
 
     @GetMapping("/mentors")

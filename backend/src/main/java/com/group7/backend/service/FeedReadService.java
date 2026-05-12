@@ -250,7 +250,14 @@ public class FeedReadService {
         Map<Long, FeedInteractionService.PostCounts> counts =
                 feedInteractionService.batchCounts(postIds.stream().toList());
 
-        return page.map(row -> followingRowToListItem(row, postsById, names, counts));
+        // Viewer-relative flags — single batch each, short-circuit empty
+        // sets for anonymous viewers. Reuses the same helpers as
+        // FeedPostMapper.toListItems so the wire shape stays consistent
+        // across feed surfaces.
+        Set<Long> liked = feedPostMapper.resolveLikedPostIds(viewerId, postIds);
+        Set<Long> bookmarked = feedPostMapper.resolveBookmarkedPostIds(viewerId, postIds);
+
+        return page.map(row -> followingRowToListItem(row, postsById, names, counts, liked, bookmarked));
     }
 
     /**
@@ -264,7 +271,9 @@ public class FeedReadService {
             FollowingFeedRow row,
             Map<Long, FeedPost> postsById,
             Map<Long, String> names,
-            Map<Long, FeedInteractionService.PostCounts> counts) {
+            Map<Long, FeedInteractionService.PostCounts> counts,
+            Set<Long> likedPostIds,
+            Set<Long> bookmarkedPostIds) {
         FeedPost post = postsById.get(row.getId());
         List<String> tags = (post == null)
                 ? List.of()
@@ -300,6 +309,8 @@ public class FeedReadService {
                 commentCount,
                 List.of(),                    // factors — Following is chronological, not ranked
                 attachments,
+                likedPostIds.contains(row.getId()),
+                bookmarkedPostIds.contains(row.getId()),
                 row.getSharedById(),
                 sharerName,
                 row.getShareCommentary(),

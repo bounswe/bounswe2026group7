@@ -6,10 +6,14 @@ import com.group7.backend.dto.response.FeedPostResponse;
 import com.group7.backend.entity.Attachment;
 import com.group7.backend.entity.FeedPost;
 import com.group7.backend.entity.FeedPostHashtag;
+import com.group7.backend.repository.FeedPostBookmarkRepository;
+import com.group7.backend.repository.FeedPostLikeRepository;
 import com.group7.backend.repository.UserRepository;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,10 +46,17 @@ public class FeedPostMapper {
 
     private final UserRepository userRepository;
     private final AttachmentUrlBuilder attachmentUrlBuilder;
+    private final FeedPostLikeRepository likeRepository;
+    private final FeedPostBookmarkRepository bookmarkRepository;
 
-    public FeedPostMapper(UserRepository userRepository, AttachmentUrlBuilder attachmentUrlBuilder) {
+    public FeedPostMapper(UserRepository userRepository,
+                          AttachmentUrlBuilder attachmentUrlBuilder,
+                          FeedPostLikeRepository likeRepository,
+                          FeedPostBookmarkRepository bookmarkRepository) {
         this.userRepository = userRepository;
         this.attachmentUrlBuilder = attachmentUrlBuilder;
+        this.likeRepository = likeRepository;
+        this.bookmarkRepository = bookmarkRepository;
     }
 
     /**
@@ -55,7 +66,10 @@ public class FeedPostMapper {
      */
     public FeedPostResponse toResponse(FeedPost post, Long viewerId) {
         Map<Long, String> names = resolveAuthorNames(Set.of(post.getAuthorId()));
-        return mapOne(post, viewerId, names);
+        Set<Long> postIds = Set.of(post.getId());
+        Set<Long> liked = resolveLikedPostIds(viewerId, postIds);
+        Set<Long> bookmarked = resolveBookmarkedPostIds(viewerId, postIds);
+        return mapOne(post, viewerId, names, liked, bookmarked);
     }
 
     /**
@@ -73,9 +87,14 @@ public class FeedPostMapper {
         Set<Long> authorIds = posts.stream()
                 .map(FeedPost::getAuthorId)
                 .collect(Collectors.toSet());
+        Set<Long> postIds = posts.stream()
+                .map(FeedPost::getId)
+                .collect(Collectors.toSet());
         Map<Long, String> names = resolveAuthorNames(authorIds);
+        Set<Long> liked = resolveLikedPostIds(viewerId, postIds);
+        Set<Long> bookmarked = resolveBookmarkedPostIds(viewerId, postIds);
         return posts.stream()
-                .map(p -> mapOne(p, viewerId, names))
+                .map(p -> mapOne(p, viewerId, names, liked, bookmarked))
                 .toList();
     }
 
@@ -108,9 +127,14 @@ public class FeedPostMapper {
         Set<Long> authorIds = posts.stream()
                 .map(FeedPost::getAuthorId)
                 .collect(Collectors.toSet());
+        Set<Long> postIds = posts.stream()
+                .map(FeedPost::getId)
+                .collect(Collectors.toSet());
         Map<Long, String> names = resolveAuthorNames(authorIds);
+        Set<Long> liked = resolveLikedPostIds(viewerId, postIds);
+        Set<Long> bookmarked = resolveBookmarkedPostIds(viewerId, postIds);
         return posts.stream()
-                .map(p -> mapListItem(p, names, counts, factors))
+                .map(p -> mapListItem(p, names, counts, factors, liked, bookmarked))
                 .toList();
     }
 
@@ -126,7 +150,30 @@ public class FeedPostMapper {
         return names;
     }
 
-    private FeedPostResponse mapOne(FeedPost post, Long viewerId, Map<Long, String> names) {
+    /**
+     * One batched lookup per page of posts. Empty set for anonymous reads
+     * so the {@code viewerHasLiked} field always serialises to {@code false}
+     * without a wasted DB round-trip. Public so the Following-feed read in
+     * {@link FeedReadService} (which builds {@link FeedPostListItem}s
+     * directly from a UNION-ALL projection rather than via
+     * {@link #toListItems}) can share the same batch lookup.
+     */
+    public Set<Long> resolveLikedPostIds(Long viewerId, Set<Long> postIds) {
+        if (viewerId == null || postIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return new HashSet<>(likeRepository.findLikedPostIdsByViewer(viewerId, postIds));
+    }
+
+    public Set<Long> resolveBookmarkedPostIds(Long viewerId, Set<Long> postIds) {
+        if (viewerId == null || postIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return new HashSet<>(bookmarkRepository.findBookmarkedPostIdsByViewer(viewerId, postIds));
+    }
+
+    private FeedPostResponse mapOne(FeedPost post, Long viewerId, Map<Long, String> names,
+                                     Set<Long> likedPostIds, Set<Long> bookmarkedPostIds) {
         boolean isAuthor = viewerId != null && viewerId.equals(post.getAuthorId());
         // Strict isAfter: the service explicitly sets createdAt and
         // updatedAt to the exact same OffsetDateTime instance on create,
@@ -158,14 +205,18 @@ public class FeedPostMapper {
                 post.getUpdatedAt(),
                 isEdited,
                 isAuthor,
-                toSummaries(post.getAttachments())
+                toSummaries(post.getAttachments()),
+                likedPostIds.contains(post.getId()),
+                bookmarkedPostIds.contains(post.getId())
         );
     }
 
     private FeedPostListItem mapListItem(FeedPost post,
                                          Map<Long, String> names,
                                          Map<Long, FeedInteractionService.PostCounts> counts,
-                                         Map<Long, List<String>> factors) {
+                                         Map<Long, List<String>> factors,
+                                         Set<Long> likedPostIds,
+                                         Set<Long> bookmarkedPostIds) {
         List<String> tags = post.getHashtags().stream()
                 .map(FeedPostHashtag::getId)
                 .map(id -> id.getTag())
@@ -184,6 +235,8 @@ public class FeedPostMapper {
                 c.commentCount(),
                 factors.getOrDefault(post.getId(), List.of()),
                 toSummaries(post.getAttachments()),
+                likedPostIds.contains(post.getId()),
+                bookmarkedPostIds.contains(post.getId()),
                 null,   // sharedById — not a repost surface for this mapper
                 null,   // sharedByFirstName
                 null,   // shareCommentary
