@@ -69,6 +69,11 @@ class FeedInteractionIntegrationTest {
 
     @BeforeEach
     void cleanDb() {
+        // Children before parents — FK CASCADE would handle it but the file's
+        // pattern is explicit-children-first because that's more debuggable
+        // when something goes wrong. Comment likes (#483) are children of
+        // feed_post_comments, so they go first.
+        jdbcTemplate.update("DELETE FROM feed_post_comment_likes");
         jdbcTemplate.update("DELETE FROM feed_post_comments");
         jdbcTemplate.update("DELETE FROM feed_post_shares");
         jdbcTemplate.update("DELETE FROM feed_post_bookmarks");

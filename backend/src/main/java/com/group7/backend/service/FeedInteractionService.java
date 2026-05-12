@@ -6,6 +6,7 @@ import com.group7.backend.dto.response.FeedPostListItem;
 import com.group7.backend.entity.FeedPost;
 import com.group7.backend.entity.FeedPostBookmarkId;
 import com.group7.backend.entity.FeedPostComment;
+import com.group7.backend.entity.FeedPostCommentLikeId;
 import com.group7.backend.entity.FeedPostLikeId;
 import com.group7.backend.entity.FeedPostShare;
 import com.group7.backend.entity.User;
@@ -13,11 +14,13 @@ import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.event.FeedEngagementEvent;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FeedPostBookmarkRepository;
+import com.group7.backend.repository.FeedPostCommentLikeRepository;
 import com.group7.backend.repository.FeedPostCommentRepository;
 import com.group7.backend.repository.FeedPostLikeRepository;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.FeedPostShareRepository;
 import com.group7.backend.repository.UserRepository;
+import com.group7.backend.repository.projection.CommentCountTuple;
 import com.group7.backend.repository.projection.PostCountTuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +80,7 @@ public class FeedInteractionService {
     private final FeedPostBookmarkRepository bookmarkRepository;
     private final FeedPostShareRepository shareRepository;
     private final FeedPostCommentRepository commentRepository;
+    private final FeedPostCommentLikeRepository commentLikeRepository;
     private final UserRepository userRepository;
     private final FeedPostMapper feedPostMapper;
     private final NotificationEventPublisher notificationEventPublisher;
@@ -86,6 +91,7 @@ public class FeedInteractionService {
                                    FeedPostBookmarkRepository bookmarkRepository,
                                    FeedPostShareRepository shareRepository,
                                    FeedPostCommentRepository commentRepository,
+                                   FeedPostCommentLikeRepository commentLikeRepository,
                                    UserRepository userRepository,
                                    FeedPostMapper feedPostMapper,
                                    NotificationEventPublisher notificationEventPublisher,
@@ -95,6 +101,7 @@ public class FeedInteractionService {
         this.bookmarkRepository = bookmarkRepository;
         this.shareRepository = shareRepository;
         this.commentRepository = commentRepository;
+        this.commentLikeRepository = commentLikeRepository;
         this.userRepository = userRepository;
         this.feedPostMapper = feedPostMapper;
         this.notificationEventPublisher = notificationEventPublisher;
@@ -260,7 +267,9 @@ public class FeedInteractionService {
             notificationEventPublisher.publishFeedComment(
                     post.getAuthorId(), actorFirstName, postId);
         }
-        return mapComment(saved, authorId, actorFirstName);
+        // Fresh comment short-circuit (#483): a just-created comment has zero likes
+        // and the author hasn't liked it yet, so skip the existsBy/countBy SQL.
+        return mapComment(saved, authorId, actorFirstName, false, 0L);
     }
 
     public Page<FeedCommentResponse> listComments(Long postId, Long viewerId, Pageable pageable) {
@@ -273,7 +282,19 @@ public class FeedInteractionService {
         Set<Long> authorIds = page.getContent().stream()
                 .map(FeedPostComment::getAuthorId).collect(Collectors.toSet());
         Map<Long, String> names = resolveAuthorNamesByIds(authorIds);
-        return page.map(c -> mapComment(c, viewerId, names.get(c.getAuthorId())));
+        // Batch-load comment-like state for the page (#483) — keeps the listing
+        // O(1) per interaction type rather than N+1 across the page.
+        List<Long> commentIds = page.getContent().stream()
+                .map(FeedPostComment::getId).toList();
+        Map<Long, Long> likeCounts = commentLikeRepository.countByCommentIdIn(commentIds).stream()
+                .collect(Collectors.toMap(CommentCountTuple::commentId, CommentCountTuple::count));
+        Set<Long> liked = viewerId == null
+                ? Set.of()
+                : new HashSet<>(commentLikeRepository.findLikedCommentIdsForViewer(viewerId, commentIds));
+        return page.map(c -> mapComment(
+                c, viewerId, names.get(c.getAuthorId()),
+                liked.contains(c.getId()),
+                likeCounts.getOrDefault(c.getId(), 0L)));
     }
 
     @Transactional
@@ -321,6 +342,11 @@ public class FeedInteractionService {
      * every other single-comment operation already lives here; splitting
      * one comment op into a different service would fragment the
      * comment logic.
+     *
+     * <p>Calls the 3-arg {@link #mapComment} shim, which after #483 also
+     * loads {@code likeCount} + {@code viewerHasLiked} for the response —
+     * a permalink fetch is exactly the case where the viewer wants the
+     * full state, so the two extra SQL hits are justified.
      */
     public FeedCommentResponse getComment(Long commentId, Long viewerId) {
         FeedPostComment comment = commentRepository.findByIdAndDeletedAtIsNull(commentId)
@@ -332,6 +358,57 @@ public class FeedInteractionService {
         feedPostRepository.findByIdAndDeletedAtIsNull(comment.getPostId())
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
         return mapComment(comment, viewerId, resolveAuthorName(comment.getAuthorId()));
+    }
+
+    /**
+     * Idempotent comment-like toggle (#483). Mirrors {@link #toggleLike}
+     * exactly: existsBy → upsert / deleteById branch, with the same
+     * rapid-double-click race caveat (the {@code INSERT … ON CONFLICT
+     * DO NOTHING} keeps the row count consistent and the silent
+     * {@code deleteById} keeps the @Transactional healthy under
+     * concurrent toggles; frontend debouncing is the recommended
+     * mitigation, see {@link #toggleLike}'s javadoc).
+     *
+     * <p>404 if the comment is missing or soft-deleted, OR if the
+     * parent post has been soft-deleted (the FK CASCADE makes the
+     * post-deleted-comment-not-yet state nearly impossible, but the
+     * defensive check keeps the contract clean under race).
+     *
+     * <p>Loads the parent post so the bandit α-update trampoline (the
+     * {@link #publishEngagement} hook for #438) sees comment-like as
+     * positive engagement on the parent's hashtags. Skipping this hook
+     * would systematically under-credit comment-like signal in the
+     * advanced For-You ranker.
+     */
+    @Transactional
+    public FeedCommentResponse toggleCommentLike(Long commentId, Long userId) {
+        FeedPostComment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
+        if (comment.getDeletedAt() != null) {
+            throw new ResourceNotFoundException("Comment not found with id: " + commentId);
+        }
+        FeedPost post = requireVisiblePost(comment.getPostId());
+
+        FeedPostCommentLikeId id = new FeedPostCommentLikeId(commentId, userId);
+        boolean nowLiked;
+        if (commentLikeRepository.existsByIdCommentIdAndIdUserId(commentId, userId)) {
+            commentLikeRepository.deleteById(id);
+            nowLiked = false;
+        } else {
+            commentLikeRepository.upsertCommentLike(commentId, userId);
+            nowLiked = true;
+            // Bandit hook — toggle-OFF must NOT publish (without β
+            // updates a like→unlike would otherwise double-credit α).
+            // Mirrors the contract documented on publishEngagement.
+            publishEngagement(post, userId);
+        }
+        log.info("Toggle comment like: commentId={}, postId={}, userId={}, nowLiked={}",
+                commentId, comment.getPostId(), userId, nowLiked);
+        return mapComment(
+                comment, userId,
+                resolveAuthorName(comment.getAuthorId()),
+                nowLiked,
+                commentLikeRepository.countByIdCommentId(commentId));
     }
 
     // ── Aggregate state ────────────────────────────────────────────────────
@@ -403,7 +480,29 @@ public class FeedInteractionService {
         }
     }
 
+    /**
+     * 3-arg shim that loads {@code likeCount} + {@code viewerHasLiked}
+     * via single-comment SQL. Used on the {@code editComment} path
+     * where the editor (= comment author) may have liked their own
+     * comment earlier so the values must be re-derived. The
+     * {@code addComment} path bypasses this shim and calls the 5-arg
+     * overload directly with {@code (false, 0L)} (#483).
+     */
     private FeedCommentResponse mapComment(FeedPostComment c, Long viewerId, String authorName) {
+        boolean liked = viewerId != null
+                && commentLikeRepository.existsByIdCommentIdAndIdUserId(c.getId(), viewerId);
+        long likeCount = commentLikeRepository.countByIdCommentId(c.getId());
+        return mapComment(c, viewerId, authorName, liked, likeCount);
+    }
+
+    /**
+     * 5-arg overload that takes pre-loaded comment-like state. Called
+     * directly by {@code listComments} (with batched values) and
+     * {@code toggleCommentLike} (with the just-toggled state) so they
+     * don't pay the per-comment existsBy/countBy round-trips.
+     */
+    private FeedCommentResponse mapComment(FeedPostComment c, Long viewerId, String authorName,
+                                           boolean viewerHasLiked, long likeCount) {
         boolean isAuthor = viewerId != null && viewerId.equals(c.getAuthorId());
         boolean isDeleted = c.getDeletedAt() != null;
         boolean isEdited = c.getUpdatedAt() != null && c.getCreatedAt() != null
@@ -418,7 +517,9 @@ public class FeedInteractionService {
                 c.getUpdatedAt(),
                 isEdited,
                 isAuthor,
-                isDeleted
+                isDeleted,
+                likeCount,
+                viewerHasLiked
         );
     }
 
