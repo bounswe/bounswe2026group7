@@ -1,6 +1,7 @@
 package com.group7.backend.event;
 
 import com.group7.backend.dto.feed.FeedTopics;
+import com.group7.backend.dto.response.FeedEngagementPushPayload;
 import com.group7.backend.dto.response.FeedPostPushPayload;
 import com.group7.backend.dto.response.FeedSharePushPayload;
 import com.group7.backend.repository.FollowRepository;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -115,6 +117,39 @@ public class FeedFanoutListener {
         } catch (RuntimeException ex) {
             log.error("Share fanout aborted: shareId={}, sharerId={}: {}",
                     event.shareId(), event.sharerId(), ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Engagement-counts fanout. Mirrors {@link #onFeedPostShared}'s
+     * follower-set snapshot pattern, but adds the post author to the
+     * recipients so the author also sees live counts on their own post.
+     * Non-follower viewers (search, For-You discovery, direct link) are
+     * not in the recipient set and fall back to polling on next
+     * interaction — a documented v1 limitation.
+     */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onFeedPostEngagementChanged(FeedPostEngagementChangedEvent event) {
+        try {
+            Set<Long> recipients = new HashSet<>(
+                    followRepository.findFollowerIdsByFolloweeId(event.authorId()));
+            recipients.add(event.authorId());
+            if (recipients.isEmpty()) {
+                return;
+            }
+            FeedEngagementPushPayload payload = new FeedEngagementPushPayload(
+                    event.postId(),
+                    event.likeCount(),
+                    event.commentCount(),
+                    event.shareCount(),
+                    event.updatedAt());
+            int delivered = broadcastTo(recipients, payload, event.postId());
+            log.info("Engagement fanout: postId={}, authorId={}, recipients={}, delivered={}",
+                    event.postId(), event.authorId(), recipients.size(), delivered);
+        } catch (RuntimeException ex) {
+            log.error("Engagement fanout aborted: postId={}, authorId={}: {}",
+                    event.postId(), event.authorId(), ex.getMessage(), ex);
         }
     }
 
