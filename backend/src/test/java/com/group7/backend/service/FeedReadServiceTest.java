@@ -413,16 +413,19 @@ class FeedReadServiceTest {
     }
 
     /**
-     * 14-arg FeedPostListItem — the four share-metadata fields default to
-     * null because every test fixture here represents the non-repost
-     * surface. Specific tests that need to assert repost-attribution
-     * fields stub the projection directly rather than going through this
-     * helper.
+     * 16-arg FeedPostListItem — the viewer-relative flags default to
+     * false (#532) and the four share-metadata fields default to null
+     * (#531) because every test fixture here represents the
+     * non-repost, no-viewer-interaction surface. Specific tests that
+     * need to assert repost-attribution or viewer flags stub the
+     * projection directly rather than going through this helper.
      */
     private static FeedPostListItem listItem(Long id, Long authorId) {
         return new FeedPostListItem(
-                id, authorId, "U" + authorId, "body", List.of(),
-                OffsetDateTime.now(), 0L, 0L, List.of(), List.of(),
+                id, authorId, "U" + authorId, "body", List.<String>of(),
+                OffsetDateTime.now(), 0L, 0L, List.<String>of(),
+                List.<com.group7.backend.dto.response.AttachmentSummary>of(),
+                false, false,
                 null, null, null, null);
     }
 }
