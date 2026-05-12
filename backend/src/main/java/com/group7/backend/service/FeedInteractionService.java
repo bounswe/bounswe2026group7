@@ -13,6 +13,7 @@ import com.group7.backend.entity.FeedPostShare;
 import com.group7.backend.entity.User;
 import com.group7.backend.entity.FeedPostHashtag;
 import com.group7.backend.event.FeedEngagementEvent;
+import com.group7.backend.event.FeedPostEngagementChangedEvent;
 import com.group7.backend.event.FeedPostSharedEvent;
 import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FeedPostBookmarkRepository;
@@ -159,6 +160,7 @@ public class FeedInteractionService {
             nowLiked = true;
             publishEngagement(post, userId);
         }
+        publishEngagementChanged(post);
         log.info("Toggle like: postId={}, userId={}, nowLiked={}", postId, userId, nowLiked);
         if (nowLiked && !userId.equals(post.getAuthorId())) {
             notificationEventPublisher.publishFeedLike(
@@ -256,6 +258,7 @@ public class FeedInteractionService {
         FeedPost post = requireVisiblePost(postId);
         shareRepository.save(new FeedPostShare(postId, sharerId));
         publishEngagement(post, sharerId);
+        publishEngagementChanged(post);
         log.info("Recorded share: postId={}, sharerId={}", postId, sharerId);
         if (!sharerId.equals(post.getAuthorId())) {
             notificationEventPublisher.publishFeedShare(
@@ -319,6 +322,7 @@ public class FeedInteractionService {
                 OffsetDateTime.now()));
 
         publishEngagement(post, sharerId);
+        publishEngagementChanged(post);
         log.info("Recorded repost: postId={}, sharerId={}, hasCommentary={}",
                 postId, sharerId, body != null);
 
@@ -347,6 +351,7 @@ public class FeedInteractionService {
         comment.setUpdatedAt(now);
         FeedPostComment saved = commentRepository.save(comment);
         publishEngagement(post, authorId);
+        publishEngagementChanged(post);
         log.info("Created comment: id={}, postId={}, authorId={}", saved.getId(), postId, authorId);
         String actorFirstName = resolveAuthorName(authorId);
         if (!authorId.equals(post.getAuthorId())) {
@@ -414,6 +419,10 @@ public class FeedInteractionService {
         }
         comment.setDeletedAt(OffsetDateTime.now());
         commentRepository.save(comment);
+        // Parent may have been soft-deleted concurrently — skip the push in
+        // that case because no follower has the post visible anyway.
+        feedPostRepository.findByIdAndDeletedAtIsNull(comment.getPostId())
+                .ifPresent(this::publishEngagementChanged);
         log.info("Soft-deleted comment: id={}, authorId={}", commentId, requesterId);
     }
 
@@ -488,6 +497,10 @@ public class FeedInteractionService {
             // Mirrors the contract documented on publishEngagement.
             publishEngagement(post, userId);
         }
+        // Engagement push fires on both branches as a heartbeat — post.commentCount
+        // is unchanged, but the frontend uses the push to refresh comment-likes
+        // on an open post-detail view.
+        publishEngagementChanged(post);
         log.info("Toggle comment like: commentId={}, postId={}, userId={}, nowLiked={}",
                 commentId, comment.getPostId(), userId, nowLiked);
         return mapComment(
@@ -564,6 +577,32 @@ public class FeedInteractionService {
         if (!hashtags.isEmpty()) {
             eventPublisher.publishEvent(new FeedEngagementEvent(viewerId, hashtags));
         }
+    }
+
+    /**
+     * Publishes a {@link FeedPostEngagementChangedEvent} carrying the
+     * post-flush authoritative counts. The {@code @TransactionalEventListener}
+     * subscriber broadcasts a {@link com.group7.backend.dto.response.FeedEngagementPushPayload}
+     * to the author's followers plus the author themselves so visible
+     * feed cards can refresh counts without polling.
+     *
+     * <p>Counts are queried via {@link #interactionState} inside the same
+     * {@code @Transactional} boundary as the mutating write — Hibernate
+     * flushes before the SELECTs, so the counts include the just-written
+     * row. {@code viewerId} is {@code null} because the listener fans out
+     * to many viewers and per-viewer toggle flags aren't part of the push
+     * contract.
+     */
+    private void publishEngagementChanged(FeedPost post) {
+        if (post == null) return;
+        FeedPostInteractionState state = interactionState(post.getId(), null);
+        eventPublisher.publishEvent(new FeedPostEngagementChangedEvent(
+                post.getId(),
+                post.getAuthorId(),
+                state.likeCount(),
+                state.commentCount(),
+                state.shareCount(),
+                OffsetDateTime.now()));
     }
 
     /**
