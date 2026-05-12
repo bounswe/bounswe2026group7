@@ -3,6 +3,7 @@ import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import NotificationPreferences from '../components/NotificationPreferences'
 import MutedKeywords from '../components/MutedKeywords'
+import LocationPicker from '../components/LocationPicker'
 import usePresence from '../hooks/usePresence'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
@@ -15,6 +16,10 @@ function mapResponseToForm(data) {
     name: [data.firstName, data.lastName].filter(Boolean).join(' '),
     profilePhoto: data.profilePhoto || '',
     interests: (data.interests || []).join(', '),
+    // #461: shared location fields, available on both roles
+    city: data.city || '',
+    latitude: data.latitude ?? null,
+    longitude: data.longitude ?? null,
   }
   if (isMentor) {
     return {
@@ -152,6 +157,12 @@ export default function ProfilePage() {
         firstName,
         lastName,
         interests: toList(form.interests),
+        // #461: location fields are common across roles. Backend EditProfileRequest
+        // enforces pair-completeness on lat/lng via a DB CHECK constraint, so we
+        // send all three together. Null clears all three; partial null is rejected.
+        city: form.city || null,
+        latitude: form.latitude ?? null,
+        longitude: form.longitude ?? null,
         ...(isMentor ? {
           bio: form.bio || null,
           field: form.field || null,
@@ -309,6 +320,7 @@ export default function ProfilePage() {
                 <ViewField label="Field" value={form.field} />
                 <ViewField label="Expertise" value={form.expertise} />
                 <ViewField label="Affiliation" value={form.affiliation} />
+                <ViewField label="Location" value={form.city} />
                 <ViewField label="Interests" value={form.interests} chips />
                 <ViewField label="Mentoring Goals" value={form.mentoringGoals} />
                 <ViewField label="Preferred Mentee Major" value={form.preferredMenteeMajor} />
@@ -321,6 +333,7 @@ export default function ProfilePage() {
                 <ViewField label="Background" value={form.background} visible={form.profileVisible} />
                 <ViewField label="Goals" value={form.goals} visible={form.profileVisible} />
                 <ViewField label="Affiliation" value={form.affiliation} visible={form.profileVisible} />
+                <ViewField label="Location" value={form.city} visible={form.profileVisible} />
                 <ViewField label="Skills" value={form.skills} visible={form.profileVisible} chips />
                 <ViewField label="Interests" value={form.interests} visible={form.profileVisible} chips />
                 <ViewField label="Major" value={form.major} visible={form.profileVisible} />
@@ -358,6 +371,22 @@ export default function ProfilePage() {
                 onChange={e => handleChange('interests', e.target.value)}
                 placeholder="e.g. Mobile Development, AI/ML"
                 data-testid="profile-interests"
+              />
+            </div>
+
+            <div className="form-field">
+              <label className="form-label">Location</label>
+              <LocationPicker
+                city={form.city}
+                latitude={form.latitude}
+                longitude={form.longitude}
+                disabled={saving}
+                onChange={({ city, latitude, longitude }) => {
+                  // Picker hands back all three together so the pair-completeness
+                  // constraint always holds. Apply as a batch so we don't trip
+                  // any single-field validators in between.
+                  setForm(prev => ({ ...prev, city: city ?? '', latitude, longitude }))
+                }}
               />
             </div>
 
