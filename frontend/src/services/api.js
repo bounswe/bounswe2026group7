@@ -311,6 +311,20 @@ export async function extendMentorship(id, additionalMonths) {
   return handleResponse(res)
 }
 
+// Mentee-only rating (#278 / 1.1.1.1.11). Backend rejects with 409 if the
+// mentorship is still ACTIVE or already rated; 403 if a mentor calls it.
+// Score must be 1..5; comment is optional and capped at 1000 chars.
+export async function rateMentor(id, score, comment) {
+  const body = { score }
+  if (comment) body.comment = comment
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/rating`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
 // ── Mentorship tasks (#125) ───────────────────────────────────────────────
 // Backend: TaskController. Status enum: PENDING, SUBMITTED, REVISION_REQUESTED, COMPLETED.
 

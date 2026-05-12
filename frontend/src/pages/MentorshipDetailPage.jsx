@@ -12,6 +12,7 @@ import {
   cancelMentorship,
   endMentorship,
   extendMentorship,
+  rateMentor,
   listMentorshipMeetings,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -254,6 +255,116 @@ function ExtendMentorshipModal({ open, onClose, onConfirm, loading, otherName, c
 }
 
 /**
+ * Mentee-side mentor rating modal (#278 / 1.1.1.1.11). Backend caps the
+ * score at 1..5 and the optional comment at 1000 chars. One-shot per
+ * mentorship — duplicate POST returns 409, surfaced here as an error.
+ */
+function RateMentorModal({ open, onClose, onConfirm, loading, mentorName }) {
+  const overlayRef = useRef(null)
+  const [score, setScore] = useState(0)
+  const [hoverScore, setHoverScore] = useState(0)
+  const [comment, setComment] = useState('')
+
+  useEffect(() => {
+    if (open) { setScore(0); setHoverScore(0); setComment('') }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onKey = e => { if (e.key === 'Escape' && !loading) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose, loading])
+
+  if (!open) return null
+
+  const displayScore = hoverScore || score
+
+  return (
+    <div
+      className="modal-overlay"
+      ref={overlayRef}
+      onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
+    >
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="rateMentorTitle">
+        <div className="modal-header">
+          <div>
+            <h2 id="rateMentorTitle">Rate {mentorName || 'your mentor'}</h2>
+            <p className="modal-subtitle">
+              Your rating helps other mentees find a great match. Only the average and rating
+              count are shown publicly — your comment may appear without your name attached.
+            </p>
+          </div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>
+          Score (required)
+        </label>
+        <div
+          className="md-rating-stars"
+          role="radiogroup"
+          aria-label="Score from 1 to 5 stars"
+          onMouseLeave={() => setHoverScore(0)}
+        >
+          {[1, 2, 3, 4, 5].map(n => (
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={score === n}
+              aria-label={`${n} star${n !== 1 ? 's' : ''}`}
+              className={`md-rating-star${displayScore >= n ? ' md-rating-star--filled' : ''}`}
+              onClick={() => setScore(n)}
+              onMouseEnter={() => setHoverScore(n)}
+              onFocus={() => setHoverScore(n)}
+              onBlur={() => setHoverScore(0)}
+              disabled={loading}
+            >
+              ★
+            </button>
+          ))}
+          <span className="md-rating-value">
+            {displayScore > 0 ? `${displayScore} / 5` : 'Pick a score'}
+          </span>
+        </div>
+
+        <label className="section-label" style={{ marginTop: '14px', display: 'block' }} htmlFor="rateComment">
+          Comment (optional)
+        </label>
+        <textarea
+          id="rateComment"
+          className="modal-textarea"
+          rows={4}
+          maxLength={1000}
+          value={comment}
+          onChange={e => setComment(e.target.value)}
+          placeholder="Tell future mentees what made working with this mentor valuable."
+          disabled={loading}
+        />
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>
+          {comment.length}/1000
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button type="button" className="modal-btn-secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="modal-btn-primary"
+            onClick={() => onConfirm(score, comment.trim() || undefined)}
+            disabled={loading || score < 1}
+          >
+            {loading ? 'Submitting…' : 'Submit rating'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
  * Mentee-side cancellation modal (#127). Reason is required by the backend
  * (CancelMentorshipRequest @NotBlank); the warning copy is intentionally
  * loud because frequent cancellations escalate into a temporary ban via
@@ -448,10 +559,28 @@ export default function MentorshipDetailPage() {
   const [extendOpen, setExtendOpen] = useState(false)
   const [extendLoading, setExtendLoading] = useState(false)
   const [extendError, setExtendError] = useState(null)
+  const [rateOpen, setRateOpen] = useState(false)
+  const [rateLoading, setRateLoading] = useState(false)
+  const [rateError, setRateError] = useState(null)
+  // Backend doesn't expose a GET-rating endpoint today, so we mirror successful
+  // submissions in localStorage to suppress the prompt on subsequent visits.
+  // The 409-on-duplicate-POST path also flips this so cross-device
+  // resubmission is caught.
+  const [submittedRating, setSubmittedRating] = useState(null)
 
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelError, setCancelError] = useState(null)
+
+  // Hydrate already-submitted rating from localStorage so the prompt doesn't
+  // reappear on revisit. Backend has no GET-rating endpoint today (#278 follow-up).
+  useEffect(() => {
+    if (!id) return
+    try {
+      const raw = localStorage.getItem(`rated_mentorship_${id}`)
+      if (raw) setSubmittedRating(JSON.parse(raw))
+    } catch { /* malformed entry — ignore */ }
+  }, [id])
 
   useEffect(() => {
     let cancelled = false
@@ -515,6 +644,40 @@ export default function MentorshipDetailPage() {
       setEndError(err?.message || 'Failed to end mentorship')
     } finally {
       setEndLoading(false)
+    }
+  }
+
+  async function handleRateConfirm(score, comment) {
+    setRateLoading(true)
+    setRateError(null)
+    try {
+      const created = await rateMentor(mentorship.id, score, comment)
+      setSubmittedRating(created)
+      try {
+        localStorage.setItem(`rated_mentorship_${mentorship.id}`, JSON.stringify({
+          score: created.score,
+          comment: created.comment,
+          createdAt: created.createdAt,
+        }))
+      } catch { /* localStorage disabled — fall back to in-memory state */ }
+      setRateOpen(false)
+    } catch (err) {
+      const msg = err?.message || ''
+      // Duplicate-rating path: backend returns 409 with "already rated" wording.
+      // Treat as success-ish — flip to the read-only block so the user isn't stuck.
+      if (msg.includes('409') || /already.*rated/i.test(msg)) {
+        setSubmittedRating({ score, comment, createdAt: new Date().toISOString() })
+        try {
+          localStorage.setItem(`rated_mentorship_${mentorship.id}`, JSON.stringify({
+            score, comment, createdAt: new Date().toISOString(),
+          }))
+        } catch { /* ignore */ }
+        setRateOpen(false)
+      } else {
+        setRateError(msg || 'Failed to submit rating')
+      }
+    } finally {
+      setRateLoading(false)
     }
   }
 
@@ -628,6 +791,44 @@ export default function MentorshipDetailPage() {
           </div>
         </div>
       </div>
+
+      {!isActive && !viewerIsMentor && (
+        submittedRating ? (
+          <div className="md-rating-card md-rating-card--done" role="status">
+            <div className="md-rating-card-head">
+              <strong>You rated {otherFirstName || 'your mentor'}</strong>
+              <span className="md-rating-stars md-rating-stars--readonly" aria-hidden="true">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <span
+                    key={n}
+                    className={`md-rating-star${submittedRating.score >= n ? ' md-rating-star--filled' : ''}`}
+                  >★</span>
+                ))}
+                <span className="md-rating-value">{submittedRating.score} / 5</span>
+              </span>
+            </div>
+            {submittedRating.comment && (
+              <p className="md-rating-card-comment">"{submittedRating.comment}"</p>
+            )}
+          </div>
+        ) : (
+          <div className="md-rating-card" role="region" aria-label="Rate your mentor">
+            <div className="md-rating-card-head">
+              <strong>Rate {otherFirstName || 'your mentor'}</strong>
+              <span className="md-rating-card-sub">
+                Help future mentees by sharing your experience.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="md-action-btn md-action-primary"
+              onClick={() => setRateOpen(true)}
+            >
+              Rate your mentor
+            </button>
+          </div>
+        )
+      )}
 
       {!isActive && (
         <div className="md-ended-banner" role="status">
@@ -893,6 +1094,21 @@ export default function MentorshipDetailPage() {
         otherName={displayName || otherFirstName}
         currentEndDate={mentorship.endDate}
       />
+
+      <RateMentorModal
+        open={rateOpen}
+        onClose={() => !rateLoading && setRateOpen(false)}
+        onConfirm={handleRateConfirm}
+        loading={rateLoading}
+        mentorName={mentorship.mentorFirstName || otherFirstName}
+      />
+
+      {rateError && (
+        <div className="md-error-card" style={{ marginTop: '12px' }}>
+          <div className="md-error-title">Couldn’t submit rating</div>
+          <div className="md-error-sub">{rateError}</div>
+        </div>
+      )}
 
       <EndMentorshipModal
         open={endOpen}
