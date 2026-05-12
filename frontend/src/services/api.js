@@ -795,6 +795,25 @@ export async function deleteFeedPost(id) {
   return handleResponse(res)
 }
 
+// #356 / backend #349: feed read-state cursor + companion unread count.
+// `markFeedRead` is idempotent — backend sets the cursor to clock_timestamp.
+// `getFeedUnreadCount` returns { count, cappedAtMax } capped at 99 by default.
+export async function markFeedRead() {
+  const res = await fetch(`${BASE_URL}/feed/mark-read`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  if (res.status === 204) return null
+  return handleResponse(res)
+}
+
+export async function getFeedUnreadCount() {
+  const res = await fetch(`${BASE_URL}/feed/unread-count`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 // #544 / backend #487: restore a soft-deleted post within the 30-day window.
 // 410 means the window expired; surfaced as a regular Error from handleResponse.
 export async function restoreFeedPost(id) {
