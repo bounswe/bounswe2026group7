@@ -633,6 +633,15 @@ function MenteeProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Availability</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push({ pathname: '/my-blog', params: { authorId: sessionUserId } } as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Blog"
+            >
+              <Text style={styles.quickActionIcon}>📝</Text>
+              <Text style={styles.quickActionText}>Blog</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.formCardMentee}>
@@ -865,6 +874,15 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
               <Text style={styles.quickActionIcon}>📅</Text>
               <Text style={styles.quickActionText}>Availability</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => router.push({ pathname: '/my-blog', params: { authorId: sessionUserId } } as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Blog"
+            >
+              <Text style={styles.quickActionIcon}>📝</Text>
+              <Text style={styles.quickActionText}>Blog</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.formCardMentor}>
@@ -927,6 +945,7 @@ function MentorProfileContent({ onLogout, sessionUserId }: { onLogout: () => voi
           >
             <Text style={styles.saveButtonText}>Save Changes</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.logoutButton}
             onPress={onLogout}
