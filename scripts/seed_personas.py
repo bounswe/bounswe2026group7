@@ -27,11 +27,13 @@ PERSONAS = [   {   'id': 1,
         'location': 'Istanbul',
         'capacity_current': 0,
         'capacity_max': 0,
-        'interests': ['Data Science', 'Machine Learning'],
+        'interests': ['Data Science', 'Machine Learning', 'Music', 'Sociology', 'Photography'],
         'is_banned': False,
-        'background': 'Academic or professional background in Data Science.',
-        'goals': 'Transitioning into data science and looking for roadmap advice, project ideas, and a realistic study '
-                 'plan.'},
+        'background': 'Computer science undergrad with a part-time interest in qualitative '
+                      'research methods; plays classical guitar and shoots film photography on the side.',
+        'goals': 'Transitioning into data science with a long-term interest in computational '
+                 'social science. Looking for roadmap advice, project ideas, and a realistic '
+                 'study plan that leaves room for non-technical hobbies.'},
     {   'id': 2,
         'first_name': 'Dr. Ahmet',
         'last_name': 'Bulut',
@@ -954,11 +956,111 @@ PERSONAS.append(
     }
 )
 
+# Non-tech / cross-domain personas — explicit named mentors and mentees in
+# fields the bulk-generator pool doesn't surface clearly (Music, Sports,
+# Public Speaking, Management). They give the showcase user (Elif) a
+# realistic graph of varied interests to follow and engage with.
+PERSONAS.extend([
+    {
+        "id": 132,
+        "first_name": "Defne",
+        "last_name": "Aksu",
+        "role": "MENTOR",
+        "status": "VERIFIED",
+        "location": "Beyoglu, Istanbul",
+        "capacity_current": 1,
+        "capacity_max": 3,
+        "interests": ["Music Production", "Songwriting", "Audio Engineering"],
+        "bio": "Helps emerging musicians develop a release-ready workflow, from arrangement and "
+               "production to mixing and distribution. Background in classical training plus a decade in indie studios.",
+        "is_banned": False,
+        "mentoring_goals": "Aims to support mentees in turning unfinished demos into shipped tracks.",
+    },
+    {
+        "id": 133,
+        "first_name": "Cem",
+        "last_name": "Demir",
+        "role": "MENTOR",
+        "status": "VERIFIED",
+        "location": "Ankara",
+        "capacity_current": 0,
+        "capacity_max": 4,
+        "interests": ["Sports Performance", "Strength & Conditioning", "Sports Psychology"],
+        "bio": "Strength coach for amateur and student athletes. Builds programs that balance "
+               "academic schedules, training load, and recovery so people don't burn out mid-season.",
+        "is_banned": False,
+        "mentoring_goals": "Aims to help mentees build sustainable athletic habits alongside study and work.",
+    },
+    {
+        "id": 134,
+        "first_name": "Yasemin",
+        "last_name": "Kara",
+        "role": "MENTOR",
+        "status": "VERIFIED",
+        "location": "Kadikoy, Istanbul",
+        "capacity_current": 2,
+        "capacity_max": 4,
+        "interests": ["Public Speaking", "Storytelling", "Executive Presence"],
+        "bio": "Speaker coach for engineers and researchers preparing conference talks, interview "
+               "panels, and academic defenses. Focus on narrative structure over slide polish.",
+        "is_banned": False,
+        "mentoring_goals": "Aims to help mentees deliver a clear, confident technical story in 10 minutes or less.",
+    },
+    {
+        "id": 135,
+        "first_name": "Tolga",
+        "last_name": "Erdem",
+        "role": "MENTOR",
+        "status": "VERIFIED",
+        "location": "Sisli, Istanbul",
+        "capacity_current": 1,
+        "capacity_max": 3,
+        "interests": ["Management", "Team Leadership", "1:1 Coaching"],
+        "bio": "Engineering manager turned coach. Helps individual contributors transitioning "
+               "into their first management role build a steady cadence of 1:1s, feedback, and review.",
+        "is_banned": False,
+        "mentoring_goals": "Aims to help mentees grow into managers without losing their craft.",
+    },
+    {
+        "id": 136,
+        "first_name": "Mira",
+        "last_name": "Yalcin",
+        "role": "MENTEE",
+        "status": "VERIFIED",
+        "location": "Beyoglu, Istanbul",
+        "capacity_current": 0,
+        "capacity_max": 0,
+        "interests": ["Music Production", "Songwriting", "Photography"],
+        "is_banned": False,
+        "background": "Self-taught producer balancing a day job and weekend recording sessions.",
+        "goals": "Wants help finishing the first EP and developing a consistent release rhythm.",
+    },
+    {
+        "id": 137,
+        "first_name": "Burak",
+        "last_name": "Ozdemir",
+        "role": "MENTEE",
+        "status": "VERIFIED",
+        "location": "Bursa",
+        "capacity_current": 0,
+        "capacity_max": 0,
+        "interests": ["Sports Performance", "Public Speaking", "Time Management"],
+        "is_banned": False,
+        "background": "University student-athlete training competitively while studying engineering.",
+        "goals": "Wants a training program that respects exam crunch periods and improves "
+                 "post-game interview confidence.",
+    },
+])
+
 PERSONAS = [normalize_persona(persona) for persona in PERSONAS]
 
 
 MENTORSHIP_EDGE_CASES = [
     {"mentee_id": 1, "mentor_id": 2, "duration": 3, "message": "I would like guidance on data science foundations and a practical roadmap."},
+    # Elif's past mentor — completed gracefully in seed_demo_ecosystem so the
+    # mentee dashboard surfaces a populated "previous mentorships" timeline,
+    # not just a single active row.
+    {"mentee_id": 1, "mentor_id": 19, "duration": 3, "message": "I am preparing to apply for graduate study with a research focus; would like roadmap help."},
     {"mentee_id": 7, "mentor_id": 2, "duration": 3, "message": "I need help planning my data science portfolio and first project."},
     {"mentee_id": 8, "mentor_id": 3, "duration": 3, "message": "I want mentorship on finance and startup strategy."},
     {"mentee_id": 11, "mentor_id": 3, "duration": 3, "message": "I am exploring startup thinking and product-first finance basics."},
@@ -1210,6 +1312,32 @@ def create_feed_post(token: str, content: str, hashtags):
     )
 
 
+def like_post(post_id: int, token: str):
+    return http_post(f"{BASE}/feed/posts/{post_id}/like", {}, token)
+
+
+def comment_on_post(post_id: int, token: str, body: str):
+    return http_post(f"{BASE}/feed/posts/{post_id}/comments", {"body": body}, token)
+
+
+def follow_user(user_id: int, token: str):
+    return http_post(f"{BASE}/users/{user_id}/follow", {}, token)
+
+
+def end_mentorship_gracefully(mentorship_id: int, token: str, reason: str = ""):
+    return http_patch(
+        f"{BASE}/mentorships/{mentorship_id}/end",
+        {"reason": reason},
+        token,
+    )
+
+
+def login_admin(email: str, password: str):
+    """Lightweight admin liveness check — used by main() to confirm the
+    AdminBootstrapper actually ran. Returns (status, body)."""
+    return http_post(f"{BASE}/auth/login", {"email": email, "password": password})
+
+
 def process_persona(persona: dict, index: int) -> Optional[dict]:
     email = build_email(persona)
     print(f"[{index + 1:2}/{len(PERSONAS)}] {persona['first_name']} {persona['last_name']} ({email})", end=" ... ", flush=True)
@@ -1373,39 +1501,216 @@ def seed_demo_ecosystem(persona_tokens: dict, mentorships: dict):
     else:
         print("[DEMO][meeting] skipped because no Dr. Ahmet mentorship exists for another mentee")
 
-    elif_post_status, elif_post_resp = create_feed_post(
-        persona_tokens[1]["token"],
-        "Working on a new data cleaning routine and comparing feature choices with my mentor today. #DataScience #MachineLearning",
-        ["DataScience", "MachineLearning"],
-    )
-    if elif_post_status not in (200, 201):
-        print(f"[DEMO][feed] post creation skipped/failed ({elif_post_status}): {elif_post_resp}")
-    else:
-        print(f"[DEMO][feed] seeded post {elif_post_resp.get('id')} for Elif")
-
-    mentor_posts = [
-        (
-            persona_tokens[2]["token"],
-            "A good mentorship plan starts with one small experiment and a clear review loop. #DataScience #MachineLearning",
-            ["DataScience", "MachineLearning"],
-        ),
-        (
-            persona_tokens[2]["token"],
-            "Strong growth comes from consistent practice, feedback, and a focused portfolio story. #CareerGrowth #Mentorship",
-            ["CareerGrowth", "Mentorship"],
-        ),
-    ]
-    for token, content, hashtags in mentor_posts:
-        status, resp = create_feed_post(token, content, hashtags)
-        if status not in (200, 201):
-            print(f"[DEMO][feed] mentor post skipped/failed ({status}): {resp}")
+    # ── Past mentor for Elif: end the (1, 19) Fikret mentorship gracefully ──
+    # so the mentee dashboard surfaces a "previous mentorships" timeline with
+    # a real COMPLETED row, not just the active Ahmet one.
+    elif_fikret = mentorships.get((1, 19))
+    if elif_fikret:
+        end_status, end_resp = end_mentorship_gracefully(
+            elif_fikret["mentorship_id"],
+            persona_tokens[19]["token"],
+            "Roadmap planning wrapped — Elif starting CS coursework. Continue with Dr. Ahmet for data science depth.",
+        )
+        if end_status not in (200, 201):
+            print(f"[DEMO][mentorship] past-mentor close failed ({end_status}): {end_resp}")
         else:
-            print(f"[DEMO][feed] seeded post {resp.get('id')}")
+            print(f"[DEMO][mentorship] closed past mentorship {elif_fikret['mentorship_id']} (Elif ↔ Fikret)")
+    else:
+        print("[DEMO][mentorship] past-mentor edge (1, 19) missing; skipping graceful close")
+
+    # ── Feed posts: track ids so we can wire engagement around them ─────────
+    feed_post_ids = {}
+
+    feed_post_seed = [
+        # (key, author_persona_id, content, hashtags)
+        ("elif_data", 1,
+         "Working on a new data cleaning routine and comparing feature choices "
+         "with my mentor today. #DataScience #MachineLearning",
+         ["DataScience", "MachineLearning"]),
+        ("elif_music", 1,
+         "Took a break to learn a new piece on classical guitar — and noticed "
+         "the same iterative practice mindset transfers to debugging notebooks. "
+         "#Music #LearningInPublic",
+         ["Music", "LearningInPublic"]),
+        ("elif_sociology", 1,
+         "Started reading on computational social science. Quantitative methods "
+         "+ qualitative grounding feel underrated as a combo. #Sociology #DataScience",
+         ["Sociology", "DataScience"]),
+        ("ahmet_plan", 2,
+         "A good mentorship plan starts with one small experiment and a clear "
+         "review loop. #DataScience #MachineLearning",
+         ["DataScience", "MachineLearning"]),
+        ("ahmet_growth", 2,
+         "Strong growth comes from consistent practice, feedback, and a focused "
+         "portfolio story. #CareerGrowth #Mentorship",
+         ["CareerGrowth", "Mentorship"]),
+        ("fikret_research", 19,
+         "Research-track careers reward depth on a narrow question early on; "
+         "breadth comes from collaborators, not your own reading list. #Research #AcademicCareer",
+         ["Research", "AcademicCareer"]),
+        ("mert_portfolio", 7,
+         "Finishing a portfolio rewrite — focusing on three projects with clear "
+         "before/after impact instead of ten weak ones. #Frontend #PortfolioReview",
+         ["Frontend", "PortfolioReview"]),
+    ]
+    for key, author_id, content, hashtags in feed_post_seed:
+        author = persona_tokens.get(author_id)
+        if not author:
+            continue
+        status, resp = create_feed_post(author["token"], content, hashtags)
+        if status not in (200, 201):
+            print(f"[DEMO][feed] post '{key}' skipped/failed ({status}): {resp}")
+            continue
+        post_id = resp.get("id")
+        feed_post_ids[key] = post_id
+        print(f"[DEMO][feed] seeded post {post_id} ({key}) by persona {author_id}")
+
+    # ── Likes: Elif likes the posts that align with her interests, and a
+    # handful of other personas like Elif's posts so her engagement graph is
+    # populated for the dashboard surfaces (recent likers, like counts).
+    engagement_likes = [
+        # (post_key, liker_persona_id)
+        ("ahmet_plan", 1), ("ahmet_plan", 7), ("ahmet_plan", 8),
+        ("ahmet_growth", 1), ("ahmet_growth", 7),
+        ("fikret_research", 1), ("fikret_research", 8),
+        ("mert_portfolio", 1), ("mert_portfolio", 12),
+        ("elif_data", 2), ("elif_data", 7), ("elif_data", 8), ("elif_data", 19),
+        ("elif_music", 2), ("elif_music", 7),
+        ("elif_sociology", 2), ("elif_sociology", 19), ("elif_sociology", 8),
+    ]
+    for post_key, liker_id in engagement_likes:
+        post_id = feed_post_ids.get(post_key)
+        liker = persona_tokens.get(liker_id)
+        if not post_id or not liker:
+            continue
+        status, _ = like_post(post_id, liker["token"])
+        if status in (200, 201):
+            print(f"[DEMO][feed] persona {liker_id} liked post {post_id} ({post_key})")
+
+    # ── Comments: Elif comments on others' posts (showing engagement), and
+    # other personas comment on Elif's posts (so her detail page renders a
+    # real thread).
+    engagement_comments = [
+        # (post_key, commenter_persona_id, body)
+        ("ahmet_plan", 1, "This is exactly what I have been trying to set up with you — small experiments first."),
+        ("ahmet_plan", 7, "Saving this. The review-loop framing fixes 80% of where I get stuck."),
+        ("fikret_research", 1, "Thanks again for the early roadmap — I am applying the depth-over-breadth advice now."),
+        ("mert_portfolio", 1, "Cutting from ten to three was the hardest part for me too — but the signal got so much stronger."),
+        ("elif_data", 2, "Great progress, Elif. Note the assumptions in the README so future-you can rerun cleanly."),
+        ("elif_data", 7, "Curious which features you ended up dropping after the correlation pass."),
+        ("elif_music", 2, "Cross-domain practice transfer is real — keep both habits."),
+        ("elif_sociology", 19, "Welcome to the rabbit hole. Start with Salganik's Bit by Bit if you have not yet."),
+    ]
+    for post_key, commenter_id, body in engagement_comments:
+        post_id = feed_post_ids.get(post_key)
+        commenter = persona_tokens.get(commenter_id)
+        if not post_id or not commenter:
+            continue
+        status, resp = comment_on_post(post_id, commenter["token"], body)
+        if status in (200, 201):
+            print(f"[DEMO][feed] persona {commenter_id} commented on post {post_id} ({post_key}) -> {resp.get('id')}")
+
+    # ── Follow graph centred on Elif: she follows her active and past mentors
+    # plus a few peers across her interest mix (technical, music, sociology,
+    # photography), and a handful of personas follow her back so the network
+    # surfaces (followers/following counts, Following feed) aren't empty for
+    # the showcase mentee.
+    follow_edges = [
+        # (follower_persona_id, target_persona_id)
+        (1, 2),    # Elif → Dr. Ahmet (active mentor)
+        (1, 19),   # Elif → Fikret (past mentor)
+        (1, 50),   # Elif → Ali Bicakci (additional ML mentor)
+        (1, 7),    # Elif → Mert (peer mentee)
+        (1, 8),    # Elif → Selin (peer mentee, ML/Data)
+        (1, 12),   # Elif → Derya (peer mentee, UI/UX — cross-interest)
+        (1, 132),  # Elif → Defne (music mentor — matches Elif's Music interest)
+        (1, 133),  # Elif → Cem (sports mentor — wellness/life-balance interest)
+        (1, 134),  # Elif → Yasemin (public speaking — research-presentation prep)
+        (1, 136),  # Elif → Mira (music mentee — peer cross-interest)
+        (1, 137),  # Elif → Burak (sports mentee — cross-interest)
+        (2, 1),    # Dr. Ahmet → Elif (mentor follows mentee back)
+        (19, 1),   # Fikret → Elif
+        (7, 1),    # Mert → Elif
+        (8, 1),    # Selin → Elif
+        (132, 1),  # Defne → Elif (cross-domain peer engagement)
+        (136, 1),  # Mira → Elif
+        # A few edges that don't involve Elif so the broader graph isn't a star.
+        (136, 132), # Mira → Defne (mentee in music follows music mentor)
+        (137, 133), # Burak → Cem (sports mentee follows sports coach)
+        (137, 134), # Burak → Yasemin (sports mentee follows public-speaking coach)
+        (7, 135),   # Mert → Tolga (frontend mentee follows management mentor)
+    ]
+    for follower_id, target_id in follow_edges:
+        follower = persona_tokens.get(follower_id)
+        target = persona_tokens.get(target_id)
+        if not follower or not target:
+            continue
+        status, _ = follow_user(target["user_id"], follower["token"])
+        if status in (200, 201, 204):
+            print(f"[DEMO][follow] persona {follower_id} → persona {target_id}")
+
+    # ── Cross-domain feed posts from the new mentors + likes from Elif to
+    # surface non-tech content on her dashboard.
+    cross_domain_posts = [
+        (132, "Mixing tip of the week: leave the kick at -6 dB and carve a 3 kHz dip in the bass for clarity. "
+              "Small EQ moves outrank fancy plugins. #MusicProduction #Audio",
+         ["MusicProduction", "Audio"]),
+        (133, "Block your training into 6-week cycles aligned with your school term. Deload during exam week — "
+              "the recovery shows up two weeks later, not the next session. #Sports #Training",
+         ["Sports", "Training"]),
+        (134, "Your slides aren't the story. Open with the question your work answers, close with what to do "
+              "differently on Monday. Everything in between is supporting evidence. #PublicSpeaking",
+         ["PublicSpeaking"]),
+        (135, "First-time managers: protect your 1:1 calendar like prod traffic. Cancelled 1:1s compound silently "
+              "into surprise resignations 4 months later. #Management #Leadership",
+         ["Management", "Leadership"]),
+    ]
+    for author_id, content, hashtags in cross_domain_posts:
+        author = persona_tokens.get(author_id)
+        if not author:
+            continue
+        status, resp = create_feed_post(author["token"], content, hashtags)
+        if status not in (200, 201):
+            print(f"[DEMO][feed] cross-domain post by persona {author_id} skipped ({status}): {resp}")
+            continue
+        post_id = resp.get("id")
+        print(f"[DEMO][feed] seeded cross-domain post {post_id} by persona {author_id}")
+
+        # Elif likes + comments on each cross-domain post so the showcase
+        # account has a populated cross-interest engagement history.
+        elif_token = persona_tokens.get(1)
+        if elif_token:
+            like_post(post_id, elif_token["token"])
+            elif_comments = {
+                132: "This is exactly the kind of practical mixing note I was looking for — saving for the weekend session.",
+                133: "Calibrating my training around exam blocks has been my biggest unsolved problem; trying this.",
+                134: "Reframing slides as supporting evidence makes the prep so much less stressful.",
+                135: "Reading this as a soon-to-be tech lead — the 1:1 cadence point is the one I keep underrating.",
+            }
+            comment_body = elif_comments.get(author_id)
+            if comment_body:
+                comment_on_post(post_id, elif_token["token"], comment_body)
+
+
+def verify_admin_exists() -> None:
+    """Verify the AdminBootstrapper created the default admin. If the
+    expected credentials don't log in, print a clear warning with remediation
+    instructions but don't abort — the rest of the seed can still run."""
+    status, resp = login_admin("admin@group7.com", "Admin1234!")
+    if status == 200 and "sessionToken" in resp:
+        print("[ADMIN] verified: admin@group7.com is logged-in-able")
+    else:
+        print(f"[ADMIN][WARN] could not log in as admin@group7.com (status={status}). "
+              "Confirm the backend started with APP_ADMIN_BOOTSTRAP_ENABLED=true "
+              "and a matching APP_ADMIN_BOOTSTRAP_PASSWORD (see .env.example). The "
+              "rest of the seed will continue; persona accounts are unaffected.")
 
 
 def main() -> None:
     export_personas()
     print(f"Exported {len(PERSONAS)} personas to {OUTPUT_PATH}")
+
+    verify_admin_exists()
 
     persona_tokens = {}
     for index, persona in enumerate(PERSONAS):
