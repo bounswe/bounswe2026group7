@@ -3218,6 +3218,93 @@
 .md-primary-btn { background: var(--green-dark); }
 .md-primary-btn:hover:not(:disabled) { background: var(--green-mid); }
 
+/* Feed advanced search filters (#543). */
+.feed-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  padding: 12px 14px;
+  margin: 8px 0 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.feed-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+.feed-filter-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.feed-filter-input {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+}
+.feed-filter-input:focus {
+  outline: 2px solid var(--green-pale);
+  border-color: var(--green-mid);
+}
+.action-btn--active {
+  background: var(--green-pale);
+  border-color: var(--green-mid);
+  color: var(--green-dark);
+}
+
+/* Muted keywords settings (#543). */
+.muted-kw-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.muted-kw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+}
+.muted-kw-label {
+  font-family: 'DM Sans', sans-serif;
+}
+.muted-kw-remove {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.muted-kw-remove:hover:not(:disabled) {
+  background: var(--red-soft, #fee2e2);
+  color: var(--red-text, #b91c1c);
+}
+.muted-kw-remove:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Feed trending hashtags rail (#545). */
 .feed-trending {
   display: flex;

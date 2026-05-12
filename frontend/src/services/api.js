@@ -785,15 +785,50 @@ export async function getFollowingFeed(page = 0, size = 20) {
   return handleResponse(res)
 }
 
-export async function searchFeed({ q, hashtag, page = 0, size = 20 }) {
+// #543 / backend #486: feed search accepts q + hashtag + since + until + lang.
+// since is inclusive, until is exclusive (both ISO 8601). lang is a BCP-47
+// short tag (e.g. "en", "tr-TR"). Backend requires at least one filter and
+// returns 400 if all are null; the UI gates the request when needed.
+export async function searchFeed({ q, hashtag, since, until, lang, page = 0, size = 20 }) {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (hashtag) params.set('hashtag', hashtag)
+  if (since) params.set('since', since)
+  if (until) params.set('until', until)
+  if (lang) params.set('lang', lang)
   params.set('page', String(page))
   params.set('size', String(size))
   const res = await fetch(`${BASE_URL}/feed/search?${params.toString()}`, {
     headers: authHeaders(),
   })
+  return handleResponse(res)
+}
+
+// Per-user keyword mutes (#543 / backend #486). Server lowercases + validates
+// charset on add. Add returns 201; remove returns 204. Mutes are applied
+// transparently by every feed read path on the server side.
+export async function getMutedKeywords() {
+  const res = await fetch(`${BASE_URL}/users/me/keyword-mutes`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function addMutedKeyword(keyword) {
+  const res = await fetch(`${BASE_URL}/users/me/keyword-mutes`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ keyword }),
+  })
+  return handleResponse(res)
+}
+
+export async function removeMutedKeyword(id) {
+  const res = await fetch(`${BASE_URL}/users/me/keyword-mutes/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (res.status === 204) return null
   return handleResponse(res)
 }
 
