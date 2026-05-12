@@ -262,6 +262,17 @@ export async function getActiveMentorships() {
   return handleResponse(res)
 }
 
+// Trending hashtags (#545 / backend #487). Materialized-view aggregate over
+// the last 24h, refreshed hourly server-side. Returns at most `limit`
+// entries sorted by composite engagement score, each carrying { tag,
+// postCount, score, ... }.
+export async function getTrendingHashtags(limit = 10) {
+  const res = await fetch(`${BASE_URL}/feed/trending/hashtags?limit=${limit}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 // Paginated mentorship history filter (#408 / backend #521). status accepts
 // 'ALL' or any MentorshipStatus name (ACTIVE / COMPLETED / CANCELLED /
 // TERMINATED). Backend caps size at 100. Returns a Spring Page<>:
