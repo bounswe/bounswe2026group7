@@ -1704,9 +1704,11 @@
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; margin-top: 1px;
 }
-.notif-icon--green { background: #d1fae5; color: #059669; }
-.notif-icon--red   { background: #fee2e2; color: #dc2626; }
-.notif-icon--blue  { background: #dbeafe; color: #2563eb; }
+.notif-icon--green  { background: #d1fae5; color: #059669; }
+.notif-icon--red    { background: #fee2e2; color: #dc2626; }
+.notif-icon--blue   { background: #dbeafe; color: #2563eb; }
+.notif-icon--orange { background: #ffedd5; color: #c2410c; }
+.notif-icon--purple { background: #ede9fe; color: #7c3aed; }
 
 .notif-body { flex: 1; min-width: 0; }
 .notif-item-title {

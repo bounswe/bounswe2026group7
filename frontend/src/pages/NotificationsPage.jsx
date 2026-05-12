@@ -22,10 +22,38 @@ const TYPE_ICON = {
   MEETING_REMINDER: '📅',
   TASK_DEADLINE_REMINDER: '⏰',
   MILESTONE_REMINDER: '🚩',
+  FEED_LIKE: '❤️',
+  FEED_COMMENT: '💬',
+  FEED_SHARE: '🔁',
+  NEW_FOLLOWER: '👤',
 }
 
 function iconFor(type) {
   return TYPE_ICON[type] || '🔔'
+}
+
+function routeForNotification(type, rid) {
+  switch (type) {
+    case 'FEED_LIKE':
+    case 'FEED_COMMENT':
+    case 'FEED_SHARE':
+      return rid ? `/feed/${rid}` : '/feed'
+    case 'NEW_FOLLOWER':
+      return rid ? `/users/${rid}` : '/explore'
+  }
+  if (!rid) return null
+  switch (type) {
+    case 'REQUEST_SUBMITTED':
+    case 'REQUEST_ACCEPTED':
+    case 'REQUEST_RECEIVED':
+      return `/mentorships/${rid}`
+    case 'TASK_DEADLINE_REMINDER':
+      return `/tasks?mentorshipId=${rid}`
+    case 'MILESTONE_REMINDER':
+      return `/mentorships/${rid}#milestones`
+    default:
+      return null
+  }
 }
 
 export default function NotificationsPage() {
@@ -129,23 +157,8 @@ export default function NotificationsPage() {
                   className={`notif-page-item${!n.read ? ' notif-page-item--unread' : ''}`}
                   onClick={() => {
                     if (!n.read) handleMarkRead(n.id)
-                    const rid = n.relatedId || n.entityId
-                    if (!rid) return
-                    switch (n.type) {
-                      case 'REQUEST_SUBMITTED':
-                      case 'REQUEST_ACCEPTED':
-                      case 'REQUEST_RECEIVED':
-                        navigate(`/mentorships/${rid}`)
-                        break
-                      case 'TASK_DEADLINE_REMINDER':
-                        navigate(`/tasks?mentorshipId=${rid}`)
-                        break
-                      case 'MILESTONE_REMINDER':
-                        navigate(`/mentorships/${rid}#milestones`)
-                        break
-                      default:
-                        break
-                    }
+                    const route = routeForNotification(n.type, n.relatedId || n.entityId)
+                    if (route) navigate(route)
                   }}
                   role="button"
                   tabIndex={0}
@@ -153,23 +166,8 @@ export default function NotificationsPage() {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
                       if (!n.read) handleMarkRead(n.id)
-                      const rid = n.relatedId || n.entityId
-                      if (!rid) return
-                      switch (n.type) {
-                        case 'REQUEST_SUBMITTED':
-                        case 'REQUEST_ACCEPTED':
-                        case 'REQUEST_RECEIVED':
-                          navigate(`/mentorships/${rid}`)
-                          break
-                        case 'TASK_DEADLINE_REMINDER':
-                          navigate(`/tasks?mentorshipId=${rid}`)
-                          break
-                        case 'MILESTONE_REMINDER':
-                          navigate(`/mentorships/${rid}#milestones`)
-                          break
-                        default:
-                          break
-                      }
+                      const route = routeForNotification(n.type, n.relatedId || n.entityId)
+                      if (route) navigate(route)
                     }
                   }}
                   data-testid={`notifications-item-${n.id}`}
