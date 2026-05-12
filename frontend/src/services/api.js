@@ -1061,6 +1061,44 @@ export async function sendAdminDirectMessage(userId, content) {
   return handleResponse(res)
 }
 
+// #410 / backend #561: admin-direct read paths. Inbox list is auth'd to any
+// participant (admin OR recipient user). Thread is one-way — backend exposes
+// no POST for the recipient to reply; the conversation flows admin → user.
+export async function getAdminDirectInbox(page = 0, size = 20) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/conversations/admin-direct?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getAdminDirectMessages(otherUserId, page = 0, size = 20) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/conversations/admin-direct/${otherUserId}/messages?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// #410 / backend #280: admin-to-admin broadcast (singleton ADMIN_BROADCAST
+// thread). Admin-only on both write and read; non-admin callers get 403.
+export async function broadcastAdminMessage(content) {
+  const res = await fetch(`${BASE_URL}/admin/messages/broadcast`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ content }),
+  })
+  return handleResponse(res)
+}
+
+export async function listAdminBroadcasts(page = 0, size = 20) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/admin/messages/broadcast?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 // #279 / backend #569 + #280: admin user listing, drill-in, ban/unban,
 // and clear-bot-flag. All gated server-side by hasRole('ADMIN').
 export async function listAdminUsers({ role, banStatus, q, page = 0, size = 20 } = {}) {

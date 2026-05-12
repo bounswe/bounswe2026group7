@@ -8,6 +8,9 @@ import {
   clearBotFlag,
   listAdminReports,
   updateAdminReportStatus,
+  getAdminDirectInbox,
+  broadcastAdminMessage,
+  listAdminBroadcasts,
 } from '../services/api'
 import { showTransientToast } from '../utils/toast'
 import '../styles/main.css'
@@ -508,10 +511,55 @@ function pillForStatus(s) {
 // AdminConsolePage.test.jsx.
 
 function MessagesTab() {
+  // Three sub-panes: direct composer + inbox, plus broadcast composer + history.
+  // Direct composer keeps the original testids from #573 so existing
+  // AdminConsolePage tests still pass against this restructure.
+  const [view, setView] = useState('direct')
+
+  return (
+    <div data-testid="admin-messages-tab">
+      <div className="admin-subnav">
+        <button
+          type="button"
+          className={`feed-tab${view === 'direct' ? ' feed-tab--active' : ''}`}
+          onClick={() => setView('direct')}
+        >Direct</button>
+        <button
+          type="button"
+          className={`feed-tab${view === 'broadcast' ? ' feed-tab--active' : ''}`}
+          onClick={() => setView('broadcast')}
+        >Broadcast</button>
+      </div>
+
+      {view === 'direct' && <DirectMessagePane />}
+      {view === 'broadcast' && <BroadcastPane />}
+    </div>
+  )
+}
+
+function DirectMessagePane() {
   const [userId, setUserId] = useState('')
   const [content, setContent] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+
+  // #410: list the admin's existing admin-direct conversations so they can
+  // see who they've DMed before without typing the user id from memory.
+  const [inbox, setInbox] = useState([])
+  const [inboxLoading, setInboxLoading] = useState(true)
+
+  const loadInbox = useCallback(async () => {
+    setInboxLoading(true)
+    try {
+      const page = await getAdminDirectInbox(0, 50)
+      setInbox(page?.content || [])
+    } catch {
+      setInbox([])
+    } finally {
+      setInboxLoading(false)
+    }
+  }, [])
+  useEffect(() => { loadInbox() }, [loadInbox])
 
   async function handleSend(e) {
     e.preventDefault()
@@ -531,6 +579,7 @@ function MessagesTab() {
       setContent('')
       setUserId('')
       showTransientToast('Direct message delivered.')
+      loadInbox()
     } catch (err) {
       const msg = err?.message || 'Failed to send direct message.'
       setError(msg)
@@ -540,55 +589,181 @@ function MessagesTab() {
   }
 
   return (
-    <form
-      className="admin-console-form"
-      onSubmit={handleSend}
-      data-testid="admin-console-form"
-      style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '540px' }}
-    >
-      <label htmlFor="admin-console-recipient" style={{ fontWeight: 600 }}>Recipient user id</label>
-      <input
-        id="admin-console-recipient"
-        type="number"
-        min="1"
-        step="1"
-        value={userId}
-        onChange={(e) => setUserId(e.target.value)}
-        placeholder="e.g. 42"
-        data-testid="admin-console-recipient"
-        disabled={sending}
-        required
-      />
-
-      <label htmlFor="admin-console-body" style={{ fontWeight: 600 }}>Message</label>
-      <textarea
-        id="admin-console-body"
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        placeholder="Write your message…"
-        rows={6}
-        data-testid="admin-console-body"
-        disabled={sending}
-        required
-      />
-
-      {error && (
-        <div className="md-error-card" data-testid="admin-console-error">
-          <div className="md-error-title">Send failed</div>
-          <div className="md-error-sub">{error}</div>
-        </div>
-      )}
-
-      <div>
-        <button
-          type="submit"
-          className="action-btn"
+    <div className="admin-direct-pane">
+      <form
+        className="admin-console-form"
+        onSubmit={handleSend}
+        data-testid="admin-console-form"
+        style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '540px' }}
+      >
+        <label htmlFor="admin-console-recipient" style={{ fontWeight: 600 }}>Recipient user id</label>
+        <input
+          id="admin-console-recipient"
+          type="number"
+          min="1"
+          step="1"
+          value={userId}
+          onChange={(e) => setUserId(e.target.value)}
+          placeholder="e.g. 42"
+          data-testid="admin-console-recipient"
           disabled={sending}
-          data-testid="admin-console-send"
-        >
-          {sending ? 'Sending…' : 'Send message'}
-        </button>
+          required
+        />
+
+        <label htmlFor="admin-console-body" style={{ fontWeight: 600 }}>Message</label>
+        <textarea
+          id="admin-console-body"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Write your message…"
+          rows={6}
+          data-testid="admin-console-body"
+          disabled={sending}
+          required
+        />
+
+        {error && (
+          <div className="md-error-card" data-testid="admin-console-error">
+            <div className="md-error-title">Send failed</div>
+            <div className="md-error-sub">{error}</div>
+          </div>
+        )}
+
+        <div>
+          <button
+            type="submit"
+            className="action-btn"
+            disabled={sending}
+            data-testid="admin-console-send"
+          >
+            {sending ? 'Sending…' : 'Send message'}
+          </button>
+        </div>
+      </form>
+
+      <div style={{ marginTop: '24px' }}>
+        <div className="section-label" style={{ marginBottom: '8px' }}>
+          Your direct conversations
+        </div>
+        {inboxLoading ? (
+          <div className="md-loading">Loading…</div>
+        ) : inbox.length === 0 ? (
+          <div className="empty-state">No direct messages yet. Send one above to start a conversation.</div>
+        ) : (
+          <ul className="admin-inbox-list">
+            {inbox.map(c => (
+              <li key={c.conversationId} className="admin-inbox-row">
+                <span className="admin-inbox-peer">{c.peerFirstName || `User #${c.peerId}`}</span>
+                <span className="admin-inbox-preview">{c.lastMessageContent || '—'}</span>
+                <span className="admin-inbox-time">
+                  {c.lastMessageSentAt
+                    ? new Date(c.lastMessageSentAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                    : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-    </form>
+    </div>
+  )
+}
+
+function BroadcastPane() {
+  const [content, setContent] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [history, setHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const page = await listAdminBroadcasts(0, 50)
+      setHistory(page?.content || [])
+    } catch {
+      setHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
+  useEffect(() => { loadHistory() }, [loadHistory])
+
+  async function handleSend(e) {
+    e.preventDefault()
+    setError('')
+    if (!content.trim()) {
+      setError('Broadcast body cannot be empty.')
+      return
+    }
+    setSending(true)
+    try {
+      await broadcastAdminMessage(content)
+      setContent('')
+      showTransientToast('Broadcast sent to all admins.')
+      loadHistory()
+    } catch (err) {
+      setError(err?.message || 'Failed to broadcast.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="admin-broadcast-pane">
+      <form
+        onSubmit={handleSend}
+        style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '540px' }}
+      >
+        <label htmlFor="admin-broadcast-body" style={{ fontWeight: 600 }}>Broadcast to all admins</label>
+        <textarea
+          id="admin-broadcast-body"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Note for the moderation team…"
+          rows={5}
+          disabled={sending}
+          required
+        />
+        {error && (
+          <div className="md-error-card">
+            <div className="md-error-title">Broadcast failed</div>
+            <div className="md-error-sub">{error}</div>
+          </div>
+        )}
+        <div>
+          <button type="submit" className="action-btn" disabled={sending}>
+            {sending ? 'Sending…' : 'Broadcast'}
+          </button>
+        </div>
+      </form>
+
+      <div style={{ marginTop: '24px' }}>
+        <div className="section-label" style={{ marginBottom: '8px' }}>
+          Recent broadcasts
+        </div>
+        {historyLoading ? (
+          <div className="md-loading">Loading…</div>
+        ) : history.length === 0 ? (
+          <div className="empty-state">No broadcasts yet.</div>
+        ) : (
+          <ul className="admin-broadcast-list">
+            {history.map(m => (
+              <li key={m.id} className="admin-broadcast-row">
+                <div className="admin-broadcast-head">
+                  <strong>{m.senderFirstName || `Admin #${m.senderId}`}</strong>
+                  <span className="admin-broadcast-time">
+                    {m.sentAt
+                      ? new Date(m.sentAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      : ''}
+                  </span>
+                </div>
+                <div className="admin-broadcast-body">{m.content}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   )
 }
