@@ -182,8 +182,8 @@ describe('ExplorePage Component', () => {
     // diverse-pick rendered as a labelled pill (not as a chip)
     expect(screen.getByText('Diverse pick')).toBeInTheDocument()
 
-    // #286: Click "Why this match?" to expand factors
-    const whyBtn = screen.getByText('Why this match?')
+    // #286: Click "Show factors" to expand factors
+    const whyBtn = screen.getByText('Show factors')
     fireEvent.click(whyBtn)
 
     // human-readable factor chips in the list
