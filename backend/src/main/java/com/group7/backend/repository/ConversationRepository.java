@@ -59,6 +59,25 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
             @Param("userId") Long userId, Pageable pageable);
 
     /**
+     * Page of ADMIN_DIRECT conversations the given user participates in,
+     * ordered by most-recent activity (NULLS LAST) with deterministic
+     * tie-breaking on conversation id.
+     */
+    @Query(
+            value = "SELECT c FROM Conversation c "
+                    + "JOIN ConversationParticipant cp ON cp.conversation = c "
+                    + "WHERE cp.user.id = :userId "
+                    + "AND c.kind = com.group7.backend.entity.ConversationKind.ADMIN_DIRECT "
+                    + "ORDER BY (SELECT MAX(m.sentAt) FROM Message m WHERE m.conversation = c) DESC NULLS LAST, "
+                    + "c.id DESC",
+            countQuery = "SELECT COUNT(c) FROM Conversation c "
+                    + "WHERE c.kind = com.group7.backend.entity.ConversationKind.ADMIN_DIRECT "
+                    + "AND EXISTS (SELECT 1 FROM ConversationParticipant cp "
+                    + "WHERE cp.conversation = c AND cp.user.id = :userId)")
+    Page<Conversation> findAdminDirectConversationsForUserOrderedByLastMessage(
+            @Param("userId") Long userId, Pageable pageable);
+
+    /**
      * Lookup the singleton {@link ConversationKind#ADMIN_BROADCAST} row, if it
      * has been created. Backed by the partial unique index
      * {@code uq_conversations_admin_broadcast_singleton}, so at most one row

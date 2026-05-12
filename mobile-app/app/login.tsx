@@ -52,9 +52,10 @@ export default function LoginScreen() {
       });
 
       const { sessionToken, role, userId } = response.data;
+      const normalizedRole = String(role).toLowerCase();
       await SecureStore.setItemAsync('userId', String(userId));
-      await SecureStore.setItemAsync('userRole', role);
-      setRole(role.toLowerCase());
+      await SecureStore.setItemAsync('userRole', normalizedRole);
+      setRole(normalizedRole as any);
       await SecureStore.setItemAsync('userToken', sessionToken);
 
       router.replace('/(tabs)');

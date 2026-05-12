@@ -6,6 +6,8 @@ import apiClient from '../api/client';
 
 const mockUseLocalSearchParams = jest.fn();
 const mockGetItemAsync = jest.fn();
+const mockSetRole = jest.fn();
+const mockClearRole = jest.fn();
 let mockCurrentRole: 'mentor' | 'mentee' = 'mentee';
 
 jest.mock('../api/client', () => ({
@@ -28,6 +30,8 @@ jest.mock('expo-secure-store', () => ({
 jest.mock('../components/RoleContext', () => ({
   useRole: () => ({
     role: mockCurrentRole,
+    setRole: mockSetRole,
+    clearRole: mockClearRole,
   }),
 }));
 
@@ -58,6 +62,7 @@ describe('MessagesScreen', () => {
     mockGetItemAsync.mockImplementation(async (key: string) => {
       if (key === 'userId') return '42';
       if (key === 'userToken') return 'token-123';
+      if (key === 'userRole') return mockCurrentRole;
       return null;
     });
     (apiClient.patch as jest.Mock).mockResolvedValue({});
@@ -66,6 +71,25 @@ describe('MessagesScreen', () => {
 
   it('loads mentorship conversations for mentees and opens a thread', async () => {
     (apiClient.get as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/users/me') {
+        return {
+          data: {
+            id: 42,
+            role: 'MENTEE',
+            firstName: 'Mentee',
+            lastName: 'Me',
+          },
+        };
+      }
+
+      if (url === '/conversations/admin-direct?page=0&size=100') {
+        return {
+          data: {
+            content: [],
+          },
+        };
+      }
+
       if (url === '/mentorships') {
         return {
           data: [
@@ -116,6 +140,25 @@ describe('MessagesScreen', () => {
 
   it('shows the empty mentorship state when there are no conversations', async () => {
     (apiClient.get as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/users/me') {
+        return {
+          data: {
+            id: 42,
+            role: 'MENTEE',
+            firstName: 'Mentee',
+            lastName: 'Me',
+          },
+        };
+      }
+
+      if (url === '/conversations/admin-direct?page=0&size=100') {
+        return {
+          data: {
+            content: [],
+          },
+        };
+      }
+
       if (url === '/mentorships') {
         return { data: [] };
       }
@@ -127,7 +170,7 @@ describe('MessagesScreen', () => {
 
     expect(await findByText('No conversations found')).toBeTruthy();
     expect(
-      await findByText('Once you have an active mentorship, your chat threads will appear here.')
+      await findByText('Your mentorship and admin conversations will appear here.')
     ).toBeTruthy();
   });
 
@@ -135,6 +178,25 @@ describe('MessagesScreen', () => {
     mockCurrentRole = 'mentor';
 
     (apiClient.get as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/users/me') {
+        return {
+          data: {
+            id: 42,
+            role: 'MENTOR',
+            firstName: 'Current',
+            lastName: 'Mentor',
+          },
+        };
+      }
+
+      if (url === '/conversations/admin-direct?page=0&size=100') {
+        return {
+          data: {
+            content: [],
+          },
+        };
+      }
+
       if (url === '/mentorships') {
         return {
           data: [
@@ -195,5 +257,73 @@ describe('MessagesScreen', () => {
     expect(await findByText('Peer Existing')).toBeTruthy();
     expect(await findByText('Start New Conversation')).toBeTruthy();
     expect(await findByText('Fresh Mentor')).toBeTruthy();
+  });
+
+  it('shows admin direct conversations in the message list', async () => {
+    (apiClient.get as jest.Mock).mockImplementation(async (url: string) => {
+      if (url === '/users/me') {
+        return {
+          data: {
+            id: 42,
+            role: 'MENTEE',
+            firstName: 'Mentee',
+            lastName: 'Me',
+          },
+        };
+      }
+
+      if (url === '/mentorships') {
+        return { data: [] };
+      }
+
+      if (url === '/conversations/admin-direct?page=0&size=100') {
+        return {
+          data: {
+            content: [
+              {
+                peerId: 7,
+                peerFirstName: 'System',
+                peerLastName: 'Admin',
+                lastMessageContent: 'Please read the latest update',
+                lastMessageSentAt: '2026-05-10T09:00:00Z',
+                unreadCount: 1,
+              },
+            ],
+          },
+        };
+      }
+
+      if (url === '/conversations/admin-direct/7/messages?page=0&size=100') {
+        return {
+          data: {
+            content: [
+              {
+                id: 501,
+                senderId: 7,
+                content: 'Please read the latest update',
+                sentAt: '2026-05-10T09:00:00Z',
+                readAt: null,
+              },
+            ],
+          },
+        };
+      }
+
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    const { findByText, getAllByText } = render(<MessagesScreen />);
+
+    expect(await findByText('System Admin')).toBeTruthy();
+    expect(await findByText('Please read the latest update')).toBeTruthy();
+
+    fireEvent.press(getAllByText('System Admin')[0]);
+
+    expect(await findByText('Admin Direct Chat')).toBeTruthy();
+    expect(await findByText('Private conversation with an administrator')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(apiClient.patch).toHaveBeenCalledWith('/conversations/admin-direct/7/messages/read');
+    });
   });
 });

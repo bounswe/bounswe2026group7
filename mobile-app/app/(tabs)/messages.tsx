@@ -29,7 +29,7 @@ type ConversationListTab = 'mentorships' | 'mentorPeers';
 
 type ConversationItem = {
   id: string;
-  threadKind: 'mentorship' | 'mentorPair';
+  threadKind: 'mentorship' | 'mentorPair' | 'adminDirect';
   mentorshipId?: number;
   mentorId?: number;
   menteeId?: number;
@@ -43,7 +43,7 @@ type ConversationItem = {
   initials: string;
   avatarBg: string;
   avatarText: string;
-  type: 'mentor' | 'mentee';
+  type: 'mentor' | 'mentee' | 'admin';
 };
 
 type AttachmentSummary = {
@@ -203,6 +203,7 @@ export default function MessagesScreen() {
   const [draft, setDraft] = useState('');
   const [activeListTab, setActiveListTab] = useState<ConversationListTab>('mentorships');
   const [mentorshipConversations, setMentorshipConversations] = useState<ConversationItem[]>([]);
+  const [adminDirectConversations, setAdminDirectConversations] = useState<ConversationItem[]>([]);
   const [peerMentorConversations, setPeerMentorConversations] = useState<ConversationItem[]>([]);
   const [mentorDirectoryOptions, setMentorDirectoryOptions] = useState<ConversationItem[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
@@ -250,12 +251,17 @@ export default function MessagesScreen() {
       setSelectedConversation(null);
       setMessages([]);
       setMentorshipConversations([]);
+      setAdminDirectConversations([]);
       setPeerMentorConversations([]);
       setMentorDirectoryOptions([]);
       try {
         const meRes = await apiClient.get('/users/me');
-        const mentorshipsRes = await apiClient.get('/mentorships');
+        const [mentorshipsRes, adminInboxRes] = await Promise.all([
+          apiClient.get('/mentorships'),
+          apiClient.get('/conversations/admin-direct?page=0&size=100'),
+        ]);
         const mentorships = mentorshipsRes.data ?? [];
+        const adminInboxItems = adminInboxRes.data?.content ?? [];
         console.log('[messages] active mentorship payload', {
           currentUserId: session.userId,
           currentRole: session.role,
@@ -272,6 +278,13 @@ export default function MessagesScreen() {
             mentorFirstName: mentorship.mentorFirstName,
             menteeFirstName: mentorship.menteeFirstName,
             status: mentorship.status,
+          })),
+          adminDirectInbox: adminInboxItems.map((conversation: any) => ({
+            conversationId: conversation.conversationId,
+            peerId: conversation.peerId,
+            peerFirstName: conversation.peerFirstName,
+            peerLastName: conversation.peerLastName,
+            unreadCount: conversation.unreadCount,
           })),
         });
 
@@ -337,6 +350,31 @@ export default function MessagesScreen() {
 
         const filteredMentorshipThreads = mentorshipThreads.filter(Boolean) as ConversationItem[];
         setMentorshipConversations(filteredMentorshipThreads);
+
+        const adminThreads = adminInboxItems.map((conversation: any, index: number) => {
+          const fullName = [conversation.peerFirstName, conversation.peerLastName]
+            .filter(Boolean)
+            .join(' ')
+            .trim() || 'Admin';
+          const colors = avatarPalette(index + filteredMentorshipThreads.length);
+
+          return {
+            id: `admin-direct-${conversation.peerId}`,
+            threadKind: 'adminDirect',
+            counterpartId: Number(conversation.peerId),
+            counterpartName: fullName,
+            subtitle: 'Admin',
+            preview: conversation.lastMessageContent || 'No messages yet',
+            time: formatRelativeTime(conversation.lastMessageSentAt),
+            unread: Number(conversation.unreadCount ?? 0),
+            online: false,
+            initials: getInitials(fullName),
+            avatarBg: colors.bg,
+            avatarText: colors.text,
+            type: 'admin',
+          } satisfies ConversationItem;
+        });
+        setAdminDirectConversations(adminThreads);
 
         if (isMentor) {
           try {
@@ -421,7 +459,11 @@ export default function MessagesScreen() {
   }, [isMentor, session, sessionLoading]);
 
   useEffect(() => {
-    const allConversations = [...mentorshipConversations, ...peerMentorConversations];
+    const allConversations = [
+      ...mentorshipConversations,
+      ...adminDirectConversations,
+      ...peerMentorConversations,
+    ];
     if (selectedConversation && !allConversations.some((conversation) => conversation.id === selectedConversation.id)) {
       console.log('[messages] clearing stale selected conversation', {
         selectedConversation,
@@ -429,12 +471,16 @@ export default function MessagesScreen() {
       setSelectedConversation(null);
       setMessages([]);
     }
-  }, [mentorshipConversations, peerMentorConversations, selectedConversation]);
+  }, [mentorshipConversations, adminDirectConversations, peerMentorConversations, selectedConversation]);
 
   useEffect(() => {
     const openWith = Array.isArray(params.openWith) ? params.openWith[0] : params.openWith;
     const mentorshipIdParam = Array.isArray(params.mentorshipId) ? params.mentorshipId[0] : params.mentorshipId;
-    const allConversations = [...mentorshipConversations, ...peerMentorConversations];
+    const allConversations = [
+      ...mentorshipConversations,
+      ...adminDirectConversations,
+      ...peerMentorConversations,
+    ];
     if (!openWith || allConversations.length === 0) return;
 
     const match = allConversations.find((conversation) => {
@@ -446,7 +492,7 @@ export default function MessagesScreen() {
     if (match) {
       setSelectedConversation(match);
     }
-  }, [params.openWith, params.mentorshipId, mentorshipConversations, peerMentorConversations]);
+  }, [params.openWith, params.mentorshipId, mentorshipConversations, adminDirectConversations, peerMentorConversations]);
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -461,10 +507,14 @@ export default function MessagesScreen() {
       try {
         const endpoint = selectedConversation.threadKind === 'mentorship'
           ? `/mentorships/${selectedConversation.mentorshipId}/messages?page=0&size=100`
-          : `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages?page=0&size=100`;
+          : selectedConversation.threadKind === 'mentorPair'
+          ? `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages?page=0&size=100`
+          : `/conversations/admin-direct/${selectedConversation.counterpartId}/messages?page=0&size=100`;
         const readEndpoint = selectedConversation.threadKind === 'mentorship'
           ? `/mentorships/${selectedConversation.mentorshipId}/messages/read`
-          : `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages/read`;
+          : selectedConversation.threadKind === 'mentorPair'
+          ? `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages/read`
+          : `/conversations/admin-direct/${selectedConversation.counterpartId}/messages/read`;
 
         console.log('[messages] loading thread', {
           endpoint,
@@ -488,6 +538,8 @@ export default function MessagesScreen() {
 
         if (selectedConversation.threadKind === 'mentorship') {
           setMentorshipConversations((prev) => clearUnread(prev));
+        } else if (selectedConversation.threadKind === 'adminDirect') {
+          setAdminDirectConversations((prev) => clearUnread(prev));
         } else {
           setPeerMentorConversations((prev) => clearUnread(prev));
         }
@@ -510,12 +562,12 @@ export default function MessagesScreen() {
 
   const visibleConversations = useMemo(() => {
     if (!isMentor) {
-      return mentorshipConversations;
+      return [...adminDirectConversations, ...mentorshipConversations];
     }
     return activeListTab === 'mentorships'
-      ? mentorshipConversations
+      ? [...adminDirectConversations, ...mentorshipConversations]
       : peerMentorConversations;
-  }, [activeListTab, isMentor, mentorshipConversations, peerMentorConversations]);
+  }, [activeListTab, isMentor, mentorshipConversations, adminDirectConversations, peerMentorConversations]);
 
   const filteredMentorDirectoryOptions = useMemo(() => {
     if (!isMentor || activeListTab !== 'mentorPeers') {
@@ -551,7 +603,9 @@ export default function MessagesScreen() {
     );
   }, [visibleConversations, search]);
 
-  const titleLine = isMentor ? 'Your mentees and mentor peers.' : 'Your mentor.';
+  const titleLine = isMentor
+    ? 'Your mentees, admins, and mentor peers.'
+    : 'Your mentor and admin messages.';
 
   const pickImageAttachment = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -629,7 +683,9 @@ export default function MessagesScreen() {
     setSending(true);
     const messageEndpoint = selectedConversation.threadKind === 'mentorship'
       ? `/mentorships/${selectedConversation.mentorshipId}/messages`
-      : `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages`;
+      : selectedConversation.threadKind === 'mentorPair'
+      ? `/conversations/mentor-pair/${selectedConversation.counterpartId}/messages`
+      : `/conversations/admin-direct/${selectedConversation.counterpartId}/messages`;
     try {
       let uploadedAttachment: AttachmentSummary | null = null;
 
@@ -672,8 +728,10 @@ export default function MessagesScreen() {
             : conversation
         );
 
-              if (selectedConversation.threadKind === 'mentorship') {
+      if (selectedConversation.threadKind === 'mentorship') {
         setMentorshipConversations((prev) => applyPreviewUpdate(prev));
+      } else if (selectedConversation.threadKind === 'adminDirect') {
+        setAdminDirectConversations((prev) => applyPreviewUpdate(prev));
       } else {
         setPeerMentorConversations((prev) => applyPreviewUpdate(prev));
       }
@@ -792,14 +850,22 @@ export default function MessagesScreen() {
             accessibilityLabel={
               selectedConversation.threadKind === 'mentorPair'
                 ? 'Peer mentor chat'
+                : selectedConversation.threadKind === 'adminDirect'
+                ? 'Admin direct chat'
                 : 'Mentorship chat'
             }
           >
-            {selectedConversation.threadKind === 'mentorPair' ? 'Peer Mentor Chat' : 'Mentorship Chat'}
+            {selectedConversation.threadKind === 'mentorPair'
+              ? 'Peer Mentor Chat'
+              : selectedConversation.threadKind === 'adminDirect'
+              ? 'Admin Direct Chat'
+              : 'Mentorship Chat'}
           </Text>
           <Text style={styles.contextText}>
             {selectedConversation.threadKind === 'mentorPair'
               ? 'Private mentor-to-mentor conversation with attachment support'
+              : selectedConversation.threadKind === 'adminDirect'
+              ? 'Private conversation with an administrator'
               : 'Real messages and attachment support'}
           </Text>
         </View>
@@ -1050,7 +1116,7 @@ export default function MessagesScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listScroll}>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
-              {isMentor && activeListTab === 'mentorPeers' ? 'Mentor Network' : 'Active Mentorships'}
+              {isMentor && activeListTab === 'mentorPeers' ? 'Mentor Network' : 'Messages'}
             </Text>
             <View style={styles.cardList}>
               {filteredConversations.length === 0 ? (
@@ -1059,7 +1125,7 @@ export default function MessagesScreen() {
                   <Text style={styles.emptyConversationText}>
                     {isMentor && activeListTab === 'mentorPeers'
                       ? 'No existing mentor-to-mentor conversations matched your search.'
-                      : 'Once you have an active mentorship, your chat threads will appear here.'}
+                      : 'Your mentorship and admin conversations will appear here.'}
                   </Text>
                 </View>
               ) : (
@@ -1105,7 +1171,7 @@ export default function MessagesScreen() {
             <Text style={styles.tipText}>
               {isMentor && activeListTab === 'mentorPeers'
                 ? 'Mentors can start private peer conversations here and reuse the same attachment-enabled chat flow.'
-                : 'You can now attach images, PDF files, DOCX files, and TXT files directly from the chat composer.'}
+                : 'Admin broadcasts now arrive here as direct chats, alongside mentorship conversations and attachments.'}
             </Text>
           </View>
         </ScrollView>

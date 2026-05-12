@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import { useRole } from './RoleContext';
 
-type SessionRole = 'mentor' | 'mentee';
+type SessionRole = 'mentor' | 'mentee' | 'admin';
 
 export type ProtectedSession = {
   token: string;
@@ -28,7 +28,7 @@ export function useProtectedSession(screenName: string) {
           SecureStore.getItemAsync('userRole'),
         ]);
 
-        if (!token || !storedUserId || (storedRole !== 'mentor' && storedRole !== 'mentee')) {
+        if (!token || !storedUserId || (storedRole !== 'mentor' && storedRole !== 'mentee' && storedRole !== 'admin')) {
           console.log(`[session-guard] missing session for ${screenName}`, {
             tokenPresent: Boolean(token),
             storedUserId,

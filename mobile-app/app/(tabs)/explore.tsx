@@ -24,6 +24,11 @@ const getInitials = (name: string) => {
   return name.substring(0, 2).toUpperCase();
 };
 
+type FactorChip = {
+  label: string;
+  kind: 'interest' | 'skill' | 'major' | 'time' | 'location' | 'semantic';
+};
+
 type MentorCard = {
   id: string;
   initials: string;
@@ -41,17 +46,63 @@ type MentorCard = {
   availability: string[];
   following: boolean;
   followLoading: boolean;
+  // Match-mode extras (only populated when card came from /matching/mentors).
+  matchScore?: number;
+  factorChips?: FactorChip[];
+  isDiversePick?: boolean;
+  semanticUnavailable?: boolean;
+  explanation?: string | null;
+  distanceKm?: number | null;
 };
+
+// Mirror of web's formatFactor in frontend/src/pages/ExplorePage.jsx — kept
+// verbatim so backend factor codes render the same on web and mobile. Codes
+// we don't recognize, or operational signals (semantic-unavailable,
+// location-unset), return null so they don't render. 'diverse-pick' is
+// rendered as a separate badge by the caller, not as a chip.
+function formatFactor(code: string): FactorChip | null {
+  if (!code || typeof code !== 'string') return null;
+  const colon = code.indexOf(':');
+  const head = colon === -1 ? code : code.slice(0, colon);
+  const value = colon === -1 ? '' : code.slice(colon + 1);
+  switch (head) {
+    case 'interest-match':
+    case 'shared-interest':      return value ? { label: value, kind: 'interest' } : null;
+    case 'skill-match':
+    case 'shared-skill':         return value ? { label: value, kind: 'skill' } : null;
+    case 'major-exact':
+    case 'major-exact-match':    return { label: 'Same major', kind: 'major' };
+    case 'major-field':
+    case 'major-field-overlap':  return { label: 'Major fits field', kind: 'major' };
+    case 'availability':         return value ? { label: `${value} overlap`, kind: 'time' } : null;
+    case 'nearby':               return value ? { label: `${value} away`, kind: 'location' } : null;
+    case 'city-match':           return { label: 'Same city', kind: 'location' };
+    case 'semantic-match':       return { label: 'Strong content match', kind: 'semantic' };
+    default:                     return null;
+  }
+}
+
+const FACTOR_STYLES: Record<FactorChip['kind'], { bg: string; fg: string }> = {
+  interest: { bg: '#D6E8DC', fg: '#2F563C' },
+  skill:    { bg: '#D8E5F1', fg: '#315A7A' },
+  major:    { bg: '#F1E1BB', fg: '#8A5D12' },
+  time:     { bg: '#E2D1E6', fg: '#6D3F72' },
+  location: { bg: '#CCD6E5', fg: '#4A5D7A' },
+  semantic: { bg: '#EAD7D3', fg: '#8A4B2E' },
+};
+
+const MAX_MATCH_FACTORS = 4;
 
 export default function ExploreScreen() {
   const { role } = useRole();
   const isMentor = role === 'mentor';
+  const isAdmin = role === 'admin';
 
   if (isMentor) {
     return <MentorRequestsContent />;
   }
 
-  return <MenteeExploreContent />;
+  return <MenteeExploreContent suppressFollowing={isAdmin} />;
 }
 
 const PAGE_SIZE = 5;
@@ -62,6 +113,11 @@ function mapMentor(m: any, isMatch = false): MentorCard {
     m.maxMenteeCapacity == null
       ? true
       : (m.currentMenteeCount ?? 0) < m.maxMenteeCapacity;
+  const rawFactors: string[] = Array.isArray(m.factors) ? m.factors : [];
+  const factorChips = rawFactors
+    .map(formatFactor)
+    .filter((f): f is FactorChip => f !== null)
+    .slice(0, MAX_MATCH_FACTORS);
   return {
     id: String(m.id),
     name: fullName,
@@ -79,14 +135,21 @@ function mapMentor(m: any, isMatch = false): MentorCard {
     availability: [],
     following: false,
     followLoading: false,
+    matchScore: typeof m.matchScore === 'number' ? m.matchScore : undefined,
+    factorChips: isMatch ? factorChips : undefined,
+    isDiversePick: isMatch && rawFactors.includes('diverse-pick'),
+    semanticUnavailable: isMatch && rawFactors.includes('semantic-unavailable'),
+    explanation: typeof m.explanation === 'string' && m.explanation.trim() ? m.explanation : null,
+    distanceKm: typeof m.distanceKm === 'number' ? m.distanceKm : null,
   };
 }
 
-function MenteeExploreContent() {
+function MenteeExploreContent({ suppressFollowing = false }: { suppressFollowing?: boolean }) {
   const [mentors, setMentors] = useState<MentorCard[]>([]);
+  const [aiMatches, setAiMatches] = useState<MentorCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
-  const [isMatchMode, setIsMatchMode] = useState(false);
+  const [showAiMatches, setShowAiMatches] = useState(false);
   const [matchLoading, setMatchLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const scrollRef = React.useRef<ScrollView>(null);
@@ -100,7 +163,7 @@ function MenteeExploreContent() {
         ]);
         const data: any[] = mentorsRes.data.content ?? mentorsRes.data;
         const mapped = data.map((m) => mapMentor(m, false));
-        if (myId) {
+        if (myId && !suppressFollowing) {
           try {
             const followRes = await apiClient.get(`/users/${myId}/following?size=100`);
             const followingIds = new Set(
@@ -126,16 +189,20 @@ function MenteeExploreContent() {
     const mentor = mentors.find((m) => m.id === mentorId);
     if (!mentor || mentor.followLoading) return;
     setMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, followLoading: true } : m));
+    setAiMatches((prev) => prev.map((m) => m.id === mentorId ? { ...m, followLoading: true } : m));
     try {
       if (mentor.following) {
         await apiClient.delete(`/users/${mentorId}/follow`);
         setMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, following: false, followLoading: false } : m));
+        setAiMatches((prev) => prev.map((m) => m.id === mentorId ? { ...m, following: false, followLoading: false } : m));
       } else {
         await apiClient.post(`/users/${mentorId}/follow`, {});
         setMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, following: true, followLoading: false } : m));
+        setAiMatches((prev) => prev.map((m) => m.id === mentorId ? { ...m, following: true, followLoading: false } : m));
       }
     } catch (err: any) {
       setMentors((prev) => prev.map((m) => m.id === mentorId ? { ...m, followLoading: false } : m));
+      setAiMatches((prev) => prev.map((m) => m.id === mentorId ? { ...m, followLoading: false } : m));
       const status = err?.response?.status ? ` (${err.response.status})` : '';
       const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Could not update follow status.';
       Alert.alert('Follow Error' + status, msg);
@@ -143,17 +210,31 @@ function MenteeExploreContent() {
   };
 
   const toggleMatchMode = async () => {
-    if (isMatchMode) {
-      setIsMatchMode(false);
-      setCurrentPage(0);
+    if (showAiMatches) {
+      setShowAiMatches(false);
+      return;
+    }
+    if (aiMatches.length > 0) {
+      setShowAiMatches(true);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     setMatchLoading(true);
     try {
-      const res = await apiClient.get('/matching/mentors/all');
-      setMentors((res.data as any[]).map((m) => mapMentor(m, true)));
-      setIsMatchMode(true);
-      setCurrentPage(0);
+      const res = await apiClient.get('/matching/mentors?size=5');
+      const data: any[] = Array.isArray(res.data) ? res.data : (res.data?.content ?? []);
+      setAiMatches(data.map((m) => {
+        const mapped = mapMentor(m, true);
+        const existing = mentors.find((mentor) => mentor.id === mapped.id);
+        return existing
+          ? {
+              ...mapped,
+              following: existing.following,
+              followLoading: existing.followLoading,
+            }
+          : mapped;
+      }));
+      setShowAiMatches(true);
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (err: any) {
       if (err?.response?.status === 403) {
@@ -179,6 +260,16 @@ function MenteeExploreContent() {
         );
       })
     : mentors;
+  const filteredAiMatches = searchQuery.trim()
+    ? aiMatches.filter((m) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          m.name.toLowerCase().includes(q) ||
+          m.role.toLowerCase().includes(q) ||
+          m.tags.some((t) => t.toLowerCase().includes(q))
+        );
+      })
+    : aiMatches;
   const totalPages = Math.ceil(filteredMentors.length / PAGE_SIZE);
   const pagedMentors = filteredMentors.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
@@ -205,6 +296,97 @@ function MenteeExploreContent() {
     });
   };
 
+  const renderMentorCard = (mentor: MentorCard, options?: { highlightMatch?: boolean }) => {
+    const highlightMatch = options?.highlightMatch ?? false;
+    return (
+      <View key={`${highlightMatch ? 'match' : 'mentor'}-${mentor.id}`} style={styles.card}>
+        <View style={styles.cardTopRow}>
+          <View style={[styles.avatar, { backgroundColor: mentor.avatarBg }]}>
+            <Text style={[styles.avatarText, { color: mentor.avatarText }]}>{mentor.initials}</Text>
+          </View>
+          <View style={styles.cardInfo}>
+            <Text style={styles.cardName}>{mentor.name}</Text>
+            <Text style={styles.cardRole}>{mentor.role}</Text>
+          </View>
+          <View style={styles.badgeColumn}>
+            {highlightMatch && typeof mentor.matchScore === 'number' && (
+              <View style={styles.scoreRing}>
+                <Text style={styles.scoreRingText}>{mentor.matchScore}</Text>
+              </View>
+            )}
+            {highlightMatch && mentor.isDiversePick && (
+              <View style={styles.diversePickBadge}>
+                <Text style={styles.diversePickText}>Diverse pick</Text>
+              </View>
+            )}
+            <View style={[styles.statusBadge, mentor.available ? styles.availableBadge : styles.fullBadge]}>
+              <Text style={[styles.statusBadgeText, mentor.available ? styles.availableBadgeText : styles.fullBadgeText]}>
+                {mentor.available ? 'Available' : 'Full'}
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.tagsRow}>
+          {mentor.tags.map((tag, idx) => (
+            <View key={idx} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>
+          ))}
+        </View>
+        {highlightMatch && mentor.factorChips && mentor.factorChips.length > 0 && (
+          <View style={styles.factorRow}>
+            {mentor.factorChips.map((f, i) => (
+              <View
+                key={`${f.kind}-${f.label}-${i}`}
+                style={[styles.factorChip, { backgroundColor: FACTOR_STYLES[f.kind].bg }]}
+              >
+                <Text style={[styles.factorChipText, { color: FACTOR_STYLES[f.kind].fg }]}>
+                  {f.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {highlightMatch && (mentor.explanation || typeof mentor.distanceKm === 'number' || mentor.semanticUnavailable) && (
+          <View style={styles.matchMetaBlock}>
+            {mentor.explanation && (
+              <Text style={styles.matchExplanation}>{mentor.explanation}</Text>
+            )}
+            {typeof mentor.distanceKm === 'number' && (
+              <Text style={styles.matchDistance}>📍 {mentor.distanceKm.toFixed(0)} km away</Text>
+            )}
+            {mentor.semanticUnavailable && (
+              <Text style={styles.matchSemanticHint}>
+                AI signal unavailable
+              </Text>
+            )}
+          </View>
+        )}
+        <View style={styles.divider} />
+        <View style={styles.cardBottomRow}>
+          <View style={styles.ratingRow}>
+            <Text style={styles.stars}>★★★★★</Text>
+            <Text style={styles.ratingText}>{mentor.rating} ({mentor.reviews})</Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={[styles.followButton, mentor.following && styles.followButtonActive]}
+              onPress={() => handleFollow(mentor.id)}
+              disabled={mentor.followLoading}
+            >
+              {mentor.followLoading
+                ? <ActivityIndicator size="small" color="#456B50" />
+                : <Text style={[styles.followButtonText, mentor.following && styles.followButtonTextActive]}>
+                    {mentor.following ? '✓' : '+ Follow'}
+                  </Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.viewButton} onPress={() => openMentorProfile(mentor)}>
+              <Text style={styles.viewButtonText}>View</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.fixedHeader}>
@@ -222,11 +404,11 @@ function MenteeExploreContent() {
             autoCapitalize="none"
           />
         </View>
-        <TouchableOpacity style={[styles.matchButton, isMatchMode && styles.matchButtonActive]} onPress={toggleMatchMode} disabled={matchLoading}>
+        <TouchableOpacity style={[styles.matchButton, showAiMatches && styles.matchButtonActive]} onPress={toggleMatchMode} disabled={matchLoading}>
           {matchLoading
             ? <ActivityIndicator size="small" color="#F8F6F2" />
-            : <Text style={[styles.matchButtonText, isMatchMode && styles.matchButtonTextActive]}>
-                {isMatchMode ? '✕  Show All Mentors' : '✦  Find Best Matches'}
+            : <Text style={[styles.matchButtonText, showAiMatches && styles.matchButtonTextActive]}>
+                {showAiMatches ? '✕  Hide AI Matches' : '✦  Find Best Matches'}
               </Text>}
         </TouchableOpacity>
       </View>
@@ -235,59 +417,30 @@ function MenteeExploreContent() {
         <ActivityIndicator size="large" color="#456B50" style={{ marginTop: 50 }} />
       ) : (
         <ScrollView ref={scrollRef} style={styles.listArea} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-          {pagedMentors.map((mentor) => (
-            <View key={mentor.id} style={styles.card}>
-              <View style={styles.cardTopRow}>
-                <View style={[styles.avatar, { backgroundColor: mentor.avatarBg }]}>
-                  <Text style={[styles.avatarText, { color: mentor.avatarText }]}>{mentor.initials}</Text>
-                </View>
-                <View style={styles.cardInfo}>
-                  <Text style={styles.cardName}>{mentor.name}</Text>
-                  <Text style={styles.cardRole}>{mentor.role}</Text>
-                </View>
-                <View style={styles.badgeColumn}>
-                  {isMatchMode && (
-                    <View style={styles.matchBadge}>
-                      <Text style={styles.matchBadgeText}>✦ Match</Text>
-                    </View>
-                  )}
-                  <View style={[styles.statusBadge, mentor.available ? styles.availableBadge : styles.fullBadge]}>
-                    <Text style={[styles.statusBadgeText, mentor.available ? styles.availableBadgeText : styles.fullBadgeText]}>
-                      {mentor.available ? 'Available' : 'Full'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              <View style={styles.tagsRow}>
-                {mentor.tags.map((tag, idx) => (
-                  <View key={idx} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>
-                ))}
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.cardBottomRow}>
-                <View style={styles.ratingRow}>
-                  <Text style={styles.stars}>★★★★★</Text>
-                  <Text style={styles.ratingText}>{mentor.rating} ({mentor.reviews})</Text>
-                </View>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity
-                    style={[styles.followButton, mentor.following && styles.followButtonActive]}
-                    onPress={() => handleFollow(mentor.id)}
-                    disabled={mentor.followLoading}
-                  >
-                    {mentor.followLoading
-                      ? <ActivityIndicator size="small" color="#456B50" />
-                      : <Text style={[styles.followButtonText, mentor.following && styles.followButtonTextActive]}>
-                          {mentor.following ? '✓' : '+ Follow'}
-                        </Text>}
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.viewButton} onPress={() => openMentorProfile(mentor)}>
-                    <Text style={styles.viewButtonText}>View</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+          {showAiMatches && (
+            <View style={styles.aiSection}>
+              <Text style={styles.sectionTitle}>Top AI Matches</Text>
+              <Text style={styles.sectionSubtitle}>
+                Your regular mentor browse stays below. AI results are shown here as an extra layer.
+              </Text>
+              {filteredAiMatches.length > 0 ? (
+                filteredAiMatches.map((mentor) => renderMentorCard(mentor, { highlightMatch: true }))
+              ) : (
+                <Text style={styles.sectionEmptyText}>
+                  No AI matches found for this search yet.
+                </Text>
+              )}
             </View>
-          ))}
+          )}
+
+          <View style={styles.browseSection}>
+            <Text style={styles.sectionTitle}>All Mentors</Text>
+            <Text style={styles.sectionSubtitle}>
+              Browse the full mentor directory or refine it with search.
+            </Text>
+          </View>
+
+          {pagedMentors.map((mentor) => renderMentorCard(mentor))}
 
           {totalPages > 1 && (
             <View style={styles.paginationRow}>
@@ -1321,5 +1474,93 @@ const styles = StyleSheet.create({
   },
   followButtonTextActive: {
     color: '#2F563C',
+  },
+  scoreRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 3,
+    borderColor: '#3F7653',
+    backgroundColor: '#D7E8DA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scoreRingText: {
+    color: '#1F3826',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  diversePickBadge: {
+    backgroundColor: '#F1E1BB',
+    borderColor: '#D09541',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  diversePickText: {
+    color: '#8A5D12',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  factorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  factorChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  factorChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  aiSection: {
+    marginBottom: 8,
+  },
+  browseSection: {
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    color: '#23372B',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  sectionSubtitle: {
+    color: '#7E7368',
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  sectionEmptyText: {
+    color: '#7E7368',
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  matchMetaBlock: {
+    marginBottom: 12,
+    gap: 4,
+  },
+  matchExplanation: {
+    color: '#23372B',
+    fontSize: 12,
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
+  matchDistance: {
+    color: '#456B50',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  matchSemanticHint: {
+    color: '#9A8F82',
+    fontSize: 11,
+    fontStyle: 'italic',
   },
 });

@@ -37,6 +37,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -247,6 +248,46 @@ class AdminBanAndMessagingIntegrationTest {
         long directConvCount = conversationRepository.findAll().stream()
                 .filter(c -> c.getKind() == ConversationKind.ADMIN_DIRECT).count();
         assertThat(directConvCount).isEqualTo(1L);
+    }
+
+    @Test
+    void adminDirect_recipientSeesInbox_canReadThread_andReply() throws Exception {
+        seedAdmin(ADMIN_EMAIL, ADMIN_PASSWORD);
+        String adminToken = login(ADMIN_EMAIL, ADMIN_PASSWORD, "ADMIN");
+        registerAndVerify("dm_inbox_target@test.com", false);
+        String userToken = login("dm_inbox_target@test.com", "Password1", "MENTEE");
+        Long targetId = userRepository.findByEmail("dm_inbox_target@test.com").orElseThrow().getId();
+        Long adminId = userRepository.findByEmail(ADMIN_EMAIL).orElseThrow().getId();
+
+        mockMvc.perform(post("/api/admin/messages/direct/" + targetId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("content", "Hello from admin"))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/conversations/admin-direct")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].peerId").value(adminId))
+                .andExpect(jsonPath("$.content[0].peerFirstName").value("Bootstrap"))
+                .andExpect(jsonPath("$.content[0].lastMessageContent").value("Hello from admin"))
+                .andExpect(jsonPath("$.content[0].unreadCount").value(1));
+
+        mockMvc.perform(get("/api/conversations/admin-direct/" + adminId + "/messages")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].content").value("Hello from admin"));
+
+        mockMvc.perform(patch("/api/conversations/admin-direct/" + adminId + "/messages/read")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userToken))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/conversations/admin-direct/" + adminId + "/messages")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("content", "Received, thanks"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.content").value("Received, thanks"));
     }
 
     @Test

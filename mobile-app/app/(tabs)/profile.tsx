@@ -970,13 +970,41 @@ function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
   const [banTarget, setBanTarget] = useState<{ id: string; name: string } | null>(null);
   const [banReason, setBanReason] = useState('');
   const [banHours, setBanHours] = useState('168');
+  const [userSearch, setUserSearch] = useState('');
 
   useEffect(() => {
-    apiClient.get('/users?size=100').then((res) => {
-      const data = res.data?.content ?? res.data ?? [];
-      setUsers(data);
-    }).catch(() => {}).finally(() => setUsersLoading(false));
+    // Backend clamps page size to 100, so iterate pages until everyone's loaded.
+    const fetchAll = async () => {
+      const all: any[] = [];
+      try {
+        for (let page = 0; page < 50; page++) {
+          const res = await apiClient.get(`/users?size=100&page=${page}`);
+          const body = res.data;
+          const content: any[] = body?.content ?? (Array.isArray(body) ? body : []);
+          all.push(...content);
+          const totalPages = body?.totalPages;
+          if (typeof totalPages === 'number' && page + 1 >= totalPages) break;
+          if (content.length === 0) break;
+        }
+        setUsers(all);
+      } catch {
+        // keep whatever pages succeeded
+        setUsers(all);
+      } finally {
+        setUsersLoading(false);
+      }
+    };
+    fetchAll();
   }, []);
+
+  const filteredUsers = (() => {
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) => {
+      const haystack = `${u.firstName ?? ''} ${u.lastName ?? ''} ${u.email ?? ''} ${u.role ?? ''}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  })();
 
   const banUser = (userId: string, userName: string) => {
     setBanReason('');
@@ -1024,12 +1052,45 @@ function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
   };
 
   const sendBroadcast = async () => {
-    if (!broadcastText.trim()) return;
+    const content = broadcastText.trim();
+    if (!content) return;
+
+    // Skip other admins (self-DM is rejected by the backend, and admin-to-admin
+    // chatter belongs to the legacy ADMIN_BROADCAST flow we're replacing here).
+    const targets = users.filter((u) => u.role !== 'ADMIN');
+
+    if (targets.length === 0) {
+      Alert.alert('No recipients', 'The user list is still loading or empty. Try again in a moment.');
+      return;
+    }
+
     setBroadcasting(true);
+    let sent = 0;
+    let failed = 0;
     try {
-      await apiClient.post('/admin/messages/broadcast', { body: broadcastText.trim() });
+      // Fan out one DM per recipient. Run in small batches so a stalled
+      // request doesn't block the whole send.
+      const batchSize = 8;
+      for (let i = 0; i < targets.length; i += batchSize) {
+        const batch = targets.slice(i, i + batchSize);
+        const results = await Promise.allSettled(
+          batch.map((u) =>
+            apiClient.post(`/admin/messages/direct/${u.id}`, { content })
+          )
+        );
+        for (const r of results) {
+          if (r.status === 'fulfilled') sent++; else failed++;
+        }
+      }
       setBroadcastText('');
-      Alert.alert('Sent', 'Broadcast message sent to all users.');
+      if (failed === 0) {
+        Alert.alert('Sent', `Message delivered to ${sent} user${sent === 1 ? '' : 's'}.`);
+      } else {
+        Alert.alert(
+          'Partially sent',
+          `Delivered to ${sent} user${sent === 1 ? '' : 's'}. ${failed} failed.`
+        );
+      }
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'Could not send broadcast.');
     } finally {
@@ -1098,16 +1159,40 @@ function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
           {view === 'users' ? (
             <>
               <Text style={styles.sectionHeaderText}>USER MANAGEMENT</Text>
+              <View style={{ backgroundColor: '#F8F6F2', borderRadius: 18, borderWidth: 1, borderColor: '#E5DDD1', paddingHorizontal: 14, paddingVertical: 4, marginBottom: 14, flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ fontSize: 16, marginRight: 8 }}>🔍</Text>
+                <TextInput
+                  style={{ flex: 1, paddingVertical: 12, color: '#23372B', fontSize: 14 }}
+                  placeholder="Search by name, email, or role…"
+                  placeholderTextColor="#9A8F82"
+                  value={userSearch}
+                  onChangeText={setUserSearch}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+                {userSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setUserSearch('')}>
+                    <Text style={{ color: '#9A8F82', fontSize: 18, paddingHorizontal: 6 }}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {!usersLoading && users.length > 0 && (
+                <Text style={{ color: '#7E7368', fontSize: 12, marginBottom: 10 }}>
+                  {filteredUsers.length} of {users.length} users
+                </Text>
+              )}
               {usersLoading ? (
                 <View style={{ paddingVertical: 40, alignItems: 'center' }}>
                   <ActivityIndicator size="large" color="#456B50" />
                 </View>
-              ) : users.length === 0 ? (
+              ) : filteredUsers.length === 0 ? (
                 <View style={styles.emptyRequestsCard}>
-                  <Text style={styles.emptyRequestsText}>No users found.</Text>
+                  <Text style={styles.emptyRequestsText}>
+                    {userSearch ? 'No users match this search.' : 'No users found.'}
+                  </Text>
                 </View>
               ) : (
-                users.map((u) => {
+                filteredUsers.map((u) => {
                   const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || String(u.id);
                   const uid = String(u.id);
                   return (
@@ -1145,7 +1230,9 @@ function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
             <>
               <Text style={styles.sectionHeaderText}>BROADCAST MESSAGE</Text>
               <View style={styles.formCardMentee}>
-                <Text style={styles.inputLabel}>Message to all users</Text>
+                <Text style={styles.inputLabel}>
+                  Message to all users ({users.filter((u) => u.role !== 'ADMIN').length} recipients)
+                </Text>
                 <TextInput
                   style={[styles.input, styles.aboutInput]}
                   value={broadcastText}
@@ -1154,12 +1241,15 @@ function AdminProfileContent({ onLogout }: { onLogout: () => void }) {
                   placeholderTextColor="#B5ADA3"
                   multiline
                 />
+                <Text style={{ color: '#7E7368', fontSize: 11, marginTop: 6, lineHeight: 16 }}>
+                  Each user receives this as a direct message in their Messages tab.
+                </Text>
                 <TouchableOpacity
                   style={[styles.saveButtonMentee, { marginTop: 8, opacity: (!broadcastText.trim() || broadcasting) ? 0.5 : 1 }]}
                   onPress={sendBroadcast}
                   disabled={!broadcastText.trim() || broadcasting}
                 >
-                  <Text style={styles.saveButtonText}>{broadcasting ? 'Sending...' : 'Send Broadcast'}</Text>
+                  <Text style={styles.saveButtonText}>{broadcasting ? 'Sending...' : 'Send to All Users'}</Text>
                 </TouchableOpacity>
               </View>
             </>
