@@ -105,7 +105,18 @@ export default function UserProfilePage() {
         setLoading(false)
       })
       .catch(err => {
-        setError(err.message || 'Failed to load profile.')
+        // #359 / backend #579: server returns 403 "Profile is private" when
+        // the target's profileVisibility=false and the viewer isn't the
+        // owner or an admin. Mentees can also be hidden from each other
+        // entirely (req 1.1.2.7). Map both to a friendly private-profile
+        // state so the page doesn't render a generic error card.
+        const msg = err?.message || ''
+        const isPrivate = /private/i.test(msg) || /not visible/i.test(msg)
+        if (isPrivate) {
+          setError('This profile is private.')
+        } else {
+          setError(msg || 'Failed to load profile.')
+        }
         setLoading(false)
       })
 
@@ -266,15 +277,26 @@ export default function UserProfilePage() {
   }
 
   if (error) {
-    const is403 = error.includes('403') || error.toLowerCase().includes('not allowed') || error.toLowerCase().includes('cannot view')
+    const lower = error.toLowerCase()
+    const isPrivate = lower.includes('private')
+    const is403 = !isPrivate && (error.includes('403') || lower.includes('not allowed') || lower.includes('cannot view') || lower.includes('not visible'))
+    let title = 'User not found'
+    let body = 'This user does not exist.'
+    if (isPrivate) {
+      title = 'This profile is private'
+      body = 'The owner has chosen to hide their profile from other users.'
+    } else if (is403) {
+      title = 'Profile not available'
+      body = 'You do not have permission to view this profile.'
+    }
     return (
       <MainLayout>
         <div style={{ padding: '40px', textAlign: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>
-            {is403 ? 'Profile not available' : 'User not found'}
+            {title}
           </div>
           <div style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
-            {is403 ? 'You do not have permission to view this profile.' : 'This user does not exist.'}
+            {body}
           </div>
           <button className="action-btn" onClick={() => navigate(-1)}>Go Back</button>
         </div>
