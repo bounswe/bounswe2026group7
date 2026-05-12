@@ -359,6 +359,7 @@ export default function FeedPage() {
             </button>
             <button
               className="action-btn"
+              data-testid="feed-composer-toggle"
               onClick={() => setComposeOpen(v => !v)}
             >
               {composeOpen ? 'Close' : 'New post'}
@@ -370,6 +371,7 @@ export default function FeedPage() {
           <div className="card" style={{ marginBottom: '16px' }}>
             <textarea
               className="md-composer-input"
+              data-testid="feed-composer-body"
               rows={3}
               placeholder="Share something with the community… (#hashtags supported)"
               value={composeBody}
@@ -382,10 +384,11 @@ export default function FeedPage() {
               onChange={setComposeAttachments}
               disabled={composeBusy}
             />
-            {composeError && <div className="md-composer-error">{composeError}</div>}
+            {composeError && <div className="md-composer-error" data-testid="feed-composer-error">{composeError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
               <button
                 className="md-composer-send"
+                data-testid="feed-composer-send"
                 onClick={submitCompose}
                 disabled={composeBusy || !composeBody.trim()}
               >
@@ -412,6 +415,7 @@ export default function FeedPage() {
           <input
             type="text"
             className="feed-search-input"
+            data-testid="feed-search-input"
             placeholder="Search posts (or #hashtag)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -616,11 +620,12 @@ export default function FeedPage() {
 
       {editing && (
         <div className="modal-backdrop" onClick={() => !editBusy && setEditing(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" data-testid="feed-edit-modal">
             <h2>Edit post</h2>
             <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Body</label>
             <textarea
               className="modal-textarea"
+              data-testid="feed-edit-body"
               value={editBody}
               onChange={(e) => setEditBody(e.target.value)}
               rows={5}
@@ -629,6 +634,7 @@ export default function FeedPage() {
             <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Hashtags (space-separated)</label>
             <input
               className="modal-textarea"
+              data-testid="feed-edit-hashtags"
               value={editHashtags}
               onChange={(e) => setEditHashtags(e.target.value)}
               placeholder="design react ux"
@@ -643,8 +649,8 @@ export default function FeedPage() {
             />
             {editError && <div className="md-composer-error" style={{ marginTop: '8px' }}>{editError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-              <button className="action-btn" onClick={() => setEditing(null)} disabled={editBusy}>Cancel</button>
-              <button className="md-composer-send" onClick={submitEdit} disabled={editBusy || !editBody.trim()}>
+              <button className="action-btn" data-testid="feed-edit-cancel" onClick={() => setEditing(null)} disabled={editBusy}>Cancel</button>
+              <button className="md-composer-send" data-testid="feed-edit-save" onClick={submitEdit} disabled={editBusy || !editBody.trim()}>
                 {editBusy ? 'Saving…' : 'Save'}
               </button>
             </div>

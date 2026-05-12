@@ -153,10 +153,10 @@ export default function MeetingsSessionsScreen() {
         </View>
 
         <View style={styles.headerTopRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()} testID="meetings.back">
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={openSchedule}>
+          <TouchableOpacity onPress={openSchedule} testID="meetings.schedule-button">
             <Text style={styles.scheduleText}>+ Schedule</Text>
           </TouchableOpacity>
         </View>
@@ -196,6 +196,7 @@ export default function MeetingsSessionsScreen() {
                 <TouchableOpacity
                   style={styles.joinButton}
                   onPress={() => upcoming.meetingLink && Linking.openURL(upcoming.meetingLink)}
+                  testID="meetings.upcoming-join"
                 >
                   <Text style={styles.joinButtonText}>Join Now</Text>
                 </TouchableOpacity>
@@ -224,7 +225,7 @@ export default function MeetingsSessionsScreen() {
               const meta = statusMeta(meeting.status);
               const isExpanded = expandedId === meeting.id;
               return (
-                <View key={meeting.id} style={styles.meetingCard}>
+                <View key={meeting.id} style={styles.meetingCard} testID={`meetings.card.${meeting.id}`}>
                   <TouchableOpacity
                     activeOpacity={0.7}
                     onPress={() => toggleExpand(meeting)}
@@ -282,6 +283,7 @@ export default function MeetingsSessionsScreen() {
                               style={[styles.notesSaveButton, notesSaving && { opacity: 0.5 }]}
                               onPress={() => saveNotes(meeting.id)}
                               disabled={notesSaving}
+                              testID="meetings.notes-save"
                             >
                               {notesSaving
                                 ? <ActivityIndicator size="small" color="#F8F6F2" />
@@ -302,6 +304,7 @@ export default function MeetingsSessionsScreen() {
                               setNotesDraft(meeting.notes ?? '');
                               setNotesEditing(true);
                             }}
+                            testID={`meetings.notes-edit.${meeting.id}`}
                           >
                             <Text style={styles.notesEditText}>{meeting.notes ? 'Edit Notes' : 'Add Notes'}</Text>
                           </TouchableOpacity>

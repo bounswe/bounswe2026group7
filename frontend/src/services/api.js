@@ -18,11 +18,24 @@ async function handleResponse(res) {
     return text ? JSON.parse(text) : null
   }
   let message
+  let parsedBody = null
   try {
-    const body = JSON.parse(await res.text())
-    message = body.message || body.error || JSON.stringify(body)
+    parsedBody = JSON.parse(await res.text())
+    message = parsedBody.message || parsedBody.error || JSON.stringify(parsedBody)
   } catch {
     message = res.statusText
+  }
+  // Cross-cutting concern: when the server reports the caller is banned, surface
+  // the structured payload to whoever cares (AuthProvider listens) without
+  // coupling this module to React. Listeners observe via window events; the
+  // throw still happens so existing `.catch` handlers behave unchanged.
+  if (res.status === 403 && parsedBody && parsedBody.code === 'BANNED_UNTIL'
+      && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    try {
+      window.dispatchEvent(new CustomEvent('auth:banned', { detail: parsedBody }))
+    } catch {
+      // ignore — older browsers / jsdom edge cases
+    }
   }
   throw new Error(message)
 }
@@ -266,6 +279,17 @@ export async function getActiveMentorships() {
 // by `authorId`. Returns Page<FeedPostListItem>; backend caps size at 100.
 export async function getUserFeedPosts(authorId, page = 0, size = 10) {
   const res = await fetch(`${BASE_URL}/feed/users/${authorId}/posts?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// Thin wrapper around the paginated mentorship history endpoint kept separate
+// from getActiveMentorships() because HomePage + MentorshipContext rely on the
+// older list-shaped response and shouldn't shift to Page<> semantics.
+export async function listMentorships({ status = 'ALL', page = 0, size = 50 } = {}) {
+  const params = new URLSearchParams({ status, page: String(page), size: String(size) })
+  const res = await fetch(`${BASE_URL}/mentorships?${params}`, {
     headers: authHeaders(),
   })
   return handleResponse(res)
@@ -1006,6 +1030,19 @@ export async function recordShareOnPost(postId) {
 export async function getMyBookmarks(page = 0, size = 20) {
   const res = await fetch(`${BASE_URL}/feed/me/bookmarks?page=${page}&size=${size}`, {
     headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// Admin-only direct-message endpoint. Backend route: POST
+// /api/admin/messages/direct/{userId} accepting a SendMessageRequest with a
+// `content` body. The 403 path is handled by the shared handleResponse
+// interceptor (BANNED_UNTIL events) — admins ban-immune, but the same shape.
+export async function sendAdminDirectMessage(userId, content) {
+  const res = await fetch(`${BASE_URL}/admin/messages/direct/${userId}`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ content }),
   })
   return handleResponse(res)
 }

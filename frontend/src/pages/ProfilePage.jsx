@@ -534,6 +534,7 @@ export default function ProfilePage() {
                     value={form.maxMenteeCapacity}
                     onChange={e => handleChange('maxMenteeCapacity', e.target.value)}
                     placeholder="e.g. 3"
+                    data-testid="profile-max-mentee-capacity"
                   />
                   {errors.maxMenteeCapacity && (
                     <div style={{ color: 'var(--red-text)', fontSize: '13px', marginTop: '4px' }}>

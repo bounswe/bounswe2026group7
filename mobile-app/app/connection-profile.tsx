@@ -668,7 +668,7 @@ export default function ConnectionProfileScreen() {
             <Text style={styles.statusIcons}>▲ ▮</Text>
           </View>
 
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton} testID="connection-profile.back">
             <Text style={styles.backText}>‹</Text>
           </TouchableOpacity>
 
@@ -800,7 +800,7 @@ export default function ConnectionProfileScreen() {
                         month: 'short', day: 'numeric',
                       });
                       return (
-                        <View key={`${event.kind}-${event.refId ?? idx}`} style={[styles.timelineSlot, { left: `${left}%` }]}>
+                        <View key={`${event.kind}-${event.refId ?? idx}`} style={[styles.timelineSlot, { left: `${left}%` }]} testID={`connection-profile.timeline.${event.kind}-${event.refId ?? idx}`}>
                           <TouchableOpacity
                             style={[styles.timelinePill, { backgroundColor: color }]}
                             onPress={() => handleTimelineEventPress(event)}
@@ -867,6 +867,7 @@ export default function ConnectionProfileScreen() {
                     style={[styles.goalSaveButton, (!goalDraft.trim() || goalSaving) && { opacity: 0.5 }]}
                     onPress={saveSharedGoal}
                     disabled={!goalDraft.trim() || goalSaving}
+                    testID="connection-profile.goal-save"
                   >
                     {goalSaving
                       ? <ActivityIndicator size="small" color="#F8F6F2" />
@@ -882,6 +883,7 @@ export default function ConnectionProfileScreen() {
                 <TouchableOpacity
                   style={styles.goalEditButton}
                   onPress={() => { setGoalDraft(sharedGoal); setGoalEditing(true); }}
+                  testID="connection-profile.goal-edit"
                 >
                   <Text style={styles.goalEditText}>Edit Goal</Text>
                 </TouchableOpacity>
@@ -921,6 +923,7 @@ export default function ConnectionProfileScreen() {
                 <TouchableOpacity
                   style={styles.actionButtonSecondary}
                   onPress={() => setMilestoneComposerOpen((current) => !current)}
+                  testID="connection-profile.milestone-add"
                 >
                   <Text style={styles.actionButtonSecondaryText}>
                     {milestoneComposerOpen ? 'Hide Milestone Form' : '+ Add Milestone'}
@@ -996,6 +999,7 @@ export default function ConnectionProfileScreen() {
                           selectedMilestoneId === milestone.id && styles.milestoneCardActive,
                         ]}
                         onPress={() => setSelectedMilestoneId(milestone.id)}
+                        testID={`connection-profile.milestone-card.${milestone.id}`}
                       >
                         <View style={styles.milestoneCardHeader}>
                           <Text style={styles.milestoneCardTitle}>{milestone.title}</Text>
