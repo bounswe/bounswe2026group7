@@ -4,6 +4,7 @@ import com.group7.backend.dto.request.EditProfileRequest;
 import com.group7.backend.dto.request.MenteeProfileRequest;
 import com.group7.backend.dto.request.MentorProfileRequest;
 import com.group7.backend.dto.request.SearchRole;
+import com.group7.backend.dto.response.AdminResponse;
 import com.group7.backend.dto.response.MenteeResponse;
 import com.group7.backend.dto.response.MentorResponse;
 import com.group7.backend.dto.response.ProfileResponse;
@@ -387,16 +388,34 @@ public class UserService {
         }
     }
 
+    /**
+     * Maps a {@link User} entity to its role-specific {@link ProfileResponse}.
+     *
+     * <p>Admins map to {@link AdminResponse} so the self-view path
+     * {@code GET /api/users/me} returns 200 for authenticated admins.
+     * This is the only call path that legitimately reaches the admin
+     * branch:
+     * <ul>
+     *   <li>{@link #getProfileById(Long, Long)} short-circuits with 403
+     *       for admin targets before invoking this helper, preserving
+     *       admin opacity to third parties.</li>
+     *   <li>{@link #getAllUsersFiltered(Long, Pageable)} filters admins
+     *       at the repository layer via {@code findAllNonAdmins}.</li>
+     *   <li>{@link #searchUsers(Long, String, Pageable, SearchRole)}
+     *       dispatches to mentor / mentee repositories that never load
+     *       admins.</li>
+     *   <li>Profile-edit / photo paths are scoped to {@code /me}, so
+     *       admins reaching them is privacy-equivalent to viewing
+     *       {@code /me} itself.</li>
+     * </ul>
+     */
     private ProfileResponse mapToResponse(User user) {
         if (user instanceof Mentor mentor) {
             return MentorResponse.from(mentor);
         } else if (user instanceof Mentee mentee) {
             return MenteeResponse.from(mentee);
-        } else if (user instanceof Admin) {
-            // Defensive: admins are filtered upstream via findAllNonAdmins and
-            // rejected explicitly in getProfileById, so this path should be
-            // unreachable. Throw the same 403 mapping if a future caller forgets.
-            throw new ProfileNotVisibleException("Admin profile is not visible");
+        } else if (user instanceof Admin admin) {
+            return AdminResponse.from(admin);
         }
         throw new IllegalStateException("Unknown user type: " + user.getClass().getSimpleName());
     }
