@@ -120,6 +120,15 @@ export default function NotificationBell() {
     if (open) fetchNotifications()
   }, [open, fetchNotifications])
 
+  // #447: re-fetch on a `notifications:refresh` window event, which the
+  // push hook dispatches whenever a foreground FCM message arrives. Keeps
+  // the badge live without a manual reload.
+  useEffect(() => {
+    const handler = () => fetchNotifications()
+    window.addEventListener('notifications:refresh', handler)
+    return () => window.removeEventListener('notifications:refresh', handler)
+  }, [fetchNotifications])
+
   useEffect(() => {
     function handleClickOutside(e) {
       if (bellRef.current && !bellRef.current.contains(e.target)) {

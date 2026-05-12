@@ -819,6 +819,26 @@ export async function deleteFeedPost(id) {
   return handleResponse(res)
 }
 
+// #447 / backend #136: FCM device-token registration. Idempotent on the
+// server (per-user cap = 5, oldest-first eviction). 201 on success.
+export async function registerDeviceToken(token) {
+  const res = await fetch(`${BASE_URL}/users/me/devices`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ token }),
+  })
+  return handleResponse(res)
+}
+
+export async function unregisterDeviceToken(token) {
+  const res = await fetch(`${BASE_URL}/users/me/devices/${encodeURIComponent(token)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (res.status === 204) return null
+  return handleResponse(res)
+}
+
 // #356 / backend #349: feed read-state cursor + companion unread count.
 // `markFeedRead` is idempotent — backend sets the cursor to clock_timestamp.
 // `getFeedUnreadCount` returns { count, cappedAtMax } capped at 99 by default.
