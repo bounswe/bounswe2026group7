@@ -9,6 +9,7 @@ import com.group7.backend.exception.ResourceNotFoundException;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.FollowRepository;
 import com.group7.backend.repository.UserRepository;
+import com.group7.backend.repository.projection.FollowingFeedRow;
 import com.group7.backend.service.ranking.FeedRanker;
 import com.group7.backend.service.ranking.FeedScoreResult;
 import com.group7.backend.service.ranking.feed.ForYouScoringPipeline;
@@ -25,11 +26,13 @@ import java.util.stream.Collectors;
 
 import java.time.OffsetDateTime;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Read service for the social-feed surfaces in #350 — For-You,
@@ -204,12 +207,105 @@ public class FeedReadService {
 
 
     /**
-     * Following feed (#350, requirement 1.1.7.4). Chronological over
-     * posts authored by users the viewer follows.
+     * Following feed (#350, requirement 1.1.7.4). Chronological merge of
+     * two streams: posts authored by users the viewer follows, and
+     * posts reposted by users the viewer follows. The repository's
+     * UNION-ALL query returns a projection carrying the share metadata
+     * when the row originates from the repost branch; this mapper
+     * threads that metadata through into {@link FeedPostListItem}.
+     *
+     * <p>Cost: one projection query (paged) + one batch fetch of post
+     * entities (for hashtag collections, which the projection
+     * deliberately does not carry) + one user batch fetch (authors
+     * union sharers) + one counts batch. No N+1 against the page size.
      */
     public Page<FeedPostListItem> followingFeed(Long viewerId, Pageable pageable) {
-        Page<FeedPost> page = feedPostRepository.findFollowingFeed(viewerId, pageable);
-        return mapPage(page, viewerId);
+        Page<FollowingFeedRow> page = feedPostRepository.findFollowingFeed(viewerId, pageable);
+        if (page.isEmpty()) {
+            return Page.empty(page.getPageable());
+        }
+
+        List<FollowingFeedRow> rows = page.getContent();
+
+        // Distinct post ids to fetch FeedPost entities (only for the
+        // hashtag collection, which the projection omits to keep its
+        // shape narrow). @BatchSize on FeedPost.hashtags collapses
+        // the lazy load to a single query for the whole page.
+        Set<Long> postIds = rows.stream()
+                .map(FollowingFeedRow::getId)
+                .collect(Collectors.toSet());
+        Map<Long, FeedPost> postsById = feedPostRepository.findAllById(postIds).stream()
+                .collect(Collectors.toMap(FeedPost::getId, p -> p));
+
+        // Single user-batch covering both authors and sharers — one round
+        // trip even when most rows originate from the repost branch.
+        Set<Long> userIds = new java.util.HashSet<>();
+        rows.forEach(r -> {
+            userIds.add(r.getAuthorId());
+            if (r.getSharedById() != null) userIds.add(r.getSharedById());
+        });
+        Map<Long, String> names = new HashMap<>();
+        userRepository.findAllById(userIds).forEach(u -> names.put(u.getId(), u.getFirstName()));
+
+        Map<Long, FeedInteractionService.PostCounts> counts =
+                feedInteractionService.batchCounts(postIds.stream().toList());
+
+        return page.map(row -> followingRowToListItem(row, postsById, names, counts));
+    }
+
+    /**
+     * Builds a {@link FeedPostListItem} for the Following feed from the
+     * UNION-ALL projection. Falls back to an empty hashtag list if the
+     * post entity is unexpectedly missing (e.g., hard-deleted between
+     * the projection query and the entity batch), so the response
+     * remains well-formed.
+     */
+    private FeedPostListItem followingRowToListItem(
+            FollowingFeedRow row,
+            Map<Long, FeedPost> postsById,
+            Map<Long, String> names,
+            Map<Long, FeedInteractionService.PostCounts> counts) {
+        FeedPost post = postsById.get(row.getId());
+        List<String> tags = (post == null)
+                ? List.of()
+                : post.getHashtags().stream()
+                        .map(h -> h.getId().getTag())
+                        .sorted()
+                        .toList();
+        List<com.group7.backend.dto.response.AttachmentSummary> attachments =
+                (post == null) ? List.of() : feedPostMapper.toSummaries(post.getAttachments());
+        FeedInteractionService.PostCounts c = counts.get(row.getId());
+        long likeCount = (c == null) ? 0L : c.likeCount();
+        long commentCount = (c == null) ? 0L : c.commentCount();
+        String sharerName = row.getSharedById() == null
+                ? null
+                : names.get(row.getSharedById());
+
+        // Spring Data interface projections on native queries return
+        // TIMESTAMPTZ as java.time.Instant; FeedPostListItem carries
+        // OffsetDateTime. Convert at UTC — the database stores UTC and
+        // the existing direct-entity reads (FeedPost.createdAt as
+        // OffsetDateTime) effectively use UTC too, so this keeps the
+        // wire shape identical across both feed read paths.
+        return new FeedPostListItem(
+                row.getId(),
+                row.getAuthorId(),
+                names.get(row.getAuthorId()),
+                row.getBody(),
+                tags,
+                row.getCreatedAt() == null
+                        ? null
+                        : row.getCreatedAt().atOffset(java.time.ZoneOffset.UTC),
+                likeCount,
+                commentCount,
+                List.of(),                    // factors — Following is chronological, not ranked
+                attachments,
+                row.getSharedById(),
+                sharerName,
+                row.getShareCommentary(),
+                row.getSharedAt() == null
+                        ? null
+                        : row.getSharedAt().atOffset(java.time.ZoneOffset.UTC));
     }
 
     /**

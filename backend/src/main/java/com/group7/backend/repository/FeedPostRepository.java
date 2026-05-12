@@ -62,23 +62,80 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
      * countQuery} is provided so Spring Data does not attempt to derive
      * one from the native query (which it cannot do reliably).
      */
+    /**
+     * Following-feed read. UNIONs two branches:
+     * <ul>
+     *   <li>Original posts authored by users the viewer follows.</li>
+     *   <li>Posts reposted (is_repost = TRUE) by users the viewer follows.</li>
+     * </ul>
+     *
+     * <p>Both branches filter {@code p.deleted_at IS NULL}, so a soft-
+     * deleted post never surfaces — its share rows are silently dropped.
+     *
+     * <p>Sort key is {@code sort_at} (post-creation time on the original
+     * branch, share-creation time on the repost branch) so reposts
+     * inserted today rank above untouched posts from earlier. The
+     * {@code share_row_id DESC NULLS LAST} tiebreaker guarantees stable
+     * pagination when two reposts of the same post share a millisecond
+     * — without it, page boundaries could drop or duplicate rows.
+     *
+     * <p>The same post can surface twice if the viewer follows both the
+     * post's author and a separate user who reposted it. Frontend may
+     * collapse if desired; this is documented contract behaviour, not a
+     * bug.
+     */
     @Query(value = """
-            SELECT * FROM feed_posts p
-            WHERE p.deleted_at IS NULL
-              AND p.author_id IN (
-                  SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
-              )
-            ORDER BY p.created_at DESC, p.id DESC
+            SELECT * FROM (
+                SELECT p.id, p.author_id, p.body, p.created_at,
+                       NULL::BIGINT      AS shared_by_id,
+                       NULL::TEXT        AS share_commentary,
+                       NULL::BIGINT      AS share_row_id,
+                       NULL::TIMESTAMPTZ AS shared_at,
+                       p.created_at      AS sort_at
+                FROM feed_posts p
+                WHERE p.deleted_at IS NULL
+                  AND p.author_id IN (
+                      SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
+                  )
+                UNION ALL
+                SELECT p.id, p.author_id, p.body, p.created_at,
+                       s.sharer_id  AS shared_by_id,
+                       s.body       AS share_commentary,
+                       s.id         AS share_row_id,
+                       s.created_at AS shared_at,
+                       s.created_at AS sort_at
+                FROM feed_post_shares s
+                JOIN feed_posts p ON p.id = s.post_id
+                WHERE s.is_repost = TRUE
+                  AND p.deleted_at IS NULL
+                  AND s.sharer_id IN (
+                      SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
+                  )
+            ) merged
+            ORDER BY sort_at DESC, id DESC, share_row_id DESC NULLS LAST
             """,
             countQuery = """
-            SELECT COUNT(*) FROM feed_posts p
-            WHERE p.deleted_at IS NULL
-              AND p.author_id IN (
-                  SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
-              )
+            SELECT COUNT(*) FROM (
+                SELECT 1
+                FROM feed_posts p
+                WHERE p.deleted_at IS NULL
+                  AND p.author_id IN (
+                      SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
+                  )
+                UNION ALL
+                SELECT 1
+                FROM feed_post_shares s
+                JOIN feed_posts p ON p.id = s.post_id
+                WHERE s.is_repost = TRUE
+                  AND p.deleted_at IS NULL
+                  AND s.sharer_id IN (
+                      SELECT f.followee_id FROM follows f WHERE f.follower_id = :viewerId
+                  )
+            ) merged
             """,
             nativeQuery = true)
-    Page<FeedPost> findFollowingFeed(@Param("viewerId") Long viewerId, Pageable pageable);
+    Page<com.group7.backend.repository.projection.FollowingFeedRow> findFollowingFeed(
+            @Param("viewerId") Long viewerId, Pageable pageable);
 
     /**
      * Author-profile feed query (#471). Returns non-deleted posts for a

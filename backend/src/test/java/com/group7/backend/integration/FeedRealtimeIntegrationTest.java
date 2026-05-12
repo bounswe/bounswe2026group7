@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.group7.backend.dto.request.LoginRequest;
 import com.group7.backend.dto.request.RegisterRequest;
 import com.group7.backend.dto.response.FeedPostPushPayload;
+import com.group7.backend.dto.response.FeedSharePushPayload;
 import com.group7.backend.dto.response.FeedUnreadCountResponse;
 import com.group7.backend.repository.FeedPostRepository;
 import com.group7.backend.repository.FollowRepository;
@@ -175,6 +176,111 @@ class FeedRealtimeIntegrationTest {
 
         boolean rejected = handler.rejection.await(5, TimeUnit.SECONDS);
         assertThat(rejected).isTrue();
+    }
+
+    @Test
+    void followerReceivesFeedSharePushPayload_onBareRepost() throws Exception {
+        // Author posts; follower follows the sharer (a third party); sharer
+        // reposts the post. Follower receives FeedSharePushPayload on
+        // /topic/feed.{followerId}.
+        Pair pair = setupAuthorAndFollower();
+        // Re-purpose: sharer = follower here (they are a follower of the
+        // author and ALSO the sharer of the resulting repost). The setup
+        // suffices.
+        String authorToken = pair.authorToken();
+        String sharerToken = pair.followerToken();
+        Long sharerId = pair.followerId();
+
+        // Register a third party who follows the sharer so the fanout fires.
+        String observerToken = registerAndLogin("ws_repost_observer@test.com", false, "Observer");
+        Long observerId = userRepository.findByEmail("ws_repost_observer@test.com").orElseThrow().getId();
+        ResponseEntity<String> followResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/users/" + sharerId + "/follow",
+                HttpMethod.POST, authedJson(observerToken, null), String.class);
+        assertThat(followResponse.getStatusCode().is2xxSuccessful()).isTrue();
+
+        StompSession session = connect(observerToken);
+        LinkedBlockingDeque<FeedSharePushPayload> received = new LinkedBlockingDeque<>();
+        session.subscribe("/topic/feed." + observerId, new StompFrameHandler() {
+            @Override public Type getPayloadType(StompHeaders headers) { return FeedSharePushPayload.class; }
+            @Override public void handleFrame(StompHeaders headers, Object payload) {
+                if (payload instanceof FeedSharePushPayload p) {
+                    received.add(p);
+                }
+            }
+        });
+        Thread.sleep(2000);
+
+        // Author posts.
+        ResponseEntity<String> createResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts",
+                HttpMethod.POST,
+                authedJson(authorToken, Map.of(
+                        "body", "Reposted via STOMP",
+                        "hashtags", java.util.List.of())),
+                String.class);
+        assertThat(createResponse.getStatusCode().value()).isEqualTo(201);
+        Long postId = objectMapper.readTree(createResponse.getBody()).get("id").asLong();
+
+        // Sharer reposts.
+        ResponseEntity<String> repostResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + postId + "/reposts",
+                HttpMethod.POST, authedJson(sharerToken, java.util.Map.of()), String.class);
+        assertThat(repostResponse.getStatusCode().value()).isEqualTo(200);
+
+        FeedSharePushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.postId()).isEqualTo(postId);
+        assertThat(delivered.sharerId()).isEqualTo(sharerId);
+        assertThat(delivered.sharerFirstName()).isEqualTo("Follower");  // setupAuthorAndFollower names the follower "Follower"
+        assertThat(delivered.commentary()).isNull();   // bare repost
+        assertThat(delivered.sharedAt()).isNotNull();
+
+        session.disconnect();
+    }
+
+    @Test
+    void followerReceivesFeedSharePushPayload_onQuoteShareWithCommentary() throws Exception {
+        Pair pair = setupAuthorAndFollower();
+        String authorToken = pair.authorToken();
+        String sharerToken = pair.followerToken();
+        Long sharerId = pair.followerId();
+
+        String observerToken = registerAndLogin("ws_quote_observer@test.com", false, "Observer");
+        Long observerId = userRepository.findByEmail("ws_quote_observer@test.com").orElseThrow().getId();
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/users/" + sharerId + "/follow",
+                HttpMethod.POST, authedJson(observerToken, null), String.class);
+
+        StompSession session = connect(observerToken);
+        LinkedBlockingDeque<FeedSharePushPayload> received = new LinkedBlockingDeque<>();
+        session.subscribe("/topic/feed." + observerId, new StompFrameHandler() {
+            @Override public Type getPayloadType(StompHeaders headers) { return FeedSharePushPayload.class; }
+            @Override public void handleFrame(StompHeaders headers, Object payload) {
+                if (payload instanceof FeedSharePushPayload p) {
+                    received.add(p);
+                }
+            }
+        });
+        Thread.sleep(2000);
+
+        ResponseEntity<String> createResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts",
+                HttpMethod.POST,
+                authedJson(authorToken, Map.of("body", "to be quoted", "hashtags", java.util.List.of())),
+                String.class);
+        Long postId = objectMapper.readTree(createResponse.getBody()).get("id").asLong();
+
+        restTemplate.exchange(
+                "http://localhost:" + port + "/api/feed/posts/" + postId + "/reposts",
+                HttpMethod.POST, authedJson(sharerToken, Map.of("body", "my added commentary")),
+                String.class);
+
+        FeedSharePushPayload delivered = received.poll(5, TimeUnit.SECONDS);
+        assertThat(delivered).isNotNull();
+        assertThat(delivered.commentary()).isEqualTo("my added commentary");
+
+        session.disconnect();
     }
 
     @Test
