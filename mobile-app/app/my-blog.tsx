@@ -211,7 +211,7 @@ export default function MyBlogScreen() {
           {posts.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>No posts yet.</Text>
-              <Text style={styles.emptySubText}>Tap "New Post" to write your first post.</Text>
+              <Text style={styles.emptySubText}>{'Tap "New Post" to write your first post.'}</Text>
             </View>
           ) : (
             <>
