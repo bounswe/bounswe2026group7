@@ -6,6 +6,7 @@ import FeedImageUploader from '../components/FeedImageUploader'
 import { getFeedPostById, updateFeedPost, deleteFeedPost, restoreFeedPost } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { showUndoToast } from '../utils/toast'
+import useFeedSubscription from '../hooks/useFeedSubscription'
 import '../styles/main.css'
 
 export default function FeedPostDetailPage() {
@@ -16,6 +17,22 @@ export default function FeedPostDetailPage() {
   const [post, setPost] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // #563: subscribe to the viewer's feed topic so a like / comment / share
+  // on the post being viewed updates the counts in place. Engagement frames
+  // for other posts are ignored. New-post and repost frames are ignored on
+  // the detail surface — there's no list to insert them into.
+  useFeedSubscription(userId, {
+    onEngagement: (payload) => {
+      if (!post || String(post.id) !== String(payload.postId)) return
+      setPost(prev => prev ? {
+        ...prev,
+        likeCount: payload.likeCount,
+        commentCount: payload.commentCount,
+        shareCount: payload.shareCount,
+      } : prev)
+    },
+  })
 
   // Edit modal state — same pattern as FeedPage; would extract a shared
   // <EditPostModal /> if/when a third caller appears.

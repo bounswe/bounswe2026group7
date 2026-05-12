@@ -1,7 +1,13 @@
 package com.group7.backend.controller;
 
+import com.group7.backend.controller.support.PageableSupport;
 import com.group7.backend.dto.request.AdminBanRequest;
+import com.group7.backend.dto.request.AdminUserBanStatusFilter;
+import com.group7.backend.dto.request.AdminUserRoleFilter;
+import com.group7.backend.dto.response.AdminUserDetailResponse;
+import com.group7.backend.dto.response.AdminUserListItem;
 import com.group7.backend.dto.response.BanResponse;
+import com.group7.backend.service.AdminUserQueryService;
 import com.group7.backend.service.BanService;
 import com.group7.backend.service.SpamDetectionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +18,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -20,6 +28,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -32,10 +41,14 @@ public class AdminController {
 
     private final BanService banService;
     private final SpamDetectionService spamDetectionService;
+    private final AdminUserQueryService adminUserQueryService;
 
-    public AdminController(BanService banService, SpamDetectionService spamDetectionService) {
+    public AdminController(BanService banService,
+                           SpamDetectionService spamDetectionService,
+                           AdminUserQueryService adminUserQueryService) {
         this.banService = banService;
         this.spamDetectionService = spamDetectionService;
+        this.adminUserQueryService = adminUserQueryService;
     }
 
     @GetMapping("/me")
@@ -46,6 +59,48 @@ public class AdminController {
                 "email", authentication.getPrincipal(),
                 "role", "ADMIN"
         ));
+    }
+
+    @GetMapping("/users")
+    @Operation(summary = "List users for the admin panel (#569)",
+            description = "Paginated listing across all roles with optional role / "
+                    + "ban-status / keyword filters. Page size is clamped to 100. "
+                    + "Ordered newest user first (createdAt desc, id desc).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Page of users"),
+            @ApiResponse(responseCode = "403", description = "Not an admin", content = @Content)
+    })
+    public ResponseEntity<Page<AdminUserListItem>> listUsers(
+            @Parameter(description = "Restrict to a single role. Omit for all roles.")
+            @RequestParam(required = false) AdminUserRoleFilter role,
+            @Parameter(description = "ACTIVE = users with a current ban "
+                    + "(lifted_at IS NULL AND expires_at > now); "
+                    + "NONE = users without one. Omit to include both.")
+            @RequestParam(required = false) AdminUserBanStatusFilter banStatus,
+            @Parameter(description = "Keyword matched against firstName / lastName / "
+                    + "email (case-insensitive). Inputs shorter than 3 alphanumerics "
+                    + "are ignored.")
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageableSupport.clampPageable(page, size);
+        return ResponseEntity.ok(
+                adminUserQueryService.listUsers(role, banStatus, q, pageable));
+    }
+
+    @GetMapping("/users/{id}")
+    @Operation(summary = "Get a user's admin drill-down view (#569)",
+            description = "Returns the role-specific profile (Mentor / Mentee / Admin) "
+                    + "plus full ban history (newest first) and the spam-bot flag. "
+                    + "Admin-on-admin reads are intentional for this endpoint.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "User detail"),
+            @ApiResponse(responseCode = "403", description = "Not an admin", content = @Content),
+            @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
+    })
+    public ResponseEntity<AdminUserDetailResponse> getUserDetail(
+            @Parameter(description = "Target user id") @PathVariable Long id) {
+        return ResponseEntity.ok(adminUserQueryService.getUserDetail(id));
     }
 
     @PostMapping("/users/{userId}/ban")

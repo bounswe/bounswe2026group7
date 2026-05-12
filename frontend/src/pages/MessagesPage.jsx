@@ -267,6 +267,7 @@ export default function MessagesPage() {
                   key={c.id}
                   className="md-conv-item"
                   onClick={() => navigate(c.href)}
+                  data-testid={`messages-conversation-${c.id}`}
                 >
                   <Avatar initials={initials} size="md" />
                   <div className="md-conv-info">

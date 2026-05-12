@@ -347,6 +347,7 @@ export default function FeedPostCard({
     <article
       className={`feed-card${clickable ? ' feed-card--clickable' : ''}`}
       onClick={openDetail}
+      data-testid={`feed-post-card-${post.id}`}
     >
       {isRepostSurface && (
         <div className="feed-card-repost-banner">
@@ -374,7 +375,7 @@ export default function FeedPostCard({
             <span className="feed-card-author-name">{post.authorFirstName || '—'}</span>
             <span className="feed-card-time">
               {formatPostTime(post.createdAt)}
-              {post.isEdited && <span className="feed-card-edited"> · edited</span>}
+              {post.isEdited && <span className="feed-card-edited" data-testid={`feed-post-edited-${post.id}`}> · edited</span>}
             </span>
           </div>
         </button>
@@ -388,13 +389,20 @@ export default function FeedPostCard({
               aria-haspopup="true"
               aria-expanded={menuOpen}
               aria-label="Post options"
+              data-testid={`feed-post-menu-${post.id}`}
             >
               <MoreHorizontal size={18} strokeWidth={1.75} />
             </button>
             {menuOpen && (
               <div className="feed-card-menu" role="menu">
                 {onEdit && (
-                  <button type="button" className="feed-card-menu-item" onClick={stopAndRun(onEdit)} role="menuitem">
+                  <button
+                    type="button"
+                    className="feed-card-menu-item"
+                    onClick={stopAndRun(onEdit)}
+                    role="menuitem"
+                    data-testid={`feed-post-edit-${post.id}`}
+                  >
                     <Pencil size={14} strokeWidth={1.75} /> Edit
                   </button>
                 )}
@@ -414,6 +422,7 @@ export default function FeedPostCard({
                     className="feed-card-menu-item feed-card-menu-item--danger"
                     onClick={stopAndRun(onDelete)}
                     role="menuitem"
+                    data-testid={`feed-post-delete-${post.id}`}
                   >
                     <Trash2 size={14} strokeWidth={1.75} /> Delete
                   </button>
@@ -424,14 +433,16 @@ export default function FeedPostCard({
         )}
       </div>
 
-      <div className="feed-card-body">{renderBody(post.body)}</div>
+      <div className="feed-card-body" data-testid={`feed-post-body-${post.id}`}>{renderBody(post.body)}</div>
 
-      <FeedAttachmentGrid attachments={post.attachments} />
+      <div data-testid={`feed-post-attachments-${post.id}`}>
+        <FeedAttachmentGrid attachments={post.attachments} />
+      </div>
 
       {Array.isArray(post.hashtags) && post.hashtags.length > 0 && (
         <div className="feed-card-tags">
           {post.hashtags.map(t => (
-            <span key={t} className="feed-card-tag">#{t}</span>
+            <span key={t} className="feed-card-tag" data-testid={`feed-post-hashtag-${post.id}-${t}`}>#{t}</span>
           ))}
         </div>
       )}
@@ -445,6 +456,7 @@ export default function FeedPostCard({
           aria-label={liked ? 'Unlike post' : 'Like post'}
           aria-pressed={liked}
           title={liked ? 'Liked' : 'Like'}
+          data-testid={`feed-post-like-${post.id}`}
         >
           <Heart size={16} strokeWidth={1.75} fill={liked ? 'currentColor' : 'none'} />
           <span>{likeCount}</span>
@@ -456,6 +468,7 @@ export default function FeedPostCard({
           aria-label="View comments"
           aria-expanded={commentsOpen}
           title="Comments"
+          data-testid={`feed-post-comment-${post.id}`}
         >
           <MessageCircle size={16} strokeWidth={1.75} />
           <span>{commentCount}</span>
@@ -478,6 +491,7 @@ export default function FeedPostCard({
           disabled={shareBusy}
           aria-label="Share post"
           title="Share"
+          data-testid={`feed-post-share-${post.id}`}
         >
           <Share2 size={16} strokeWidth={1.75} />
           <span>{shareCount}</span>
@@ -490,6 +504,7 @@ export default function FeedPostCard({
           aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark post'}
           aria-pressed={bookmarked}
           title={bookmarked ? 'Bookmarked' : 'Bookmark'}
+          data-testid={`feed-post-bookmark-${post.id}`}
         >
           <Bookmark
             size={16}

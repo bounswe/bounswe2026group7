@@ -28,7 +28,7 @@ import {
  * a mentee tries the mentor-only paths regardless, but hiding them in the UI
  * keeps the experience clean.
  */
-export default function MentorshipMilestones({ mentorshipId, isMentor, isActive, hasSharedGoal }) {
+export default function MentorshipMilestones({ mentorshipId, isMentor, isActive, hasSharedGoal, onMutate }) {
   const [list, setList] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -64,6 +64,15 @@ export default function MentorshipMilestones({ mentorshipId, isMentor, isActive,
     }
   }, [reload, hasSharedGoal])
 
+  // After any milestone mutation, also bump the parent timeline so the
+  // progress ribbon reflects the new state. The initial mount-fetch above
+  // intentionally uses plain `reload()` — the parent already triggers a
+  // fresh timeline fetch when it mounts.
+  const reloadAll = useCallback(async () => {
+    await reload()
+    onMutate?.()
+  }, [reload, onMutate])
+
   const overallProgress = useMemo(() => {
     if (list.length === 0) return null
     const done = list.filter(m => m.status === 'COMPLETED').length
@@ -74,7 +83,7 @@ export default function MentorshipMilestones({ mentorshipId, isMentor, isActive,
     if (milestone.status === nextStatus) return
     try {
       await updateMilestone(milestone.id, { status: nextStatus })
-      reload()
+      reloadAll()
     } catch (err) {
       window.alert(err?.message || 'Failed to update milestone status')
     }
@@ -85,7 +94,7 @@ export default function MentorshipMilestones({ mentorshipId, isMentor, isActive,
     try {
       await deleteMilestone(milestone.id)
       if (expanded === milestone.id) setExpanded(null)
-      reload()
+      reloadAll()
     } catch (err) {
       window.alert(err?.message || 'Failed to delete milestone')
     }
@@ -109,7 +118,7 @@ export default function MentorshipMilestones({ mentorshipId, isMentor, isActive,
       <div className="md-section-header">
         <div className="section-label" style={{ marginBottom: 0 }}>Milestones</div>
         {isMentor && isActive && (
-          <button className="md-link-btn" onClick={() => setCreateOpen(true)}>
+          <button className="md-link-btn" onClick={() => setCreateOpen(true)} data-testid="milestones-add">
             + Add milestone
           </button>
         )}
@@ -152,7 +161,7 @@ export default function MentorshipMilestones({ mentorshipId, isMentor, isActive,
               onStatus={nextStatus => handleStatusChange(m, nextStatus)}
               onEdit={() => setEditing(m)}
               onDelete={() => handleDelete(m)}
-              onActionItemChanged={reload}
+              onActionItemChanged={reloadAll}
             />
           ))}
         </ol>
@@ -165,7 +174,7 @@ export default function MentorshipMilestones({ mentorshipId, isMentor, isActive,
           onSubmit={async (payload) => {
             await createMilestone(mentorshipId, payload)
             setCreateOpen(false)
-            reload()
+            reloadAll()
           }}
         />
       )}
@@ -178,7 +187,7 @@ export default function MentorshipMilestones({ mentorshipId, isMentor, isActive,
           onSubmit={async (payload) => {
             await updateMilestone(editing.id, payload)
             setEditing(null)
-            reload()
+            reloadAll()
           }}
         />
       )}
@@ -212,7 +221,7 @@ function MilestoneCard({
     && new Date(milestone.targetDate) < new Date()
 
   return (
-    <li className={`milestone-card${expanded ? ' milestone-card--open' : ''}`}>
+    <li className={`milestone-card${expanded ? ' milestone-card--open' : ''}`} data-testid={`milestone-card-${milestone.id}`}>
       <button type="button" className="milestone-card-summary" onClick={onToggle} aria-expanded={expanded}>
         <div className="milestone-card-main">
           <div className="milestone-card-title">{milestone.title}</div>
@@ -225,7 +234,7 @@ function MilestoneCard({
       </button>
 
       {expanded && (
-        <div className="milestone-card-body">
+        <div className="milestone-card-body" data-testid={`milestone-card-body-${milestone.id}`}>
           {detailLoading && <div className="md-goal-empty">Loading…</div>}
           {detailError && (
             <div className="md-error-sub" style={{ color: '#c53030' }}>{detailError}</div>
@@ -250,8 +259,8 @@ function MilestoneCard({
               {isMentor && isActive && (
                 <div className="milestone-card-actions">
                   <StatusSelector status={milestone.status} onChange={onStatus} />
-                  <button className="task-action-primary" onClick={onEdit}>Edit milestone</button>
-                  <button className="task-action-danger" onClick={onDelete}>Delete</button>
+                  <button className="task-action-primary" onClick={onEdit} data-testid={`milestone-edit-${milestone.id}`}>Edit milestone</button>
+                  <button className="task-action-danger" onClick={onDelete} data-testid={`milestone-delete-${milestone.id}`}>Delete</button>
                 </div>
               )}
             </>
@@ -473,7 +482,7 @@ function MilestoneFormModal({ mode, initial, onClose, onSubmit }) {
       ref={overlayRef}
       onMouseDown={e => { if (e.target === overlayRef.current && !busy) onClose() }}
     >
-      <div className="modal-card" role="dialog" aria-modal="true">
+      <div className="modal-card" role="dialog" aria-modal="true" data-testid="milestone-modal">
         <div className="modal-header">
           <div>
             <h2>{mode === 'edit' ? 'Edit milestone' : 'New milestone'}</h2>
@@ -492,6 +501,7 @@ function MilestoneFormModal({ mode, initial, onClose, onSubmit }) {
           onChange={e => setTitle(e.target.value)}
           maxLength={200}
           disabled={busy}
+          data-testid="milestone-modal-title"
         />
 
         <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Description</label>
@@ -524,7 +534,12 @@ function MilestoneFormModal({ mode, initial, onClose, onSubmit }) {
 
         <div className="modal-actions" style={{ marginTop: '16px' }}>
           <button className="modal-btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="modal-btn-primary" onClick={handleSubmit} disabled={busy || !title.trim()}>
+          <button
+            className="modal-btn-primary"
+            onClick={handleSubmit}
+            disabled={busy || !title.trim()}
+            data-testid="milestone-modal-save"
+          >
             {busy ? 'Saving…' : (mode === 'edit' ? 'Save' : 'Create milestone')}
           </button>
         </div>

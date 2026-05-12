@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { loginUser } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -29,6 +29,13 @@ export default function LoginPage() {
 
   const registered = location.state?.registered
   const [exiting, setExiting] = useState(false)
+  // `hydrated` flips to true on the first commit after mount — by then React's
+  // event handlers are attached and the controlled `fields` state owns the
+  // input values. Tests gate fill+click on this flag (`form[data-hydrated]`)
+  // so an e2e driver writing during framer-motion's entrance animation can no
+  // longer race the initial render and end up with an empty controlled state.
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => { setHydrated(true) }, [])
 
   function handleBack() {
     setExiting(true)
@@ -89,7 +96,7 @@ export default function LoginPage() {
           <div className="auth-error" data-testid="login-error">{serverError}</div>
         )}
 
-        <form onSubmit={handleSubmit} noValidate data-testid="login-form">
+        <form onSubmit={handleSubmit} noValidate data-testid="login-form" data-hydrated={hydrated ? 'true' : 'false'}>
           <label className="field-label">Email</label>
           <input
             type="email"
@@ -116,7 +123,7 @@ export default function LoginPage() {
 
           <Link to="/forgot-password" className="forgot-link" data-testid="login-forgot-link">Forgot password?</Link>
 
-          <button type="submit" className="auth-btn" disabled={isLoading} data-testid="login-submit">
+          <button type="submit" className="auth-btn" disabled={!hydrated || isLoading} data-testid="login-submit">
             {isLoading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>

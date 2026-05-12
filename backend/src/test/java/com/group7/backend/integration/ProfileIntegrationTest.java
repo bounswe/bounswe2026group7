@@ -138,7 +138,10 @@ class ProfileIntegrationTest {
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-        assertNull(body.get("profileVisibility"), "Mentor should not have profileVisibility");
+        // #570 added profileVisibility to MentorResponse; field is present and defaults to true.
+        assertNotNull(body.get("profileVisibility"), "Mentor profileVisibility should be present after #570");
+        assertEquals(true, body.get("profileVisibility").asBoolean(),
+                "Mentor profileVisibility default should be true");
         assertNull(body.get("cancelCount"), "Mentor should not have cancelCount");
         assertNull(body.get("meetingFreqPref"), "Mentor should not have meetingFreqPref");
     }
@@ -541,14 +544,20 @@ class ProfileIntegrationTest {
 
     @Test
     void getProfileById_mentorViewsMentee_returns200() throws Exception {
-        String mentorToken = registerAndLogin("mentor@test.com", true);
-        String menteeToken = registerAndLogin("mentee@test.com", false);
+        // #570 (1.1.2.5) — mentors see mentees with lastName and profilePhoto
+        // masked to null. Field shape unchanged; values redacted.
+        String mentorToken = registerAndLogin("Mira", "Demir", "mentor@test.com", true);
+        String menteeToken = registerAndLogin("Ali", "Yilmaz", "mentee@test.com", false);
         Long menteeId = getUserId(menteeToken);
 
         mockMvc.perform(get("/api/users/" + menteeId)
                         .header("Authorization", "Bearer " + mentorToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("MENTEE"));
+                .andExpect(jsonPath("$.role").value("MENTEE"))
+                .andExpect(jsonPath("$.firstName").value("Ali"))
+                // lastName and profilePhoto are masked for mentor viewers (1.1.2.5).
+                .andExpect(jsonPath("$.lastName").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.profilePhoto").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

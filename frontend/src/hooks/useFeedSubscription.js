@@ -4,16 +4,17 @@ import { getStompClient } from '../services/stompClient'
 /**
  * Subscribe to live feed pushes on `/topic/feed.{userId}` (#349).
  *
- * Backend (FeedFanoutListener) publishes two payload shapes to this topic
- * after a post or share commits in the viewer's follow graph:
- *   - FeedPostPushPayload  : { postId, authorId, authorFirstName, createdAt }
- *   - FeedSharePushPayload : { shareId, postId, sharerId, sharerFirstName,
- *                              commentary, sharedAt }
+ * Backend (FeedFanoutListener) publishes three payload shapes to this
+ * topic, all routed to followers of the relevant author/sharer:
+ *   - FeedPostPushPayload       : { postId, authorId, authorFirstName, createdAt }
+ *   - FeedSharePushPayload      : { shareId, postId, sharerId, sharerFirstName,
+ *                                   commentary, sharedAt }
+ *   - FeedEngagementPushPayload : { postId, likeCount, commentCount, shareCount,
+ *                                   updatedAt }  -- has neither authorId nor sharerId
  *
- * The two shapes are distinguished by presence of `sharerId` (share) vs.
- * `authorId` (original post). Callers pass `onPost` and / or `onShare`;
- * frames are routed by the discriminator without the caller having to
- * write the JSON.parse + try/catch boilerplate.
+ * Callers pass `onPost`, `onShare`, and/or `onEngagement`; frames are
+ * routed by the discriminator without the caller writing JSON.parse +
+ * try/catch boilerplate.
  *
  * Lifecycle mirrors `useConversationSubscription` — the singleton STOMP
  * client survives unmounts so navigating between pages doesn't churn the
@@ -21,18 +22,26 @@ import { getStompClient } from '../services/stompClient'
  *
  * The latest callbacks are stored in refs so callers don't need to memoize.
  */
-export default function useFeedSubscription(userId, { onPost, onShare } = {}) {
+export default function useFeedSubscription(userId, { onPost, onShare, onEngagement } = {}) {
   const postRef = useRef(onPost)
   const shareRef = useRef(onShare)
+  const engagementRef = useRef(onEngagement)
   postRef.current = onPost
   shareRef.current = onShare
+  engagementRef.current = onEngagement
 
   useEffect(() => {
     if (!userId) return undefined
     const client = getStompClient()
     let subscription = null
+    // `cancelled` guards the deferred-CONNECT path: if the hook unmounts
+    // before the socket connects, the attach() scheduled on onConnect must
+    // short-circuit, otherwise we'd subscribe with no cleanup reference and
+    // leak a zombie subscription on every reconnect.
+    let cancelled = false
 
     function attach() {
+      if (cancelled) return
       try {
         subscription = client.subscribe(
           `/topic/feed.${userId}`,
@@ -41,8 +50,11 @@ export default function useFeedSubscription(userId, { onPost, onShare } = {}) {
               const payload = JSON.parse(frame.body)
               if (payload.sharerId != null) {
                 shareRef.current?.(payload)
-              } else {
+              } else if (payload.authorId != null) {
                 postRef.current?.(payload)
+              } else if (payload.postId != null) {
+                // Engagement payload — has neither authorId nor sharerId.
+                engagementRef.current?.(payload)
               }
             } catch {
               // Backend always sends JSON; bad frames are ignored.
@@ -57,6 +69,8 @@ export default function useFeedSubscription(userId, { onPost, onShare } = {}) {
     if (client.connected) {
       attach()
     } else {
+      // Defer subscription until CONNECT completes. Chain onto any prior
+      // override so multiple concurrent hooks all get their attach() call.
       const original = client.onConnect
       client.onConnect = (frame) => {
         try { original?.(frame) } catch { /* ignore */ }
@@ -65,6 +79,7 @@ export default function useFeedSubscription(userId, { onPost, onShare } = {}) {
     }
 
     return () => {
+      cancelled = true
       try { subscription?.unsubscribe() } catch { /* ignore */ }
     }
   }, [userId])

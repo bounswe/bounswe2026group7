@@ -50,6 +50,15 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
     Optional<FeedPost> findByIdAndDeletedAtIsNull(Long id);
 
     /**
+     * Batched public-visibility lookup. Used by {@code ReportMapper} to
+     * resolve POST-target excerpts in one query when paging the admin
+     * report queue. Soft-deleted posts are excluded so the mapper falls
+     * back to {@code [post deleted or unavailable]} for any id missing
+     * from the result.
+     */
+    java.util.List<FeedPost> findAllByIdInAndDeletedAtIsNull(java.util.Collection<Long> ids);
+
+    /**
      * Following-feed query (#350). Returns posts authored by users the
      * viewer follows (via the {@code follows} graph in #343), excluding
      * soft-deleted posts. Chronological by {@code created_at DESC}; the

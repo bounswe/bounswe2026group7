@@ -42,7 +42,7 @@ export default function FeedBookmarksPage() {
 
   return (
     <MainLayout>
-      <div className="feed-page">
+      <div className="feed-page" data-testid="feed-bookmarks-page">
         <div className="page-header">
           <div>
             <button
@@ -64,11 +64,11 @@ export default function FeedBookmarksPage() {
             <div className="md-error-sub">{error}</div>
           </div>
         ) : posts.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state" data-testid="feed-bookmarks-empty">
             You haven’t bookmarked any posts yet. Tap the bookmark icon on a post in your feed to save it here.
           </div>
         ) : (
-          <div className="feed-list">
+          <div className="feed-list" data-testid="feed-bookmarks-list">
             {posts.map(p => (
               <FeedPostCard
                 key={p.id}

@@ -272,6 +272,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.notificationButton}
             onPress={openNotifications}
+            testID="home.notifications-button"
           >
             <Text style={styles.notificationIcon}>🔔</Text>
             {unreadCount > 0 && (
@@ -295,7 +296,7 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <TouchableOpacity style={styles.feedEntryCard} onPress={openSocialFeed}>
+        <TouchableOpacity style={styles.feedEntryCard} onPress={openSocialFeed} testID="home.feed-entry">
           <View style={styles.feedEntryHeader}>
             <View style={styles.feedEntryInfo}>
               <Text style={styles.feedEntryEyebrow}>SOCIAL FEED</Text>
@@ -326,6 +327,7 @@ export default function HomeScreen() {
                 alignItems: 'center',
                 backgroundColor: selectedTab === tab ? '#456B50' : '#EEE9E3',
               }}
+              testID={tab === 'active' ? 'home.tab.active' : 'home.tab.past'}
             >
               <Text style={{ fontWeight: '700', fontSize: 14, color: selectedTab === tab ? '#fff' : '#7E7368' }}>
                 {tab === 'active' ? `Active (${activeConnections.length})` : `Past (${pastConnections.length})`}
@@ -347,7 +349,7 @@ export default function HomeScreen() {
             const colors = getAvatarColors(item.connectedUserId);
             const initials = item.connectedUserFirstName.substring(0, 2).toUpperCase();
             return (
-              <View key={item.mentorshipId} style={styles.activeCard}>
+              <View key={item.mentorshipId} style={styles.activeCard} testID={`home.mentorship-card.${item.mentorshipId}`}>
                 <TouchableOpacity activeOpacity={0.9} onPress={() => openConnectionProfile(item)}>
                   <View style={styles.topRow}>
                     <View style={[styles.avatar, { backgroundColor: colors.bg }]}>
@@ -387,22 +389,15 @@ export default function HomeScreen() {
                     {item.status === 'ACTIVE' ? `Progress: ${item.progress}%` : `Ended ${formatMentorshipStatus(item.status).toLowerCase()}`}
                   </Text>
 
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity
-                      style={[styles.viewProfileButton, { flex: 1 }]}
-                      onPress={() => openConnectionProfile(item)}
-                    >
-                      <Text style={styles.viewProfileButtonText}>
-                        {item.status === 'ACTIVE' ? 'Open Shared Space' : 'View Mentorship'}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.reportButton}
-                      onPress={() => { setReportReason(''); setReportTarget(item); }}
-                    >
-                      <Text style={styles.reportButtonText}>⚑</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity
+                    style={styles.viewProfileButton}
+                    onPress={() => openConnectionProfile(item)}
+                    testID={`home.mentorship-open.${item.mentorshipId}`}
+                  >
+                    <Text style={styles.viewProfileButtonText}>
+                      {item.status === 'ACTIVE' ? 'Open Shared Space' : 'View Mentorship'}
+                    </Text>
+                  </TouchableOpacity>
                 </TouchableOpacity>
               </View>
             );
