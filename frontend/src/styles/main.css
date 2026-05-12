@@ -3605,6 +3605,118 @@
   overflow: hidden;
 }
 
+/* Taxonomy autocomplete + chip picker (#448). */
+.tax-autocomplete-wrap {
+  position: relative;
+}
+.tax-autocomplete-results {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.tax-autocomplete-result-btn {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+}
+.tax-autocomplete-result-btn:hover {
+  background: var(--green-pale);
+}
+.tax-autocomplete-linked {
+  border-color: var(--green-mid, #b6d8bd);
+  background: #fafdfb;
+}
+.tax-autocomplete-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.tax-autocomplete-error {
+  font-size: 12px;
+  color: var(--red-text, #b91c1c);
+  margin-top: 4px;
+}
+
+.tax-chips-wrap {
+  position: relative;
+}
+.tax-chips-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-family: 'DM Sans', sans-serif;
+}
+.tax-chips-input-row:focus-within {
+  border-color: var(--green-mid);
+  box-shadow: 0 0 0 3px var(--green-pale);
+}
+.tax-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+  background: #f1f5ee;
+  border: 1px solid #e2e8d8;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+.tax-chip--linked {
+  background: var(--green-pale, #ecf6ee);
+  border-color: var(--green-mid, #b6d8bd);
+  color: var(--green-dark, #2e7d4f);
+}
+.tax-chip-remove {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: currentColor;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+.tax-chip-remove:hover:not(:disabled) { opacity: 1; }
+.tax-chips-input {
+  flex: 1;
+  min-width: 120px;
+  border: none;
+  outline: none;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 13px;
+  background: transparent;
+  color: var(--text);
+}
+
 /* Location picker on profile (#461). */
 .loc-picker {
   position: relative;
