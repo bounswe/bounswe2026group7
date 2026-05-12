@@ -11,11 +11,13 @@ import {
   createFeedPost,
   updateFeedPost,
   deleteFeedPost,
+  restoreFeedPost,
   getFollowRecommendations,
   followUser,
   getTrendingHashtags,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { showUndoToast } from '../utils/toast'
 import '../styles/main.css'
 
 const TABS = [
@@ -257,13 +259,28 @@ export default function FeedPage() {
   }
 
   // ── Delete ────────────────────────────────────────────────────────────
+  // Backend soft-deletes posts (#487 / #544); restoring is possible within
+  // a 30-day window via POST /api/feed/posts/{id}/restore. The confirm copy
+  // reflects that, and a successful delete drops an undo toast that calls
+  // restoreFeedPost on click.
   async function handleDelete(post) {
     if (!post) return
-    const confirmed = window.confirm('Delete this post? This cannot be undone.')
+    const confirmed = window.confirm(
+      'Hide this post? You can restore it within 30 days from the toast below.'
+    )
     if (!confirmed) return
     try {
       await deleteFeedPost(post.id)
       setPosts(prev => prev.filter(p => p.id !== post.id))
+      showUndoToast('Post hidden.', async () => {
+        try {
+          const restored = await restoreFeedPost(post.id)
+          // Reinsert at the original index if we still have the list around.
+          setPosts(prev => [restored, ...prev])
+        } catch (err) {
+          window.alert(err?.message || 'Failed to restore post')
+        }
+      })
     } catch (err) {
       window.alert(err?.message || 'Failed to delete post')
     }
