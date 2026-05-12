@@ -311,6 +311,26 @@ export async function extendMentorship(id, additionalMonths) {
   return handleResponse(res)
 }
 
+// User notification preferences (#289 / 1.1.5.8). Backend lazily creates the
+// row with all toggles enabled on first GET. PATCH is partial — omitted
+// fields keep their current value, so the client only sends the toggle
+// being flipped.
+export async function getNotificationPreferences() {
+  const res = await fetch(`${BASE_URL}/users/me/notification-preferences`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function updateNotificationPreferences(patch) {
+  const res = await fetch(`${BASE_URL}/users/me/notification-preferences`, {
+    method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify(patch),
+  })
+  return handleResponse(res)
+}
+
 // Mentee-only rating (#278 / 1.1.1.1.11). Backend rejects with 409 if the
 // mentorship is still ACTIVE or already rated; 403 if a mentor calls it.
 // Score must be 1..5; comment is optional and capped at 1000 chars.

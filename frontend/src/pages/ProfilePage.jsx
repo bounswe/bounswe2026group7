@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
+import NotificationPreferences from '../components/NotificationPreferences'
 import usePresence from '../hooks/usePresence'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
@@ -569,6 +570,8 @@ export default function ProfilePage() {
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </form>
+
+          <NotificationPreferences />
         </div>
 
       </div>
