@@ -3605,6 +3605,38 @@
   overflow: hidden;
 }
 
+/* Recent feedback list on mentor profile (#556 / #278). */
+.rating-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rating-card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+.rating-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rating-card-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.rating-card-comment {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--text);
+  font-style: italic;
+}
+
 /* Mentor rating modal + post-end prompt (#278). */
 .md-rating-card {
   margin: 12px 0;

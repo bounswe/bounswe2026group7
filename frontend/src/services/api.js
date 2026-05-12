@@ -363,6 +363,30 @@ export async function updateNotificationPreferences(patch) {
   return handleResponse(res)
 }
 
+// Read the rating for a mentorship (#556 / backend #534 / #518). Visible to
+// both participants. Returns 404 when no rating exists yet — wrappers throw
+// an Error with a status field so callers can branch cleanly on first paint.
+export async function getMentorshipRating(id) {
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/rating`, {
+    headers: authHeaders(),
+  })
+  if (res.status === 404) {
+    const err = new Error('Not rated yet')
+    err.status = 404
+    throw err
+  }
+  return handleResponse(res)
+}
+
+// Paginated mentor ratings list (#556 / backend #534 / #518). Newest-first.
+// Returns Spring Page<MentorRatingResponse>. Size capped at 50 server-side.
+export async function getMentorRatings(userId, page = 0, size = 10) {
+  const res = await fetch(`${BASE_URL}/users/${userId}/ratings?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 // Mentee-only rating (#278 / 1.1.1.1.11). Backend rejects with 409 if the
 // mentorship is still ACTIVE or already rated; 403 if a mentor calls it.
 // Score must be 1..5; comment is optional and capped at 1000 chars.
