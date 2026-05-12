@@ -12,10 +12,18 @@ import {
   unfollowUser,
   getFollowing,
   getUserFeedPosts,
+  getMentorRatings,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
+
+function formatRatingDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
 
 function ProfileField({ label, value, chips = false }) {
   const isEmpty = !value && value !== 0
@@ -79,6 +87,14 @@ export default function UserProfilePage() {
   const [postsLoading, setPostsLoading] = useState(true)
   const [postsLoadingMore, setPostsLoadingMore] = useState(false)
 
+  // Mentor ratings ("Recent feedback", #556 / backend #534). Only mentors
+  // accumulate ratings; mentee profiles skip the section entirely.
+  const [ratings, setRatings] = useState([])
+  const [ratingsPage, setRatingsPage] = useState(0)
+  const [ratingsHasMore, setRatingsHasMore] = useState(false)
+  const [ratingsLoading, setRatingsLoading] = useState(true)
+  const [ratingsLoadingMore, setRatingsLoadingMore] = useState(false)
+
   useEffect(() => {
     getUserById(id)
       .then(data => {
@@ -141,6 +157,46 @@ export default function UserProfilePage() {
       /* swallow — keep the existing list, user can retry */
     } finally {
       setPostsLoadingMore(false)
+    }
+  }
+
+  // Mentor ratings ("Recent feedback") — only fetch once profile is loaded
+  // and the viewer is on a mentor profile. Mentees never accumulate ratings.
+  useEffect(() => {
+    if (!id || !profile || profile.role !== 'MENTOR') {
+      setRatingsLoading(false)
+      return undefined
+    }
+    let ignore = false
+    setRatingsLoading(true)
+    setRatings([])
+    setRatingsPage(0)
+    getMentorRatings(id, 0, 10)
+      .then(page => {
+        if (ignore) return
+        const items = page?.content ?? page ?? []
+        setRatings(items)
+        setRatingsHasMore(page && page.last === false)
+      })
+      .catch(() => { if (!ignore) setRatings([]) })
+      .finally(() => { if (!ignore) setRatingsLoading(false) })
+    return () => { ignore = true }
+  }, [id, profile])
+
+  async function loadMoreRatings() {
+    if (ratingsLoadingMore) return
+    const next = ratingsPage + 1
+    setRatingsLoadingMore(true)
+    try {
+      const page = await getMentorRatings(id, next, 10)
+      const items = page?.content ?? page ?? []
+      setRatings(prev => [...prev, ...items])
+      setRatingsPage(next)
+      setRatingsHasMore(page && page.last === false)
+    } catch {
+      /* swallow — keep the existing list, user can retry */
+    } finally {
+      setRatingsLoadingMore(false)
     }
   }
 
@@ -424,6 +480,49 @@ export default function UserProfilePage() {
           )}
         </div>
       </div>
+
+      {isMentorProfile && (
+        <div className="card" style={{ marginTop: '16px' }}>
+          <div className="section-label" style={{ marginBottom: '12px' }}>Recent Feedback</div>
+          {ratingsLoading ? (
+            <div className="md-loading">Loading feedback…</div>
+          ) : ratings.length === 0 ? (
+            <div className="empty-state" style={{ padding: '20px 0' }}>No ratings yet.</div>
+          ) : (
+            <ul className="rating-list">
+              {ratings.map(r => (
+                <li key={r.id} className="rating-card">
+                  <div className="rating-card-head">
+                    <span className="md-rating-stars md-rating-stars--readonly" aria-label={`${r.score} out of 5 stars`}>
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <span
+                          key={n}
+                          className={`md-rating-star${r.score >= n ? ' md-rating-star--filled' : ''}`}
+                        >★</span>
+                      ))}
+                    </span>
+                    <span className="rating-card-date">{formatRatingDate(r.createdAt)}</span>
+                  </div>
+                  {r.comment && (
+                    <p className="rating-card-comment">"{r.comment}"</p>
+                  )}
+                </li>
+              ))}
+              {ratingsHasMore && (
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={loadMoreRatings}
+                  disabled={ratingsLoadingMore}
+                  style={{ alignSelf: 'center', marginTop: '8px' }}
+                >
+                  {ratingsLoadingMore ? 'Loading…' : 'Show more'}
+                </button>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: '16px' }}>
         <div className="section-label" style={{ marginBottom: '12px' }}>Posts</div>
