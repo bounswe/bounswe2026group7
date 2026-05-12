@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
+import FeedPostCard from '../components/FeedPostCard'
 import {
   getUserById,
   createMentorshipRequest,
@@ -10,6 +11,7 @@ import {
   followUser,
   unfollowUser,
   getFollowing,
+  getUserFeedPosts,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useMentorship } from '../context/MentorshipContext'
@@ -68,6 +70,15 @@ export default function UserProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
 
+  // Author posts (#546). Lightweight pagination — Show more loads the next
+  // page and appends. Empty page is rendered as "No posts yet" rather than
+  // hiding the whole section so first-time visitors see what the section is.
+  const [posts, setPosts] = useState([])
+  const [postsPage, setPostsPage] = useState(0)
+  const [postsHasMore, setPostsHasMore] = useState(false)
+  const [postsLoading, setPostsLoading] = useState(true)
+  const [postsLoadingMore, setPostsLoadingMore] = useState(false)
+
   useEffect(() => {
     getUserById(id)
       .then(data => {
@@ -97,6 +108,41 @@ export default function UserProfilePage() {
       setCanSeePhoto(active)
     }
   }, [id, userIsMentee, activeMentorships])
+
+  useEffect(() => {
+    if (!id) return
+    let ignore = false
+    setPostsLoading(true)
+    setPosts([])
+    setPostsPage(0)
+    getUserFeedPosts(id, 0, 10)
+      .then(page => {
+        if (ignore) return
+        const items = page?.content ?? page ?? []
+        setPosts(items)
+        setPostsHasMore(page && page.last === false)
+      })
+      .catch(() => { if (!ignore) setPosts([]) })
+      .finally(() => { if (!ignore) setPostsLoading(false) })
+    return () => { ignore = true }
+  }, [id])
+
+  async function loadMorePosts() {
+    if (postsLoadingMore) return
+    const next = postsPage + 1
+    setPostsLoadingMore(true)
+    try {
+      const page = await getUserFeedPosts(id, next, 10)
+      const items = page?.content ?? page ?? []
+      setPosts(prev => [...prev, ...items])
+      setPostsPage(next)
+      setPostsHasMore(page && page.last === false)
+    } catch {
+      /* swallow — keep the existing list, user can retry */
+    } finally {
+      setPostsLoadingMore(false)
+    }
+  }
 
   useEffect(() => {
     if (!userId || !id || !profile) return
@@ -376,6 +422,36 @@ export default function UserProfilePage() {
             </>
           )}
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: '16px' }}>
+        <div className="section-label" style={{ marginBottom: '12px' }}>Posts</div>
+        {postsLoading ? (
+          <div className="md-loading">Loading posts…</div>
+        ) : posts.length === 0 ? (
+          <div className="empty-state" style={{ padding: '20px 0' }}>No posts yet.</div>
+        ) : (
+          <div className="feed-list">
+            {posts.map(p => (
+              <FeedPostCard
+                key={p.id}
+                post={p}
+                viewerUserId={userId}
+              />
+            ))}
+            {postsHasMore && (
+              <button
+                type="button"
+                className="action-btn"
+                onClick={loadMorePosts}
+                disabled={postsLoadingMore}
+                style={{ alignSelf: 'center', marginTop: '8px' }}
+              >
+                {postsLoadingMore ? 'Loading…' : 'Show more'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {isMentee && isMentorProfile && (

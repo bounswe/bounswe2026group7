@@ -262,6 +262,15 @@ export async function getActiveMentorships() {
   return handleResponse(res)
 }
 
+// Author posts feed (#546 / backend #471). Paginated list of posts authored
+// by `authorId`. Returns Page<FeedPostListItem>; backend caps size at 100.
+export async function getUserFeedPosts(authorId, page = 0, size = 10) {
+  const res = await fetch(`${BASE_URL}/feed/users/${authorId}/posts?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 // Trending hashtags (#545 / backend #487). Materialized-view aggregate over
 // the last 24h, refreshed hourly server-side. Returns at most `limit`
 // entries sorted by composite engagement score, each carrying { tag,
