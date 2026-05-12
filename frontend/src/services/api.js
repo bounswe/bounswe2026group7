@@ -157,6 +157,47 @@ export async function getUserById(id) {
   return handleResponse(res)
 }
 
+// ── Follow graph (#343) ─────────────────────────────────────────────────
+
+export async function followUser(id) {
+  const res = await fetch(`${BASE_URL}/users/${id}/follow`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function unfollowUser(id) {
+  const res = await fetch(`${BASE_URL}/users/${id}/follow`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getFollowers(id, page = 0, size = 20) {
+  const res = await fetch(`${BASE_URL}/users/${id}/followers?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getFollowing(id, page = 0, size = 20) {
+  const res = await fetch(`${BASE_URL}/users/${id}/following?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// ── Follow recommendations (#344) ───────────────────────────────────────
+
+export async function getFollowRecommendations(page = 0, size = 12) {
+  const res = await fetch(`${BASE_URL}/users/me/follow-recommendations?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 export async function getNotifications(unreadOnly = false) {
   const res = await fetch(`${BASE_URL}/notifications?unreadOnly=${unreadOnly}`, {
     headers: authHeaders(),
