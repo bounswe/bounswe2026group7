@@ -147,6 +147,15 @@ public class FeedPostJsonLdMapping implements JsonLdMapping {
             }
             if (content != null && !content.isBlank()) {
                 doc.put("content", content);
+                // Schema.org Article terms emitted alongside the AS 2.0 `content`
+                // alias so a plain-Schema.org consumer (search-engine crawler,
+                // structured-data extractor) finds what the wiki promises:
+                // `headline` is the first 200 chars (truncated at a word
+                // boundary), `articleBody` is the verbatim body. JSON-LD
+                // consumers with both contexts loaded see `content` and
+                // `articleBody` resolve to the same property.
+                doc.put("headline", deriveHeadline(content));
+                doc.put("articleBody", content);
             }
             if (lang != null && !lang.isBlank() && content != null && !content.isBlank()) {
                 // AS 2.0 contentMap is a JSON object keyed by BCP-47 tag.
@@ -154,11 +163,17 @@ public class FeedPostJsonLdMapping implements JsonLdMapping {
                 doc.put("inLanguage", lang);
             }
             if (hashtags != null && !hashtags.isEmpty()) {
+                // AS 2.0's Hashtag extension allows bare-string `name` values
+                // (no leading `#`); this is what the issue #490 spec note
+                // calls out and what spec-compliant consumers expect. The
+                // Mastodon convention of prefixing `#` is a Fediverse-only
+                // override and not part of the AS 2.0 contract — we honour
+                // the spec here to keep the document interop-friendly.
                 doc.put("tag", hashtags.stream()
                         .map(h -> {
                             Map<String, Object> tag = new LinkedHashMap<>();
                             tag.put("type", "Hashtag");
-                            tag.put("name", "#" + h);
+                            tag.put("name", h);
                             return tag;
                         })
                         .toList());
@@ -177,6 +192,21 @@ public class FeedPostJsonLdMapping implements JsonLdMapping {
                     counter("https://schema.org/ShareAction", shareCount),
                     counter("https://schema.org/BookmarkAction", bookmarkCount)));
             return doc;
+        }
+
+        /**
+         * Truncates a post body to a Schema.org-friendly headline. 200 chars
+         * is the conventional ceiling for SocialMediaPosting/Article
+         * headlines on search-engine extractors; trimming at the nearest
+         * word boundary below the cap keeps the result readable.
+         */
+        private static String deriveHeadline(String content) {
+            if (content.length() <= 200) {
+                return content;
+            }
+            String slice = content.substring(0, 200);
+            int lastSpace = slice.lastIndexOf(' ');
+            return lastSpace > 50 ? slice.substring(0, lastSpace) + "…" : slice + "…";
         }
 
         private static Map<String, Object> counter(String interactionType, long count) {

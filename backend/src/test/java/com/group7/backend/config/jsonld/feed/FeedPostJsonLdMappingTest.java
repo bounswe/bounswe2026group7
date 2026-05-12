@@ -93,20 +93,50 @@ class FeedPostJsonLdMappingTest {
     }
 
     @Test
-    void apply_emitsHashtagsAsAS2Hashtag_withHashPrefix() {
+    void apply_emitsHashtagsAsAS2Hashtag_withBareStringName() {
         Map<String, Object> doc = mapping.apply(samplePost());
 
         Object tags = doc.get("tag");
         assertThat(tags).isInstanceOf(List.class);
         List<?> tagList = (List<?>) tags;
-        // Hashtag values in AS 2.0 use the leading `#` so consumers can
-        // render them verbatim. The stored DB value drops the `#` for
-        // index hygiene; we re-add it on the wire.
+        // AS 2.0's Hashtag extension permits bare-string `name` values
+        // (no leading `#`). The issue #490 note explicitly chooses this
+        // over the Mastodon convention for spec compliance; pinning it
+        // here so a future diff that re-adds the prefix tips the test.
         assertThat(tagList).hasSize(2);
         @SuppressWarnings("unchecked")
         Map<String, Object> first = (Map<String, Object>) tagList.get(0);
         assertThat(first).containsEntry("type", "Hashtag");
-        assertThat(first).containsEntry("name", "#datascience");
+        assertThat(first).containsEntry("name", "datascience");
+    }
+
+    @Test
+    void apply_emitsSchemaOrgArticleTerms_alongsideAS2Aliases() {
+        Map<String, Object> doc = mapping.apply(samplePost());
+
+        // headline + articleBody let a plain-Schema.org consumer (search
+        // engine crawler, structured-data extractor) read the post
+        // without needing the AS 2.0 context loaded. JSON-LD consumers
+        // with both contexts see `content` and `articleBody` resolve to
+        // the same property.
+        assertThat(doc).containsKey("headline");
+        assertThat(doc).containsKey("articleBody");
+        assertThat(doc.get("articleBody")).isEqualTo(doc.get("content"));
+    }
+
+    @Test
+    void apply_headline_truncatesAtWordBoundary_whenContentExceeds200Chars() {
+        String body = "x".repeat(180) + " " + "y".repeat(60);   // 241 chars
+        OffsetDateTime created = OffsetDateTime.of(2026, 5, 1, 10, 0, 0, 0, ZoneOffset.UTC);
+        FeedPostResponse post = new FeedPostResponse(
+                42L, 17L, "Ada", body, List.of(),
+                created, created, false, false, List.of(), false, false, null);
+
+        Map<String, Object> doc = mapping.apply(post);
+        String headline = (String) doc.get("headline");
+        assertThat(headline).isNotEqualTo(body);
+        assertThat(headline.length()).isLessThanOrEqualTo(201);   // 200 chars + ellipsis
+        assertThat(headline).endsWith("…");
     }
 
     @Test

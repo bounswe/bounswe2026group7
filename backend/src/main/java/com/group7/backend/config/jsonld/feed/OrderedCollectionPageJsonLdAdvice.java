@@ -171,8 +171,12 @@ public class OrderedCollectionPageJsonLdAdvice implements ResponseBodyAdvice<Obj
     private static URI uriFor(ServerHttpRequest request) {
         if (request instanceof ServletServerHttpRequest servletRequest) {
             HttpServletRequest http = servletRequest.getServletRequest();
+            // Spring 6.1 deprecated UriComponentsBuilder.fromHttpUrl;
+            // fromUriString is the long-standing alternative that handles
+            // the same set of valid http(s) URLs without the deprecation
+            // warning.
             return UriComponentsBuilder
-                    .fromHttpUrl(http.getRequestURL().toString())
+                    .fromUriString(http.getRequestURL().toString())
                     .query(http.getQueryString())
                     .build(true)
                     .toUri();
