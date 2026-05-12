@@ -73,7 +73,13 @@ export default function FeedPage() {
   const [trending, setTrending] = useState([])
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag? } or null
+  const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag?, since?, until?, lang? } or null
+  // #543: advanced filters. Open state is a toggle; values persist across
+  // searches so users don't lose a date range when they refine the keyword.
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filterSince, setFilterSince] = useState('')
+  const [filterUntil, setFilterUntil] = useState('')
+  const [filterLang, setFilterLang] = useState('')
 
   // Minimal compose — full UI lands in #353
   const [composeOpen, setComposeOpen] = useState(false)
@@ -155,20 +161,35 @@ export default function FeedPage() {
   function handleSearchSubmit(e) {
     e.preventDefault()
     const trimmed = searchQuery.trim()
-    if (!trimmed) {
+    // Date inputs are LocalDate (YYYY-MM-DD). Backend wants ISO-8601 datetime.
+    // since = start of day inclusive, until = start of next day exclusive
+    // (matches backend's half-open semantics).
+    const sinceIso = filterSince ? new Date(`${filterSince}T00:00:00Z`).toISOString() : undefined
+    const untilIso = filterUntil ? (() => {
+      const d = new Date(`${filterUntil}T00:00:00Z`)
+      d.setUTCDate(d.getUTCDate() + 1)
+      return d.toISOString()
+    })() : undefined
+    const lang = filterLang || undefined
+
+    const hasKeyword = trimmed.length > 0
+    const hasHashtag = hasKeyword && /^#?\w+$/.test(trimmed) && trimmed.startsWith('#')
+    const hasAnyFilter = hasKeyword || sinceIso || untilIso || lang
+    if (!hasAnyFilter) {
       setActiveSearch(null)
       return
     }
-    // Treat any leading "#word" as a hashtag query
-    if (/^#?\w+$/.test(trimmed) && trimmed.startsWith('#')) {
-      setActiveSearch({ hashtag: trimmed.slice(1) })
-    } else {
-      setActiveSearch({ q: trimmed })
-    }
+    const next = { since: sinceIso, until: untilIso, lang }
+    if (hasHashtag) next.hashtag = trimmed.slice(1)
+    else if (hasKeyword) next.q = trimmed
+    setActiveSearch(next)
   }
 
   function clearSearch() {
     setSearchQuery('')
+    setFilterSince('')
+    setFilterUntil('')
+    setFilterLang('')
     setActiveSearch(null)
   }
 
@@ -341,10 +362,74 @@ export default function FeedPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           <button type="submit" className="action-btn">Search</button>
+          <button
+            type="button"
+            className={`action-btn${filtersOpen || filterSince || filterUntil || filterLang ? ' action-btn--active' : ''}`}
+            onClick={() => setFiltersOpen(v => !v)}
+            aria-expanded={filtersOpen}
+            aria-controls="feed-filters-panel"
+          >
+            Filters{(filterSince || filterUntil || filterLang) ? ' •' : ''}
+          </button>
           {activeSearch && (
             <button type="button" className="action-btn" onClick={clearSearch}>Clear</button>
           )}
         </form>
+
+        {filtersOpen && (
+          <div id="feed-filters-panel" className="feed-filters">
+            <div className="feed-filter-field">
+              <label htmlFor="feed-filter-since">From</label>
+              <input
+                id="feed-filter-since"
+                type="date"
+                className="feed-filter-input"
+                value={filterSince}
+                max={filterUntil || undefined}
+                onChange={(e) => setFilterSince(e.target.value)}
+              />
+            </div>
+            <div className="feed-filter-field">
+              <label htmlFor="feed-filter-until">To</label>
+              <input
+                id="feed-filter-until"
+                type="date"
+                className="feed-filter-input"
+                value={filterUntil}
+                min={filterSince || undefined}
+                onChange={(e) => setFilterUntil(e.target.value)}
+              />
+            </div>
+            <div className="feed-filter-field">
+              <label htmlFor="feed-filter-lang">Language</label>
+              <select
+                id="feed-filter-lang"
+                className="feed-filter-input"
+                value={filterLang}
+                onChange={(e) => setFilterLang(e.target.value)}
+              >
+                <option value="">Any</option>
+                <option value="en">English</option>
+                <option value="tr">Türkçe</option>
+                <option value="de">Deutsch</option>
+                <option value="fr">Français</option>
+                <option value="es">Español</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => {
+                setFilterSince('')
+                setFilterUntil('')
+                setFilterLang('')
+              }}
+              disabled={!filterSince && !filterUntil && !filterLang}
+            >
+              Reset
+            </button>
+          </div>
+        )}
 
         {!activeSearch && trending.length > 0 && (
           <div className="feed-trending" aria-label="Trending hashtags">
