@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import FeedPostCard from '../components/FeedPostCard'
+import FeedImageUploader from '../components/FeedImageUploader'
 import { getFeedPostById, updateFeedPost, deleteFeedPost } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -20,6 +21,7 @@ export default function FeedPostDetailPage() {
   const [editing, setEditing] = useState(null)
   const [editBody, setEditBody] = useState('')
   const [editHashtags, setEditHashtags] = useState('')
+  const [editAttachments, setEditAttachments] = useState([])
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState(null)
 
@@ -38,6 +40,7 @@ export default function FeedPostDetailPage() {
     setEditing(p)
     setEditBody(p.body || '')
     setEditHashtags((p.hashtags || []).join(' '))
+    setEditAttachments(Array.isArray(p.attachments) ? p.attachments : [])
     setEditError(null)
   }
 
@@ -52,7 +55,11 @@ export default function FeedPostDetailPage() {
         .split(/\s+/)
         .map(t => t.replace(/^#/, '').trim())
         .filter(Boolean)
-      const updated = await updateFeedPost(editing.id, { body, hashtags: tags })
+      const updated = await updateFeedPost(editing.id, {
+        body,
+        hashtags: tags,
+        attachmentIds: editAttachments.map(a => a.id),
+      })
       setPost(updated)
       setEditing(null)
     } catch (err) {
@@ -127,6 +134,12 @@ export default function FeedPostDetailPage() {
               placeholder="design react ux"
               disabled={editBusy}
               style={{ minHeight: 'auto', height: '40px' }}
+            />
+            <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Images</label>
+            <FeedImageUploader
+              value={editAttachments}
+              onChange={setEditAttachments}
+              disabled={editBusy}
             />
             {editError && <div className="md-composer-error" style={{ marginTop: '8px' }}>{editError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>

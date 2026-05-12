@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import FeedPostCard from '../components/FeedPostCard'
+import FeedImageUploader from '../components/FeedImageUploader'
 import Avatar from '../components/Avatar'
 import {
   getForYouFeed,
@@ -71,6 +72,7 @@ export default function FeedPage() {
   // Minimal compose — full UI lands in #353
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeBody, setComposeBody] = useState('')
+  const [composeAttachments, setComposeAttachments] = useState([]) // AttachmentSummary[]
   const [composeBusy, setComposeBusy] = useState(false)
   const [composeError, setComposeError] = useState(null)
 
@@ -78,6 +80,7 @@ export default function FeedPage() {
   const [editing, setEditing] = useState(null) // post object or null
   const [editBody, setEditBody] = useState('')
   const [editHashtags, setEditHashtags] = useState('')
+  const [editAttachments, setEditAttachments] = useState([])
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState(null)
 
@@ -162,8 +165,13 @@ export default function FeedPage() {
     setComposeBusy(true)
     setComposeError(null)
     try {
-      const created = await createFeedPost({ body, hashtags: extractHashtags(body) })
+      const created = await createFeedPost({
+        body,
+        hashtags: extractHashtags(body),
+        attachmentIds: composeAttachments.map(a => a.id),
+      })
       setComposeBody('')
+      setComposeAttachments([])
       setComposeOpen(false)
       // Optimistically prepend for visibility; reload picks up the canonical state
       setPosts(prev => [created, ...prev])
@@ -179,6 +187,7 @@ export default function FeedPage() {
     setEditing(post)
     setEditBody(post.body || '')
     setEditHashtags((post.hashtags || []).join(' '))
+    setEditAttachments(Array.isArray(post.attachments) ? post.attachments : [])
     setEditError(null)
   }
 
@@ -196,9 +205,13 @@ export default function FeedPage() {
         .split(/\s+/)
         .map(t => t.replace(/^#/, '').trim())
         .filter(Boolean)
-      const updated = await updateFeedPost(editing.id, { body, hashtags: tags })
+      const updated = await updateFeedPost(editing.id, {
+        body,
+        hashtags: tags,
+        attachmentIds: editAttachments.map(a => a.id),
+      })
       setPosts(prev => prev.map(p => p.id === updated.id
-        ? { ...p, body: updated.body, hashtags: updated.hashtags, isEdited: true }
+        ? { ...p, body: updated.body, hashtags: updated.hashtags, attachments: updated.attachments, isEdited: true }
         : p))
       setEditing(null)
     } catch (err) {
@@ -270,6 +283,11 @@ export default function FeedPage() {
               onChange={(e) => setComposeBody(e.target.value)}
               disabled={composeBusy}
               style={{ width: '100%', maxHeight: 'none', resize: 'vertical' }}
+            />
+            <FeedImageUploader
+              value={composeAttachments}
+              onChange={setComposeAttachments}
+              disabled={composeBusy}
             />
             {composeError && <div className="md-composer-error">{composeError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
@@ -423,6 +441,12 @@ export default function FeedPage() {
               placeholder="design react ux"
               disabled={editBusy}
               style={{ minHeight: 'auto', height: '40px' }}
+            />
+            <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Images</label>
+            <FeedImageUploader
+              value={editAttachments}
+              onChange={setEditAttachments}
+              disabled={editBusy}
             />
             {editError && <div className="md-composer-error" style={{ marginTop: '8px' }}>{editError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>

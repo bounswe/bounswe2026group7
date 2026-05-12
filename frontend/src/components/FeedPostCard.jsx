@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MoreHorizontal, Pencil, Trash2, Share2, Bookmark, Heart, MessageCircle } from 'lucide-react'
 import Avatar from './Avatar'
+import FeedAttachmentGrid from './FeedAttachmentGrid'
 import { linkify } from '../utils/linkify'
 import {
   toggleBookmarkOnPost,
@@ -326,6 +327,8 @@ export default function FeedPostCard({
       </div>
 
       <div className="feed-card-body">{renderBody(post.body)}</div>
+
+      <FeedAttachmentGrid attachments={post.attachments} />
 
       {Array.isArray(post.hashtags) && post.hashtags.length > 0 && (
         <div className="feed-card-tags">
