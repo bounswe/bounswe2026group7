@@ -417,6 +417,7 @@ export default function UserProfilePage() {
               {/* Per req 1.1.2.6: hide lastName and profilePhoto for unmatched mentees */}
               <ProfileField label="Background" value={profile.backgroundInfo} />
               <ProfileField label="Goals" value={profile.goals} />
+              <ProfileField label="Affiliation" value={profile.affiliation} />
               <ProfileField label="Interests" value={profile.interests} chips />
               <ProfileField label="Skills" value={profile.skills} chips />
             </>
