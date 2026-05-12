@@ -72,9 +72,9 @@ class MenteeRepositorySearchTest {
         menteeRepository.saveAll(List.of(a, b));
 
         Page<Mentee> ml = menteeRepository.searchByFilters(
-                "%machine%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%machine%", null, null, null, false, false, null, PageRequest.of(0, 20));
         Page<Mentee> cs = menteeRepository.searchByFilters(
-                "%computer%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%computer%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(ml.getContent()).extracting(Mentee::getId).containsExactly(a.getId());
         assertThat(cs.getContent()).extracting(Mentee::getId).containsExactly(b.getId());
     }
@@ -85,7 +85,7 @@ class MenteeRepositorySearchTest {
         menteeRepository.save(m);
 
         Page<Mentee> p = menteeRepository.searchByFilters(
-                "%drone%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%drone%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -95,7 +95,7 @@ class MenteeRepositorySearchTest {
         menteeRepository.save(m);
 
         Page<Mentee> p = menteeRepository.searchByFilters(
-                "%haskell%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%haskell%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -107,7 +107,7 @@ class MenteeRepositorySearchTest {
         menteeRepository.saveAll(List.of(a, b, c));
 
         Page<Mentee> p = menteeRepository.searchByFilters(
-                null, List.of("ai", "robotics"), null, null, false, null,
+                null, List.of("ai", "robotics"), null, null, false, false, null,
                 PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentee::getId)
                 .containsExactlyInAnyOrder(a.getId(), b.getId());
@@ -126,7 +126,7 @@ class MenteeRepositorySearchTest {
         menteeRepository.saveAll(List.of(attached, unattached));
 
         Page<Mentee> p = menteeRepository.searchByFilters(
-                null, null, null, null, true, null, PageRequest.of(0, 20));
+                null, null, null, null, true, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentee::getId)
                 .containsExactly(unattached.getId());
     }
@@ -141,7 +141,7 @@ class MenteeRepositorySearchTest {
         menteeRepository.save(attached);
 
         Page<Mentee> p = menteeRepository.searchByFilters(
-                null, null, null, null, false, null, PageRequest.of(0, 20));
+                null, null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -168,7 +168,7 @@ class MenteeRepositorySearchTest {
         menteeAvailabilitySlotRepository.save(meSlot);
 
         Page<Mentee> p = menteeRepository.searchByFilters(
-                null, null, null, null, false, mentor.getId(),
+                null, null, null, null, false, false, mentor.getId(),
                 PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentee::getId).containsExactly(me.getId());
     }
@@ -178,7 +178,7 @@ class MenteeRepositorySearchTest {
     @Test
     void emptyResult_returnsEmptyPage() {
         Page<Mentee> p = menteeRepository.searchByFilters(
-                "%nothingmatches%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%nothingmatches%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).isEmpty();
     }
 
@@ -189,7 +189,7 @@ class MenteeRepositorySearchTest {
         menteeRepository.saveAll(List.of(a, b));
 
         Page<Mentee> p = menteeRepository.searchByFilters(
-                "%100|%%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%100|%%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentee::getId).containsExactly(a.getId());
     }
 
@@ -200,7 +200,7 @@ class MenteeRepositorySearchTest {
 
         long before = menteeRepository.count();
         Page<Mentee> p = menteeRepository.searchByFilters(
-                "%'; drop table mentees; --%", null, null, null, false, null,
+                "%'; drop table mentees; --%", null, null, null, false, false, null,
                 PageRequest.of(0, 20));
         long after = menteeRepository.count();
         assertThat(after).isEqualTo(before);

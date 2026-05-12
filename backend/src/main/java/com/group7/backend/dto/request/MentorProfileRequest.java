@@ -19,6 +19,10 @@ import java.util.List;
 @Schema(description = "Mentor profile update payload (includes common fields)")
 public class MentorProfileRequest extends EditProfileRequest {
 
+    @Schema(description = "Profile visibility. false = private (hidden from non-owner / non-admin viewers).",
+            example = "true")
+    private Boolean profileVisibility;
+
     @Size(max = 1000, message = "Bio must not exceed 1000 characters")
     @Schema(description = "Short bio", example = "Experienced software engineer with 10+ years in industry")
     private String bio;

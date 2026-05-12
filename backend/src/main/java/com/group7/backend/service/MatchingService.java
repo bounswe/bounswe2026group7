@@ -243,6 +243,7 @@ public class MatchingService {
         List<Mentor> raw = mentorRepository.findRankingCandidates(
                 SearchNormaliser.keyword(keyword), null, null, null,
                 /*requireCapacity*/ true,
+                /*bypassVisibility*/ false,
                 /*requesterMenteeId*/ null,
                 fetchPage);
 
@@ -286,6 +287,7 @@ public class MatchingService {
         List<Mentee> raw = menteeRepository.findRankingCandidates(
                 SearchNormaliser.keyword(keyword), null, null, null,
                 /*requireUnattached*/ true,
+                /*bypassVisibility*/ false,
                 /*requesterMentorId*/ null,
                 fetchPage);
 

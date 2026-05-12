@@ -292,6 +292,23 @@ class UserSearchControllerTest {
     }
 
     @Test
+    void search_privateMentor_absentFromResults() throws Exception {
+        // #570 — the service filters private mentors at SQL level; this test
+        // verifies controller → service plumbing emits an empty page when the
+        // service does so (the integration test pins the SQL-side behaviour).
+        mockValidToken(1L, "MENTEE");
+        when(userService.searchUsers(eq(SearchRole.MENTOR), any(), any(), any(), any(),
+                anyBoolean(), eq(1L), any(Pageable.class)))
+                .thenReturn(emptyPage());
+
+        mockMvc.perform(get("/api/users/search?role=MENTOR")
+                        .header("Authorization", "Bearer " + TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.content").isEmpty());
+    }
+
+    @Test
     void searchAllParams_forwardedToService() throws Exception {
         mockValidToken(2L, "MENTOR");
         when(userService.searchUsers(any(), any(), any(), any(), any(),
