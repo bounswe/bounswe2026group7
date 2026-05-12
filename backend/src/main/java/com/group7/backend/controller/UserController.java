@@ -194,17 +194,20 @@ public class UserController {
     @ApiResponse(responseCode = "200", description = "Paginated list of mentors")
     public ResponseEntity<Page<MentorResponse>> getAllMentors(
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        return ResponseEntity.ok(userService.getAllMentors(pageable));
+        return ResponseEntity.ok(userService.getAllMentors(requesterId, pageable));
     }
 
     @GetMapping("/mentors/all")
     @Operation(summary = "List all mentors (unpaginated)",
             description = "Returns all mentor profiles as a plain list. Use /mentors for paginated results.")
     @ApiResponse(responseCode = "200", description = "List of all mentors")
-    public ResponseEntity<List<MentorResponse>> getAllMentorsUnpaginated() {
-        return ResponseEntity.ok(userService.getAllMentorsList());
+    public ResponseEntity<List<MentorResponse>> getAllMentorsUnpaginated(Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(userService.getAllMentorsList(requesterId));
     }
 
     @GetMapping("/search")
@@ -258,9 +261,11 @@ public class UserController {
     @ApiResponse(responseCode = "200", description = "Paginated list of mentees")
     public ResponseEntity<Page<MenteeResponse>> getAllMentees(
             @Parameter(description = "Page number (0-based)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
         Pageable pageable = PageableSupport.clampPageable(page, size);
-        return ResponseEntity.ok(userService.getAllMentees(pageable));
+        return ResponseEntity.ok(userService.getAllMentees(requesterId, pageable));
     }
 
     // ── Delete ──────────────────────────────────────────────

@@ -686,7 +686,7 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MentorResponse mentorResp = buildMentorResponse();
-        when(userService.getAllMentors(any(Pageable.class)))
+        when(userService.getAllMentors(eq(1L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(mentorResp)));
 
         mockMvc.perform(get("/api/users/mentors")
@@ -702,7 +702,7 @@ class ProfileControllerTest {
         mockValidToken(1L, "MENTOR");
 
         MenteeResponse menteeResp = buildMenteeResponse();
-        when(userService.getAllMentees(any(Pageable.class)))
+        when(userService.getAllMentees(eq(1L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(menteeResp)));
 
         mockMvc.perform(get("/api/users/mentees")

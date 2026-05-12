@@ -13,6 +13,9 @@ import java.util.List;
 @Schema(description = "Mentor profile response")
 public final class MentorResponse extends UserResponse implements ProfileResponse {
 
+    @Schema(description = "Whether the profile is visible to other users", example = "true")
+    private Boolean profileVisibility;
+
     @Schema(description = "Short bio", example = "Experienced software engineer with 10+ years in industry")
     private String bio;
 

@@ -73,7 +73,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(m);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%java%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%java%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId).containsExactly(m.getId());
     }
 
@@ -83,7 +83,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(m);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%computer%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%computer%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -93,7 +93,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(m);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%thesis%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%thesis%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -103,7 +103,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(m);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%machine%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%machine%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -113,7 +113,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(m);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%kotlin%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%kotlin%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -124,7 +124,7 @@ class MentorRepositorySearchTest {
 
         // Caller normalises to lowercase before passing — JPQL uses LOWER(col) LIKE :keyword.
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%java%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%java%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -138,7 +138,7 @@ class MentorRepositorySearchTest {
         mentorRepository.saveAll(List.of(a, b, c));
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, List.of("ai", "robotics"), null, null, false, null,
+                null, List.of("ai", "robotics"), null, null, false, false, null,
                 PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId)
                 .containsExactlyInAnyOrder(a.getId(), b.getId());
@@ -151,7 +151,7 @@ class MentorRepositorySearchTest {
         mentorRepository.saveAll(List.of(a, b));
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, null, List.of("java", "go"), null, false, null,
+                null, null, List.of("java", "go"), null, false, false, null,
                 PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId)
                 .containsExactlyInAnyOrder(a.getId(), b.getId());
@@ -165,7 +165,7 @@ class MentorRepositorySearchTest {
         mentorRepository.saveAll(List.of(a, b, c));
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, null, null, "computer science", false, null,
+                null, null, null, "computer science", false, false, null,
                 PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId)
                 .containsExactlyInAnyOrder(a.getId(), b.getId());
@@ -182,7 +182,7 @@ class MentorRepositorySearchTest {
         mentorRepository.saveAll(List.of(full, avail));
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, null, null, null, true, null, PageRequest.of(0, 20));
+                null, null, null, null, true, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId).containsExactly(avail.getId());
     }
 
@@ -193,7 +193,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(full);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, null, null, null, false, null, PageRequest.of(0, 20));
+                null, null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -204,7 +204,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(m);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, null, null, null, true, null, PageRequest.of(0, 20));
+                null, null, null, null, true, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).hasSize(1);
     }
 
@@ -231,7 +231,7 @@ class MentorRepositorySearchTest {
         menteeAvailabilitySlotRepository.save(meSlot);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, null, null, null, false, me.getId(), PageRequest.of(0, 20));
+                null, null, null, null, false, false, me.getId(), PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId).containsExactly(m.getId());
     }
 
@@ -258,7 +258,7 @@ class MentorRepositorySearchTest {
         menteeAvailabilitySlotRepository.save(meSlot);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, null, null, null, false, me.getId(), PageRequest.of(0, 20));
+                null, null, null, null, false, false, me.getId(), PageRequest.of(0, 20));
         assertThat(p.getContent()).isEmpty();
     }
 
@@ -283,7 +283,7 @@ class MentorRepositorySearchTest {
         menteeAvailabilitySlotRepository.save(meSlot);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, null, null, null, false, me.getId(), PageRequest.of(0, 20));
+                null, null, null, null, false, false, me.getId(), PageRequest.of(0, 20));
         assertThat(p.getContent()).isEmpty();
     }
 
@@ -297,7 +297,7 @@ class MentorRepositorySearchTest {
 
         // Caller escapes % as |% (ESCAPE '|') so the search treats it as literal.
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%abc|%def%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%abc|%def%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId).containsExactly(a.getId());
     }
 
@@ -308,7 +308,7 @@ class MentorRepositorySearchTest {
         mentorRepository.saveAll(List.of(a, b));
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%abc|_def%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%abc|_def%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId).containsExactly(a.getId());
     }
 
@@ -317,7 +317,7 @@ class MentorRepositorySearchTest {
     @Test
     void emptyResult_returnsEmptyPage() {
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%nothingmatchesthis%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%nothingmatchesthis%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).isEmpty();
         assertThat(p.getTotalElements()).isZero();
     }
@@ -330,7 +330,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(m);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%anything%", null, null, null, false, null, PageRequest.of(0, 20));
+                "%anything%", null, null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).isEmpty();
     }
 
@@ -340,7 +340,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(m);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, List.of("ai"), null, null, false, null, PageRequest.of(0, 20));
+                null, List.of("ai"), null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).isEmpty();
     }
 
@@ -350,7 +350,7 @@ class MentorRepositorySearchTest {
         mentorRepository.save(m);
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, List.of("ai", "ai"), null, null, false, null, PageRequest.of(0, 20));
+                null, List.of("ai", "ai"), null, null, false, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId).containsExactly(m.getId());
     }
 
@@ -372,7 +372,7 @@ class MentorRepositorySearchTest {
         mentorRepository.saveAll(List.of(a, b, c));
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, List.of("ai"), null, null, true, null, PageRequest.of(0, 20));
+                null, List.of("ai"), null, null, true, false, null, PageRequest.of(0, 20));
         assertThat(p.getContent()).extracting(Mentor::getId).containsExactly(a.getId());
     }
 
@@ -387,7 +387,7 @@ class MentorRepositorySearchTest {
         // Caller would send escaped form. The keyword is matched as a literal
         // — no parser interpretation. The mentors table is not dropped.
         Page<Mentor> p = mentorRepository.searchByFilters(
-                "%'; drop table mentors; --%", null, null, null, false, null,
+                "%'; drop table mentors; --%", null, null, null, false, false, null,
                 PageRequest.of(0, 20));
         long after = mentorRepository.count();
         assertThat(after).isEqualTo(before);
@@ -403,9 +403,9 @@ class MentorRepositorySearchTest {
         }
 
         Page<Mentor> page0 = mentorRepository.searchByFilters(
-                null, null, null, null, false, null, PageRequest.of(0, 2));
+                null, null, null, null, false, false, null, PageRequest.of(0, 2));
         Page<Mentor> page1 = mentorRepository.searchByFilters(
-                null, null, null, null, false, null, PageRequest.of(1, 2));
+                null, null, null, null, false, false, null, PageRequest.of(1, 2));
 
         assertThat(page0.getContent()).hasSize(2);
         assertThat(page0.getTotalElements()).isEqualTo(5);
@@ -423,7 +423,7 @@ class MentorRepositorySearchTest {
         mentorRepository.saveAll(List.of(a, b, c));
 
         Page<Mentor> p = mentorRepository.searchByFilters(
-                null, null, null, null, false, null, PageRequest.of(0, 10));
+                null, null, null, null, false, false, null, PageRequest.of(0, 10));
         // Default ORDER BY m.id DESC — newer first.
         List<Long> ids = p.getContent().stream().map(Mentor::getId).toList();
         assertThat(ids).containsExactly(c.getId(), b.getId(), a.getId());

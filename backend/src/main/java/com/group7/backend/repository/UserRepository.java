@@ -24,6 +24,27 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Page<User> findAllNonAdmins(Pageable pageable);
 
     /**
+     * Visibility-filtered variant of {@link #findAllNonAdmins}. When
+     * {@code bypassVisibility=true} (admin viewer), returns identical results
+     * to {@code findAllNonAdmins}. Otherwise applies the #570 predicate:
+     * mentors/mentees with {@code profileVisibility=false} are excluded. Uses
+     * the JOINED-inheritance {@code TREAT} clause — verified by
+     * {@code UserRepositoryFollowCandidatesTest}.
+     */
+    @Query("""
+            select u from User u
+            where type(u) <> com.group7.backend.entity.Admin
+              and (:bypassVisibility = true
+                   or (type(u) <> com.group7.backend.entity.Mentee
+                       or treat(u as com.group7.backend.entity.Mentee).profileVisibility = true))
+              and (:bypassVisibility = true
+                   or (type(u) <> com.group7.backend.entity.Mentor
+                       or treat(u as com.group7.backend.entity.Mentor).profileVisibility = true))
+            """)
+    Page<User> findAllNonAdminsVisible(@Param("bypassVisibility") boolean bypassVisibility,
+                                       Pageable pageable);
+
+    /**
      * Candidate window for the follow-recommendation pipeline. Excludes in a
      * single SQL pass:
      * <ol>
@@ -31,8 +52,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
      *   <li>the viewer themselves;</li>
      *   <li>users the viewer already follows;</li>
      *   <li>users with an active ban ({@code lifted_at IS NULL AND expires_at > now});</li>
-     *   <li>mentees with {@code profileVisibility = false} (admins/mentors always pass
-     *       — only the JOINED Mentee subclass is privacy-gated).</li>
+     *   <li>mentees with {@code profileVisibility = false}.</li>
+     *   <li>mentors with {@code profileVisibility = false} (added in #570 — symmetric
+     *       to the mentee predicate above).</li>
      * </ol>
      *
      * <p>The ranker scores the returned slice in memory and the service slices
@@ -40,10 +62,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * semantic signal — mirroring the matching pipeline (#262/#273) where the
      * same trade-off applies: pages beyond the window return empty content.
      *
-     * <p>{@code TREAT(u AS Mentee).profileVisibility} requires Hibernate's
-     * JOINED-inheritance TREAT support; verified against this codebase's
-     * {@code User} → {@code Mentor}/{@code Mentee}/{@code Admin} hierarchy by
-     * {@code UserRepositoryFollowCandidatesTest}.
+     * <p>{@code TREAT(u AS Mentee).profileVisibility} and {@code TREAT(u AS Mentor)
+     * .profileVisibility} require Hibernate's JOINED-inheritance TREAT support;
+     * verified against this codebase's {@code User} → {@code Mentor}/{@code Mentee}
+     * /{@code Admin} hierarchy by {@code UserRepositoryFollowCandidatesTest}.
      */
     @Query("""
             select u from User u
@@ -60,6 +82,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     and b.expiresAt > :now)
               and (type(u) <> com.group7.backend.entity.Mentee
                    or treat(u as com.group7.backend.entity.Mentee).profileVisibility = true)
+              and (type(u) <> com.group7.backend.entity.Mentor
+                   or treat(u as com.group7.backend.entity.Mentor).profileVisibility = true)
             order by u.id desc
             """)
     List<User> findFollowRecommendationCandidates(@Param("viewerId") Long viewerId,
