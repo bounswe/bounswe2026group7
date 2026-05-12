@@ -200,32 +200,13 @@ public class FeedInteractionService {
                 .map(byId::get)
                 .filter(p -> p != null && p.getDeletedAt() == null)
                 .toList();
-        Map<Long, String> authorNames = new HashMap<>();
-        userRepository.findAllById(ordered.stream().map(FeedPost::getAuthorId)
-                .collect(Collectors.toSet()))
-                .forEach(u -> authorNames.put(u.getId(), u.getFirstName()));
+        // Single source of truth for the list-item shape — author-name batching,
+        // attachment URL construction, and per-post counts all routed through
+        // the mapper + batchCounts. Keeps list rendering identical across
+        // /for-you, /following, /search, /author posts, and /me/bookmarks.
         Map<Long, PostCounts> counts = batchCounts(
                 ordered.stream().map(FeedPost::getId).toList());
-        List<FeedPostListItem> items = ordered.stream().map(p -> {
-            PostCounts c = counts.get(p.getId());
-            long likeCount = (c == null) ? 0L : c.likeCount();
-            long commentCount = (c == null) ? 0L : c.commentCount();
-            return new FeedPostListItem(
-                    p.getId(),
-                    p.getAuthorId(),
-                    authorNames.getOrDefault(p.getAuthorId(), null),
-                    p.getBody(),
-                    p.getHashtags().stream().map(h -> h.getId().getTag()).sorted().toList(),
-                    p.getCreatedAt(),
-                    likeCount,
-                    commentCount,
-                    List.of(),
-                    null,   // sharedById — bookmarks are user-scoped, not a repost surface
-                    null,   // sharedByFirstName
-                    null,   // shareCommentary
-                    null    // sharedAt
-            );
-        }).toList();
+        List<FeedPostListItem> items = feedPostMapper.toListItems(ordered, userId, counts);
         return new PageImpl<>(items, pageable, postIds.getTotalElements());
     }
 
@@ -413,6 +394,30 @@ public class FeedInteractionService {
         comment.setDeletedAt(OffsetDateTime.now());
         commentRepository.save(comment);
         log.info("Soft-deleted comment: id={}, authorId={}", commentId, requesterId);
+    }
+
+    /**
+     * Single-comment read (#489 permalink). Returns the comment iff it is
+     * not soft-deleted AND its parent post is still visible — without
+     * the parent-visibility check, a permalink to a comment on a
+     * soft-deleted post would surface orphan content with no navigation
+     * affordance. 404 on either condition.
+     *
+     * <p>Lives on this service (not {@code FeedReadService}) because
+     * every other single-comment operation already lives here; splitting
+     * one comment op into a different service would fragment the
+     * comment logic.
+     */
+    public FeedCommentResponse getComment(Long commentId, Long viewerId) {
+        FeedPostComment comment = commentRepository.findByIdAndDeletedAtIsNull(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
+        // Orphan-permalink guard: 404 when the parent post is soft-deleted.
+        // Same exception message as the comment-missing branch — distinguishing
+        // the two would leak whether the comment id ever existed, an
+        // unnecessary information disclosure for anyone probing ids.
+        feedPostRepository.findByIdAndDeletedAtIsNull(comment.getPostId())
+                .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
+        return mapComment(comment, viewerId, resolveAuthorName(comment.getAuthorId()));
     }
 
     // ── Aggregate state ────────────────────────────────────────────────────

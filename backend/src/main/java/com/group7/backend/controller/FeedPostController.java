@@ -1,19 +1,25 @@
 package com.group7.backend.controller;
 
+import com.group7.backend.docs.feed.FeedApiExamples;
 import com.group7.backend.dto.request.CreateFeedPostRequest;
 import com.group7.backend.dto.request.UpdateFeedPostRequest;
+import com.group7.backend.dto.response.FeedPostEditEntry;
 import com.group7.backend.dto.response.FeedPostResponse;
 import com.group7.backend.service.FeedPostService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -21,7 +27,13 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.WebRequest;
+
+import java.time.OffsetDateTime;
+
+import java.util.List;
 
 /**
  * REST surface for the social-feed posts core (#348).
@@ -50,6 +62,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/feed/posts")
+@Validated  // enables MethodValidationPostProcessor for @Min/@Max on @RequestParam
 @Tag(name = "Feed Posts",
         description = "Author-owned social-feed posts (text + hashtags). Soft-delete preserves "
                 + "referential integrity for downstream interactions and feed reads (#348).")
@@ -65,9 +78,16 @@ public class FeedPostController {
     @Operation(summary = "Create a feed post",
             description = "Creates a new feed post on behalf of the authenticated user. "
                     + "Mentors and mentees can post; admins are rejected (403). Hashtags "
-                    + "are server-normalised (lowercase, leading '#' stripped, dedupe).")
+                    + "are server-normalised (lowercase, leading '#' stripped, dedupe).",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.CREATE_FEED_POST_REQUEST))))
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Post created"),
+            @ApiResponse(responseCode = "201", description = "Post created",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.FEED_POST_RESPONSE))),
             @ApiResponse(responseCode = "400", description = "Validation failure (blank body, oversize, too many tags)", content = @Content),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
             @ApiResponse(responseCode = "403", description = "Admin requester (admins cannot post)", content = @Content)
@@ -76,24 +96,52 @@ public class FeedPostController {
             @Valid @RequestBody CreateFeedPostRequest request,
             Authentication authentication) {
         Long authorId = (Long) authentication.getCredentials();
-        FeedPostResponse body = feedPostService.create(authorId, request.body(), request.hashtags());
+        FeedPostResponse body = feedPostService.create(
+                authorId, request.body(), request.hashtags(), request.attachmentIds());
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
     @GetMapping("/{id:\\d+}")
     @Operation(summary = "Get a feed post by id",
             description = "Returns the post if present and not soft-deleted. The viewer's "
-                    + "id is reflected in the response's isAuthor flag.")
+                    + "id is reflected in the response's isAuthor flag. Participates in "
+                    + "conditional GET: clients may send If-None-Match with the ETag from "
+                    + "a prior response to receive 304 when the post body is unchanged.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Post body"),
+            @ApiResponse(responseCode = "200", description = "Post body",
+                    content = @Content(examples = @ExampleObject(
+                            name = "default",
+                            value = FeedApiExamples.FEED_POST_RESPONSE))),
+            @ApiResponse(responseCode = "304", description = "Not Modified — If-None-Match matched current ETag"),
             @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
             @ApiResponse(responseCode = "404", description = "Post not found or soft-deleted", content = @Content)
     })
     public ResponseEntity<FeedPostResponse> getById(
             @Parameter(description = "Feed post id") @PathVariable Long id,
-            Authentication authentication) {
+            Authentication authentication,
+            WebRequest webRequest) {
         Long viewerId = (Long) authentication.getCredentials();
-        return ResponseEntity.ok(feedPostService.getById(id, viewerId));
+        FeedPostResponse post = feedPostService.getById(id, viewerId);
+        // ETag derived from updatedAt (falls back to createdAt) — the only
+        // post-shape mutation point. Counters / viewer flags live on the
+        // separate /interactions endpoint with no-cache, so they never
+        // invalidate this cache.
+        OffsetDateTime lastModified = post.updatedAt() != null ? post.updatedAt() : post.createdAt();
+        long lastModifiedMillis = lastModified.toInstant().toEpochMilli();
+        String etag = "\"" + lastModifiedMillis + "\"";
+        if (webRequest.checkNotModified(etag, lastModifiedMillis)) {
+            // Spring writes 304 from the WebRequest hint; null return is the
+            // documented Spring 6 pattern for conditional-GET short-circuit.
+            return null;
+        }
+        // private because isAuthor is viewer-relative; max-age=30 is short
+        // enough that staleness is harmless and long enough to absorb
+        // typical UI-render reload bursts.
+        return ResponseEntity.ok()
+                .eTag(etag)
+                .lastModified(lastModifiedMillis)
+                .header("Cache-Control", "private, max-age=30")
+                .body(post);
     }
 
     @PatchMapping("/{id:\\d+}")
@@ -114,7 +162,8 @@ public class FeedPostController {
             Authentication authentication) {
         Long requesterId = (Long) authentication.getCredentials();
         return ResponseEntity.ok(
-                feedPostService.update(id, requesterId, request.body(), request.hashtags()));
+                feedPostService.update(id, requesterId, request.body(), request.hashtags(),
+                        request.attachmentIds()));
     }
 
     @DeleteMapping("/{id:\\d+}")
@@ -134,5 +183,47 @@ public class FeedPostController {
         Long requesterId = (Long) authentication.getCredentials();
         feedPostService.delete(id, requesterId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id:\\d+}/restore")
+    @Operation(summary = "Restore a soft-deleted feed post (author-only, within 30 days)",
+            description = "Resurrects a soft-deleted post that is still within the configured "
+                    + "restore window (app.feed.cleanup.restore-window-days, default 30). "
+                    + "The post becomes visible again on the public feed surfaces; no fanout "
+                    + "is emitted to followers (a restore is a quiet rollback, not a publish).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Post restored"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Non-author cannot restore", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post never existed", content = @Content),
+            @ApiResponse(responseCode = "409", description = "Post is not deleted (nothing to restore)", content = @Content),
+            @ApiResponse(responseCode = "410", description = "Restore window has expired", content = @Content)
+    })
+    public ResponseEntity<FeedPostResponse> restore(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(feedPostService.restorePost(id, requesterId));
+    }
+
+    @GetMapping("/{id:\\d+}/history")
+    @Operation(summary = "Get edit history for a feed post (author or admin)",
+            description = "Returns the post's edit history newest-first, capped at 50 entries. "
+                    + "editorId is the snapshot editor's user id at edit time; the client "
+                    + "resolves display names via the existing user-summary endpoint when needed. "
+                    + "Visible to the post author and to any admin; everyone else gets 403.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "History entries (newest first)"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Not the post author and not an admin", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post never existed", content = @Content)
+    })
+    public ResponseEntity<List<FeedPostEditEntry>> history(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            @Parameter(description = "Maximum number of entries (1..50)")
+            @RequestParam(defaultValue = "50") @Min(1) @Max(50) int limit,
+            Authentication authentication) {
+        Long requesterId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(feedPostService.getPostHistory(id, requesterId, limit));
     }
 }

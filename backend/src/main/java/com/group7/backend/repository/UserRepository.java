@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,13 +23,26 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Page<User> findAllNonAdmins(Pageable pageable);
 
     /**
-     * Candidate window for the follow-recommendation pipeline (#344). Excludes
-     * admins, the viewer themselves, and anyone the viewer already follows in
-     * a single SQL pass; the ranker scores the returned slice in memory and
-     * the service slices the resulting page. Order is {@code id DESC} —
-     * deterministic with no semantic signal — mirroring the matching pipeline
-     * (#262/#273) where the same trade-off applies: pages beyond the window
-     * return empty content.
+     * Candidate window for the follow-recommendation pipeline. Excludes in a
+     * single SQL pass:
+     * <ol>
+     *   <li>admins (defence-in-depth — admins never appear in user-facing lists);</li>
+     *   <li>the viewer themselves;</li>
+     *   <li>users the viewer already follows;</li>
+     *   <li>users with an active ban ({@code lifted_at IS NULL AND expires_at > now});</li>
+     *   <li>mentees with {@code profileVisibility = false} (admins/mentors always pass
+     *       — only the JOINED Mentee subclass is privacy-gated).</li>
+     * </ol>
+     *
+     * <p>The ranker scores the returned slice in memory and the service slices
+     * the resulting page. Order is {@code id DESC} — deterministic with no
+     * semantic signal — mirroring the matching pipeline (#262/#273) where the
+     * same trade-off applies: pages beyond the window return empty content.
+     *
+     * <p>{@code TREAT(u AS Mentee).profileVisibility} requires Hibernate's
+     * JOINED-inheritance TREAT support; verified against this codebase's
+     * {@code User} → {@code Mentor}/{@code Mentee}/{@code Admin} hierarchy by
+     * {@code UserRepositoryFollowCandidatesTest}.
      */
     @Query("""
             select u from User u
@@ -38,9 +52,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
                   select 1 from Follow f
                   where f.id.followerId = :viewerId
                     and f.id.followeeId = u.id)
+              and not exists (
+                  select 1 from Ban b
+                  where b.user.id = u.id
+                    and b.liftedAt is null
+                    and b.expiresAt > :now)
+              and (type(u) <> com.group7.backend.entity.Mentee
+                   or treat(u as com.group7.backend.entity.Mentee).profileVisibility = true)
             order by u.id desc
             """)
     List<User> findFollowRecommendationCandidates(@Param("viewerId") Long viewerId,
+                                                  @Param("now") OffsetDateTime now,
                                                   Pageable pageable);
 
     /**

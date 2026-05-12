@@ -1,9 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MoreHorizontal, Pencil, Trash2, Share2, Bookmark } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Share2, Bookmark, Heart, MessageCircle } from 'lucide-react'
 import Avatar from './Avatar'
+import FeedAttachmentGrid from './FeedAttachmentGrid'
 import { linkify } from '../utils/linkify'
-import { toggleBookmarkOnPost, recordShareOnPost } from '../services/api'
+import {
+  toggleBookmarkOnPost,
+  recordShareOnPost,
+  toggleLikeOnPost,
+  getPostInteractions,
+  getPostComments,
+  addCommentToPost,
+} from '../services/api'
 
 /**
  * Renders a single feed post.
@@ -55,16 +63,60 @@ export default function FeedPostCard({
   const [bookmarked, setBookmarked] = useState(initialBookmarked)
   const [bookmarkBusy, setBookmarkBusy] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
+  const [likeBusy, setLikeBusy] = useState(false)
+  const [commentsOpen, setCommentsOpen] = useState(false)
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentBusy, setCommentBusy] = useState(false)
+  const [commentError, setCommentError] = useState(null)
+  const [commentDraft, setCommentDraft] = useState('')
+  const [comments, setComments] = useState([])
+  const [liked, setLiked] = useState(Boolean(post?.viewerHasLiked))
   const [bookmarkCount, setBookmarkCount] = useState(post?.bookmarkCount ?? 0)
   const [shareCount, setShareCount] = useState(post?.shareCount ?? 0)
+  const [likeCount, setLikeCount] = useState(post?.likeCount ?? 0)
+  const [commentCount, setCommentCount] = useState(post?.commentCount ?? 0)
 
   // Re-seed if parent swaps the post in (e.g., navigating between posts on
   // the detail page) or hands us a fresh `initialBookmarked` value.
   useEffect(() => {
     setBookmarked(initialBookmarked)
+    setLiked(Boolean(post?.viewerHasLiked))
     setBookmarkCount(post?.bookmarkCount ?? 0)
     setShareCount(post?.shareCount ?? 0)
-  }, [post?.id, initialBookmarked, post?.bookmarkCount, post?.shareCount])
+    setLikeCount(post?.likeCount ?? 0)
+    setCommentCount(post?.commentCount ?? 0)
+    setComments([])
+    setCommentsOpen(false)
+    setCommentDraft('')
+    setCommentError(null)
+  }, [
+    post?.id,
+    initialBookmarked,
+    post?.bookmarkCount,
+    post?.shareCount,
+    post?.likeCount,
+    post?.commentCount,
+    post?.viewerHasLiked,
+  ])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!post?.id) return undefined
+    const needsInteractionState = post?.viewerHasLiked == null || post?.viewerHasBookmarked == null
+    if (!needsInteractionState) return undefined
+    getPostInteractions(post.id)
+      .then((state) => {
+        if (cancelled) return
+        setLiked(state.viewerHasLiked)
+        setLikeCount(state.likeCount)
+        setCommentCount(state.commentCount)
+        setBookmarkCount(state.bookmarkCount)
+        setBookmarked(state.viewerHasBookmarked)
+        setShareCount(state.shareCount)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [post?.id, post?.viewerHasLiked, post?.viewerHasBookmarked])
 
   const isAuthor = post?.isAuthor === true ||
     (viewerUserId != null && String(post?.authorId) === String(viewerUserId))
@@ -116,6 +168,75 @@ export default function FeedPostCard({
       window.alert(err?.message || 'Failed to update bookmark')
     } finally {
       setBookmarkBusy(false)
+    }
+  }
+
+  async function handleLike(e) {
+    e.stopPropagation()
+    e.preventDefault()
+    if (likeBusy) return
+    const prevLiked = liked
+    const prevCount = likeCount
+    setLiked(!prevLiked)
+    setLikeCount(prevLiked ? Math.max(0, prevCount - 1) : prevCount + 1)
+    setLikeBusy(true)
+    try {
+      const state = await toggleLikeOnPost(post.id)
+      setLiked(state.viewerHasLiked)
+      setLikeCount(state.likeCount)
+      setCommentCount(state.commentCount)
+    } catch (err) {
+      setLiked(prevLiked)
+      setLikeCount(prevCount)
+      window.alert(err?.message || 'Failed to update like')
+    } finally {
+      setLikeBusy(false)
+    }
+  }
+
+  async function loadComments() {
+    if (commentsLoading) return
+    setCommentsLoading(true)
+    setCommentError(null)
+    try {
+      const res = await getPostComments(post.id, 0, 50)
+      const items = Array.isArray(res?.content) ? res.content : (Array.isArray(res) ? res : [])
+      const ordered = [...items].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      setComments(ordered)
+    } catch (err) {
+      setCommentError(err?.message || 'Failed to load comments')
+      setComments([])
+    } finally {
+      setCommentsLoading(false)
+    }
+  }
+
+  function handleToggleComments(e) {
+    e.stopPropagation()
+    e.preventDefault()
+    const nextOpen = !commentsOpen
+    setCommentsOpen(nextOpen)
+    if (nextOpen && comments.length === 0) loadComments()
+  }
+
+  async function handleSubmitComment() {
+    if (commentBusy) return
+    const body = commentDraft.trim()
+    if (!body) {
+      setCommentError('Comment cannot be empty')
+      return
+    }
+    setCommentBusy(true)
+    setCommentError(null)
+    try {
+      const created = await addCommentToPost(post.id, body)
+      setComments((prev) => [created, ...prev])
+      setCommentDraft('')
+      setCommentCount((prev) => prev + 1)
+    } catch (err) {
+      setCommentError(err?.message || 'Failed to post comment')
+    } finally {
+      setCommentBusy(false)
     }
   }
 
@@ -207,6 +328,8 @@ export default function FeedPostCard({
 
       <div className="feed-card-body">{renderBody(post.body)}</div>
 
+      <FeedAttachmentGrid attachments={post.attachments} />
+
       {Array.isArray(post.hashtags) && post.hashtags.length > 0 && (
         <div className="feed-card-tags">
           {post.hashtags.map(t => (
@@ -216,8 +339,30 @@ export default function FeedPostCard({
       )}
 
       <div className="feed-card-actions">
-        <span className="feed-card-action-meta">{post.likeCount ?? 0} likes</span>
-        <span className="feed-card-action-meta">{post.commentCount ?? 0} comments</span>
+        <button
+          type="button"
+          className={`feed-card-action-btn${liked ? ' feed-card-action-btn--active' : ''}`}
+          onClick={handleLike}
+          disabled={likeBusy}
+          aria-label={liked ? 'Unlike post' : 'Like post'}
+          aria-pressed={liked}
+          title={liked ? 'Liked' : 'Like'}
+        >
+          <Heart size={16} strokeWidth={1.75} fill={liked ? 'currentColor' : 'none'} />
+          <span>{likeCount}</span>
+        </button>
+        <button
+          type="button"
+          className={`feed-card-action-btn${commentsOpen ? ' feed-card-action-btn--active' : ''}`}
+          onClick={handleToggleComments}
+          aria-label="View comments"
+          aria-expanded={commentsOpen}
+          title="Comments"
+        >
+          <MessageCircle size={16} strokeWidth={1.75} />
+          <span>{commentCount}</span>
+        </button>
+        <span className="feed-card-action-spacer" aria-hidden="true" />
         <button
           type="button"
           className="feed-card-action-btn"
@@ -246,6 +391,70 @@ export default function FeedPostCard({
           <span>{bookmarkCount}</span>
         </button>
       </div>
+
+      {commentsOpen && (
+        <div className="feed-card-comments" onClick={(e) => e.stopPropagation()}>
+          {commentsLoading ? (
+            <div className="feed-comment-loading">Loading comments…</div>
+          ) : comments.length === 0 ? (
+            <div className="feed-comment-empty">No comments yet.</div>
+          ) : (
+            <div className="feed-comment-list">
+              {comments.map((comment) => (
+                <div key={comment.id} className="feed-comment">
+                  <div className="feed-comment-avatar">
+                    {(comment.authorFirstName?.[0] || '?').toUpperCase()}
+                  </div>
+                  <div className="feed-comment-content">
+                    <div className="feed-comment-meta">
+                      {comment.authorId ? (
+                        <button
+                          type="button"
+                          className="feed-comment-author"
+                          onClick={() => navigate(`/users/${comment.authorId}`)}
+                        >
+                          {comment.authorFirstName || 'User'}
+                        </button>
+                      ) : (
+                        <span className="feed-comment-author feed-comment-author--muted">Deleted user</span>
+                      )}
+                      <span className="feed-comment-time">
+                        {formatPostTime(comment.createdAt)}
+                        {comment.isEdited && <span className="feed-card-edited"> · edited</span>}
+                      </span>
+                    </div>
+                    <div className="feed-comment-body">
+                      {comment.isDeleted || !comment.body
+                        ? <span className="feed-comment-deleted">Comment removed</span>
+                        : renderTextWithMentions(comment.body, 'comment')}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="feed-comment-composer">
+            <textarea
+              className="feed-comment-input"
+              placeholder="Write a comment…"
+              rows={3}
+              value={commentDraft}
+              onChange={(e) => setCommentDraft(e.target.value)}
+              disabled={commentBusy}
+            />
+            <button
+              type="button"
+              className="feed-comment-submit"
+              onClick={handleSubmitComment}
+              disabled={commentBusy || !commentDraft.trim()}
+            >
+              {commentBusy ? 'Posting…' : 'Post'}
+            </button>
+          </div>
+          {commentError && <div className="feed-comment-error">{commentError}</div>}
+        </div>
+      )}
     </article>
   )
 }
@@ -262,11 +471,18 @@ function showTransientToast(text) {
 
 function renderBody(body) {
   if (!body) return null
-  return linkify(body).map((part, i) => {
+  return renderTextWithMentions(body, 'post')
+}
+
+function renderTextWithMentions(text, keyPrefix) {
+  if (!text) return null
+  const output = []
+  let key = 0
+  linkify(text).forEach((part) => {
     if (part && typeof part === 'object' && part.kind === 'url') {
-      return (
+      output.push(
         <a
-          key={i}
+          key={`${keyPrefix}-url-${key++}`}
           href={part.url}
           target="_blank"
           rel="noopener noreferrer"
@@ -276,9 +492,42 @@ function renderBody(body) {
           {part.url}
         </a>
       )
+      return
     }
-    return <span key={i}>{part}</span>
+    const segment = String(part)
+    const mentionRegex = /@([a-zA-Z0-9_.-]+)/g
+    let lastIndex = 0
+    let match
+    while ((match = mentionRegex.exec(segment)) !== null) {
+      if (match.index > lastIndex) {
+        output.push(
+          <span key={`${keyPrefix}-text-${key++}`}>
+            {segment.slice(lastIndex, match.index)}
+          </span>
+        )
+      }
+      const handle = match[1]
+      output.push(
+        <a
+          key={`${keyPrefix}-mention-${key++}`}
+          href={`/users/${encodeURIComponent(handle)}`}
+          className="mention-link"
+          onClick={(e) => e.stopPropagation()}
+        >
+          @{handle}
+        </a>
+      )
+      lastIndex = match.index + match[0].length
+    }
+    if (lastIndex < segment.length) {
+      output.push(
+        <span key={`${keyPrefix}-tail-${key++}`}>
+          {segment.slice(lastIndex)}
+        </span>
+      )
+    }
   })
+  return output
 }
 
 function formatPostTime(iso) {

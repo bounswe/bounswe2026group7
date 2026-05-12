@@ -52,6 +52,10 @@ public record FeedPostListItem(
                 example = "[\"feed:semantic-match:0.82\", \"feed:fresh\", \"feed:follow-boost\"]")
         List<String> factors,
 
+        @Schema(description = "Image attachments on the post, in author-specified order. Empty when "
+                + "the post has no media (#485).")
+        List<AttachmentSummary> attachments,
+
         @Schema(description = "User id of the follower who reposted this post into the viewer's "
                 + "Following feed. Null when the row originates from the post's own author "
                 + "(i.e., not a repost surface).",

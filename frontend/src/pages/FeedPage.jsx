@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import FeedPostCard from '../components/FeedPostCard'
+import FeedImageUploader from '../components/FeedImageUploader'
+import Avatar from '../components/Avatar'
 import {
   getForYouFeed,
   getFollowingFeed,
@@ -9,6 +11,8 @@ import {
   createFeedPost,
   updateFeedPost,
   deleteFeedPost,
+  getFollowRecommendations,
+  followUser,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -17,6 +21,36 @@ const TABS = [
   { key: 'for-you', label: 'For you' },
   { key: 'following', label: 'Following' },
 ]
+
+function displayUserName(user) {
+  if (!user) return 'User'
+  if (user.role === 'MENTOR') {
+    return [user.firstName, user.lastName].filter(Boolean).join(' ')
+  }
+  return user.firstName || 'User'
+}
+
+function userInitials(user) {
+  if (!user) return '?'
+  const parts = user.role === 'MENTOR'
+    ? [user.firstName, user.lastName]
+    : [user.firstName]
+  const initials = parts.filter(Boolean).map(w => w[0]).join('')
+  return initials ? initials.toUpperCase().slice(0, 2) : '?'
+}
+
+function formatFollowFactor(factor) {
+  if (!factor) return ''
+  if (factor.startsWith('shared-interest:')) {
+    const label = factor.replace('shared-interest:', '')
+    return `Shared interest: ${label}`
+  }
+  if (factor.startsWith('followed-by-')) {
+    const match = factor.match(/followed-by-(\d+)-of-your-follows/)
+    if (match) return `Followed by ${match[1]} of your follows`
+  }
+  return factor
+}
 
 export default function FeedPage() {
   const [params, setParams] = useSearchParams()
@@ -28,12 +62,17 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  const [recommendations, setRecommendations] = useState([])
+  const [recLoading, setRecLoading] = useState(false)
+  const [recError, setRecError] = useState(null)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag? } or null
 
   // Minimal compose — full UI lands in #353
   const [composeOpen, setComposeOpen] = useState(false)
   const [composeBody, setComposeBody] = useState('')
+  const [composeAttachments, setComposeAttachments] = useState([]) // AttachmentSummary[]
   const [composeBusy, setComposeBusy] = useState(false)
   const [composeError, setComposeError] = useState(null)
 
@@ -41,6 +80,7 @@ export default function FeedPage() {
   const [editing, setEditing] = useState(null) // post object or null
   const [editBody, setEditBody] = useState('')
   const [editHashtags, setEditHashtags] = useState('')
+  const [editAttachments, setEditAttachments] = useState([])
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState(null)
 
@@ -67,6 +107,26 @@ export default function FeedPage() {
   }, [tab, activeSearch])
 
   useEffect(() => { reload() }, [reload])
+
+  const loadRecommendations = useCallback(async () => {
+    setRecLoading(true)
+    setRecError(null)
+    try {
+      const page = await getFollowRecommendations(0, 8)
+      const list = (page?.content || []).map(r => ({ ...r, busy: false }))
+      setRecommendations(list)
+    } catch (err) {
+      setRecError(err?.message || 'Failed to load suggestions')
+      setRecommendations([])
+    } finally {
+      setRecLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab !== 'following' || activeSearch || loading || posts.length > 0) return
+    loadRecommendations()
+  }, [tab, activeSearch, loading, posts.length, loadRecommendations])
 
   // ── Tab nav ───────────────────────────────────────────────────────────
   function changeTab(next) {
@@ -105,8 +165,13 @@ export default function FeedPage() {
     setComposeBusy(true)
     setComposeError(null)
     try {
-      const created = await createFeedPost({ body, hashtags: extractHashtags(body) })
+      const created = await createFeedPost({
+        body,
+        hashtags: extractHashtags(body),
+        attachmentIds: composeAttachments.map(a => a.id),
+      })
       setComposeBody('')
+      setComposeAttachments([])
       setComposeOpen(false)
       // Optimistically prepend for visibility; reload picks up the canonical state
       setPosts(prev => [created, ...prev])
@@ -122,6 +187,7 @@ export default function FeedPage() {
     setEditing(post)
     setEditBody(post.body || '')
     setEditHashtags((post.hashtags || []).join(' '))
+    setEditAttachments(Array.isArray(post.attachments) ? post.attachments : [])
     setEditError(null)
   }
 
@@ -139,9 +205,13 @@ export default function FeedPage() {
         .split(/\s+/)
         .map(t => t.replace(/^#/, '').trim())
         .filter(Boolean)
-      const updated = await updateFeedPost(editing.id, { body, hashtags: tags })
+      const updated = await updateFeedPost(editing.id, {
+        body,
+        hashtags: tags,
+        attachmentIds: editAttachments.map(a => a.id),
+      })
       setPosts(prev => prev.map(p => p.id === updated.id
-        ? { ...p, body: updated.body, hashtags: updated.hashtags, isEdited: true }
+        ? { ...p, body: updated.body, hashtags: updated.hashtags, attachments: updated.attachments, isEdited: true }
         : p))
       setEditing(null)
     } catch (err) {
@@ -161,6 +231,22 @@ export default function FeedPage() {
       setPosts(prev => prev.filter(p => p.id !== post.id))
     } catch (err) {
       window.alert(err?.message || 'Failed to delete post')
+    }
+  }
+
+  async function handleFollowSuggestion(userId) {
+    setRecommendations(prev => prev.map(r => r.id === userId ? { ...r, busy: true } : r))
+    try {
+      await followUser(userId)
+      // #512: drop the followed user from the rail entirely. Keeping the card
+      // with the label flipped to "Unfollow" leaves a dead-looking button
+      // (the original click handler short-circuits on isFollowing=true). The
+      // recommendation no longer applies once we're following, so removal is
+      // the cleanest UX.
+      setRecommendations(prev => prev.filter(r => r.id !== userId))
+    } catch (err) {
+      setRecommendations(prev => prev.map(r => r.id === userId ? { ...r, busy: false } : r))
+      window.alert(err?.message || 'Failed to follow user')
     }
   }
 
@@ -200,6 +286,11 @@ export default function FeedPage() {
               onChange={(e) => setComposeBody(e.target.value)}
               disabled={composeBusy}
               style={{ width: '100%', maxHeight: 'none', resize: 'vertical' }}
+            />
+            <FeedImageUploader
+              value={composeAttachments}
+              onChange={setComposeAttachments}
+              disabled={composeBusy}
             />
             {composeError && <div className="md-composer-error">{composeError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
@@ -249,13 +340,75 @@ export default function FeedPage() {
             <div className="md-error-sub">{error}</div>
           </div>
         ) : posts.length === 0 ? (
-          <div className="empty-state">
-            {activeSearch
-              ? 'No posts match this search.'
-              : tab === 'following'
-                ? 'You don\'t follow anyone yet — switch to For you to discover posts.'
-                : 'No posts yet — be the first to share something.'}
-          </div>
+          activeSearch ? (
+            <div className="empty-state">No posts match this search.</div>
+          ) : tab === 'following' ? (
+            <div className="empty-following">
+              <div className="empty-state">
+                You do not follow anyone yet. Find people to follow to populate your feed.
+              </div>
+
+              <div className="follow-suggested">
+                <div className="follow-suggested-header">
+                  <div className="follow-suggested-title">Suggested to follow</div>
+                  {recLoading && <div className="follow-suggested-sub">Loading…</div>}
+                  {!recLoading && recError && <div className="follow-suggested-sub">{recError}</div>}
+                </div>
+
+                {recLoading ? (
+                  <div className="md-loading">Loading suggestions…</div>
+                ) : recError ? null : recommendations.length === 0 ? (
+                  <div className="empty-state">No suggestions available right now.</div>
+                ) : (
+                  <div className="follow-suggested-rail">
+                    {recommendations.map(rec => (
+                      <div className="follow-suggested-card" key={rec.id}>
+                        <div className="follow-suggested-main">
+                          <Avatar
+                            src={rec.profilePhoto}
+                            initials={userInitials(rec)}
+                            size="md"
+                          />
+                          <div>
+                            <div className="follow-suggested-name">{displayUserName(rec)}</div>
+                            <div className="follow-suggested-role">{rec.role === 'MENTOR' ? 'Mentor' : 'Mentee'}</div>
+                          </div>
+                        </div>
+                        {Array.isArray(rec.factors) && rec.factors.length > 0 && (
+                          <div className="follow-suggested-factors">
+                            {rec.factors.slice(0, 2).map((f, i) => (
+                              <span className="follow-suggested-factor" key={`${rec.id}-f-${i}`}>
+                                {formatFollowFactor(f)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="follow-suggested-actions">
+                          <button
+                            className="view-profile-btn"
+                            type="button"
+                            onClick={() => navigate(`/users/${rec.id}`)}
+                          >
+                            View Profile
+                          </button>
+                          <button
+                            className="follow-btn"
+                            type="button"
+                            onClick={() => !rec.busy && handleFollowSuggestion(rec.id)}
+                            disabled={rec.busy}
+                          >
+                            {rec.busy ? 'Following…' : 'Follow'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">No posts yet — be the first to share something.</div>
+          )
         ) : (
           <div className="feed-list">
             {posts.map(p => (
@@ -291,6 +444,12 @@ export default function FeedPage() {
               placeholder="design react ux"
               disabled={editBusy}
               style={{ minHeight: 'auto', height: '40px' }}
+            />
+            <label className="section-label" style={{ marginTop: '12px', display: 'block' }}>Images</label>
+            <FeedImageUploader
+              value={editAttachments}
+              onChange={setEditAttachments}
+              disabled={editBusy}
             />
             {editError && <div className="md-composer-error" style={{ marginTop: '8px' }}>{editError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>

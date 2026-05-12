@@ -41,6 +41,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -129,6 +130,24 @@ class FollowIntegrationTest {
                         .header("Authorization", "Bearer " + p.tokenA))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    // ── X-Total-Count project-wide smoke (#489) ───────────────────────────
+
+    @Test
+    void followersList_carriesXTotalCountHeader() throws Exception {
+        // Proves PageTotalCountHeaderAdvice fires on non-feed paged
+        // endpoints — guards against a regression that scopes the advice
+        // to feed routes silently.
+        Pair p = registerTwo("xtc_a@test.com", "xtc_b@test.com");
+        mockMvc.perform(post("/api/users/" + p.idB + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/users/" + p.idB + "/followers")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Total-Count", "1"));
     }
 
     // ── Self-follow: project-standard {error, message} body ───────────────

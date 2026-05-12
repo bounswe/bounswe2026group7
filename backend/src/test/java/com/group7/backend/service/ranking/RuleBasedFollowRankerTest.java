@@ -206,6 +206,6 @@ class RuleBasedFollowRankerTest {
     private static FollowRecommendationContext ctx(Set<String> labels,
                                                    Set<Long> followeeIds,
                                                    Map<Long, Integer> secondHop) {
-        return new FollowRecommendationContext(42L, labels, followeeIds, secondHop);
+        return FollowRecommendationContext.legacy(42L, labels, followeeIds, secondHop);
     }
 }

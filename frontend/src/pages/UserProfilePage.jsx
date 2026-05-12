@@ -3,8 +3,16 @@ import { useParams, useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
-import { getUserById, createMentorshipRequest, getSentMentorshipRequests, getActiveMentorships, getMentorAvailability } from '../services/api'
+import {
+  getUserById,
+  createMentorshipRequest,
+  getMentorAvailability,
+  followUser,
+  unfollowUser,
+  getFollowing,
+} from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useMentorship } from '../context/MentorshipContext'
 import '../styles/main.css'
 
 function ProfileField({ label, value, chips = false }) {
@@ -49,7 +57,16 @@ export default function UserProfilePage() {
   const [modalVisible, setModalVisible] = useState(false)
   const [requestLoading, setRequestLoading] = useState(false)
   const [requestError, setRequestError] = useState('')
-  const [requestSent, setRequestSent] = useState(false)
+
+  const {
+    sentRequests,
+    activeMentorships,
+    refresh: refreshMentorships,
+    isMentee: userIsMentee
+  } = useMentorship()
+
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
 
   useEffect(() => {
     getUserById(id)
@@ -69,37 +86,69 @@ export default function UserProfilePage() {
       })
       .catch(() => {})
 
-    if (isMentee) {
-      getSentMentorshipRequests()
-        .then(data => {
-          const sent = (data.content || []).some(r => String(r.mentorId) === String(id))
-          setRequestSent(sent)
-        })
-        .catch(() => {})
+    if (userIsMentee && id) {
+      // Check if we already have a pending request to this specific mentor
+      // This is now handled by derived state from context (sentRequests)
     }
 
-    if (!isMentee) {
+    if (!userIsMentee && id && activeMentorships) {
       // Mentor viewing a mentee: only show photo if there's an active mentorship between them.
-      getActiveMentorships()
-        .then(data => {
-          const active = (data || []).some(m => m.status === 'ACTIVE' && String(m.menteeId) === String(id))
-          setCanSeePhoto(active)
-        })
-        .catch(() => {})
+      const active = (activeMentorships || []).some(m => m.status === 'ACTIVE' && String(m.menteeId) === String(id))
+      setCanSeePhoto(active)
     }
-  }, [id, isMentee])
+  }, [id, userIsMentee, activeMentorships])
+
+  useEffect(() => {
+    if (!userId || !id || !profile) return
+    if (String(userId) === String(id)) return
+    if (role === 'MENTEE' && profile.role === 'MENTEE') return
+    let ignore = false
+    async function loadFollowState() {
+      try {
+        const page = await getFollowing(userId, 0, 200)
+        const list = page?.content || []
+        if (!ignore) {
+          setIsFollowing(list.some(u => String(u.id) === String(id)))
+        }
+      } catch {
+        // ignore follow-state failures; toggle will still work
+      }
+    }
+    loadFollowState()
+    return () => { ignore = true }
+  }, [userId, id, profile, role])
 
   async function handleSubmitRequest(message) {
     setRequestLoading(true)
     setRequestError('')
     try {
       await createMentorshipRequest({ mentorId: parseInt(id), message })
-      setRequestSent(true)
+      refreshMentorships() // Refresh context to update sentRequests and pending counts
       setModalVisible(false)
     } catch (err) {
       setRequestError(err.message || 'Failed to send request.')
     } finally {
       setRequestLoading(false)
+    }
+  }
+
+  async function toggleFollow() {
+    if (followLoading) return
+    setFollowLoading(true)
+    try {
+      if (isFollowing) {
+        await unfollowUser(id)
+        setIsFollowing(false)
+        setProfile(prev => prev ? { ...prev, followerCount: Math.max(0, (prev.followerCount ?? 0) - 1) } : prev)
+      } else {
+        await followUser(id)
+        setIsFollowing(true)
+        setProfile(prev => prev ? { ...prev, followerCount: (prev.followerCount ?? 0) + 1 } : prev)
+      }
+    } catch (err) {
+      window.alert(err?.message || 'Failed to update follow status')
+    } finally {
+      setFollowLoading(false)
     }
   }
 
@@ -141,6 +190,11 @@ export default function UserProfilePage() {
     ? profile.profilePhoto
     : (canSeePhoto ? profile.profilePhoto : null)
 
+  const followerCount = profile.followerCount ?? 0
+  const followingCount = profile.followingCount ?? 0
+  const canFollow = !isOwnProfile && !(role === 'MENTEE' && profile.role === 'MENTEE')
+  const canViewFollowGraph = !(role === 'MENTEE' && profile.role === 'MENTEE' && !isOwnProfile)
+
   return (
     <MainLayout>
       <div className="page-header">
@@ -169,6 +223,38 @@ export default function UserProfilePage() {
             )}
           </div>
 
+          <div className="profile-follow-stats">
+            <button
+              type="button"
+              className="profile-follow-stat"
+              onClick={() => canViewFollowGraph && navigate(`/users/${id}/followers`)}
+              disabled={!canViewFollowGraph}
+            >
+              <div className="profile-follow-num">{followerCount}</div>
+              <div className="profile-follow-label">Followers</div>
+            </button>
+            <button
+              type="button"
+              className="profile-follow-stat"
+              onClick={() => canViewFollowGraph && navigate(`/users/${id}/following`)}
+              disabled={!canViewFollowGraph}
+            >
+              <div className="profile-follow-num">{followingCount}</div>
+              <div className="profile-follow-label">Following</div>
+            </button>
+          </div>
+
+          {canFollow && (
+            <button
+              type="button"
+              className={`follow-btn${isFollowing ? ' follow-btn--active' : ''}`}
+              onClick={toggleFollow}
+              disabled={followLoading}
+            >
+              {followLoading ? 'Updating...' : isFollowing ? 'Unfollow' : 'Follow'}
+            </button>
+          )}
+
           {isMentorProfile && (
             <div className="profile-stats-row">
               <div className="psr-item">
@@ -183,19 +269,42 @@ export default function UserProfilePage() {
                 <div className="psr-num">{profile.currentMenteeCount ?? 0}/{profile.maxMenteeCapacity ?? '∞'}</div>
                 <div className="psr-lbl">Mentees</div>
               </div>
+              <div className="psr-item" title={profile.ratingCount ? `${profile.ratingCount} rating${profile.ratingCount === 1 ? '' : 's'}` : 'No ratings yet'}>
+                <div className="psr-num">
+                  {profile.averageRating != null
+                    ? `★ ${profile.averageRating.toFixed(1)}`
+                    : '—'}
+                </div>
+                <div className="psr-lbl">
+                  {profile.ratingCount
+                    ? `${profile.ratingCount} rating${profile.ratingCount === 1 ? '' : 's'}`
+                    : 'Rating'}
+                </div>
+              </div>
             </div>
           )}
 
-          {isMentee && isMentorProfile && (
+          {userIsMentee && isMentorProfile && (
             <div style={{ textAlign: 'center' }}>
-              <button
-                className={`send-request-btn${requestSent ? ' sent' : ''}`}
-                disabled={requestSent}
-                onClick={() => !requestSent && setModalVisible(true)}
-                style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
-              >
-                {requestSent ? '✓ Request Sent' : 'Send Request'}
-              </button>
+              {(() => {
+                const isPending = (sentRequests || []).some(r => String(r.mentorId) === String(id) && r.status === 'PENDING')
+                const hasActiveMentor = (activeMentorships || []).some(m => m.status === 'ACTIVE')
+                const isFull = profile.maxMenteeCapacity != null && (profile.currentMenteeCount ?? 0) >= profile.maxMenteeCapacity
+                
+                const btnDisabled = isPending || hasActiveMentor || isFull
+                const btnLabel = isPending ? '✓ Request Sent' : isFull ? 'At Capacity' : hasActiveMentor ? 'Already Mentored' : 'Send Request'
+                
+                return (
+                  <button
+                    className={`send-request-btn${isPending ? ' sent' : ''}${hasActiveMentor && !isPending ? ' locked' : ''}`}
+                    disabled={btnDisabled}
+                    onClick={() => !btnDisabled && setModalVisible(true)}
+                    style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
+                  >
+                    {btnLabel}
+                  </button>
+                )
+              })()}
             </div>
           )}
 

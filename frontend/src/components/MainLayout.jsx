@@ -20,6 +20,7 @@ const NAV_TABS = [
   { label: 'Messages', path: '/messages' },
   { label: 'Tasks', path: '/tasks' },
   { label: 'Schedule', path: '/schedule' },
+  { label: 'Calendar', path: '/calendar' },
   { label: 'Availability', path: '/availability' },
   { label: 'Profile', path: '/profile' },
 ]
@@ -31,6 +32,7 @@ const SIDEBAR_LINKS = [
   { label: 'Messages', path: '/messages', icon: MessageCircle },
   { label: 'My Tasks', path: '/tasks', icon: CheckSquare },
   { label: 'Schedule', path: '/schedule', icon: CalendarDays },
+  { label: 'Calendar', path: '/calendar', icon: CalendarDays },
   { label: 'Availability', path: '/availability', icon: Clock },
   { label: 'Profile', path: '/profile', icon: User },
 ]
@@ -41,7 +43,10 @@ export default function MainLayout({ children }) {
 
 
   const { role, logout, firstName, lastName, profilePhoto } = useAuth()
-  const { pendingCount, activeMenteeCount, activeMentorshipCount, tasksCount, sessionsCount } = useMentorship()
+  const {
+    pendingCount, activeMenteeCount, activeMentorshipCount,
+    tasksCount, sessionsCount, statsLoading
+  } = useMentorship()
   const presence = usePresence()
   const currentPath = location.pathname
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -128,7 +133,7 @@ export default function MainLayout({ children }) {
                   { num: sessionsCount, label: 'Sessions' },
                 ]).map((s, i) => (
                   <div key={s.label} className={`ud-stat${i > 0 ? ' ud-stat--sep' : ''}`}>
-                    <span className="ud-stat-num">{s.num}</span>
+                    <span className="ud-stat-num">{statsLoading ? '...' : s.num}</span>
                     <span className="ud-stat-lbl">{s.label}</span>
                   </div>
                 ))}

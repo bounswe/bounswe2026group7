@@ -629,6 +629,54 @@ class FeedInteractionIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    // ── Comment permalink (#489) ──────────────────────────────────────────
+
+    @Test
+    void commentPermalink_happyPath_returnsComment() throws Exception {
+        String tokenA = registerAndLogin("perma_a@test.com");
+        String tokenB = registerAndLogin("perma_b@test.com");
+        long pid = createPost(tokenA, "permalink target", List.of());
+        long commentId = addComment(tokenB, pid, "linkable comment");
+
+        mockMvc.perform(get("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(commentId))
+                .andExpect(jsonPath("$.postId").value(pid))
+                .andExpect(jsonPath("$.body").value("linkable comment"))
+                .andExpect(jsonPath("$.isDeleted").value(false));
+    }
+
+    @Test
+    void commentPermalink_softDeletedComment_returns404() throws Exception {
+        String tokenA = registerAndLogin("perma_del_a@test.com");
+        long pid = createPost(tokenA, "post", List.of());
+        long commentId = addComment(tokenA, pid, "to be deleted");
+
+        mockMvc.perform(delete("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void commentPermalink_parentPostSoftDeleted_returns404() throws Exception {
+        String tokenA = registerAndLogin("perma_parent_a@test.com");
+        long pid = createPost(tokenA, "orphan parent", List.of());
+        long commentId = addComment(tokenA, pid, "comment on soon-deleted post");
+
+        mockMvc.perform(delete("/api/feed/posts/" + pid)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/feed/comments/" + commentId)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNotFound());
+    }
+
     // ── Auth gate ──────────────────────────────────────────────────────────
 
     @Test
@@ -639,6 +687,7 @@ class FeedInteractionIntegrationTest {
         mockMvc.perform(post("/api/feed/posts/1/comments")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/me/bookmarks")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/posts/1/interactions")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/feed/comments/1")).andExpect(status().isForbidden());
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -679,6 +728,19 @@ class FeedInteractionIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asLong();
+    }
+
+    private long addComment(String token, long postId, String body) throws Exception {
+        // ObjectMapper-based body construction so future tests can pass
+        // bodies containing quotes or backslashes without breaking the
+        // JSON literal.
+        MvcResult res = mockMvc.perform(post("/api/feed/posts/" + postId + "/comments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("body", body))))
                 .andExpect(status().isCreated())
                 .andReturn();
         return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asLong();

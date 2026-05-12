@@ -34,6 +34,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -421,6 +422,36 @@ class FeedReadIntegrationTest {
         mockMvc.perform(get("/api/feed/following")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/search")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/feed/users/1/posts")).andExpect(status().isForbidden());
+    }
+
+    // ── X-Total-Count header (#489) ────────────────────────────────────────
+
+    @Test
+    void xTotalCountHeader_presentOnEachPagedFeedEndpoint() throws Exception {
+        String token = registerAndLogin("xtotal@test.com", true);
+        String tokenOther = registerAndLogin("xtotal_other@test.com", true);
+        Long otherId = userRepository.findByEmail("xtotal_other@test.com").orElseThrow().getId();
+
+        // Create one followed-author post and one own post so each paged
+        // endpoint has at least one row to count.
+        mockMvc.perform(post("/api/users/" + otherId + "/follow")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isCreated());
+        createPost(tokenOther, "trackable content", List.of("xt"));
+        createPost(token, "own content", List.of());
+
+        String[] urls = new String[] {
+                "/api/feed/for-you",
+                "/api/feed/following",
+                "/api/feed/search?q=trackable",
+                "/api/feed/users/" + otherId + "/posts",
+                "/api/feed/me/bookmarks"
+        };
+        for (String url : urls) {
+            mockMvc.perform(get(url).header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk())
+                    .andExpect(header().exists("X-Total-Count"));
+        }
     }
 
     // ── Page-size clamp ─────────────────────────────────────────────────────

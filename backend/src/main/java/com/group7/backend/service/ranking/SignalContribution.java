@@ -3,19 +3,25 @@ package com.group7.backend.service.ranking;
 import java.util.List;
 
 /**
- * Result of a single {@link MentorScoringSignal#compute} call. The
- * {@code normalizedScore} is in {@code [0, 1]} and is multiplied by the
- * signal's {@code weight} by {@link AdvancedMentorRanker} during
- * aggregation; the {@code factors} list contains zero or more
- * machine-readable factor strings appended to the response for spec
- * 1.1.2.5 ("explanation for each recommendation").
+ * Per-signal output from a {@link FollowScoringSignal#compute}.
+ *
+ * <p>{@code normalizedScore} is expected to lie in {@code [0,1]}; the
+ * aggregator ({@code AdvancedFollowRanker}) clamps defensively so a
+ * malformed signal cannot blow up the final score. {@code factors} is a
+ * short, human-readable list of strings that flow through to the API
+ * response so the UI can render "why are you seeing this?" cards.
+ *
+ * <p>Convention: factor strings use the signal's {@code code()} as the
+ * prefix (kebab-case), e.g. {@code "shared-interest:Java"},
+ * {@code "network-proximity"}, {@code "active-this-week"}.
  */
 public record SignalContribution(double normalizedScore, List<String> factors) {
 
+    /** Zero-contribution placeholder — useful when a signal has nothing to add. */
     public static final SignalContribution NONE = new SignalContribution(0.0, List.of());
 
-    /** Defensive copy of {@code factors} so callers can pass a mutable list. */
-    public SignalContribution {
-        factors = (factors == null) ? List.of() : List.copyOf(factors);
+    /** Convenience: build a contribution from a score and a varargs of factors. */
+    public static SignalContribution of(double score, String... factors) {
+        return new SignalContribution(score, List.of(factors));
     }
 }

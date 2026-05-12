@@ -157,6 +157,47 @@ export async function getUserById(id) {
   return handleResponse(res)
 }
 
+// ── Follow graph (#343) ─────────────────────────────────────────────────
+
+export async function followUser(id) {
+  const res = await fetch(`${BASE_URL}/users/${id}/follow`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function unfollowUser(id) {
+  const res = await fetch(`${BASE_URL}/users/${id}/follow`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getFollowers(id, page = 0, size = 20) {
+  const res = await fetch(`${BASE_URL}/users/${id}/followers?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getFollowing(id, page = 0, size = 20) {
+  const res = await fetch(`${BASE_URL}/users/${id}/following?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+// ── Follow recommendations (#344) ───────────────────────────────────────
+
+export async function getFollowRecommendations(page = 0, size = 12) {
+  const res = await fetch(`${BASE_URL}/users/me/follow-recommendations?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 export async function getNotifications(unreadOnly = false) {
   const res = await fetch(`${BASE_URL}/notifications?unreadOnly=${unreadOnly}`, {
     headers: authHeaders(),
@@ -253,6 +294,51 @@ export async function endMentorship(id, reason) {
   const body = reason ? { reason } : {}
   const res = await fetch(`${BASE_URL}/mentorships/${id}/end`, {
     method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse(res)
+}
+
+// Mentor-only extend (#276 / 1.1.1.2.13). additionalMonths must be 1, 3, or 6
+// per backend ExtendMentorshipRequest validator. Returns the updated mentorship.
+export async function extendMentorship(id, additionalMonths) {
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/extend`, {
+    method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ additionalMonths }),
+  })
+  return handleResponse(res)
+}
+
+// User notification preferences (#289 / 1.1.5.8). Backend lazily creates the
+// row with all toggles enabled on first GET. PATCH is partial — omitted
+// fields keep their current value, so the client only sends the toggle
+// being flipped.
+export async function getNotificationPreferences() {
+  const res = await fetch(`${BASE_URL}/users/me/notification-preferences`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function updateNotificationPreferences(patch) {
+  const res = await fetch(`${BASE_URL}/users/me/notification-preferences`, {
+    method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify(patch),
+  })
+  return handleResponse(res)
+}
+
+// Mentee-only rating (#278 / 1.1.1.1.11). Backend rejects with 409 if the
+// mentorship is still ACTIVE or already rated; 403 if a mentor calls it.
+// Score must be 1..5; comment is optional and capped at 1000 chars.
+export async function rateMentor(id, score, comment) {
+  const body = { score }
+  if (comment) body.comment = comment
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/rating`, {
+    method: 'POST',
     headers: authJsonHeaders(),
     body: JSON.stringify(body),
   })
@@ -612,11 +698,13 @@ export async function markMentorPairMessagesRead(otherMentorId) {
 // ── Social feed ───────────────────────────────────────────────────────────
 // Backend: FeedPostController + FeedReadController (+ FeedInteractionController in #340)
 
-export async function createFeedPost({ body, hashtags = [] }) {
+export async function createFeedPost({ body, hashtags = [], attachmentIds = [] }) {
+  const payload = { body, hashtags }
+  if (attachmentIds.length > 0) payload.attachmentIds = attachmentIds
   const res = await fetch(`${BASE_URL}/feed/posts`, {
     method: 'POST',
     headers: authJsonHeaders(),
-    body: JSON.stringify({ body, hashtags }),
+    body: JSON.stringify(payload),
   })
   return handleResponse(res)
 }
@@ -628,10 +716,13 @@ export async function getFeedPostById(id) {
   return handleResponse(res)
 }
 
-export async function updateFeedPost(id, { body, hashtags }) {
+export async function updateFeedPost(id, { body, hashtags, attachmentIds }) {
   const payload = {}
   if (body !== undefined) payload.body = body
   if (hashtags !== undefined) payload.hashtags = hashtags
+  // attachmentIds: omit to leave attachments untouched; pass [] to clear them;
+  // pass an array to replace the post's attachment list (backend semantics).
+  if (attachmentIds !== undefined) payload.attachmentIds = attachmentIds
   const res = await fetch(`${BASE_URL}/feed/posts/${id}`, {
     method: 'PATCH',
     headers: authJsonHeaders(),
@@ -683,6 +774,30 @@ export async function searchFeed({ q, hashtag, page = 0, size = 20 }) {
 export async function getPostInteractions(postId) {
   const res = await fetch(`${BASE_URL}/feed/posts/${postId}/interactions`, {
     headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function toggleLikeOnPost(postId) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/like`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function getPostComments(postId, page = 0, size = 20) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/comments?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function addCommentToPost(postId, body) {
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/comments`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ body }),
   })
   return handleResponse(res)
 }
