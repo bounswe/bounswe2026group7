@@ -56,27 +56,65 @@ import { TasksPage } from '../pages/TasksPage.js';
     // the POST. The page subsequently sits on /login indefinitely.                                                                                                                     
     await page.waitForLoadState('networkidle');                                                                                                                                         
                                                                                                                                                                                         
-    // Step 1. Wait for the form to be fully interactive before clicking.                                                                                                               
-    // The login page uses a framer-motion entrance animation; during the ~250ms                                                                                                        
-    // it runs, the submit button receives clicks but the underlying form's                                                                                                             
-    // submit handler can be racy. Waiting for the button's `enabled` state                                                                                                             
-    // (which the React component clears once mount + initial render settle)           
-    // gates the click on a real "ready to submit" signal rather than guessing.                                                                                                         
-    const submit = page.getByTestId('login-submit');                                                                                                                                    
-    await expect(submit).toBeEnabled({ timeout: 10_000 });                                                                                                                              
-                                                                                                                                                                                        
-    // Step 2. Atomic submit-and-wait. Register the response listener BEFORE                                                                                                            
-    // dispatching the click so a fast backend can't return the response                                                                                                                
-    // before we attach. Use Promise.all so a missed click (button still                                                                                                                
-    // animating, hydration not done, etc.) surfaces here as a response                                                                                                                 
-    // timeout — not silently 40s later on the navigation assertion.               
-    const [loginResponse] = await Promise.all([                                                                                                                                         
-      page.waitForResponse(                                                        
-        res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',                                                                                              
+    // Step 1. Wait for the form to be fully interactive before clicking.
+    // The login page uses a framer-motion entrance animation; during the ~250ms
+    // it runs, the submit button receives clicks but the underlying form's
+    // submit handler can be racy. Waiting for the button's `enabled` state
+    // (which the React component clears once mount + initial render settle)
+    // gates the click on a real "ready to submit" signal rather than guessing.
+    const submit = page.getByTestId('login-submit');
+    await expect(submit).toBeEnabled({ timeout: 10_000 });
+
+    // Step 1b. Defend against the controlled-input race head-on.
+    // The fill() inside loginPage.signIn() can land in the same frame as
+    // a hydration / strict-mode-double-invoke / framer-motion exit-animation
+    // re-render. The controlled <input value={fields.email} /> then snaps
+    // back to its initial empty string and the next click submits a blank
+    // form — validate() rejects on "missing email/password", no POST fires,
+    // and waitForResponse times out 30s later with no diagnostic context.
+    //
+    // We do the fill ourselves here, then assert the value held, and retype
+    // up to two more times if it didn't. Cheap when the race doesn't hit
+    // (one fill + one fast assertion); recovers cleanly when it does.
+    // Cannot move this into LoginPage.signIn() because the Step 2 Promise.all
+    // below needs signIn() to do JUST the click for the response listener
+    // to register before the POST fires.
+    const emailField = page.getByTestId('login-email');
+    const passwordField = page.getByTestId('login-password');
+    let valuesHeld = false;
+    for (let attempt = 1; attempt <= 3 && !valuesHeld; attempt++) {
+      await emailField.fill(email);
+      await passwordField.fill(password);
+      try {
+        await expect(emailField).toHaveValue(email, { timeout: 1500 });
+        await expect(passwordField).toHaveValue(password, { timeout: 1500 });
+        valuesHeld = true;
+      } catch (err) {
+        if (attempt === 3) {
+          throw new Error(
+            `Login form fields kept getting cleared by re-renders after 3 fill attempts. ` +
+            `Last error: ${err.message}`,
+          );
+        }
+      }
+    }
+
+    // Step 2. Atomic submit-and-wait. Register the response listener BEFORE
+    // dispatching the click so a fast backend can't return the response
+    // before we attach. Use Promise.all so a missed click (button still
+    // animating, hydration not done, etc.) surfaces here as a response
+    // timeout — not silently 40s later on the navigation assertion.
+    //
+    // Click directly (not via loginPage.signIn) because Step 1b already
+    // filled the inputs; calling signIn() would refill them and re-introduce
+    // the race we just defended against.
+    const [loginResponse] = await Promise.all([
+      page.waitForResponse(
+        res => res.url().endsWith('/api/auth/login') && res.request().method() === 'POST',
         { timeout: 30_000 },
-      ),                                                                                                                                                                                
-      loginPage.signIn({ email, password }),                                       
-    ]);                                                                                                                                                                                 
+      ),
+      submit.click(),
+    ]);
                           
     // Step 3. Diagnose backend-rejected logins (401/429/5xx) with the real                                                                                                             
     // status code instead of degrading to a generic "stuck on /login".            
