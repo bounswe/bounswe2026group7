@@ -8,6 +8,10 @@ import { MentorshipProvider } from '../../context/MentorshipContext'
 
 vi.mock('../../services/api')
 vi.mock('../../context/AuthContext')
+// Note: MentorshipDetailPage no longer imports from mentorshipMocks (#506
+// replaced getNextUpcomingMeeting with the real listMentorshipMeetings).
+// The mock below is harmless dead code now but kept for forward-compat in
+// case something else in the page tree imports from mentorshipMocks later.
 vi.mock('../../services/mentorshipMocks', () => ({
   getNextUpcomingMeeting: vi.fn().mockResolvedValue(null)
 }))
@@ -22,6 +26,12 @@ describe('MentorshipDetailPage - Shared Goal Feature', () => {
     api.getNotifications.mockResolvedValue([])
     api.listMilestones.mockResolvedValue([])
     api.getUserById.mockResolvedValue({ id: '2', firstName: 'Jane', lastName: 'Doe' })
+    // #506: page now derives the upcoming-meeting card from the real
+    // meetings list. Auto-mocked api functions return undefined by default;
+    // explicitly resolve to an empty array so the page's Promise.all and
+    // subsequent deriveNextUpcomingMeeting() resolve cleanly in tests that
+    // don't care about meeting data.
+    api.listMentorshipMeetings.mockResolvedValue([])
   })
 
   const renderComponent = async (mentorshipData) => {
