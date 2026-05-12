@@ -3389,6 +3389,72 @@
   opacity: 0.75;
 }
 
+/* Admin messaging (#410). */
+.admin-subnav {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.admin-inbox-list,
+.admin-broadcast-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.admin-inbox-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 110px;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+  align-items: center;
+}
+.admin-inbox-peer { font-weight: 600; color: var(--text); }
+.admin-inbox-preview {
+  color: var(--text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.admin-inbox-time { color: var(--text-muted); font-size: 12px; text-align: right; }
+
+.admin-broadcast-row {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+.admin-broadcast-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.admin-broadcast-time { color: var(--text-muted); font-size: 12px; }
+.admin-broadcast-body { color: var(--text); font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+
+.md-conv-badge--admin {
+  background: #ede9fe !important;
+  color: #6d28d9 !important;
+}
+
+.md-readonly-notice {
+  margin: 16px 0;
+  padding: 10px 14px;
+  background: #f3f4f6;
+  border-left: 3px solid var(--text-muted);
+  color: var(--text-muted);
+  font-size: 13px;
+  border-radius: 6px;
+}
+
 /* Admin console (#279). */
 .admin-table {
   width: 100%;
