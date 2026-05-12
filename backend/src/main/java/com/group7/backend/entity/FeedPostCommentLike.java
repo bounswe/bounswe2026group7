@@ -22,7 +22,7 @@ import java.time.OffsetDateTime;
  * <p>Thin entity by design: no {@code @ManyToOne} to
  * {@link FeedPostComment} or {@code User}. Like-counts are derived via
  * {@code COUNT(*)} on {@code feed_post_comment_likes WHERE comment_id = ?};
- * cascade-on-delete is handled by the FK at the DB layer (V49).
+ * cascade-on-delete is handled by the FK at the DB layer (V51).
  */
 @Entity
 @Table(name = "feed_post_comment_likes")
