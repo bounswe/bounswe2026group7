@@ -18,6 +18,12 @@ describe('AdminConsolePage', () => {
     api.getActiveMentorships.mockResolvedValue([])
     api.getReceivedMentorshipRequests.mockResolvedValue({ content: [] })
     api.getOwnProfile.mockResolvedValue({})
+    // #279: AdminConsolePage is now a tabbed surface. The Users tab is the
+    // default and fires `listAdminUsers` on mount; auto-mocked it returns
+    // undefined which would crash the page. Resolve with an empty page so
+    // the tests for the Messages tab can navigate cleanly to it.
+    api.listAdminUsers.mockResolvedValue({ content: [], totalPages: 1, totalElements: 0 })
+    api.listAdminReports.mockResolvedValue({ content: [], totalPages: 1, totalElements: 0 })
   })
 
   async function renderConsole() {
@@ -54,6 +60,15 @@ describe('AdminConsolePage', () => {
     api.sendAdminDirectMessage.mockResolvedValue({ id: 42 })
     await renderConsole()
 
+    // #279: tabbed surface. Messages tab is not the default; switch to it
+    // before exercising the composer.
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /messages/i })).toBeInTheDocument()
+    })
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: /messages/i }))
+    })
+
     await waitFor(() => {
       expect(screen.getByTestId('admin-console-send')).toBeInTheDocument()
     })
@@ -74,6 +89,15 @@ describe('AdminConsolePage', () => {
     AuthContext.useAuth.mockReturnValue({ token: 'tok', role: 'ADMIN', userId: '1', isLoading: false })
     api.sendAdminDirectMessage.mockRejectedValue(new Error('boom'))
     await renderConsole()
+
+    // #279: tabbed surface. Messages tab is not the default; switch to it
+    // before exercising the composer.
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /messages/i })).toBeInTheDocument()
+    })
+    await act(async () => {
+      await userEvent.click(screen.getByRole('tab', { name: /messages/i }))
+    })
 
     await waitFor(() => {
       expect(screen.getByTestId('admin-console-send')).toBeInTheDocument()
