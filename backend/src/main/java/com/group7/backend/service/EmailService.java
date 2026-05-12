@@ -42,7 +42,9 @@ public class EmailService {
     }
 
     public void sendVerificationEmail(User user, String token) {
-        String verifyLink = baseUrl + "/api/auth/verify-email?token=" + token;
+        // Route through the frontend SPA route (VerifyEmailPage) instead of
+        // the raw backend JSON endpoint, so recipients land on a real page.
+        String verifyLink = frontendUrl + "/verify-email?token=" + token;
         if (!enabled) {
             // Dev/manual-smoke escape hatch: log the link instead of calling
             // Resend, so a fresh user can verify by curl-ing the link from
