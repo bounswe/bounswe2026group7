@@ -163,9 +163,14 @@ public class MatchingService {
         return mentee;
     }
 
-    @Transactional(readOnly = true)
     public List<MentorMatchResponse> getTopMentorsList(Long menteeId, String keyword) {
-        return rankMentorsForId(menteeId, keyword, null);
+        record Loaded(List<MentorMatchResponse> mentors, MenteeSnapshot snapshot) {}
+        Loaded loaded = readOnlyTx.execute(status -> {
+            Mentee mentee = loadEligibleMentee(menteeId);
+            return new Loaded(rankMentorsFor(mentee, keyword, null), MenteeSnapshot.of(mentee));
+        });
+        explanationService.attach(loaded.mentors(), loaded.snapshot().toDetachedMentee());
+        return loaded.mentors();
     }
 
     @Transactional(readOnly = true)
