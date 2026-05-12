@@ -35,6 +35,10 @@ function mapResponseToForm(data) {
     // #448: chip pickers manage labels + URIs together. Persist parallel
     // arrays into a single [{label, uri}] form value per concept.
     interests: zipLabelsAndUris(data.interests, data.interestUris),
+    // #519 / backend #528: affiliation is on both roles (mentor since V1,
+    // mentee since V52). Persist on the shared base so a mentee save round-
+    // trips the value instead of wiping it back to null.
+    affiliation: data.affiliation || '',
     // #461: shared location fields, available on both roles
     city: data.city || '',
     latitude: data.latitude ?? null,
@@ -47,7 +51,6 @@ function mapResponseToForm(data) {
       field: data.field || '',
       fieldUri: data.fieldUri || '',
       expertise: data.expertise || '',
-      affiliation: data.affiliation || '',
       maxMenteeCapacity: data.maxMenteeCapacity != null ? String(data.maxMenteeCapacity) : '',
       currentMenteeCount: data.currentMenteeCount ?? 0,
       preferredMenteeMajor: data.preferredMenteeMajor || '',
@@ -211,12 +214,14 @@ export default function ProfilePage() {
         city: form.city || null,
         latitude: form.latitude ?? null,
         longitude: form.longitude ?? null,
+        // Shared between both roles (backend MentorProfileRequest and
+        // MenteeProfileRequest both expose it via the shared EditProfileRequest).
+        affiliation: form.affiliation || null,
         ...(isMentor ? {
           bio: form.bio || null,
           field: form.field || null,
           fieldUri: form.fieldUri || null,
           expertise: form.expertise || null,
-          affiliation: form.affiliation || null,
           maxMenteeCapacity: form.maxMenteeCapacity !== '' ? parseInt(form.maxMenteeCapacity) : null,
           preferredMenteeMajor: form.preferredMenteeMajor || null,
           mentoringGoals: form.mentoringGoals || null,
@@ -226,7 +231,6 @@ export default function ProfilePage() {
         } : {
           backgroundInfo: form.background || null,
           goals: form.goals || null,
-          affiliation: form.affiliation || null,
           major: form.major || null,
           majorUri: form.majorUri || null,
           careerInterest: form.careerInterest || null,
