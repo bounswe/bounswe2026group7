@@ -70,6 +70,10 @@ public class MenteeProfileRequest extends EditProfileRequest {
     @Schema(description = "Background information", example = "2nd year student interested in AI")
     private String backgroundInfo;
 
+    @Size(max = 200, message = "Affiliation must not exceed 200 characters")
+    @Schema(description = "Affiliation (university/company)", example = "Bogazici University")
+    private String affiliation;
+
     /**
      * Each parallel URI list must align with its label list when supplied.
      * A null URI list means "no URIs for any entry"; otherwise lengths must

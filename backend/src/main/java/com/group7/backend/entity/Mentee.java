@@ -41,6 +41,16 @@ public class Mentee extends User {
 
     private String backgroundInfo;
 
+    /**
+     * University / company the mentee is affiliated with. Symmetric to
+     * {@link Mentor#getAffiliation()} (V1) — mentees may need to surface
+     * where they study or work when looking for a mentor. Added in V51
+     * because the mentees table was created without the column and the
+     * API could not round-trip the value through
+     * {@code MenteeProfileRequest} / {@code MenteeResponse}.
+     */
+    private String affiliation;
+
     @Column(nullable = false)
     private Integer cancelCount = 0;
 
