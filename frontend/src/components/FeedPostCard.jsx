@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MoreHorizontal, Pencil, Trash2, History, Share2, Repeat2, Bookmark, Heart, MessageCircle } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, History, Flag, Share2, Repeat2, Bookmark, Heart, MessageCircle } from 'lucide-react'
 import Avatar from './Avatar'
 import FeedAttachmentGrid from './FeedAttachmentGrid'
 import EditHistoryModal from './EditHistoryModal'
 import RepostModal from './RepostModal'
+import ReportModal from './ReportModal'
+import { showTransientToast } from '../utils/toast'
 import { linkify } from '../utils/linkify'
 import {
   toggleBookmarkOnPost,
@@ -62,6 +64,7 @@ export default function FeedPostCard({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [repostOpen, setRepostOpen] = useState(false)
   const [repostBusy, setRepostBusy] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const menuRef = useRef(null)
 
   // Local state mirrors viewer-relative interaction toggles + counts; backend
@@ -139,7 +142,9 @@ export default function FeedPostCard({
   if (!post) return null
 
   const initials = (post.authorFirstName?.[0] || '?').toUpperCase()
-  const showOverflow = isAuthor && (onEdit || onDelete || post?.isEdited)
+  // #358: every viewer can report. Authors additionally get edit/delete/history.
+  const canReport = viewerUserId != null && !isAuthor
+  const showOverflow = canReport || (isAuthor && (onEdit || onDelete || post?.isEdited))
 
   function openDetail() {
     if (clickable) navigate(`/feed/${post.id}`)
@@ -427,6 +432,16 @@ export default function FeedPostCard({
                     <Trash2 size={14} strokeWidth={1.75} /> Delete
                   </button>
                 )}
+                {canReport && (
+                  <button
+                    type="button"
+                    className="feed-card-menu-item feed-card-menu-item--danger"
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpen(false); setReportOpen(true) }}
+                    role="menuitem"
+                  >
+                    <Flag size={14} strokeWidth={1.75} /> Report
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -608,18 +623,17 @@ export default function FeedPostCard({
         onConfirm={handleRepostConfirm}
         loading={repostBusy}
       />
+
+      <ReportModal
+        open={reportOpen}
+        targetType="POST"
+        targetId={post.id}
+        targetLabel="post"
+        onClose={() => setReportOpen(false)}
+        onSubmitted={() => showTransientToast('Report submitted. Admins will review it.')}
+      />
     </article>
   )
-}
-
-// Lightweight toast helper for share-link copy feedback. Avoids pulling in
-// a toast library for this single use; if more callers appear, extract.
-function showTransientToast(text) {
-  const el = document.createElement('div')
-  el.className = 'toast toast-success'
-  el.textContent = text
-  document.body.appendChild(el)
-  setTimeout(() => el.remove(), 2500)
 }
 
 function renderBody(body) {

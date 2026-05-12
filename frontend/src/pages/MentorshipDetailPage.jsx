@@ -5,6 +5,8 @@ import Avatar from '../components/Avatar'
 import MentorshipMilestones from '../components/MentorshipMilestones'
 import MentorshipProgressTimeline from '../components/MentorshipProgressTimeline'
 import MentorMenteesProgress from '../components/MentorMenteesProgress'
+import ReportModal from '../components/ReportModal'
+import { showTransientToast } from '../utils/toast'
 import {
   getMentorshipById,
   getUserById,
@@ -572,6 +574,7 @@ export default function MentorshipDetailPage() {
   const [submittedRating, setSubmittedRating] = useState(null)
 
   const [cancelOpen, setCancelOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelError, setCancelError] = useState(null)
 
@@ -1076,6 +1079,16 @@ export default function MentorshipDetailPage() {
             Cancel Mentorship
           </button>
         )}
+        {/* #411: either participant can report the mentorship — distinct from
+            reporting the other user (#128) or a feed post (#358). Visible on
+            both ACTIVE and ENDED mentorships per the issue. */}
+        <button
+          className="md-action-btn"
+          onClick={() => setReportOpen(true)}
+          title="Report this mentorship to platform admins"
+        >
+          Report Mentorship
+        </button>
       </div>
 
       {cancelError && (
@@ -1146,6 +1159,15 @@ export default function MentorshipDetailPage() {
         onSubmit={handleSaveGoal}
         loading={goalSaving}
         error={goalError}
+      />
+
+      <ReportModal
+        open={reportOpen}
+        targetType="MENTORSHIP"
+        targetId={mentorship?.id}
+        targetLabel="this mentorship"
+        onClose={() => setReportOpen(false)}
+        onSubmitted={() => showTransientToast('Report submitted. Admins will review it.')}
       />
     </MainLayout>
   )
