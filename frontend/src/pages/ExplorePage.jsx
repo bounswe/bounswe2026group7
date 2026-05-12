@@ -292,8 +292,15 @@ export default function ExplorePage() {
       setMatches(list)
       setAiState('done')
       setShowMatches(true)
-      setTimeout(() => matchSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
-    } catch {
+      // #286: Safer scroll into view
+      if (matchSectionRef.current) {
+        const ref = matchSectionRef.current
+        setTimeout(() => {
+          ref?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+      }
+    } catch (err) {
+      console.error('AI Match Error:', err)
       setAiState('idle')
     }
   }

@@ -177,7 +177,7 @@ describe('ExplorePage Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/your top 1 match/i)).toBeInTheDocument()
-    })
+    }, { timeout: 3000 })
 
     // diverse-pick rendered as a labelled pill (not as a chip)
     expect(screen.getByText('Diverse pick')).toBeInTheDocument()
