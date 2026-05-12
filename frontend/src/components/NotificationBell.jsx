@@ -39,6 +39,37 @@ function TypeIcon({ type }) {
           <line x1="4" y1="22" x2="4" y2="15" />
         </svg>
       )
+    case 'FEED_LIKE':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+        </svg>
+      )
+    case 'FEED_COMMENT':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      )
+    case 'FEED_SHARE':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+      )
+    case 'NEW_FOLLOWER':
+      return (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="8.5" cy="7" r="4" />
+          <line x1="20" y1="8" x2="20" y2="14" />
+          <line x1="23" y1="11" x2="17" y2="11" />
+        </svg>
+      )
     default:
       // Default bell icon for unknown types
       return (
@@ -56,6 +87,10 @@ function typeColorClass(type) {
     case 'REQUEST_REJECTED': return 'notif-icon--red'
     case 'TASK_DEADLINE_REMINDER': return 'notif-icon--orange'
     case 'MILESTONE_REMINDER': return 'notif-icon--purple'
+    case 'FEED_LIKE': return 'notif-icon--red'
+    case 'FEED_COMMENT': return 'notif-icon--blue'
+    case 'FEED_SHARE': return 'notif-icon--green'
+    case 'NEW_FOLLOWER': return 'notif-icon--purple'
     default: return 'notif-icon--blue'
   }
 }
@@ -201,6 +236,16 @@ export default function NotificationBell() {
                   if (!n.read) handleMarkRead(n.id)
                   setOpen(false)
                   const rid = n.relatedId || n.entityId
+                  switch (n.type) {
+                    case 'FEED_LIKE':
+                    case 'FEED_COMMENT':
+                    case 'FEED_SHARE':
+                      navigate(rid ? `/feed/${rid}` : '/feed')
+                      return
+                    case 'NEW_FOLLOWER':
+                      navigate(rid ? `/users/${rid}` : '/explore')
+                      return
+                  }
                   if (!rid) return
                   switch (n.type) {
                     case 'REQUEST_SUBMITTED':
@@ -215,7 +260,6 @@ export default function NotificationBell() {
                       navigate(`/mentorships/${rid}#milestones`)
                       break
                     default:
-                      // Fallback: No navigation for unknown types unless we want a default
                       break
                   }
                 }}
