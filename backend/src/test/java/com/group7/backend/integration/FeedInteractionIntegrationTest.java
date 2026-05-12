@@ -653,4 +653,74 @@ class FeedInteractionIntegrationTest {
         Thread.sleep(200);
         assertThat(notificationsFor(authorId, NotificationType.FEED_SHARE)).hasSize(1);
     }
+
+    // ── Viewer-relative flags on FeedPostResponse / FeedPostListItem ───────
+
+    @Test
+    void getPostById_carriesViewerHasLikedAndBookmarked_afterToggles() throws Exception {
+        String authorToken = registerAndLogin("vflag_author@test.com");
+        String viewerToken = registerAndLogin("vflag_viewer@test.com");
+        long pid = createPost(authorToken, "post for viewer flags", List.of());
+
+        // Before either toggle — both flags are false.
+        mockMvc.perform(get("/api/feed/posts/" + pid)
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.viewerHasLiked").value(false))
+                .andExpect(jsonPath("$.viewerHasBookmarked").value(false));
+
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/like")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + pid + "/bookmark")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/feed/posts/" + pid)
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.viewerHasLiked").value(true))
+                .andExpect(jsonPath("$.viewerHasBookmarked").value(true));
+
+        // Author has not toggled — same post must report both as false for them.
+        mockMvc.perform(get("/api/feed/posts/" + pid)
+                        .header("Authorization", "Bearer " + authorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.viewerHasLiked").value(false))
+                .andExpect(jsonPath("$.viewerHasBookmarked").value(false));
+    }
+
+    @Test
+    void bookmarksList_listItemsCarryViewerFlags_forViewer() throws Exception {
+        String authorToken = registerAndLogin("vflag_list_author@test.com");
+        String viewerToken = registerAndLogin("vflag_list_viewer@test.com");
+        long likedAndBookmarked = createPost(authorToken, "liked + bookmarked", List.of());
+        long bookmarkedOnly = createPost(authorToken, "bookmarked only", List.of());
+
+        mockMvc.perform(post("/api/feed/posts/" + likedAndBookmarked + "/like")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + likedAndBookmarked + "/bookmark")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/feed/posts/" + bookmarkedOnly + "/bookmark")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk());
+
+        // /feed/me/bookmarks returns Page<FeedPostListItem>; both rows must
+        // carry viewerHasBookmarked=true (they're on the bookmark list) and
+        // viewerHasLiked must mirror the per-post like state.
+        mockMvc.perform(get("/api/feed/me/bookmarks")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[?(@.id == " + likedAndBookmarked + ")].viewerHasLiked")
+                        .value(true))
+                .andExpect(jsonPath("$.content[?(@.id == " + likedAndBookmarked + ")].viewerHasBookmarked")
+                        .value(true))
+                .andExpect(jsonPath("$.content[?(@.id == " + bookmarkedOnly + ")].viewerHasLiked")
+                        .value(false))
+                .andExpect(jsonPath("$.content[?(@.id == " + bookmarkedOnly + ")].viewerHasBookmarked")
+                        .value(true));
+    }
 }

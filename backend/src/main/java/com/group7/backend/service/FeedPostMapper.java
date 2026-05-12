@@ -127,9 +127,14 @@ public class FeedPostMapper {
         Set<Long> authorIds = posts.stream()
                 .map(FeedPost::getAuthorId)
                 .collect(Collectors.toSet());
+        Set<Long> postIds = posts.stream()
+                .map(FeedPost::getId)
+                .collect(Collectors.toSet());
         Map<Long, String> names = resolveAuthorNames(authorIds);
+        Set<Long> liked = resolveLikedPostIds(viewerId, postIds);
+        Set<Long> bookmarked = resolveBookmarkedPostIds(viewerId, postIds);
         return posts.stream()
-                .map(p -> mapListItem(p, names, counts, factors))
+                .map(p -> mapListItem(p, names, counts, factors, liked, bookmarked))
                 .toList();
     }
 
@@ -206,7 +211,9 @@ public class FeedPostMapper {
     private FeedPostListItem mapListItem(FeedPost post,
                                          Map<Long, String> names,
                                          Map<Long, FeedInteractionService.PostCounts> counts,
-                                         Map<Long, List<String>> factors) {
+                                         Map<Long, List<String>> factors,
+                                         Set<Long> likedPostIds,
+                                         Set<Long> bookmarkedPostIds) {
         List<String> tags = post.getHashtags().stream()
                 .map(FeedPostHashtag::getId)
                 .map(id -> id.getTag())
@@ -224,7 +231,9 @@ public class FeedPostMapper {
                 c.likeCount(),
                 c.commentCount(),
                 factors.getOrDefault(post.getId(), List.of()),
-                toSummaries(post.getAttachments())
+                toSummaries(post.getAttachments()),
+                likedPostIds.contains(post.getId()),
+                bookmarkedPostIds.contains(post.getId())
         );
     }
 

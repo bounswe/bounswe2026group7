@@ -54,6 +54,16 @@ public record FeedPostListItem(
 
         @Schema(description = "Image attachments on the post, in author-specified order. Empty when "
                 + "the post has no media (#485).")
-        List<AttachmentSummary> attachments
+        List<AttachmentSummary> attachments,
+
+        @Schema(description = "True if the authenticated viewer has liked this post. Always "
+                + "false for anonymous reads. Lets the UI render the heart-icon toggle state "
+                + "without a follow-up GET /interactions call per item.")
+        boolean viewerHasLiked,
+
+        @Schema(description = "True if the authenticated viewer has bookmarked this post. "
+                + "Always false for anonymous reads. Lets the UI render the bookmark-icon "
+                + "toggle state without a follow-up GET /interactions call per item.")
+        boolean viewerHasBookmarked
 ) {
 }
