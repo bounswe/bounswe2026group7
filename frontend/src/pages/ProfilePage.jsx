@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
+import LocationPicker from '../components/LocationPicker'
 import NotificationPreferences from '../components/NotificationPreferences'
 import usePresence from '../hooks/usePresence'
 import { useAuth } from '../context/AuthContext'
@@ -14,6 +15,9 @@ function mapResponseToForm(data) {
     name: [data.firstName, data.lastName].filter(Boolean).join(' '),
     profilePhoto: data.profilePhoto || '',
     interests: (data.interests || []).join(', '),
+    city: data.city || '',
+    latitude: data.latitude,
+    longitude: data.longitude,
   }
   if (isMentor) {
     return {
@@ -125,6 +129,8 @@ export default function ProfilePage() {
         e.maxMenteeCapacity = `Max mentee capacity cannot be below current mentee count (${form.currentMenteeCount}).`
       }
     }
+    if (form.latitude != null && (form.latitude < -90 || form.latitude > 90)) e.location = 'Invalid latitude.'
+    if (form.longitude != null && (form.longitude < -180 || form.longitude > 180)) e.location = 'Invalid longitude.'
     return e
   }
 
@@ -151,6 +157,9 @@ export default function ProfilePage() {
         firstName,
         lastName,
         interests: toList(form.interests),
+        city: form.city || null,
+        latitude: form.latitude ?? null,
+        longitude: form.longitude ?? null,
         ...(isMentor ? {
           bio: form.bio || null,
           field: form.field || null,
@@ -311,6 +320,7 @@ export default function ProfilePage() {
                 <ViewField label="Mentoring Goals" value={form.mentoringGoals} />
                 <ViewField label="Preferred Mentee Major" value={form.preferredMenteeMajor} />
                 <ViewField label="Preferred Mentee Skills" value={form.preferredMenteeSkills} chips />
+                <ViewField label="Location" value={form.city} />
                 <ViewField label="Max Mentees" value={form.maxMenteeCapacity} />
                 <ViewField label="Mentorship Duration" value={form.mentorshipDuration ? `${form.mentorshipDuration} months` : ''} />
               </>
@@ -321,6 +331,7 @@ export default function ProfilePage() {
                 <ViewField label="Skills" value={form.skills} visible={form.profileVisible} chips />
                 <ViewField label="Interests" value={form.interests} visible={form.profileVisible} chips />
                 <ViewField label="Major" value={form.major} visible={form.profileVisible} />
+                <ViewField label="Location" value={form.city} visible={form.profileVisible} />
                 <ViewField label="Career Interest" value={form.careerInterest} visible={form.profileVisible} />
                 <ViewField label="Meeting Preference" value={form.meetingFreqPref} visible={form.profileVisible} />
               </>
@@ -357,6 +368,17 @@ export default function ProfilePage() {
                 data-testid="profile-interests"
               />
             </div>
+            
+            <LocationPicker
+              city={form.city}
+              latitude={form.latitude}
+              longitude={form.longitude}
+              onChange={({ city, latitude, longitude }) => {
+                setForm(prev => ({ ...prev, city, latitude, longitude }))
+                setErrors(prev => ({ ...prev, location: '' }))
+              }}
+              error={errors.location}
+            />
 
             {isMentor ? (
               <>

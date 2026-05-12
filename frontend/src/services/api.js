@@ -136,14 +136,14 @@ export async function deleteProfilePhoto() {
 }
 
 export async function updateOwnProfile(data, role) {
-  // Backend exposes role-specific PATCH endpoints (`/users/me/mentor` and
-  // `/users/me/mentee`); the generic `/users/me` PATCH does not exist.
+  // Backend exposes role-specific PUT endpoints (`/users/me/mentor` and
+  // `/users/me/mentee`); the generic `/users/me` PUT does not exist.
   // Pick the path from the explicit role argument, falling back to the
   // role stored on login.
   const effectiveRole = role || localStorage.getItem('auth_role')
   const path = effectiveRole === 'MENTOR' ? '/users/me/mentor' : '/users/me/mentee'
   const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'PATCH',
+    method: 'PUT',
     headers: authJsonHeaders(),
     body: JSON.stringify(data),
   })
