@@ -814,6 +814,39 @@ export async function getFeedUnreadCount() {
   return handleResponse(res)
 }
 
+// #448 / backend #320: taxonomy autocomplete endpoints. Each returns a
+// list of { label, identifierUri } pairs from a canonical source — ESCO
+// for skills, ISCED-F for fields of study, Wikidata for hobbies.
+//
+// The `lang` parameter is a BCP-47 short tag (e.g. "en", "tr") and falls
+// back to the request's Accept-Language server-side when omitted.
+export async function searchTaxonomySkills(q, { lang, limit = 10 } = {}) {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  if (lang) params.set('lang', lang)
+  const res = await fetch(`${BASE_URL}/taxonomies/skills?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function searchTaxonomyFields(q, { lang, limit = 10 } = {}) {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  if (lang) params.set('lang', lang)
+  const res = await fetch(`${BASE_URL}/taxonomies/fields?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function searchTaxonomyHobbies(q, { lang, limit = 10 } = {}) {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  if (lang) params.set('lang', lang)
+  const res = await fetch(`${BASE_URL}/taxonomies/hobbies?${params}`, {
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 // #542 / backend #484: repost or quote-share a feed post. body is optional —
 // null/blank produces a bare repost, non-blank (up to 2000 chars) attaches
 // commentary. Backend dedupes repeated payloads within ~60s. Returns the
