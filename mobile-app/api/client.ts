@@ -1,9 +1,19 @@
-import axios from 'axios';
+import axios, { InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    silent?: boolean;
+  }
+}
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL
+  ? `${process.env.EXPO_PUBLIC_API_URL}/api`
+  : 'http://10.1.195.120:8080/api';
+
 const apiClient = axios.create({
-  baseURL: 'http://192.168.37.177:8080/api',
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -34,7 +44,9 @@ apiClient.interceptors.response.use(
     const url = error?.config?.url ?? '';
     const method = error?.config?.method?.toUpperCase();
     const data = error?.response?.data;
-    console.error(`[apiClient] ${method} ${url} → ${status}`, JSON.stringify(data));
+    if (!error?.config?.silent) {
+      console.error(`[apiClient] ${method} ${url} → ${status}`, JSON.stringify(data));
+    }
 
     // Token yoksa ya da süresi dolduysa otomatik çıkış yap
     if (status === 401 && !url.includes('/auth/') && !isRedirectingToLogin) {

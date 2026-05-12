@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { router } from 'expo-router';
 import {
   ActivityIndicator,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -31,7 +32,14 @@ type FeedPostListItem = {
   createdAt: string;
   likeCount: number;
   commentCount: number;
+  shareCount: number;
   attachments: PostAttachment[];
+  sharedById?: number;
+  sharedByFirstName?: string;
+  shareCommentary?: string;
+  sharedAt?: string;
+  viewerHasLiked?: boolean;
+  viewerHasBookmarked?: boolean;
 };
 
 type FeedUnreadCountResponse = {
@@ -54,6 +62,17 @@ type FeedComment = {
   isEdited: boolean;
   isAuthor: boolean;
   isDeleted: boolean;
+  likeCount: number;
+  viewerHasLiked: boolean;
+};
+
+type FollowRecommendation = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  role: string;
+  score: number;
+  factors: string[];
 };
 
 function formatRelativeLabel(value: string) {
@@ -92,6 +111,24 @@ export default function SocialFeedScreen() {
 
   const commentInputRef = useRef<TextInput>(null);
 
+  // Repost
+  const [repostModalPost, setRepostModalPost] = useState<FeedPostListItem | null>(null);
+  const [repostBusy, setRepostBusy] = useState(false);
+  const [repostCommentary, setRepostCommentary] = useState('');
+  const [shareCountState, setShareCountState] = useState<Record<number, number>>({});
+
+  // Bookmark
+  const [bookmarkState, setBookmarkState] = useState<Record<number, boolean>>({});
+  const [bookmarkingId, setBookmarkingId] = useState<number | null>(null);
+
+  // Comment likes
+  const [commentLikeState, setCommentLikeState] = useState<Record<number, { liked: boolean; count: number }>>({});
+
+  // Who to follow
+  const [followRecs, setFollowRecs] = useState<FollowRecommendation[]>([]);
+  const [followingIds, setFollowingIds] = useState<Set<number>>(new Set());
+  const [followingInFlight, setFollowingInFlight] = useState<Set<number>>(new Set());
+
   const loadUnreadCount = useCallback(async () => {
     const res = await apiClient.get('/feed/unread-count');
     setUnreadCount(res.data);
@@ -105,6 +142,33 @@ export default function SocialFeedScreen() {
       // silently ignore
     }
   }, []);
+
+  const loadFollowRecs = useCallback(async () => {
+    try {
+      const res = await apiClient.get('/users/me/follow-recommendations?page=0&size=5');
+      setFollowRecs(res.data?.content ?? []);
+    } catch {
+      // silently ignore
+    }
+  }, []);
+
+  const handleFollow = async (userId: number) => {
+    if (followingInFlight.has(userId)) return;
+    setFollowingInFlight((s) => new Set(s).add(userId));
+    try {
+      if (followingIds.has(userId)) {
+        await apiClient.delete(`/users/${userId}/follow`);
+        setFollowingIds((s) => { const n = new Set(s); n.delete(userId); return n; });
+      } else {
+        await apiClient.post(`/users/${userId}/follow`);
+        setFollowingIds((s) => new Set(s).add(userId));
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setFollowingInFlight((s) => { const n = new Set(s); n.delete(userId); return n; });
+    }
+  };
 
   const loadFeeds = useCallback(async () => {
     setErrorMessage('');
@@ -120,12 +184,18 @@ export default function SocialFeedScreen() {
       setFollowingPosts(following);
       setUnreadCount(unreadRes.data);
 
-      // Seed like state from posts
+      // Seed like, bookmark, and share counts from posts
       const seed: Record<number, { liked: boolean; count: number }> = {};
+      const shareSeed: Record<number, number> = {};
+      const bmarkSeed: Record<number, boolean> = {};
       [...forYou, ...following].forEach((p) => {
-        if (!(p.id in seed)) seed[p.id] = { liked: false, count: p.likeCount };
+        if (!(p.id in seed)) seed[p.id] = { liked: p.viewerHasLiked ?? false, count: p.likeCount };
+        if (!(p.id in shareSeed)) shareSeed[p.id] = p.shareCount ?? 0;
+        if (!(p.id in bmarkSeed)) bmarkSeed[p.id] = p.viewerHasBookmarked ?? false;
       });
       setLikeState((prev) => ({ ...seed, ...prev }));
+      setShareCountState((prev) => ({ ...shareSeed, ...prev }));
+      setBookmarkState((prev) => ({ ...bmarkSeed, ...prev }));
     } catch {
       setErrorMessage('Could not load the social feed right now.');
     } finally {
@@ -137,7 +207,8 @@ export default function SocialFeedScreen() {
   useEffect(() => {
     loadFeeds();
     loadTrending();
-  }, [loadFeeds, loadTrending]);
+    loadFollowRecs();
+  }, [loadFeeds, loadTrending, loadFollowRecs]);
 
   const activePosts = useMemo(
     () => (activeTab === 'forYou' ? forYouPosts : followingPosts),
@@ -197,11 +268,26 @@ export default function SocialFeedScreen() {
     setCommentsLoading((s) => ({ ...s, [postId]: true }));
     try {
       const res = await apiClient.get(`/feed/posts/${postId}/comments?page=0&size=20`);
-      setComments((s) => ({ ...s, [postId]: res.data.content ?? res.data ?? [] }));
+      const loaded: FeedComment[] = res.data.content ?? res.data ?? [];
+      setComments((s) => ({ ...s, [postId]: loaded }));
+      const seed: Record<number, { liked: boolean; count: number }> = {};
+      loaded.forEach((c) => { seed[c.id] = { liked: c.viewerHasLiked ?? false, count: c.likeCount ?? 0 }; });
+      setCommentLikeState((s) => ({ ...seed, ...s }));
     } catch {
       setComments((s) => ({ ...s, [postId]: [] }));
     } finally {
       setCommentsLoading((s) => ({ ...s, [postId]: false }));
+    }
+  };
+
+  const toggleCommentLike = async (commentId: number) => {
+    const prev = commentLikeState[commentId] ?? { liked: false, count: 0 };
+    setCommentLikeState((s) => ({ ...s, [commentId]: { liked: !prev.liked, count: prev.liked ? prev.count - 1 : prev.count + 1 } }));
+    try {
+      const res = await apiClient.post(`/feed/comments/${commentId}/like`);
+      setCommentLikeState((s) => ({ ...s, [commentId]: { liked: res.data.viewerHasLiked, count: res.data.likeCount } }));
+    } catch {
+      setCommentLikeState((s) => ({ ...s, [commentId]: prev }));
     }
   };
 
@@ -224,6 +310,43 @@ export default function SocialFeedScreen() {
       // silently ignore
     } finally {
       setSubmittingComment(false);
+    }
+  };
+
+  const toggleBookmark = async (postId: number) => {
+    if (bookmarkingId !== null) return;
+    const prev = bookmarkState[postId] ?? false;
+    setBookmarkState((s) => ({ ...s, [postId]: !prev }));
+    setBookmarkingId(postId);
+    try {
+      await apiClient.post(`/feed/posts/${postId}/bookmark`);
+    } catch {
+      setBookmarkState((s) => ({ ...s, [postId]: prev }));
+    } finally {
+      setBookmarkingId(null);
+    }
+  };
+
+  const openRepost = (post: FeedPostListItem) => {
+    setRepostCommentary('');
+    setRepostModalPost(post);
+  };
+
+  const handleRepost = async () => {
+    if (!repostModalPost || repostBusy) return;
+    setRepostBusy(true);
+    try {
+      const res = await apiClient.post(`/feed/posts/${repostModalPost.id}/reposts`, {
+        body: repostCommentary.trim() || null,
+      });
+      if (res.data?.shareCount != null) {
+        setShareCountState((s) => ({ ...s, [repostModalPost.id]: res.data.shareCount }));
+      }
+      setRepostModalPost(null);
+    } catch {
+      // silently ignore
+    } finally {
+      setRepostBusy(false);
     }
   };
 
@@ -268,6 +391,39 @@ export default function SocialFeedScreen() {
                 </View>
               ))}
             </ScrollView>
+          </View>
+        )}
+
+        {/* Who to Follow */}
+        {followRecs.length > 0 && (
+          <View style={styles.whoToFollowCard}>
+            <Text style={styles.whoToFollowLabel}>WHO TO FOLLOW</Text>
+            {followRecs.map((rec) => {
+              const isFollowing = followingIds.has(rec.id);
+              const inFlight = followingInFlight.has(rec.id);
+              return (
+                <View key={rec.id} style={styles.whoToFollowRow}>
+                  <View style={styles.whoToFollowAvatar}>
+                    <Text style={styles.whoToFollowAvatarText}>
+                      {rec.firstName.substring(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.whoToFollowInfo}>
+                    <Text style={styles.whoToFollowName}>{rec.firstName} {rec.lastName}</Text>
+                    <Text style={styles.whoToFollowRole}>{rec.role === 'MENTOR' ? 'Mentor' : 'Mentee'}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.followBtn, isFollowing && styles.followBtnActive]}
+                    onPress={() => handleFollow(rec.id)}
+                    disabled={inFlight}
+                  >
+                    <Text style={[styles.followBtnText, isFollowing && styles.followBtnTextActive]}>
+                      {inFlight ? '...' : isFollowing ? 'Following' : 'Follow'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -335,8 +491,26 @@ export default function SocialFeedScreen() {
             const postComments = comments[post.id] ?? [];
             const loadingCmts = commentsLoading[post.id] ?? false;
 
+            const shareCount = shareCountState[post.id] ?? (post.shareCount ?? 0);
+            const isRepostSurface = post.sharedById != null && activeTab === 'following';
+
             return (
               <View key={post.id} style={styles.postCard}>
+                {isRepostSurface && (
+                  <View style={styles.repostBanner}>
+                    <Text style={styles.repostBannerText}>
+                      🔁 Reposted by {post.sharedByFirstName || 'someone'}
+                      {post.sharedAt ? ` · ${formatRelativeLabel(post.sharedAt)}` : ''}
+                    </Text>
+                  </View>
+                )}
+
+                {isRepostSurface && !!post.shareCommentary && (
+                  <View style={styles.repostCommentaryBox}>
+                    <Text style={styles.repostCommentaryText}>{post.shareCommentary}</Text>
+                  </View>
+                )}
+
                 <View style={styles.postHeader}>
                   <TouchableOpacity onPress={() => navigateToUserProfile(post.authorId)}>
                     <View style={styles.avatar}>
@@ -394,6 +568,24 @@ export default function SocialFeedScreen() {
                       {post.commentCount}
                     </Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => openRepost(post)}
+                  >
+                    <Text style={styles.actionIcon}>🔁</Text>
+                    <Text style={styles.actionCount}>{shareCount}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.bookmarkBtn, bookmarkState[post.id] && styles.bookmarkBtnActive, { marginLeft: 'auto' }]}
+                    onPress={() => toggleBookmark(post.id)}
+                    disabled={bookmarkingId === post.id}
+                  >
+                    <Text style={[styles.bookmarkBtnText, bookmarkState[post.id] && styles.bookmarkBtnTextActive]}>
+                      {bookmarkState[post.id] ? '★' : '☆'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Comments section */}
@@ -427,24 +619,36 @@ export default function SocialFeedScreen() {
                     ) : postComments.length === 0 ? (
                       <Text style={styles.noComments}>No comments yet.</Text>
                     ) : (
-                      postComments.map((c) => (
-                        <View key={c.id} style={styles.commentItem}>
-                          <View style={styles.commentAvatar}>
-                            <Text style={styles.commentAvatarText}>
-                              {c.authorFirstName ? c.authorFirstName.substring(0, 1).toUpperCase() : '?'}
-                            </Text>
+                      postComments.map((c) => {
+                        const clike = commentLikeState[c.id] ?? { liked: false, count: 0 };
+                        return (
+                          <View key={c.id} style={styles.commentItem}>
+                            <View style={styles.commentAvatar}>
+                              <Text style={styles.commentAvatarText}>
+                                {c.authorFirstName ? c.authorFirstName.substring(0, 1).toUpperCase() : '?'}
+                              </Text>
+                            </View>
+                            <View style={styles.commentBody}>
+                              <Text style={styles.commentAuthor}>
+                                {c.authorFirstName ?? 'Deleted user'}
+                                {c.isEdited ? <Text style={styles.editedTag}> · edited</Text> : null}
+                              </Text>
+                              <Text style={styles.commentText}>
+                                {c.isDeleted ? '[comment removed]' : c.body}
+                              </Text>
+                              {!c.isDeleted && (
+                                <TouchableOpacity
+                                  onPress={() => toggleCommentLike(c.id)}
+                                  style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 4 }}
+                                >
+                                  <Text style={{ fontSize: 13, color: clike.liked ? '#E05C5C' : '#9A8F82' }}>{clike.liked ? '♥' : '♡'}</Text>
+                                  {clike.count > 0 && <Text style={{ fontSize: 11, color: '#9A8F82' }}>{clike.count}</Text>}
+                                </TouchableOpacity>
+                              )}
+                            </View>
                           </View>
-                          <View style={styles.commentBody}>
-                            <Text style={styles.commentAuthor}>
-                              {c.authorFirstName ?? 'Deleted user'}
-                              {c.isEdited ? <Text style={styles.editedTag}> · edited</Text> : null}
-                            </Text>
-                            <Text style={styles.commentText}>
-                              {c.isDeleted ? '[comment removed]' : c.body}
-                            </Text>
-                          </View>
-                        </View>
-                      ))
+                        );
+                      })
                     )}
                   </View>
                 )}
@@ -453,6 +657,66 @@ export default function SocialFeedScreen() {
           })
         )}
       </ScrollView>
+
+      {/* Repost / Quote-share modal */}
+      <Modal
+        visible={repostModalPost !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !repostBusy && setRepostModalPost(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Repost</Text>
+            <Text style={styles.modalSubtitle}>
+              Reshare this post to your followers. Add commentary to quote-share, or leave empty for a bare repost.
+            </Text>
+
+            <Text style={styles.modalLabel}>Your commentary (optional)</Text>
+            <TextInput
+              style={styles.modalTextarea}
+              value={repostCommentary}
+              onChangeText={setRepostCommentary}
+              placeholder="What's your take on this?"
+              placeholderTextColor="#B5ADA3"
+              multiline
+              maxLength={2000}
+              editable={!repostBusy}
+            />
+            <Text style={styles.modalCharCount}>{2000 - repostCommentary.length} characters left</Text>
+
+            {repostModalPost && (
+              <View style={styles.repostEmbed}>
+                <Text style={styles.repostEmbedAuthor}>{repostModalPost.authorFirstName}</Text>
+                <Text style={styles.repostEmbedBody} numberOfLines={4}>{repostModalPost.body}</Text>
+              </View>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setRepostModalPost(null)}
+                disabled={repostBusy}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, repostBusy && { opacity: 0.6 }]}
+                onPress={handleRepost}
+                disabled={repostBusy}
+              >
+                {repostBusy ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>
+                    {repostCommentary.trim() ? 'Quote-share' : 'Repost'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -648,4 +912,140 @@ const styles = StyleSheet.create({
   commentAuthor: { color: '#23372B', fontSize: 12, fontWeight: '700', marginBottom: 4 },
   commentText: { color: '#3E352C', fontSize: 13, lineHeight: 18 },
   editedTag: { color: '#9A8F82', fontSize: 11, fontWeight: '400' },
+
+  // Repost attribution banner (shown in Following tab)
+  repostBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDE8E1',
+  },
+  repostBannerText: { color: '#7A6E62', fontSize: 12, fontWeight: '600' },
+  bookmarkBtn: {
+    borderWidth: 1,
+    borderColor: '#D8CEC0',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  bookmarkBtnActive: { borderColor: '#456B50', backgroundColor: '#EEF3EE' },
+  bookmarkBtnText: { fontSize: 16, color: '#9A8F82' },
+  bookmarkBtnTextActive: { color: '#456B50' },
+  whoToFollowCard: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#DDD5CA',
+  },
+  whoToFollowLabel: {
+    color: '#8B8176',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 12,
+  },
+  whoToFollowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  whoToFollowAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#D7E8DA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  whoToFollowAvatarText: { color: '#2F563C', fontSize: 14, fontWeight: '700' },
+  whoToFollowInfo: { flex: 1 },
+  whoToFollowName: { color: '#23372B', fontSize: 14, fontWeight: '700' },
+  whoToFollowRole: { color: '#8B8176', fontSize: 12, fontWeight: '500' },
+  followBtn: {
+    borderWidth: 1.5,
+    borderColor: '#456B50',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  followBtnActive: { backgroundColor: '#456B50' },
+  followBtnText: { color: '#456B50', fontSize: 13, fontWeight: '700' },
+  followBtnTextActive: { color: '#fff' },
+
+  // Quote-share commentary block
+  repostCommentaryBox: {
+    backgroundColor: '#EEF3EE',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#456B50',
+  },
+  repostCommentaryText: { color: '#2F563C', fontSize: 14, lineHeight: 20 },
+
+  // Repost modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#F8F6F2',
+    borderRadius: 24,
+    padding: 22,
+    width: '100%',
+    maxWidth: 440,
+  },
+  modalTitle: { color: '#23372B', fontSize: 20, fontWeight: '700', marginBottom: 6 },
+  modalSubtitle: { color: '#6F6459', fontSize: 13, lineHeight: 19, marginBottom: 16 },
+  modalLabel: { color: '#5D554C', fontSize: 13, fontWeight: '700', marginBottom: 8 },
+  modalTextarea: {
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#3E352C',
+    backgroundColor: '#FCFBF8',
+    minHeight: 90,
+    maxHeight: 140,
+    textAlignVertical: 'top',
+  },
+  modalCharCount: { color: '#9A8F82', fontSize: 11, textAlign: 'right', marginTop: 4, marginBottom: 14 },
+  repostEmbed: {
+    backgroundColor: '#EDE8E1',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#D8CEC0',
+  },
+  repostEmbedAuthor: { color: '#23372B', fontSize: 13, fontWeight: '700', marginBottom: 4 },
+  repostEmbedBody: { color: '#3E352C', fontSize: 13, lineHeight: 18 },
+  modalActions: { flexDirection: 'row', gap: 10, justifyContent: 'flex-end' },
+  modalCancelBtn: {
+    borderWidth: 1.5,
+    borderColor: '#D8CEC0',
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  modalCancelText: { color: '#5D554C', fontSize: 14, fontWeight: '700' },
+  modalConfirmBtn: {
+    backgroundColor: '#456B50',
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    minWidth: 90,
+    alignItems: 'center',
+  },
+  modalConfirmText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });

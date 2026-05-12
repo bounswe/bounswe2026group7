@@ -68,6 +68,8 @@ export default function MeetingsSessionsScreen() {
   const params = useLocalSearchParams();
   const connectedUserName = parseString(params.connectedUserName) || 'Your Connection';
   const mentorshipId = parseString(params.mentorshipId);
+  const mentorshipStatus = parseString(params.mentorshipStatus) || 'ACTIVE';
+  const isActive = mentorshipStatus === 'ACTIVE';
 
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,7 +83,7 @@ export default function MeetingsSessionsScreen() {
   const loadMeetings = useCallback(async () => {
     if (!mentorshipId) { setLoading(false); return; }
     try {
-      const res = await apiClient.get(`/mentorships/${mentorshipId}/meetings`);
+      const res = await apiClient.get(`/mentorships/${mentorshipId}/meetings`, { silent: true });
       setMeetings(res.data ?? []);
     } catch {
       // silently show empty state
@@ -156,9 +158,11 @@ export default function MeetingsSessionsScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>‹ Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={openSchedule}>
-            <Text style={styles.scheduleText}>+ Schedule</Text>
-          </TouchableOpacity>
+          {isActive && (
+            <TouchableOpacity onPress={openSchedule}>
+              <Text style={styles.scheduleText}>+ Schedule</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.title}>
@@ -179,7 +183,15 @@ export default function MeetingsSessionsScreen() {
           />
         }
       >
-        {upcoming && (
+        {!isActive && (
+          <View style={styles.endedBanner}>
+            <Text style={styles.endedBannerText}>
+              {mentorshipStatus === 'COMPLETED' ? 'This mentorship has been completed.' : 'This mentorship has ended.'}
+            </Text>
+          </View>
+        )}
+
+        {isActive && upcoming && (
           <View style={styles.upcomingCard}>
             <View style={styles.upcomingCircle} />
             <Text style={styles.upcomingLabel}>UPCOMING</Text>
@@ -213,9 +225,11 @@ export default function MeetingsSessionsScreen() {
         ) : meetings.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No meetings yet.</Text>
-            <TouchableOpacity style={styles.scheduleEmptyButton} onPress={openSchedule}>
-              <Text style={styles.scheduleEmptyButtonText}>Schedule a Meeting</Text>
-            </TouchableOpacity>
+            {isActive && (
+              <TouchableOpacity style={styles.scheduleEmptyButton} onPress={openSchedule}>
+                <Text style={styles.scheduleEmptyButtonText}>Schedule a Meeting</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           [...meetings]
@@ -417,6 +431,19 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     color: '#8B8176',
     marginBottom: 18,
+  },
+  endedBanner: {
+    backgroundColor: '#F2E4C9',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  endedBannerText: {
+    color: '#9B6A1B',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   emptyState: { paddingVertical: 32, alignItems: 'center' },
   emptyText: { color: '#9A8F82', fontSize: 15, fontWeight: '500', marginBottom: 16 },
