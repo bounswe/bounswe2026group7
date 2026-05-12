@@ -99,6 +99,7 @@ public class FeedInteractionService {
      * ops tuning, ISO 8601 duration syntax.
      */
     private final Duration repostIdempotencyWindow;
+    private final boolean respectVisibility;
 
     public FeedInteractionService(FeedPostRepository feedPostRepository,
                                    FeedPostLikeRepository likeRepository,
@@ -111,7 +112,9 @@ public class FeedInteractionService {
                                    NotificationEventPublisher notificationEventPublisher,
                                    ApplicationEventPublisher eventPublisher,
                                    @Value("${app.feed.repost.idempotency-window:PT60S}")
-                                   Duration repostIdempotencyWindow) {
+                                   Duration repostIdempotencyWindow,
+                                   @Value("${app.feed.respect-profile-visibility:false}")
+                                   boolean respectVisibility) {
         this.feedPostRepository = feedPostRepository;
         this.likeRepository = likeRepository;
         this.bookmarkRepository = bookmarkRepository;
@@ -123,6 +126,7 @@ public class FeedInteractionService {
         this.notificationEventPublisher = notificationEventPublisher;
         this.eventPublisher = eventPublisher;
         this.repostIdempotencyWindow = repostIdempotencyWindow;
+        this.respectVisibility = respectVisibility;
     }
 
     // ── Likes ──────────────────────────────────────────────────────────────
@@ -148,7 +152,7 @@ public class FeedInteractionService {
      */
     @Transactional
     public FeedPostInteractionState toggleLike(Long postId, Long userId) {
-        FeedPost post = requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId, userId);
         FeedPostLikeId id = new FeedPostLikeId(postId, userId);
         boolean nowLiked;
         if (likeRepository.existsByIdPostIdAndIdUserId(postId, userId)) {
@@ -177,7 +181,7 @@ public class FeedInteractionService {
      */
     @Transactional
     public FeedPostInteractionState toggleBookmark(Long postId, Long userId) {
-        FeedPost post = requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId, userId);
         FeedPostBookmarkId id = new FeedPostBookmarkId(postId, userId);
         boolean nowBookmarked;
         if (bookmarkRepository.existsByIdPostIdAndIdUserId(postId, userId)) {
@@ -253,7 +257,7 @@ public class FeedInteractionService {
 
     @Transactional
     public FeedPostInteractionState recordShare(Long postId, Long sharerId) {
-        FeedPost post = requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId, sharerId);
         shareRepository.save(new FeedPostShare(postId, sharerId));
         publishEngagement(post, sharerId);
         log.info("Recorded share: postId={}, sharerId={}", postId, sharerId);
@@ -286,7 +290,7 @@ public class FeedInteractionService {
     @Transactional
     public FeedPostInteractionState recordRepost(Long postId, Long sharerId,
                                                   CreateRepostRequest request) {
-        FeedPost post = requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId, sharerId);
         String body = blankToNull(request != null ? request.body() : null);
 
         Optional<FeedPostShare> recent = shareRepository.findRecentRepost(
@@ -337,7 +341,7 @@ public class FeedInteractionService {
 
     @Transactional
     public FeedCommentResponse addComment(Long postId, Long authorId, String body) {
-        FeedPost post = requireVisiblePost(postId);
+        FeedPost post = requireVisiblePost(postId, authorId);
         if (body == null || body.isBlank()) {
             throw new IllegalArgumentException("Comment body must not be blank");
         }
@@ -359,7 +363,7 @@ public class FeedInteractionService {
     }
 
     public Page<FeedCommentResponse> listComments(Long postId, Long viewerId, Pageable pageable) {
-        requireVisiblePost(postId);
+        requireVisiblePost(postId, viewerId);
         Page<FeedPostComment> page = commentRepository
                 .findByPostIdOrderByCreatedAtAscIdAsc(postId, pageable);
         if (page.isEmpty()) {
@@ -437,11 +441,13 @@ public class FeedInteractionService {
     public FeedCommentResponse getComment(Long commentId, Long viewerId) {
         FeedPostComment comment = commentRepository.findByIdAndDeletedAtIsNull(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
-        // Orphan-permalink guard: 404 when the parent post is soft-deleted.
-        // Same exception message as the comment-missing branch — distinguishing
-        // the two would leak whether the comment id ever existed, an
-        // unnecessary information disclosure for anyone probing ids.
-        feedPostRepository.findByIdAndDeletedAtIsNull(comment.getPostId())
+        // Orphan-permalink guard: 404 when the parent post is soft-deleted
+        // OR (when respectVisibility=true) when the parent post belongs to a
+        // hidden mentee the viewer cannot otherwise reach. Same exception
+        // message as the comment-missing branch — distinguishing the two
+        // would leak whether the comment id ever existed, an unnecessary
+        // information disclosure for anyone probing ids.
+        feedPostRepository.findVisibleById(comment.getPostId(), viewerId, respectVisibility)
                 .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + commentId));
         return mapComment(comment, viewerId, resolveAuthorName(comment.getAuthorId()));
     }
@@ -473,7 +479,7 @@ public class FeedInteractionService {
         if (comment.getDeletedAt() != null) {
             throw new ResourceNotFoundException("Comment not found with id: " + commentId);
         }
-        FeedPost post = requireVisiblePost(comment.getPostId());
+        FeedPost post = requireVisiblePost(comment.getPostId(), userId);
 
         FeedPostCommentLikeId id = new FeedPostCommentLikeId(commentId, userId);
         boolean nowLiked;
@@ -510,7 +516,7 @@ public class FeedInteractionService {
      * {@code FeedPostService.getById}).
      */
     public FeedPostInteractionState getInteractionState(Long postId, Long viewerId) {
-        requireVisiblePost(postId);
+        requireVisiblePost(postId, viewerId);
         return interactionState(postId, viewerId);
     }
 
@@ -536,8 +542,20 @@ public class FeedInteractionService {
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
-    private FeedPost requireVisiblePost(Long postId) {
-        return feedPostRepository.findByIdAndDeletedAtIsNull(postId)
+    /**
+     * Gate that fronts every interaction toggle and comment fetch. Routes
+     * through {@link FeedPostRepository#findVisibleById} so when the
+     * {@code app.feed.respect-profile-visibility} flag is on, a viewer
+     * who is not the author and not a follower of a hidden mentee gets
+     * a uniform 404 instead of being able to like / bookmark / comment
+     * on a post they could not have surfaced through any feed read.
+     *
+     * <p>When the flag is off (default) the predicate degenerates and
+     * behaviour is identical to the prior {@code findByIdAndDeletedAtIsNull}
+     * path — same query plan, same set of rows.
+     */
+    private FeedPost requireVisiblePost(Long postId, Long viewerId) {
+        return feedPostRepository.findVisibleById(postId, viewerId, respectVisibility)
                 .orElseThrow(() -> new ResourceNotFoundException("Feed post not found with id: " + postId));
     }
 

@@ -58,7 +58,8 @@ class FeedPostServiceRestoreTest {
                 feedPostMapper,
                 feedPostEventPublisher,
                 historyRepository,
-                RESTORE_WINDOW_DAYS);
+                RESTORE_WINDOW_DAYS,
+                false);
     }
 
     @Test
@@ -148,7 +149,7 @@ class FeedPostServiceRestoreTest {
         // Reconstruct with a misconfigured 0; the constructor clamps to 1.
         FeedPostService clampedService = new FeedPostService(
                 feedPostRepository, userRepository, attachmentRepository, hashtagNormalizer,
-                feedPostMapper, feedPostEventPublisher, historyRepository, 0);
+                feedPostMapper, feedPostEventPublisher, historyRepository, 0, false);
 
         FeedPost post = freshPost(7L, 1L, "Body");
         // Soft-deleted 2 days ago — past the clamped 1-day window.

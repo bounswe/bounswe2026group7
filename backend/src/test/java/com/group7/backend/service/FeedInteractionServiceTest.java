@@ -33,6 +33,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -93,14 +94,15 @@ class FeedInteractionServiceTest {
                 feedPostMapper,
                 notificationEventPublisher,
                 eventPublisher,
-                Duration.ofSeconds(60));
+                Duration.ofSeconds(60),
+                false);
     }
 
     // ── toggleLike ─────────────────────────────────────────────────────────
 
     @Test
     void toggleLike_throws404_whenPostMissingOrSoftDeleted() {
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.empty());
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.toggleLike(7L, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -112,7 +114,7 @@ class FeedInteractionServiceTest {
     @Test
     void toggleLike_firstCall_insertsAndNotifiesNonSelfAuthor() {
         FeedPost post = freshPost(7L, 99L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
         // First existsBy call (in toggleLike) → not yet liked, so service
         // hits the upsert branch. The second call (inside interactionState)
         // → returns true because the row now exists in production. Mockito's
@@ -131,7 +133,7 @@ class FeedInteractionServiceTest {
     @Test
     void toggleLike_secondCall_deletesAndSkipsNotification() {
         FeedPost post = freshPost(7L, 99L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
         // First existsBy → already liked; second (inside interactionState
         // after the row is gone) → false.
         when(likeRepository.existsByIdPostIdAndIdUserId(7L, 1L)).thenReturn(true, false);
@@ -148,7 +150,7 @@ class FeedInteractionServiceTest {
     @Test
     void toggleLike_selfLike_skipsNotificationButStillInserts() {
         FeedPost post = freshPost(7L, 1L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
         when(likeRepository.existsByIdPostIdAndIdUserId(7L, 1L)).thenReturn(false);
 
         service.toggleLike(7L, 1L);
@@ -162,7 +164,7 @@ class FeedInteractionServiceTest {
 
     @Test
     void toggleBookmark_throws404_whenPostMissing() {
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.empty());
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.toggleBookmark(7L, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -173,7 +175,7 @@ class FeedInteractionServiceTest {
     @Test
     void toggleBookmark_firstCall_inserts() {
         FeedPost post = freshPost(7L, 99L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
         // Flip mirrors the toggleLike test: first call (in toggle) returns
         // false, second call (in interactionState after the upsert) returns
         // true.
@@ -188,7 +190,7 @@ class FeedInteractionServiceTest {
     @Test
     void toggleBookmark_secondCall_deletes() {
         FeedPost post = freshPost(7L, 99L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
         when(bookmarkRepository.existsByIdPostIdAndIdUserId(7L, 1L)).thenReturn(true, false);
 
         FeedPostInteractionState state = service.toggleBookmark(7L, 1L);
@@ -201,7 +203,7 @@ class FeedInteractionServiceTest {
 
     @Test
     void recordShare_throws404_whenPostMissing() {
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.empty());
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.recordShare(7L, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -212,7 +214,7 @@ class FeedInteractionServiceTest {
     @Test
     void recordShare_notifiesNonSelfAuthor() {
         FeedPost post = freshPost(7L, 99L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor(1L)));
 
         service.recordShare(7L, 1L);
@@ -224,7 +226,7 @@ class FeedInteractionServiceTest {
     @Test
     void recordShare_selfShare_skipsNotification() {
         FeedPost post = freshPost(7L, 1L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
 
         service.recordShare(7L, 1L);
 
@@ -236,7 +238,7 @@ class FeedInteractionServiceTest {
 
     @Test
     void addComment_throws404_whenPostMissing() {
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.empty());
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.addComment(7L, 1L, "hello"))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -247,7 +249,7 @@ class FeedInteractionServiceTest {
     @Test
     void addComment_throws400_onBlankBody() {
         FeedPost post = freshPost(7L, 99L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
 
         assertThatThrownBy(() -> service.addComment(7L, 1L, "   "))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -260,7 +262,7 @@ class FeedInteractionServiceTest {
     @Test
     void addComment_throws400_onNullBody() {
         FeedPost post = freshPost(7L, 99L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
 
         assertThatThrownBy(() -> service.addComment(7L, 1L, null))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -269,7 +271,7 @@ class FeedInteractionServiceTest {
     @Test
     void addComment_savesAndNotifiesNonSelfAuthor() {
         FeedPost post = freshPost(7L, 99L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor(1L)));
         when(commentRepository.save(any(FeedPostComment.class))).thenAnswer(inv -> {
             FeedPostComment c = inv.getArgument(0);
@@ -287,7 +289,7 @@ class FeedInteractionServiceTest {
     @Test
     void addComment_selfComment_skipsNotification() {
         FeedPost post = freshPost(7L, 1L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor(1L)));
         when(commentRepository.save(any(FeedPostComment.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -415,7 +417,7 @@ class FeedInteractionServiceTest {
         FeedPostComment c = freshComment(42L, 7L, 1L, "x");
         when(commentRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.of(c));
         // Parent post invisible → orphan-permalink guard fires.
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.empty());
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getComment(42L, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -425,7 +427,7 @@ class FeedInteractionServiceTest {
     void getComment_returnsDto_whenBothVisible() {
         FeedPostComment c = freshComment(42L, 7L, 1L, "body");
         when(commentRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.of(c));
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L))
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean()))
                 .thenReturn(Optional.of(freshPost(7L, 99L)));
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor(1L)));
 

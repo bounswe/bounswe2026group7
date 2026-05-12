@@ -24,6 +24,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -62,7 +64,8 @@ class FeedPostServiceTest {
                 feedPostMapper,
                 feedPostEventPublisher,
                 historyRepository,
-                30);
+                30,
+                false);
     }
 
     // ── create ─────────────────────────────────────────────────────────────
@@ -171,7 +174,7 @@ class FeedPostServiceTest {
     @Test
     void getById_returnsDto_whenPostVisible() {
         FeedPost post = freshPost(7L, 1L, "Body");
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(7L), anyLong(), anyBoolean())).thenReturn(Optional.of(post));
         FeedPostResponse expected = stubResponse(7L, 1L);
         when(feedPostMapper.toResponse(post, 99L)).thenReturn(expected);
 
@@ -182,7 +185,7 @@ class FeedPostServiceTest {
 
     @Test
     void getById_throws404_whenPostMissingOrDeleted() {
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(99L)).thenReturn(Optional.empty());
+        when(feedPostRepository.findVisibleById(eq(99L), anyLong(), anyBoolean())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> feedPostService.getById(99L, 1L))
                 .isInstanceOf(ResourceNotFoundException.class);

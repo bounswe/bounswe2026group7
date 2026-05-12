@@ -79,6 +79,7 @@ public class FeedReadService {
     private final FeedPostMapper feedPostMapper;
     private final UserKeywordMuteService keywordMuteService;
     private final int candidateWindow;
+    private final boolean respectVisibility;
 
     public FeedReadService(FeedPostRepository feedPostRepository,
                            UserRepository userRepository,
@@ -89,7 +90,8 @@ public class FeedReadService {
                            Optional<ForYouScoringPipeline> forYouPipeline,
                            FeedPostMapper feedPostMapper,
                            UserKeywordMuteService keywordMuteService,
-                           @Value("${app.feed.forYou.candidate-window:200}") int candidateWindow) {
+                           @Value("${app.feed.forYou.candidate-window:200}") int candidateWindow,
+                           @Value("${app.feed.respect-profile-visibility:false}") boolean respectVisibility) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
         this.followRepository = followRepository;
@@ -100,6 +102,7 @@ public class FeedReadService {
         this.feedPostMapper = feedPostMapper;
         this.keywordMuteService = keywordMuteService;
         this.candidateWindow = candidateWindow;
+        this.respectVisibility = respectVisibility;
     }
 
     /**
@@ -111,7 +114,7 @@ public class FeedReadService {
      */
     public Page<FeedPostListItem> forYouFeed(Long viewerId, Pageable pageable) {
         List<FeedPost> candidates =
-                feedPostRepository.findForYouCandidates(viewerId, candidateWindow);
+                feedPostRepository.findForYouCandidates(viewerId, respectVisibility, candidateWindow);
         if (candidates.isEmpty()) {
             return Page.empty(pageable);
         }
@@ -325,7 +328,8 @@ public class FeedReadService {
      * authored by the given user id.
      */
     public Page<FeedPostListItem> postsByAuthor(Long authorId, Long viewerId, Pageable pageable) {
-        Page<FeedPost> page = feedPostRepository.findByAuthorIdForFeed(authorId, pageable);
+        Page<FeedPost> page = feedPostRepository.findByAuthorIdForFeed(
+                authorId, viewerId, respectVisibility, pageable);
         return mapPage(page, viewerId);
     }
 
@@ -382,7 +386,8 @@ public class FeedReadService {
             throw new IllegalArgumentException("'until' is too far in the future (limit: 1 day)");
         }
         Page<FeedPost> page = feedPostRepository.searchPosts(
-                normalisedKeyword, normalisedHashtag, since, until, lang, pageable);
+                normalisedKeyword, normalisedHashtag, since, until, lang,
+                viewerId, respectVisibility, pageable);
         return mapPage(page, viewerId);
     }
 

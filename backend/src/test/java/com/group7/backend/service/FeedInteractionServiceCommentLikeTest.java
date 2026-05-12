@@ -19,7 +19,6 @@ import com.group7.backend.repository.projection.CommentCountTuple;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -36,6 +35,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -63,7 +63,29 @@ class FeedInteractionServiceCommentLikeTest {
     @Mock private FeedPostMapper feedPostMapper;
     @Mock private NotificationEventPublisher notificationEventPublisher;
     @Mock private ApplicationEventPublisher eventPublisher;
-    @InjectMocks private FeedInteractionService service;
+
+    // Manual construction (not @InjectMocks): the service's primitive
+    // boolean (respectVisibility) + Duration parameters cannot be auto-
+    // wired by Mockito. Pin both to the production default so this test's
+    // assertions stay in sync with the shipped behaviour.
+    private FeedInteractionService service;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        service = new FeedInteractionService(
+                feedPostRepository,
+                likeRepository,
+                bookmarkRepository,
+                shareRepository,
+                commentRepository,
+                commentLikeRepository,
+                userRepository,
+                feedPostMapper,
+                notificationEventPublisher,
+                eventPublisher,
+                java.time.Duration.ofSeconds(60),
+                false);
+    }
 
     // ── toggleCommentLike ─────────────────────────────────────────────────
 
@@ -73,7 +95,7 @@ class FeedInteractionServiceCommentLikeTest {
         FeedPost post = freshPost(42L, 7L);
         attachHashtags(post, "java");
         when(commentRepository.findById(101L)).thenReturn(Optional.of(comment));
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(42L), any(), anyBoolean())).thenReturn(Optional.of(post));
         when(commentLikeRepository.existsByIdCommentIdAndIdUserId(101L, 9L)).thenReturn(false);
         when(commentLikeRepository.upsertCommentLike(101L, 9L)).thenReturn(1);
         when(commentLikeRepository.countByIdCommentId(101L)).thenReturn(1L);
@@ -98,7 +120,7 @@ class FeedInteractionServiceCommentLikeTest {
         FeedPost post = freshPost(42L, 7L);
         attachHashtags(post, "java");
         when(commentRepository.findById(101L)).thenReturn(Optional.of(comment));
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(42L), any(), anyBoolean())).thenReturn(Optional.of(post));
         when(commentLikeRepository.existsByIdCommentIdAndIdUserId(101L, 9L)).thenReturn(true);
         when(commentLikeRepository.countByIdCommentId(101L)).thenReturn(0L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(mentor(1L, "Author")));
@@ -142,7 +164,7 @@ class FeedInteractionServiceCommentLikeTest {
     void toggleCommentLike_404_whenParentPostSoftDeleted() {
         FeedPostComment comment = freshComment(101L, 42L, 1L, "hi");
         when(commentRepository.findById(101L)).thenReturn(Optional.of(comment));
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.empty());
+        when(feedPostRepository.findVisibleById(eq(42L), any(), anyBoolean())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.toggleCommentLike(101L, 9L))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -155,7 +177,7 @@ class FeedInteractionServiceCommentLikeTest {
     @Test
     void addComment_doesNotIssuePerRowLikeQueries_onFreshComment() {
         FeedPost post = freshPost(42L, 1L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(42L), any(), anyBoolean())).thenReturn(Optional.of(post));
         when(commentRepository.save(any(FeedPostComment.class))).thenAnswer(inv -> {
             FeedPostComment c = inv.getArgument(0);
             c.setId(101L);
@@ -178,7 +200,7 @@ class FeedInteractionServiceCommentLikeTest {
     @Test
     void listComments_batchLoadsCountsAndViewerLikedExactlyOnce_perPage() {
         FeedPost post = freshPost(42L, 1L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(42L), any(), anyBoolean())).thenReturn(Optional.of(post));
 
         List<FeedPostComment> rows = List.of(
                 freshComment(101L, 42L, 1L, "a"),
@@ -217,7 +239,7 @@ class FeedInteractionServiceCommentLikeTest {
     @Test
     void listComments_emptyPage_skipsAllBatchSQL() {
         FeedPost post = freshPost(42L, 1L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(42L), any(), anyBoolean())).thenReturn(Optional.of(post));
         Pageable pageable = PageRequest.of(0, 20);
         when(commentRepository.findByPostIdOrderByCreatedAtAscIdAsc(42L, pageable))
                 .thenReturn(Page.empty(pageable));
@@ -232,7 +254,7 @@ class FeedInteractionServiceCommentLikeTest {
     @Test
     void listComments_anonymousViewer_skipsLikedLookup() {
         FeedPost post = freshPost(42L, 1L);
-        when(feedPostRepository.findByIdAndDeletedAtIsNull(42L)).thenReturn(Optional.of(post));
+        when(feedPostRepository.findVisibleById(eq(42L), any(), anyBoolean())).thenReturn(Optional.of(post));
         List<FeedPostComment> rows = List.of(freshComment(101L, 42L, 1L, "a"));
         Pageable pageable = PageRequest.of(0, 20);
         when(commentRepository.findByPostIdOrderByCreatedAtAscIdAsc(42L, pageable))

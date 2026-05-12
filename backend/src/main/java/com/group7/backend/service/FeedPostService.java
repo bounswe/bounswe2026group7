@@ -124,6 +124,7 @@ public class FeedPostService {
      * scheduler is allowed to hard-delete it.
      */
     private final int restoreWindowDays;
+    private final boolean respectVisibility;
 
     public FeedPostService(FeedPostRepository feedPostRepository,
                            UserRepository userRepository,
@@ -132,7 +133,8 @@ public class FeedPostService {
                            FeedPostMapper feedPostMapper,
                            FeedPostEventPublisher feedPostEventPublisher,
                            FeedPostEditHistoryRepository historyRepository,
-                           @Value("${app.feed.cleanup.restore-window-days:30}") int restoreWindowDays) {
+                           @Value("${app.feed.cleanup.restore-window-days:30}") int restoreWindowDays,
+                           @Value("${app.feed.respect-profile-visibility:false}") boolean respectVisibility) {
         this.feedPostRepository = feedPostRepository;
         this.userRepository = userRepository;
         this.attachmentRepository = attachmentRepository;
@@ -143,6 +145,7 @@ public class FeedPostService {
         // Defensive clamp: a misconfigured 0 would expire every restore
         // immediately. Mirrored in FeedSoftDeleteCleanupScheduler.
         this.restoreWindowDays = Math.max(1, restoreWindowDays);
+        this.respectVisibility = respectVisibility;
     }
 
     /**
@@ -216,7 +219,11 @@ public class FeedPostService {
      * case is owned by {@code #347}).
      */
     public FeedPostResponse getById(Long postId, Long viewerId) {
-        FeedPost post = feedPostRepository.findByIdAndDeletedAtIsNull(postId)
+        // findVisibleById applies the follower-aware profile-visibility gate
+        // when app.feed.respect-profile-visibility=true; otherwise it
+        // degenerates to findByIdAndDeletedAtIsNull (the predicate's first
+        // OR short-circuits to true), so default behaviour is unchanged.
+        FeedPost post = feedPostRepository.findVisibleById(postId, viewerId, respectVisibility)
                 .orElseThrow(() -> new ResourceNotFoundException("Feed post not found with id: " + postId));
         return feedPostMapper.toResponse(post, viewerId);
     }

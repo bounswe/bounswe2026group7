@@ -65,7 +65,8 @@ class FeedPostServiceHistoryTest {
                 feedPostMapper,
                 feedPostEventPublisher,
                 historyRepository,
-                30);
+                30,
+                false);
     }
 
     // ── update() snapshot behaviour ───────────────────────────────────────

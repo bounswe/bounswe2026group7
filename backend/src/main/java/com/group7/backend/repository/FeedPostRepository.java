@@ -46,8 +46,63 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
     /**
      * Public-visibility lookup. Returns empty for soft-deleted posts so
      * the controller can map cleanly to 404 on {@code GET}.
+     *
+     * <p>Does NOT honour {@link com.group7.backend.entity.Mentee#getProfileVisibility()}:
+     * callers on the author-load path ({@code PATCH}/{@code DELETE}) need
+     * the row regardless of visibility so the service can render a clean
+     * 403 vs 404 split. Read-path callers should use
+     * {@link #findVisibleById} instead.
      */
     Optional<FeedPost> findByIdAndDeletedAtIsNull(Long id);
+
+    /**
+     * Single-post read with the optional follower-aware visibility gate
+     * applied. Equivalent to {@link #findByIdAndDeletedAtIsNull} when
+     * {@code respectVisibility} is false; otherwise an extra predicate
+     * suppresses rows whose author is a mentee with
+     * {@code profile_visibility = false} unless the viewer is the author
+     * themselves or a current follower (see class javadoc on the
+     * predicate shape — identical to the For-You / search / author-timeline
+     * variants below).
+     *
+     * <p>Used by:
+     * <ul>
+     *   <li>{@code FeedPostService.getById} — the public {@code GET}
+     *       endpoint.</li>
+     *   <li>{@code FeedInteractionService.requireVisiblePost} — the
+     *       gate that fronts every interaction toggle, so a non-follower
+     *       cannot like / bookmark / comment on a hidden mentee's post
+     *       they cannot otherwise see.</li>
+     * </ul>
+     *
+     * <p>Author-load paths ({@code PATCH}, {@code DELETE}) intentionally
+     * stick with {@link #findByIdAndDeletedAtIsNull} (or inherited
+     * {@code findById}) so the author always sees their own posts even
+     * when their visibility flag is off.
+     */
+    @Query(value = """
+            SELECT * FROM feed_posts p
+            WHERE p.id = :id
+              AND p.deleted_at IS NULL
+              AND (
+                    :respectVisibility = false
+                 OR NOT EXISTS (
+                        SELECT 1 FROM mentees m
+                        WHERE m.id = p.author_id
+                          AND m.profile_visibility = false
+                    )
+                 OR p.author_id = :viewerId
+                 OR EXISTS (
+                        SELECT 1 FROM follows f
+                        WHERE f.follower_id = :viewerId
+                          AND f.followee_id = p.author_id
+                    )
+              )
+            """,
+            nativeQuery = true)
+    Optional<FeedPost> findVisibleById(@Param("id") Long id,
+                                       @Param("viewerId") Long viewerId,
+                                       @Param("respectVisibility") boolean respectVisibility);
 
     /**
      * Following-feed query (#350). Returns posts authored by users the
@@ -145,15 +200,46 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             SELECT * FROM feed_posts p
             WHERE p.deleted_at IS NULL
               AND p.author_id = :authorId
+              AND (
+                    :respectVisibility = false
+                 OR NOT EXISTS (
+                        SELECT 1 FROM mentees m
+                        WHERE m.id = p.author_id
+                          AND m.profile_visibility = false
+                    )
+                 OR p.author_id = :viewerId
+                 OR EXISTS (
+                        SELECT 1 FROM follows f
+                        WHERE f.follower_id = :viewerId
+                          AND f.followee_id = p.author_id
+                    )
+              )
             ORDER BY p.created_at DESC, p.id DESC
             """,
             countQuery = """
             SELECT COUNT(*) FROM feed_posts p
             WHERE p.deleted_at IS NULL
               AND p.author_id = :authorId
+              AND (
+                    :respectVisibility = false
+                 OR NOT EXISTS (
+                        SELECT 1 FROM mentees m
+                        WHERE m.id = p.author_id
+                          AND m.profile_visibility = false
+                    )
+                 OR p.author_id = :viewerId
+                 OR EXISTS (
+                        SELECT 1 FROM follows f
+                        WHERE f.follower_id = :viewerId
+                          AND f.followee_id = p.author_id
+                    )
+              )
             """,
             nativeQuery = true)
-    Page<FeedPost> findByAuthorIdForFeed(@Param("authorId") Long authorId, Pageable pageable);
+    Page<FeedPost> findByAuthorIdForFeed(@Param("authorId") Long authorId,
+                                          @Param("viewerId") Long viewerId,
+                                          @Param("respectVisibility") boolean respectVisibility,
+                                          Pageable pageable);
 
     /**
      * For-You candidate fetch (#350). Returns the most recent N posts
@@ -170,11 +256,25 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             SELECT * FROM feed_posts p
             WHERE p.deleted_at IS NULL
               AND p.author_id <> :viewerId
+              AND (
+                    :respectVisibility = false
+                 OR NOT EXISTS (
+                        SELECT 1 FROM mentees m
+                        WHERE m.id = p.author_id
+                          AND m.profile_visibility = false
+                    )
+                 OR EXISTS (
+                        SELECT 1 FROM follows f
+                        WHERE f.follower_id = :viewerId
+                          AND f.followee_id = p.author_id
+                    )
+              )
             ORDER BY p.created_at DESC, p.id DESC
             LIMIT :limit
             """,
             nativeQuery = true)
     List<FeedPost> findForYouCandidates(@Param("viewerId") Long viewerId,
+                                         @Param("respectVisibility") boolean respectVisibility,
                                          @Param("limit") int limit);
 
     /**
@@ -204,6 +304,20 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
               AND (CAST(:since AS timestamptz) IS NULL OR p.created_at >= CAST(:since AS timestamptz))
               AND (CAST(:until AS timestamptz) IS NULL OR p.created_at <  CAST(:until AS timestamptz))
               AND (:lang IS NULL OR p.lang = :lang)
+              AND (
+                    :respectVisibility = false
+                 OR NOT EXISTS (
+                        SELECT 1 FROM mentees m
+                        WHERE m.id = p.author_id
+                          AND m.profile_visibility = false
+                    )
+                 OR p.author_id = :viewerId
+                 OR EXISTS (
+                        SELECT 1 FROM follows f
+                        WHERE f.follower_id = :viewerId
+                          AND f.followee_id = p.author_id
+                    )
+              )
             ORDER BY p.created_at DESC, p.id DESC
             """,
             countQuery = """
@@ -215,6 +329,20 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
               AND (CAST(:since AS timestamptz) IS NULL OR p.created_at >= CAST(:since AS timestamptz))
               AND (CAST(:until AS timestamptz) IS NULL OR p.created_at <  CAST(:until AS timestamptz))
               AND (:lang IS NULL OR p.lang = :lang)
+              AND (
+                    :respectVisibility = false
+                 OR NOT EXISTS (
+                        SELECT 1 FROM mentees m
+                        WHERE m.id = p.author_id
+                          AND m.profile_visibility = false
+                    )
+                 OR p.author_id = :viewerId
+                 OR EXISTS (
+                        SELECT 1 FROM follows f
+                        WHERE f.follower_id = :viewerId
+                          AND f.followee_id = p.author_id
+                    )
+              )
             """,
             nativeQuery = true)
     Page<FeedPost> searchPosts(@Param("keyword") String keyword,
@@ -222,6 +350,8 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
                                 @Param("since") OffsetDateTime since,
                                 @Param("until") OffsetDateTime until,
                                 @Param("lang") String lang,
+                                @Param("viewerId") Long viewerId,
+                                @Param("respectVisibility") boolean respectVisibility,
                                 Pageable pageable);
 
     /**

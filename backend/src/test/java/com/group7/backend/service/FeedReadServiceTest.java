@@ -33,6 +33,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -104,14 +105,15 @@ class FeedReadServiceTest {
                 Optional.empty(),
                 feedPostMapper,
                 keywordMuteService,
-                200);
+                200,
+                false);
     }
 
     // ── forYouFeed ─────────────────────────────────────────────────────────
 
     @Test
     void forYouFeed_emptyCandidates_returnsEmptyPageWithoutRanking() {
-        when(feedPostRepository.findForYouCandidates(1L, 200)).thenReturn(List.of());
+        when(feedPostRepository.findForYouCandidates(1L, false, 200)).thenReturn(List.of());
 
         Page<FeedPostListItem> page = service.forYouFeed(1L, PageRequest.of(0, 10));
 
@@ -127,7 +129,7 @@ class FeedReadServiceTest {
         FeedPost p1 = freshPost(101L, 99L);
         FeedPost p2 = freshPost(102L, 98L);
         FeedPost p3 = freshPost(103L, 97L);
-        when(feedPostRepository.findForYouCandidates(1L, 200)).thenReturn(List.of(p1, p2, p3));
+        when(feedPostRepository.findForYouCandidates(1L, false, 200)).thenReturn(List.of(p1, p2, p3));
         when(userRepository.findById(1L)).thenReturn(Optional.of(viewer(1L)));
         when(followRepository.findFolloweeIdsByFollowerId(1L)).thenReturn(Set.of());
         // Mentee's getInterests() is null on a fresh fixture, so
@@ -249,7 +251,7 @@ class FeedReadServiceTest {
     void postsByAuthor_delegatesToRepoAndMapper() {
         FeedPost post = freshPost(101L, 99L);
         Page<FeedPost> repoPage = new PageImpl<>(List.of(post), PageRequest.of(0, 10), 1L);
-        when(feedPostRepository.findByAuthorIdForFeed(eq(99L), any())).thenReturn(repoPage);
+        when(feedPostRepository.findByAuthorIdForFeed(eq(99L), anyLong(), anyBoolean(), any())).thenReturn(repoPage);
         when(feedInteractionService.batchCounts(List.of(101L))).thenReturn(
                 Map.of(101L, new PostCounts(0L, 0L)));
         when(feedPostMapper.toListItems(eq(List.of(post)), eq(1L), any()))
@@ -269,7 +271,7 @@ class FeedReadServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("at least one");
 
-        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any());
+        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test
@@ -280,7 +282,7 @@ class FeedReadServiceTest {
         assertThatThrownBy(() -> service.search("   ", "  ", null, null, null, 1L, PageRequest.of(0, 10)))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any());
+        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test
@@ -295,7 +297,7 @@ class FeedReadServiceTest {
                 null, "not a valid hashtag", null, null, null, 1L, PageRequest.of(0, 10));
 
         assertThat(page.getContent()).isEmpty();
-        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any());
+        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test
@@ -303,24 +305,24 @@ class FeedReadServiceTest {
         // %, _, and \ are LIKE metacharacters; escaping prevents a malicious
         // q=% from matching every post. Lowercasing aligns with the
         // pg_trgm GIN index on LOWER(body).
-        when(feedPostRepository.searchPosts(eq("ja\\%va"), eq(null), eq(null), eq(null), eq(null), any()))
+        when(feedPostRepository.searchPosts(eq("ja\\%va"), eq(null), eq(null), eq(null), eq(null), anyLong(), anyBoolean(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 10)));
 
         service.search("Ja%va", null, null, null, null, 1L, PageRequest.of(0, 10));
 
-        verify(feedPostRepository).searchPosts(eq("ja\\%va"), eq(null), eq(null), eq(null), eq(null), any());
+        verify(feedPostRepository).searchPosts(eq("ja\\%va"), eq(null), eq(null), eq(null), eq(null), anyLong(), anyBoolean(), any());
     }
 
     @Test
     void search_passesNormalisedHashtagToRepository() {
         when(hashtagNormalizer.normalize(List.of("#DataScience")))
                 .thenReturn(Set.of("datascience"));
-        when(feedPostRepository.searchPosts(eq(null), eq("datascience"), eq(null), eq(null), eq(null), any()))
+        when(feedPostRepository.searchPosts(eq(null), eq("datascience"), eq(null), eq(null), eq(null), anyLong(), anyBoolean(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 10)));
 
         service.search(null, "#DataScience", null, null, null, 1L, PageRequest.of(0, 10));
 
-        verify(feedPostRepository).searchPosts(eq(null), eq("datascience"), eq(null), eq(null), eq(null), any());
+        verify(feedPostRepository).searchPosts(eq(null), eq("datascience"), eq(null), eq(null), eq(null), anyLong(), anyBoolean(), any());
     }
 
     @Test
@@ -328,12 +330,12 @@ class FeedReadServiceTest {
         // lang on its own is enough to escape the every-filter-missing 400
         // guard, so this also pins the contract that lang is a first-class
         // search axis and not just a tie-breaker behind q/hashtag.
-        when(feedPostRepository.searchPosts(eq(null), eq(null), eq(null), eq(null), eq("en"), any()))
+        when(feedPostRepository.searchPosts(eq(null), eq(null), eq(null), eq(null), eq("en"), anyLong(), anyBoolean(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 10)));
 
         service.search(null, null, null, null, "en", 1L, PageRequest.of(0, 10));
 
-        verify(feedPostRepository).searchPosts(eq(null), eq(null), eq(null), eq(null), eq("en"), any());
+        verify(feedPostRepository).searchPosts(eq(null), eq(null), eq(null), eq(null), eq("en"), anyLong(), anyBoolean(), any());
     }
 
     @Test
@@ -348,7 +350,7 @@ class FeedReadServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("strictly before");
 
-        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any());
+        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test
@@ -360,7 +362,7 @@ class FeedReadServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("'since'");
 
-        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any());
+        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test
@@ -372,19 +374,19 @@ class FeedReadServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("'until'");
 
-        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any());
+        verify(feedPostRepository, never()).searchPosts(any(), any(), any(), any(), any(), any(), anyBoolean(), any());
     }
 
     @Test
     void search_passesValidWindowToRepository() {
         OffsetDateTime since = OffsetDateTime.now().minusHours(1);
         OffsetDateTime until = OffsetDateTime.now().plusHours(1);
-        when(feedPostRepository.searchPosts(eq(null), eq(null), eq(since), eq(until), eq(null), any()))
+        when(feedPostRepository.searchPosts(eq(null), eq(null), eq(since), eq(until), eq(null), anyLong(), anyBoolean(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 10)));
 
         service.search(null, null, since, until, null, 1L, PageRequest.of(0, 10));
 
-        verify(feedPostRepository).searchPosts(eq(null), eq(null), eq(since), eq(until), eq(null), any());
+        verify(feedPostRepository).searchPosts(eq(null), eq(null), eq(since), eq(until), eq(null), anyLong(), anyBoolean(), any());
     }
 
     // ── Fixtures ───────────────────────────────────────────────────────────
