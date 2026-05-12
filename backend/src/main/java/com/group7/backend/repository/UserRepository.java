@@ -1,5 +1,6 @@
 package com.group7.backend.repository;
 
+import com.group7.backend.dto.response.AdminUserListItem;
 import com.group7.backend.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -85,4 +86,80 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     @Query("select u.id from User u where type(u) = com.group7.backend.entity.Admin")
     List<Long> findAllAdminIds();
+
+    /**
+     * Constructor projection backing the admin user listing (#569). Returns
+     * one {@link AdminUserListItem} per matching user with role and active-ban
+     * status derived in a single SQL pass.
+     *
+     * <p>Filter semantics:
+     * <ul>
+     *   <li>Role: callers pass exactly one of {@code roleMentor /
+     *       roleMentee / roleAdmin} as {@code Boolean.TRUE} and the rest as
+     *       {@code null}. Each {@code null} flag short-circuits its
+     *       discriminator predicate; when all three are {@code null} the
+     *       filter is inactive and every role is returned.</li>
+     *   <li>Ban status: {@code banActive=true} restricts to users with an
+     *       active ban exactly as defined by {@link BanRepository#findActive}
+     *       ({@code lifted_at IS NULL AND expires_at > :now}).
+     *       {@code banActive=false} restricts to users <em>without</em>
+     *       such a row (so lifted/expired bans are included in this bucket).
+     *       {@code null} skips the filter.</li>
+     *   <li>Keyword: pre-escaped, pre-lowercased {@code "%term%"} pattern
+     *       produced by {@code SearchNormaliser.keyword(...)} (or {@code null}
+     *       for inputs shorter than 3 chars). Matches {@code firstName /
+     *       lastName / email}, all lowercased and escape-prefixed with
+     *       {@code '|'} for safety.</li>
+     * </ul>
+     *
+     * <p>Order: newest user first ({@code createdAt desc, id desc}). The id
+     * tiebreaker keeps pagination stable when seed data shares a creation
+     * timestamp (common in fixture-driven tests). Constructor projection
+     * keeps the Spring Data auto-derived count query simple — the EXISTS
+     * subqueries don't appear in count derivation.
+     */
+    @Query("""
+            select new com.group7.backend.dto.response.AdminUserListItem(
+                u.id, u.firstName, u.lastName, u.email,
+                case when type(u) = com.group7.backend.entity.Mentor then 'MENTOR'
+                     when type(u) = com.group7.backend.entity.Mentee then 'MENTEE'
+                     when type(u) = com.group7.backend.entity.Admin  then 'ADMIN'
+                     else 'UNKNOWN' end,
+                case when exists (
+                         select 1 from Ban b
+                         where b.user.id = u.id
+                           and b.liftedAt is null
+                           and b.expiresAt > :now)
+                     then 'ACTIVE' else 'NONE' end,
+                u.isSuspectedBot,
+                u.createdAt)
+            from User u
+            where (:roleMentor is null or type(u) = com.group7.backend.entity.Mentor)
+              and (:roleMentee is null or type(u) = com.group7.backend.entity.Mentee)
+              and (:roleAdmin  is null or type(u) = com.group7.backend.entity.Admin)
+              and (:banActive is null
+                   or (:banActive = true and exists (
+                           select 1 from Ban b
+                           where b.user.id = u.id
+                             and b.liftedAt is null
+                             and b.expiresAt > :now))
+                   or (:banActive = false and not exists (
+                           select 1 from Ban b
+                           where b.user.id = u.id
+                             and b.liftedAt is null
+                             and b.expiresAt > :now)))
+              and (:keyword is null
+                   or lower(u.firstName) like :keyword escape '|'
+                   or lower(u.lastName)  like :keyword escape '|'
+                   or lower(u.email)     like :keyword escape '|')
+            order by u.createdAt desc, u.id desc
+            """)
+    Page<AdminUserListItem> findAdminUsers(
+            @Param("roleMentor") Boolean roleMentor,
+            @Param("roleMentee") Boolean roleMentee,
+            @Param("roleAdmin")  Boolean roleAdmin,
+            @Param("banActive")  Boolean banActive,
+            @Param("keyword")    String keyword,
+            @Param("now")        OffsetDateTime now,
+            Pageable pageable);
 }
