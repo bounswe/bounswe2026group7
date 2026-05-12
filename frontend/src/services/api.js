@@ -814,6 +814,14 @@ export async function addCommentToPost(postId, body) {
   return handleResponse(res)
 }
 
+export async function toggleLikeOnComment(commentId) {
+  const res = await fetch(`${BASE_URL}/feed/comments/${commentId}/like`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return handleResponse(res)
+}
+
 export async function toggleBookmarkOnPost(postId) {
   const res = await fetch(`${BASE_URL}/feed/posts/${postId}/bookmark`, {
     method: 'POST',
