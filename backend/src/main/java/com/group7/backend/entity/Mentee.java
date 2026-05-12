@@ -41,6 +41,8 @@ public class Mentee extends User {
 
     private String backgroundInfo;
 
+    private String affiliation;
+
     @Column(nullable = false)
     private Integer cancelCount = 0;
 

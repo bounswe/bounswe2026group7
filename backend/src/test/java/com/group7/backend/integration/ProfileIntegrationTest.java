@@ -287,6 +287,7 @@ class ProfileIntegrationTest {
         update.setSkills(List.of("Python", "Go", "Docker", "Kubernetes"));
         update.setMeetingFreqPref("Bi-weekly");
         update.setBackgroundInfo("3rd year student with internship at a cloud company");
+        update.setAffiliation("Bogazici University");
         update.setProfileVisibility(false);
 
         mockMvc.perform(patch("/api/users/me/mentee")
@@ -301,6 +302,7 @@ class ProfileIntegrationTest {
                 .andExpect(jsonPath("$.skills.length()").value(4))
                 .andExpect(jsonPath("$.meetingFreqPref").value("Bi-weekly"))
                 .andExpect(jsonPath("$.backgroundInfo").value("3rd year student with internship at a cloud company"))
+                .andExpect(jsonPath("$.affiliation").value("Bogazici University"))
                 .andExpect(jsonPath("$.profileVisibility").value(false));
 
         // Verify persisted via GET
@@ -308,6 +310,42 @@ class ProfileIntegrationTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(jsonPath("$.skills.length()").value(4))
                 .andExpect(jsonPath("$.profileVisibility").value(false));
+    }
+
+    @Test
+    void menteeAffiliation_defaultsToNull_andRejectsBeyondTwoHundredChars() throws Exception {
+        String token = registerAndLogin("affil@test.com", false);
+
+        // Fresh mentee — affiliation is null by default, surfaces as JSON null
+        // (Jackson omits null fields when configured to do so; here we assert
+        // the value is null rather than the path existing, because the
+        // SerializationFeature path can elide null fields in some configs).
+        mockMvc.perform(get("/api/users/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.affiliation").doesNotExist());
+
+        // 200 chars: accepted.
+        String exact200 = "x".repeat(200);
+        MenteeProfileRequest atLimit = new MenteeProfileRequest();
+        atLimit.setAffiliation(exact200);
+        mockMvc.perform(patch("/api/users/me/mentee")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(atLimit)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.affiliation").value(exact200));
+
+        // 201 chars: rejected at the request-validation layer (400, never
+        // reaches the service — backend prevents oversized strings hitting
+        // the column).
+        MenteeProfileRequest tooLong = new MenteeProfileRequest();
+        tooLong.setAffiliation("x".repeat(201));
+        mockMvc.perform(patch("/api/users/me/mentee")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(tooLong)))
+                .andExpect(status().isBadRequest());
     }
 
     // ── Common field updates ────────────────────────────────
