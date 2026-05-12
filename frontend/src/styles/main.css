@@ -3605,6 +3605,44 @@
   overflow: hidden;
 }
 
+/* Feed real-time UI (#356). */
+.feed-new-pill {
+  display: block;
+  margin: 8px auto 14px;
+  padding: 8px 18px;
+  background: var(--green-dark, #2e7d4f);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(46, 125, 79, 0.25);
+  animation: feed-new-pill-rise 0.2s ease-out;
+}
+.feed-new-pill:hover { filter: brightness(0.92); }
+@keyframes feed-new-pill-rise {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.feed-unread-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: #e63946;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'DM Sans', sans-serif;
+  line-height: 1;
+}
+
 /* Toast notifications (#544 — used by share + undo flows). */
 .toast {
   position: fixed;

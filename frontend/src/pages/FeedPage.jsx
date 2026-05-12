@@ -15,9 +15,11 @@ import {
   getFollowRecommendations,
   followUser,
   getTrendingHashtags,
+  markFeedRead,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { showUndoToast } from '../utils/toast'
+import useFeedSubscription from '../hooks/useFeedSubscription'
 import '../styles/main.css'
 
 const TABS = [
@@ -74,6 +76,13 @@ export default function FeedPage() {
   // data. Hidden during active search to avoid double-filtering the view.
   const [trending, setTrending] = useState([])
 
+  // Live-feed buffer (#356). When the STOMP push arrives while the user is
+  // scrolled away from the top or on a different tab, we surface a "X new
+  // posts" pill instead of yanking the list. Clicking the pill reloads.
+  // We keep just the count, not the slim payloads, since the reload path
+  // fetches the canonical full FeedPostListItem from the REST endpoint.
+  const [newPostsCount, setNewPostsCount] = useState(0)
+
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag?, since?, until?, lang? } or null
   // #543: advanced filters. Open state is a toggle; values persist across
@@ -121,6 +130,35 @@ export default function FeedPage() {
   }, [tab, activeSearch])
 
   useEffect(() => { reload() }, [reload])
+
+  // #356: subscribe to /topic/feed.{userId} so a new post from someone the
+  // user follows surfaces a "X new posts" pill without a refresh. The pill
+  // only fires on the For-You / Following tabs without an active search —
+  // a hashtag-search view shouldn't pretend a new post arrived for it.
+  useFeedSubscription(userId, {
+    onPost: () => {
+      if (activeSearch || loading) return
+      setNewPostsCount(c => c + 1)
+    },
+    onShare: () => {
+      if (activeSearch || loading) return
+      setNewPostsCount(c => c + 1)
+    },
+  })
+
+  // #356: mark the feed read whenever the page loads with results. Cheap on
+  // backend (single UPDATE) and idempotent, so re-firing on tab change is
+  // harmless. Triggers only when posts > 0 — empty feed has nothing to read.
+  useEffect(() => {
+    if (loading || activeSearch || posts.length === 0) return
+    markFeedRead().catch(() => { /* swallow — best-effort */ })
+  }, [loading, activeSearch, posts.length])
+
+  function handleClickNewPosts() {
+    setNewPostsCount(0)
+    reload()
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -471,6 +509,17 @@ export default function FeedPage() {
               ))}
             </div>
           </div>
+        )}
+
+        {newPostsCount > 0 && !loading && !activeSearch && (
+          <button
+            type="button"
+            className="feed-new-pill"
+            onClick={handleClickNewPosts}
+            aria-live="polite"
+          >
+            {newPostsCount} new post{newPostsCount === 1 ? '' : 's'} · click to refresh
+          </button>
         )}
 
         {loading ? (
