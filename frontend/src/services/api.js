@@ -819,6 +819,20 @@ export async function deleteFeedPost(id) {
   return handleResponse(res)
 }
 
+// #128 / #358 / #411 / backend #135: submit a polymorphic report.
+// targetType ∈ {POST, MENTORSHIP, USER}; the backend rejects self-reports
+// (USER target with reporter_id == target_id), non-participant mentorship
+// reports (403), and duplicate active reports (409 — same reporter +
+// same target while still-open).
+export async function submitReport({ targetType, targetId, problemType, description }) {
+  const res = await fetch(`${BASE_URL}/reports`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ targetType, targetId, problemType, description }),
+  })
+  return handleResponse(res)
+}
+
 // #356 / backend #349: feed read-state cursor + companion unread count.
 // `markFeedRead` is idempotent — backend sets the cursor to clock_timestamp.
 // `getFeedUnreadCount` returns { count, cappedAtMax } capped at 99 by default.

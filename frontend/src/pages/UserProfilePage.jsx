@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
 import RequestMentorshipModal from '../components/RequestMentorshipModal'
+import ReportModal from '../components/ReportModal'
+import { showTransientToast } from '../utils/toast'
 import FeedPostCard from '../components/FeedPostCard'
 import {
   getUserById,
@@ -66,6 +68,7 @@ export default function UserProfilePage() {
 
   const [modalVisible, setModalVisible] = useState(false)
   const [requestLoading, setRequestLoading] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [requestError, setRequestError] = useState('')
 
   const {
@@ -392,19 +395,39 @@ export default function UserProfilePage() {
                 const isPending = (sentRequests || []).some(r => String(r.mentorId) === String(id) && r.status === 'PENDING')
                 const hasActiveMentor = (activeMentorships || []).some(m => m.status === 'ACTIVE')
                 const isFull = profile.maxMenteeCapacity != null && (profile.currentMenteeCount ?? 0) >= profile.maxMenteeCapacity
-                
+
                 const btnDisabled = isPending || hasActiveMentor || isFull
                 const btnLabel = isPending ? '✓ Request Sent' : isFull ? 'At Capacity' : hasActiveMentor ? 'Already Mentored' : 'Send Request'
-                
+
                 return (
-                  <button
-                    className={`send-request-btn${isPending ? ' sent' : ''}${hasActiveMentor && !isPending ? ' locked' : ''}`}
-                    disabled={btnDisabled}
-                    onClick={() => !btnDisabled && setModalVisible(true)}
-                    style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
-                  >
-                    {btnLabel}
-                  </button>
+                  <>
+                    <button
+                      className={`send-request-btn${isPending ? ' sent' : ''}${hasActiveMentor && !isPending ? ' locked' : ''}`}
+                      disabled={btnDisabled}
+                      onClick={() => !btnDisabled && setModalVisible(true)}
+                      style={{ width: '100%', height: '44px', fontSize: '14px', fontWeight: 700 }}
+                    >
+                      {btnLabel}
+                    </button>
+                    {/* #128: mentees can report mentors. Backend rejects self-reports
+                        and duplicates; UI surfaces those errors inside the modal. */}
+                    <button
+                      type="button"
+                      onClick={() => setReportOpen(true)}
+                      style={{
+                        marginTop: '8px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      Report this mentor
+                    </button>
+                  </>
                 )
               })()}
             </div>
@@ -565,6 +588,15 @@ export default function UserProfilePage() {
           defaultMessage=""
         />
       )}
+
+      <ReportModal
+        open={reportOpen}
+        targetType="USER"
+        targetId={id}
+        targetLabel={displayName || 'this user'}
+        onClose={() => setReportOpen(false)}
+        onSubmitted={() => showTransientToast('Report submitted. Admins will review it.')}
+      />
     </MainLayout>
   )
 }
