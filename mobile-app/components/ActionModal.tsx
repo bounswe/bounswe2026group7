@@ -33,6 +33,7 @@ type Props = {
   loading?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  testID?: string;
 };
 
 export default function ActionModal({
@@ -46,6 +47,7 @@ export default function ActionModal({
   loading = false,
   onConfirm,
   onCancel,
+  testID,
 }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -57,7 +59,7 @@ export default function ActionModal({
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
-        <View style={styles.sheet}>
+        <View style={styles.sheet} testID={testID ? `${testID}.sheet` : undefined}>
           <View style={styles.handle} />
 
           <Text style={styles.title}>{title}</Text>
@@ -80,6 +82,7 @@ export default function ActionModal({
                 multiline={field.multiline}
                 textAlignVertical={field.multiline ? 'top' : 'center'}
                 editable={!loading}
+                testID={testID ? `${testID}.field-${i}` : undefined}
               />
             </View>
           ))}
@@ -89,6 +92,7 @@ export default function ActionModal({
               style={styles.cancelBtn}
               onPress={onCancel}
               disabled={loading}
+              testID={testID ? `${testID}.cancel` : undefined}
             >
               <Text style={styles.cancelBtnText}>{cancelLabel}</Text>
             </TouchableOpacity>
@@ -97,6 +101,7 @@ export default function ActionModal({
               style={[styles.confirmBtn, danger && styles.confirmBtnDanger, loading && { opacity: 0.6 }]}
               onPress={onConfirm}
               disabled={loading}
+              testID={testID ? `${testID}.confirm` : undefined}
             >
               {loading ? (
                 <ActivityIndicator size="small" color="#fff" />

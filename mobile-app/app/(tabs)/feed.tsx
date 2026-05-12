@@ -568,6 +568,7 @@ export default function FeedScreen() {
             value={searchQuery}
             onChangeText={setSearchQuery}
             returnKeyType="search"
+            testID="feed.search-input"
           />
           {searchLoading && <ActivityIndicator size="small" color="rgba(255,255,255,0.7)" style={{ marginRight: 4 }} />}
           {searchQuery.length > 0 && !searchLoading && (
@@ -587,6 +588,7 @@ export default function FeedScreen() {
             key={tab.key}
             style={[styles.filterTab, activeTab === tab.key && styles.filterTabActive]}
             onPress={() => setActiveTab(tab.key as any)}
+            testID={tab.key === 'forYou' ? 'feed.tab.for-you' : 'feed.tab.following'}
           >
             <Text style={[styles.filterTabText, activeTab === tab.key && styles.filterTabTextActive]}>
               {tab.label}
@@ -644,6 +646,7 @@ export default function FeedScreen() {
               style={styles.postCard}
               onLongPress={() => handlePostLongPress(post)}
               activeOpacity={0.97}
+              testID={`feed.post-card.${post.id}`}
             >
               {isRepostSurface && (
                 <View style={styles.repostBanner}>
@@ -720,7 +723,11 @@ export default function FeedScreen() {
               )}
 
               <View style={styles.postActions}>
-                <TouchableOpacity style={styles.actionBtn} onPress={() => toggleLike(post.id)}>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => toggleLike(post.id)}
+                  testID={`feed.post-like.${post.id}`}
+                >
                   <Text style={[styles.actionIcon, post.liked && styles.actionIconLiked]}>
                     {post.liked ? '♥' : '♡'}
                   </Text>
@@ -729,7 +736,11 @@ export default function FeedScreen() {
                   </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionBtn} onPress={() => openComments(post.id)}>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => openComments(post.id)}
+                  testID={`feed.post-comment.${post.id}`}
+                >
                   <Text style={styles.actionIcon}>💬</Text>
                   <Text style={styles.actionCount}>{post.comments}</Text>
                 </TouchableOpacity>
@@ -762,7 +773,7 @@ export default function FeedScreen() {
       )}
       </View>
 
-      <TouchableOpacity style={styles.createFab} onPress={() => setCreateVisible(true)}>
+      <TouchableOpacity style={styles.createFab} onPress={() => setCreateVisible(true)} testID="feed.compose-fab">
         <Text style={styles.createFabIcon}>✏</Text>
       </TouchableOpacity>
 

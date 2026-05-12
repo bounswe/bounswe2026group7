@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import Avatar from '../components/Avatar'
@@ -203,7 +203,7 @@ function ExtendMentorshipModal({ open, onClose, onConfirm, loading, otherName, c
       ref={overlayRef}
       onMouseDown={e => { if (e.target === overlayRef.current && !loading) onClose() }}
     >
-      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="extendMentorshipTitle">
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="extendMentorshipTitle" data-testid="mentorship-extend-modal">
         <div className="modal-header">
           <div>
             <h2 id="extendMentorshipTitle">Extend mentorship?</h2>
@@ -227,6 +227,7 @@ function ExtendMentorshipModal({ open, onClose, onConfirm, loading, otherName, c
               onClick={() => setMonths(m)}
               disabled={loading}
               aria-pressed={months === m}
+              data-testid={`mentorship-extend-option-${m}`}
             >
               +{m} month{m !== 1 ? 's' : ''}
             </button>
@@ -246,6 +247,7 @@ function ExtendMentorshipModal({ open, onClose, onConfirm, loading, otherName, c
             className="modal-btn-primary"
             onClick={() => onConfirm(months)}
             disabled={loading}
+            data-testid="mentorship-extend-confirm"
           >
             {loading ? 'Extending…' : `Extend by ${months} month${months !== 1 ? 's' : ''}`}
           </button>
@@ -572,6 +574,12 @@ export default function MentorshipDetailPage() {
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelError, setCancelError] = useState(null)
+
+  // Bumped by MentorshipMilestones after every mutation so the progress
+  // timeline refetches without a remount (which would reset its loading and
+  // scroll state). Passed as a prop, NOT React `key`, for that reason.
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
+  const bumpTimeline = useCallback(() => setTimelineRefreshKey(k => k + 1), [])
 
   // Hydrate any existing rating from the backend so the prompt doesn't flash
   // before the read-only block on revisit. 404 = no rating yet (expected
@@ -922,7 +930,10 @@ export default function MentorshipDetailPage() {
 
       {/* Progress + Timeline (#126 + #333, gated in #277) */}
       {mentorship.sharedGoal && (
-        <MentorshipProgressTimeline mentorshipId={mentorship.id} />
+        <MentorshipProgressTimeline
+          mentorshipId={mentorship.id}
+          refreshKey={timelineRefreshKey}
+        />
       )}
 
       {/* Milestones (#288, gated by goal in #277) */}
@@ -931,6 +942,7 @@ export default function MentorshipDetailPage() {
         isMentor={viewerIsMentor}
         isActive={isActive}
         hasSharedGoal={!!mentorship.sharedGoal}
+        onMutate={bumpTimeline}
       />
 
       {/* Mentor cross-mentee comparison (#126). Self-hides when viewer is a
@@ -1040,6 +1052,7 @@ export default function MentorshipDetailPage() {
             onClick={() => setExtendOpen(true)}
             disabled={!isActive}
             title={isActive ? 'Add 1, 3, or 6 months to the end date' : 'This mentorship has already ended'}
+            data-testid="mentorship-extend-open"
           >
             Extend Duration
           </button>

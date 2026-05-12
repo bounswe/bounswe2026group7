@@ -3,23 +3,24 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Avatar from './Avatar'
 import NotificationBell from './NotificationBell'
+import BannedStateBanner from './BannedStateBanner'
 import { useMentorship } from '../context/MentorshipContext'
 import usePresence from '../hooks/usePresence'
 import { getFeedUnreadCount } from '../services/api'
 import {
   Home, Compass, MessageCircle, CheckSquare, CalendarDays,
-  Clock, User, Newspaper, Users,
+  Clock, User, Newspaper, Users, Shield,
 } from 'lucide-react'
 import '../styles/main.css'
 
 const SOON = new Set()
 
-const NAV_TABS = [
+const BASE_NAV_TABS = [
   { label: 'Home', path: '/home' },
   { label: 'Explore', path: '/explore' },
   { label: 'Feed', path: '/feed' },
   { label: 'Messages', path: '/messages' },
-  { label: 'Mentorships', path: '/mentorships' },
+  { label: 'My Mentorships', path: '/mentorships' },
   { label: 'Tasks', path: '/tasks' },
   { label: 'Schedule', path: '/schedule' },
   { label: 'Calendar', path: '/calendar' },
@@ -27,7 +28,7 @@ const NAV_TABS = [
   { label: 'Profile', path: '/profile' },
 ]
 
-const SIDEBAR_LINKS = [
+const BASE_SIDEBAR_LINKS = [
   { label: 'Home', path: '/home', icon: Home },
   { label: 'Explore', path: '/explore', icon: Compass },
   { label: 'Feed', path: '/feed', icon: Newspaper },
@@ -46,6 +47,13 @@ export default function MainLayout({ children }) {
 
 
   const { role, logout, firstName, lastName, profilePhoto } = useAuth()
+  const isAdmin = role === 'ADMIN'
+  const NAV_TABS = isAdmin
+    ? [...BASE_NAV_TABS, { label: 'Admin', path: '/admin' }]
+    : BASE_NAV_TABS
+  const SIDEBAR_LINKS = isAdmin
+    ? [...BASE_SIDEBAR_LINKS, { label: 'Admin', path: '/admin', icon: Shield }]
+    : BASE_SIDEBAR_LINKS
   const {
     pendingCount, activeMenteeCount, activeMentorshipCount,
     tasksCount, sessionsCount, statsLoading
@@ -100,6 +108,7 @@ export default function MainLayout({ children }) {
 
   return (
     <>
+      <BannedStateBanner />
       <nav className="topnav">
         <div className="logo" onClick={() => navigate('/home')}>
           <span>Mentor</span>Net

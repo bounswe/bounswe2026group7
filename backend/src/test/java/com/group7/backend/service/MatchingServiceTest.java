@@ -195,7 +195,7 @@ class MatchingServiceTest {
 
         // Verify the SQL filter pushes capacity, not in-memory.
         verify(mentorRepository).findRankingCandidates(
-                any(), any(), any(), any(), eq(true), any(), any(Pageable.class));
+                any(), any(), any(), any(), eq(true), anyBoolean(), any(), any(Pageable.class));
     }
 
     // ── Pagination ────────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ class MatchingServiceTest {
 
         // Service normaliseKeyword: trim + lowercase + escape + wrap %...%.
         verify(mentorRepository).findRankingCandidates(
-                eq("%java%"), any(), any(), any(), anyBoolean(), any(), any());
+                eq("%java%"), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any());
     }
 
     @Test
@@ -290,7 +290,7 @@ class MatchingServiceTest {
         matchingService.getTopMentors(1L, "ab", pageable);
 
         verify(mentorRepository).findRankingCandidates(
-                eq(null), any(), any(), any(), anyBoolean(), any(), any());
+                eq(null), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any());
     }
 
     @Test
@@ -301,7 +301,7 @@ class MatchingServiceTest {
         matchingService.getTopMentors(1L, "   ", pageable);
 
         verify(mentorRepository).findRankingCandidates(
-                eq(null), any(), any(), any(), anyBoolean(), any(), any());
+                eq(null), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any());
     }
 
     @Test
@@ -312,7 +312,7 @@ class MatchingServiceTest {
         matchingService.getTopMentors(1L, null, pageable);
 
         verify(mentorRepository).findRankingCandidates(
-                eq(null), any(), any(), any(), anyBoolean(), any(), any());
+                eq(null), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any());
     }
 
     @Test
@@ -324,7 +324,7 @@ class MatchingServiceTest {
 
         // Escape order: pipe first, then % and _. Result: "%abc|%def%".
         verify(mentorRepository).findRankingCandidates(
-                eq("%abc|%def%"), any(), any(), any(), anyBoolean(), any(), any());
+                eq("%abc|%def%"), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any());
     }
 
     // ── Ordering ──────────────────────────────────────────────────────────
@@ -502,7 +502,7 @@ class MatchingServiceTest {
         // overlap is part of scoring, not filtering, and the mentee path here
         // doesn't score.
         verify(menteeRepository).findRankingCandidates(
-                any(), any(), any(), any(), eq(true),
+                any(), any(), any(), any(), eq(true), anyBoolean(),
                 org.mockito.ArgumentMatchers.isNull(), any(Pageable.class));
     }
 
@@ -514,7 +514,7 @@ class MatchingServiceTest {
         matchingService.getCandidateMentees(1L, "machine", pageable);
 
         verify(menteeRepository).findRankingCandidates(
-                eq("%machine%"), any(), any(), any(), anyBoolean(), any(), any());
+                eq("%machine%"), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any());
     }
 
     @Test
@@ -588,7 +588,7 @@ class MatchingServiceTest {
         assertThat(result).hasSize(1);
         // Same 200-cap as the paginated path (verified via PageRequest.of(0, 200)).
         verify(mentorRepository).findRankingCandidates(
-                any(), any(), any(), any(), anyBoolean(), any(), eq(PageRequest.of(0, 200)));
+                any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(), eq(PageRequest.of(0, 200)));
     }
 
     @Test
@@ -747,13 +747,13 @@ class MatchingServiceTest {
 
     private void stubMentorSearch(List<Mentor> mentors) {
         when(mentorRepository.findRankingCandidates(
-                any(), any(), any(), any(), anyBoolean(), any(), any(Pageable.class)))
+                any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(Pageable.class)))
                 .thenReturn(mentors);
     }
 
     private void stubMenteeSearch(List<Mentee> mentees) {
         when(menteeRepository.findRankingCandidates(
-                any(), any(), any(), any(), anyBoolean(), any(), any(Pageable.class)))
+                any(), any(), any(), any(), anyBoolean(), anyBoolean(), any(), any(Pageable.class)))
                 .thenReturn(mentees);
     }
 }

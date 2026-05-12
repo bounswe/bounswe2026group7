@@ -117,6 +117,23 @@ class MatchingControllerTest {
     }
 
     @Test
+    void getTopMentors_privateMentorAbsent_serviceReturnsEmptyPage() throws Exception {
+        // #570 — MatchingService.rankMentorsFor passes bypassVisibility=false,
+        // so private mentors never reach the controller. Controller test
+        // verifies the empty-page contract end-to-end.
+        mockValidMenteeJwt("mentee-token", 1L);
+        when(matchingService.getTopMentors(eq(1L), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/matching/mentors")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
     void getTopMentorsReturns403WhenAlreadyHasMentor() throws Exception {
         mockValidMenteeJwt("mentee-token", 1L);
         when(matchingService.getTopMentors(eq(1L), any(), any(), any(Pageable.class)))

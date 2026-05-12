@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -21,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@TestPropertySource(properties = "app.test-endpoints.enabled=false")
 class TestSupportControllerSecurityTest {
 
     @Autowired
@@ -41,6 +43,24 @@ class TestSupportControllerSecurityTest {
     @Test
     void seedUserEndpointReturns404WhenTestEndpointsDisabled() throws Exception {
         mockMvc.perform(post("/api/test/users").contentType("application/json").content("{}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void triggerMeetingAutoDeclineEndpointReturns404WhenTestEndpointsDisabled() throws Exception {
+        mockMvc.perform(post("/api/test/trigger-meeting-auto-decline"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void triggerMentorshipAutoCompletionEndpointReturns404WhenTestEndpointsDisabled() throws Exception {
+        mockMvc.perform(post("/api/test/trigger-mentorship-auto-completion"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void triggerReminderSchedulerEndpointReturns404WhenTestEndpointsDisabled() throws Exception {
+        mockMvc.perform(post("/api/test/trigger-reminder-scheduler"))
                 .andExpect(status().isNotFound());
     }
 }

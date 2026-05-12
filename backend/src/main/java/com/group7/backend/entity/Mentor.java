@@ -14,6 +14,18 @@ import java.util.List;
 @NoArgsConstructor
 public class Mentor extends User {
 
+    /**
+     * Public visibility flag mirroring {@link Mentee#getProfileVisibility()}.
+     * Backed by V54 ({@code mentors.profile_visibility NOT NULL DEFAULT TRUE});
+     * existing rows default to {@code true}, so public-by-default mentors keep
+     * their pre-#570 behaviour. When set to {@code false}, the privacy gate in
+     * {@code UserService.getProfileById} returns 403 to every viewer except
+     * the owner and admins, and the list/search/matching endpoints exclude
+     * the mentor row at SQL level via the {@code :bypassVisibility} parameter.
+     */
+    @Column(nullable = false)
+    private Boolean profileVisibility = true;
+
     private String bio;
 
     private String field;

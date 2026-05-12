@@ -116,6 +116,7 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
             color: '#fff', fontSize: 10, fontWeight: 700,
             padding: '3px 8px', borderRadius: 999, letterSpacing: 0.3,
           }}
+          data-testid={`explore-diverse-pill-${mentor.id}`}
         >
           Diverse pick
         </span>
@@ -124,8 +125,8 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
       <div className="match-card-header">
         <div className="match-avatar">{mentor.firstName?.[0] ?? '?'}</div>
         <div className="match-header-info">
-          <p className="match-name">{mentor.firstName}</p>
-          <p className="match-role">{[mentor.expertise, mentor.affiliation].filter(Boolean).join(' · ')}</p>
+          <p className="match-name" data-testid={`explore-mentor-name-${mentor.id}`}>{mentor.firstName}</p>
+          <p className="match-role" data-testid={`explore-mentor-city-${mentor.id}`}>{[mentor.expertise, mentor.affiliation].filter(Boolean).join(' · ')}</p>
         </div>
         <ScoreRing score={mentor.matchScore ?? 0} animate={scoreAnimate} />
       </div>
@@ -148,6 +149,7 @@ function MatchCard({ mentor, rank, visible, alreadySent, hasActiveMentor, onRequ
                 fontSize: 11, fontWeight: 600, padding: '3px 8px',
                 borderRadius: 999, ...FACTOR_STYLES[f.kind],
               }}
+              data-testid={`explore-factor-${mentor.id}-${i}`}
             >
               {f.label}
             </span>
@@ -384,6 +386,7 @@ export default function ExplorePage() {
             placeholder={isMentee ? 'Search topic or mentor...' : 'Search by name, major, goals, skills...'}
             value={search}
             onChange={e => setSearch(e.target.value)}
+            data-testid="explore-search-input"
           />
         </div>
       </div>
@@ -462,8 +465,8 @@ export default function ExplorePage() {
                   <div className="mc-info">
                     <Avatar src={m.profilePhoto} initials={m.firstName?.[0]?.toUpperCase() ?? '?'} size="md" />
                     <div>
-                      <div className="mc-name">{m.firstName}</div>
-                      <div className="mc-sub">{[m.expertise, m.affiliation].filter(Boolean).join(' · ')}</div>
+                      <div className="mc-name" data-testid={`explore-mentor-name-${m.id}`}>{m.firstName}</div>
+                      <div className="mc-sub" data-testid={`explore-mentor-city-${m.id}`}>{[m.expertise, m.affiliation].filter(Boolean).join(' · ')}</div>
                     </div>
                   </div>
                   {full && <span className="badge-full">Full</span>}

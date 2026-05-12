@@ -6,6 +6,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.Locale;
 
 @Service
 public class NotificationEventPublisher {
@@ -323,6 +324,24 @@ public class NotificationEventPublisher {
                 followerId,
                 null
         ));
+    }
+
+    /**
+     * Notify an admin that a new report has been submitted. Title and
+     * body are deliberately generic — the admin clicks through to the
+     * queue at /api/admin/reports for full context. Body never contains
+     * the reporter's free-text description (potential PII).
+     */
+    public void publishReportReceived(Long adminId,
+                                       String reporterFirstName,
+                                       com.group7.backend.entity.ReportTargetType targetType) {
+        publish(
+                adminId,
+                NotificationType.REPORT_RECEIVED,
+                "New report received",
+                reporterFirstName + " submitted a report against a "
+                        + targetType.name().toLowerCase(Locale.ROOT) + "."
+        );
     }
 
     public void publish(Long recipientId, NotificationType type, String title, String body) {

@@ -37,6 +37,7 @@ public interface MentorRepository extends JpaRepository<Mentor, Long> {
                  LOWER(m.preferredMenteeMajor) = :major OR
                  LOWER(m.field) = :major)
             AND (:requireCapacity = false OR m.currentMenteeCount < m.maxMenteeCapacity)
+            AND (:bypassVisibility = true OR m.profileVisibility = true)
             AND (:requesterMenteeId IS NULL OR
                  EXISTS (SELECT 1 FROM AvailabilitySlot ms, MenteeAvailabilitySlot mes
                          WHERE ms.mentor.id = m.id
@@ -84,6 +85,7 @@ public interface MentorRepository extends JpaRepository<Mentor, Long> {
             @Param("skills") List<String> skills,
             @Param("major") String major,
             @Param("requireCapacity") boolean requireCapacity,
+            @Param("bypassVisibility") boolean bypassVisibility,
             @Param("requesterMenteeId") Long requesterMenteeId,
             Pageable pageable);
 
@@ -102,6 +104,7 @@ public interface MentorRepository extends JpaRepository<Mentor, Long> {
             @Param("skills") List<String> skills,
             @Param("major") String major,
             @Param("requireCapacity") boolean requireCapacity,
+            @Param("bypassVisibility") boolean bypassVisibility,
             @Param("requesterMenteeId") Long requesterMenteeId,
             Pageable pageable);
 }

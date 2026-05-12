@@ -1,9 +1,13 @@
 package com.group7.backend.service;
 
 import com.group7.backend.dto.response.AdminResponse;
+import com.group7.backend.dto.response.MenteeResponse;
+import com.group7.backend.dto.response.MentorResponse;
+import com.group7.backend.dto.response.ProfileResponse;
 import com.group7.backend.dto.response.UserProfileResponse;
 import com.group7.backend.dto.response.UserRatingSummary;
 import com.group7.backend.entity.Admin;
+import com.group7.backend.entity.Mentee;
 import com.group7.backend.entity.Mentor;
 import com.group7.backend.exception.ProfileNotVisibleException;
 import com.group7.backend.repository.AvailabilitySlotRepository;
@@ -12,12 +16,13 @@ import com.group7.backend.repository.MenteeAvailabilitySlotRepository;
 import com.group7.backend.repository.MenteeRepository;
 import com.group7.backend.repository.MentorRepository;
 import com.group7.backend.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
@@ -47,7 +52,18 @@ class UserServiceTest {
     @Mock private MentorRatingService mentorRatingService;
     @Mock private ApplicationEventPublisher eventPublisher;
 
-    @InjectMocks private UserService userService;
+    // Manually constructed because UserService now takes a primitive boolean
+    // arg for the #570 mask flag — Mockito's @InjectMocks refuses to pick a
+    // constructor that requires a primitive it can't auto-supply.
+    private UserService userService;
+
+    @BeforeEach
+    void setUp() {
+        userService = new UserService(userRepository, mentorRepository, menteeRepository,
+                availabilitySlotRepository, menteeAvailabilitySlotRepository,
+                followRepository, fileStorageService, mentorRatingService, eventPublisher,
+                /*menteeMaskEnabled*/ true);
+    }
 
     @Test
     void getOwnUserProfile_admin_returnsAdminResponseWithRoleADMIN() {
@@ -88,6 +104,137 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.getProfileById(42L, 7L))
                 .isInstanceOf(ProfileNotVisibleException.class)
                 .hasMessageContaining("Admin");
+    }
+
+    // ─── #570 redaction matrix ─────────────────────────────────────────────
+
+    @Test
+    void getProfileById_menteeViewsPrivateMentor_returns403() {
+        Mentee viewer = mentee(1L);
+        Mentor target = mentor(2L);
+        target.setProfileVisibility(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(viewer));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> userService.getProfileById(2L, 1L))
+                .isInstanceOf(ProfileNotVisibleException.class)
+                .hasMessageContaining("private");
+    }
+
+    @Test
+    void getProfileById_mentorViewsPrivateMentor_returns403() {
+        Mentor viewer = mentor(1L);
+        Mentor target = mentor(2L);
+        target.setProfileVisibility(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(viewer));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> userService.getProfileById(2L, 1L))
+                .isInstanceOf(ProfileNotVisibleException.class);
+    }
+
+    @Test
+    void getProfileById_mentorViewsPrivateMentee_returns403() {
+        Mentor viewer = mentor(1L);
+        Mentee target = mentee(2L);
+        target.setProfileVisibility(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(viewer));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> userService.getProfileById(2L, 1L))
+                .isInstanceOf(ProfileNotVisibleException.class);
+    }
+
+    @Test
+    void getProfileById_adminViewsPrivateMentor_returns200AndUnmasked() {
+        Admin viewer = admin(1L, "Root", "Admin", "root@admin");
+        Mentor target = mentor(2L);
+        target.setFirstName("Mira");
+        target.setLastName("Demir");
+        target.setProfileVisibility(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(viewer));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+
+        ProfileResponse out = userService.getProfileById(2L, 1L);
+
+        assertThat(out).isInstanceOf(MentorResponse.class);
+        assertThat(((MentorResponse) out).getLastName()).isEqualTo("Demir");
+    }
+
+    @Test
+    void getProfileById_mentorViewsVisibleMentee_masksLastNameAndPhoto() {
+        // Mask flag is initialised by Spring's @Value; in this unit test
+        // construct @InjectMocks won't populate it, so set it manually.
+        ReflectionTestUtils.setField(userService, "menteeMaskEnabled", true);
+
+        Mentor viewer = mentor(1L);
+        Mentee target = mentee(2L);
+        target.setFirstName("Ali");
+        target.setLastName("Yilmaz");
+        target.setProfilePhoto("https://example.com/photo.jpg");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(viewer));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+
+        ProfileResponse out = userService.getProfileById(2L, 1L);
+
+        assertThat(out).isInstanceOf(MenteeResponse.class);
+        MenteeResponse mr = (MenteeResponse) out;
+        assertThat(mr.getFirstName()).isEqualTo("Ali");
+        assertThat(mr.getLastName()).isNull();
+        assertThat(mr.getProfilePhoto()).isNull();
+    }
+
+    @Test
+    void getProfileById_mentorViewsMentee_maskFlagOff_noMasking() {
+        ReflectionTestUtils.setField(userService, "menteeMaskEnabled", false);
+
+        Mentor viewer = mentor(1L);
+        Mentee target = mentee(2L);
+        target.setFirstName("Ali");
+        target.setLastName("Yilmaz");
+        target.setProfilePhoto("https://example.com/photo.jpg");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(viewer));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+
+        ProfileResponse out = userService.getProfileById(2L, 1L);
+
+        assertThat(out).isInstanceOf(MenteeResponse.class);
+        MenteeResponse mr = (MenteeResponse) out;
+        assertThat(mr.getLastName()).isEqualTo("Yilmaz");
+        assertThat(mr.getProfilePhoto()).isEqualTo("https://example.com/photo.jpg");
+    }
+
+    @Test
+    void getProfileById_self_evenIfPrivate_returns200() {
+        Mentor target = mentor(7L);
+        target.setProfileVisibility(false);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(target));
+
+        ProfileResponse out = userService.getProfileById(7L, 7L);
+
+        assertThat(out).isInstanceOf(MentorResponse.class);
+    }
+
+    @Test
+    void getProfileById_menteeViewsOtherMentee_403_visibilityIrrelevant() {
+        // The pre-existing 1.1.2.7 gate runs before the new #570 gate, so this
+        // returns 403 even when the target's profileVisibility is true.
+        Mentee viewer = mentee(1L);
+        Mentee target = mentee(2L);
+        target.setProfileVisibility(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(viewer));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> userService.getProfileById(2L, 1L))
+                .isInstanceOf(ProfileNotVisibleException.class)
+                .hasMessageContaining("Mentees cannot view");
+    }
+
+    private static Mentee mentee(Long id) {
+        Mentee m = new Mentee();
+        m.setId(id);
+        m.setEmail("mentee" + id + "@local.dev");
+        return m;
     }
 
     private static Admin admin(Long id, String firstName, String lastName, String email) {

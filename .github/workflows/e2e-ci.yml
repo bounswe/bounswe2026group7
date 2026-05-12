@@ -151,9 +151,39 @@ jobs:
             exit "$rc"
           fi
 
+      # Playwright browser binaries are the biggest single cost in this
+      # workflow — a cold `playwright install --with-deps` consistently
+      # takes 3-5 min and on a contended runner has been observed to stall
+      # past 10 min on the network step. Cache the binaries keyed on the
+      # Playwright package version so the only cold-install case is a
+      # version bump; cache-hits drop the step to ~20-30s for `install-deps`
+      # alone (apt packages, not cacheable via actions/cache, are quick).
+      # Pattern from Playwright's own CI guidance:
+      # https://playwright.dev/docs/ci-intro#caching-browsers
+      - name: Resolve Playwright version
+        id: playwright-version
+        working-directory: frontend
+        run: |
+          echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright browsers
         working-directory: frontend
-        run: npx playwright install --with-deps
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
+            npx playwright install --with-deps
+          else
+            # Browser binaries restored from cache; still need the system
+            # libraries (libnss, libasound, etc.) the browsers link
+            # against. apt-get-driven install-deps runs in ~10-20s.
+            npx playwright install-deps
+          fi
 
       - name: Run Playwright suite
         working-directory: frontend

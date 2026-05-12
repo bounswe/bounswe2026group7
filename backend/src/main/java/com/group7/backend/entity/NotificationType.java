@@ -53,5 +53,8 @@ public enum NotificationType {
     FEED_SHARE,
     // Sent to the followee when another user follows them. Self-follow is
     // already blocked upstream by SelfFollowException.
-    NEW_FOLLOWER
+    NEW_FOLLOWER,
+    // Report-routing fan-out (#135). REPORT_RECEIVED fires per admin when
+    // a user submits a report against a post / mentorship / user target.
+    REPORT_RECEIVED
 }

@@ -10,10 +10,12 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ProtectedRoute from './components/ProtectedRoute'
+import AdminRoute from './components/AdminRoute'
 import UserProfilePage from './pages/UserProfilePage'
 import UserFollowListPage from './pages/UserFollowListPage'
 import MentorshipDetailPage from './pages/MentorshipDetailPage'
-import MentorshipsListPage from './pages/MentorshipsListPage'
+import MyMentorshipsPage from './pages/MyMentorshipsPage'
+import AdminConsolePage from './pages/AdminConsolePage'
 import MessagesPage from './pages/MessagesPage'
 import TasksPage from './pages/TasksPage'
 import SchedulePage from './pages/SchedulePage'
@@ -42,7 +44,7 @@ export default function App() {
           <Route path="/users/:id" element={<UserProfilePage />} />
           <Route path="/users/:id/followers" element={<UserFollowListPage mode="followers" />} />
           <Route path="/users/:id/following" element={<UserFollowListPage mode="following" />} />
-          <Route path="/mentorships" element={<MentorshipsListPage />} />
+          <Route path="/mentorships" element={<MyMentorshipsPage />} />
           <Route path="/mentorships/:id" element={<MentorshipDetailPage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/tasks" element={<TasksPage />} />
@@ -52,6 +54,9 @@ export default function App() {
           <Route path="/feed" element={<FeedPage />} />
           <Route path="/feed/bookmarks" element={<FeedBookmarksPage />} />
           <Route path="/feed/:id" element={<FeedPostDetailPage />} />
+        </Route>
+        <Route element={<AdminRoute />}>
+          <Route path="/admin" element={<AdminConsolePage />} />
         </Route>
       </Routes>
     </BrowserRouter>

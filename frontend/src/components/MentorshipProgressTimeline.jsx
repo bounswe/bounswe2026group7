@@ -22,13 +22,18 @@ import { getMentorshipProgress, getMentorshipTimeline } from '../services/api'
  *
  * Clicking any item navigates to its `detailUrl` from the backend.
  */
-export default function MentorshipProgressTimeline({ mentorshipId }) {
+export default function MentorshipProgressTimeline({ mentorshipId, refreshKey = 0 }) {
   const navigate = useNavigate()
   const [progress, setProgress] = useState(null)
   const [timeline, setTimeline] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // `refreshKey` lets a parent (MentorshipDetailPage) signal a refetch after
+  // a milestone mutation without remounting the component — which would
+  // wipe loading and scroll state. The previous progress/timeline values are
+  // intentionally kept in state while the refetch runs (stale-while-revalidate)
+  // so the ribbon doesn't flash empty between mutations.
   const reload = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -44,7 +49,8 @@ export default function MentorshipProgressTimeline({ mentorshipId }) {
     } finally {
       setLoading(false)
     }
-  }, [mentorshipId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mentorshipId, refreshKey])
 
   useEffect(() => { reload() }, [reload])
 
@@ -138,6 +144,7 @@ export default function MentorshipProgressTimeline({ mentorshipId }) {
                   style={{ left: `${m.x}%` }}
                   onClick={() => navigate(absolutePathFromDetailUrl(m.detailUrl) || '/home')}
                   title={`${m.title} · ${formatDate(m.occursAt)}`}
+                  data-testid={`timeline-milestone-${m.id}`}
                 >
                   {m.title}
                 </button>
@@ -146,8 +153,8 @@ export default function MentorshipProgressTimeline({ mentorshipId }) {
 
             {/* Bar with start/end anchors + event dots */}
             <div className="progress-ribbon-bar">
-              <div className="progress-anchor progress-anchor--start" />
-              <div className="progress-anchor progress-anchor--end" />
+              <div className="progress-anchor progress-anchor--start" data-testid="timeline-start" />
+              <div className="progress-anchor progress-anchor--end" data-testid="timeline-end" />
 
               {events.map(it => (
                 <button
@@ -158,12 +165,13 @@ export default function MentorshipProgressTimeline({ mentorshipId }) {
                   onClick={() => navigate(absolutePathFromDetailUrl(it.detailUrl) || '/home')}
                   title={`${typeLabel(it.type)}: ${it.title} · ${formatDate(it.occursAt)}`}
                   aria-label={`${typeLabel(it.type)} ${it.title}`}
+                  data-testid={`timeline-event-${it.id}`}
                 />
               ))}
 
               {/* Today marker — only shown if it falls within the program window */}
               {positions.today >= 0 && positions.today <= 100 && (
-                <div className="progress-today" style={{ left: `${positions.today}%` }}>
+                <div className="progress-today" style={{ left: `${positions.today}%` }} data-testid="timeline-today">
                   <span className="progress-today-label">Today</span>
                 </div>
               )}
