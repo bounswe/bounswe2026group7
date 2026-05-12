@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -122,7 +123,8 @@ class AdminMessagingControllerTest {
     @Test
     void listBroadcast_asAdmin_returns200WithPagedMessages() throws Exception {
         mockJwt("admin-token", "ADMIN", 99L);
-        when(conversationService.findOrCreateAdminBroadcast()).thenReturn(broadcast());
+        when(conversationService.findAdminBroadcastForReader(99L))
+                .thenReturn(Optional.of(broadcast()));
         when(messageService.list(eq(99L), eq(7000L), any()))
                 .thenReturn(new PageImpl<>(List.of(sampleMessage(7000L))));
 
@@ -131,6 +133,21 @@ class AdminMessagingControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].content").value("ops update"))
                 .andExpect(jsonPath("$.content[0].conversationId").value(7000));
+    }
+
+    @Test
+    void listBroadcast_noBroadcastEverSent_returnsEmptyPageWithoutSideEffect() throws Exception {
+        mockJwt("admin-token", "ADMIN", 99L);
+        when(conversationService.findAdminBroadcastForReader(99L))
+                .thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/admin/messages/broadcast")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty());
+
+        verify(messageService, never()).list(any(), any(), any());
     }
 
     @Test
@@ -155,13 +172,27 @@ class AdminMessagingControllerTest {
     @Test
     void markBroadcastRead_asAdmin_returns204() throws Exception {
         mockJwt("admin-token", "ADMIN", 99L);
-        when(conversationService.findOrCreateAdminBroadcast()).thenReturn(broadcast());
+        when(conversationService.findAdminBroadcastForReader(99L))
+                .thenReturn(Optional.of(broadcast()));
 
         mockMvc.perform(patch("/api/admin/messages/broadcast/read")
                         .header("Authorization", "Bearer admin-token"))
                 .andExpect(status().isNoContent());
 
         verify(messageService).markAllRead(eq(99L), eq(7000L));
+    }
+
+    @Test
+    void markBroadcastRead_noBroadcastEverSent_returns204NoOp() throws Exception {
+        mockJwt("admin-token", "ADMIN", 99L);
+        when(conversationService.findAdminBroadcastForReader(99L))
+                .thenReturn(Optional.empty());
+
+        mockMvc.perform(patch("/api/admin/messages/broadcast/read")
+                        .header("Authorization", "Bearer admin-token"))
+                .andExpect(status().isNoContent());
+
+        verify(messageService, never()).markAllRead(any(), any());
     }
 
     @Test
