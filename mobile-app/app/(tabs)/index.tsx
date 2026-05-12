@@ -272,25 +272,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>{sectionTitle}</Text>
-        <View style={styles.tabRow}>
-          <TouchableOpacity
-            style={[styles.tabChip, selectedTab === 'active' && styles.tabChipActive]}
-            onPress={() => setSelectedTab('active')}
-          >
-            <Text style={[styles.tabChipText, selectedTab === 'active' && styles.tabChipTextActive]}>
-              Active ({activeConnections.length})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabChip, selectedTab === 'past' && styles.tabChipActive]}
-            onPress={() => setSelectedTab('past')}
-          >
-            <Text style={[styles.tabChipText, selectedTab === 'past' && styles.tabChipTextActive]}>
-              Past ({pastConnections.length})
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
           {(['active', 'past'] as const).map((tab) => (
             <TouchableOpacity

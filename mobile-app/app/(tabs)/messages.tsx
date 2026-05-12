@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -22,6 +23,7 @@ import * as Sharing from 'expo-sharing';
 import apiClient from '../../api/client';
 import { useRole } from '../../components/RoleContext';
 import { useProtectedSession } from '../../components/useProtectedSession';
+import AuthImage from '../../components/AuthImage';
 
 type ConversationListTab = 'mentorships' | 'mentorPeers';
 
@@ -846,30 +848,37 @@ export default function MessagesScreen() {
                       </Text>
 
                       {message.attachment ? (
-                        <TouchableOpacity
-                          style={styles.attachmentPill}
-                          onPress={() => openAttachment(message.attachment!)}
-                          disabled={openingAttachmentId === message.attachment.id}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Open attachment ${message.attachment.name}`}
-                          accessibilityHint={
-                            openingAttachmentId === message.attachment.id
-                              ? 'Attachment is opening'
-                              : 'Opens the shared attachment'
-                          }
-                        >
-                          <Text style={styles.attachmentIcon}>
-                            {message.attachment.contentType?.includes('image') ? '🖼️' : '📄'}
-                          </Text>
-                          <View style={styles.attachmentTextWrap}>
-                            <Text style={styles.attachmentTitle}>{message.attachment.name}</Text>
-                            <Text style={styles.attachmentMeta}>
-                              {openingAttachmentId === message.attachment.id
-                                ? 'Opening...'
-                                : message.attachment.meta}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
+                        message.attachment.contentType?.includes('image') && message.attachment.downloadUrl ? (
+                          <AuthImage
+                            downloadUrl={message.attachment.downloadUrl}
+                            filename={message.attachment.name}
+                            style={{ width: 220, height: 160 }}
+                            onPress={() => openAttachment(message.attachment!)}
+                          />
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.attachmentPill}
+                            onPress={() => openAttachment(message.attachment!)}
+                            disabled={openingAttachmentId === message.attachment.id}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open attachment ${message.attachment.name}`}
+                            accessibilityHint={
+                              openingAttachmentId === message.attachment.id
+                                ? 'Attachment is opening'
+                                : 'Opens the shared attachment'
+                            }
+                          >
+                            <Text style={styles.attachmentIcon}>📄</Text>
+                            <View style={styles.attachmentTextWrap}>
+                              <Text style={styles.attachmentTitle}>{message.attachment.name}</Text>
+                              <Text style={styles.attachmentMeta}>
+                                {openingAttachmentId === message.attachment.id
+                                  ? 'Opening...'
+                                  : message.attachment.meta}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        )
                       ) : null}
                     </View>
 
@@ -892,6 +901,13 @@ export default function MessagesScreen() {
 
         {pendingAttachment ? (
           <View style={styles.pendingAttachmentBar}>
+            {pendingAttachment.type?.includes('image') ? (
+              <Image
+                source={{ uri: pendingAttachment.uri }}
+                style={{ width: 44, height: 44, borderRadius: 8, marginRight: 10 }}
+                resizeMode="cover"
+              />
+            ) : null}
             <View style={styles.pendingAttachmentInfo}>
               <Text style={styles.pendingAttachmentTitle}>{pendingAttachment.name}</Text>
               <Text style={styles.pendingAttachmentMeta}>

@@ -2,6 +2,7 @@ package com.group7.backend.event;
 
 import com.group7.backend.dto.feed.FeedTopics;
 import com.group7.backend.dto.response.FeedPostPushPayload;
+import com.group7.backend.dto.response.FeedSharePushPayload;
 import com.group7.backend.repository.FollowRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,12 +84,50 @@ public class FeedFanoutListener {
         }
     }
 
+    /**
+     * Mirror of {@link #onFeedPostCreated} for repost / quote-share
+     * events. Fans out a slim {@link FeedSharePushPayload} to every
+     * follower of the sharer (NOT the post author) so the repost
+     * surfaces in those followers' Following feed in near-real-time.
+     *
+     * <p>Silent shares (the existing {@code /share} endpoint) do not
+     * publish {@link FeedPostSharedEvent} and therefore never reach this
+     * listener — their semantics remain unchanged.
+     */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onFeedPostShared(FeedPostSharedEvent event) {
+        try {
+            Set<Long> followers = followRepository.findFollowerIdsByFolloweeId(event.sharerId());
+            if (followers.isEmpty()) {
+                return;
+            }
+            FeedSharePushPayload payload = new FeedSharePushPayload(
+                    event.shareId(),
+                    event.postId(),
+                    event.sharerId(),
+                    event.sharerFirstName(),
+                    event.commentary(),
+                    event.sharedAt());
+            int delivered = broadcastTo(followers, payload, event.postId());
+            log.info("Share fanout: shareId={}, sharerId={}, postId={}, recipients={}, delivered={}",
+                    event.shareId(), event.sharerId(), event.postId(), followers.size(), delivered);
+        } catch (RuntimeException ex) {
+            log.error("Share fanout aborted: shareId={}, sharerId={}: {}",
+                    event.shareId(), event.sharerId(), ex.getMessage(), ex);
+        }
+    }
+
     private static FeedPostPushPayload toPayload(FeedPostCreatedEvent event) {
         return new FeedPostPushPayload(
                 event.postId(), event.authorId(), event.authorFirstName(), event.createdAt());
     }
 
-    private int broadcastTo(Set<Long> recipients, FeedPostPushPayload payload, Long postId) {
+    // Payload typed as Object: SimpMessagingTemplate.convertAndSend is itself
+    // untyped, and the share-fanout path needs to send FeedSharePushPayload
+    // through the same helper. The previous strongly-typed FeedPostPushPayload
+    // parameter blocked reuse.
+    private int broadcastTo(Set<Long> recipients, Object payload, Long postId) {
         int delivered = 0;
         for (Long recipientId : recipients) {
             try {

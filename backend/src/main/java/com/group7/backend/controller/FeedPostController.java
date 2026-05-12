@@ -97,7 +97,7 @@ public class FeedPostController {
             Authentication authentication) {
         Long authorId = (Long) authentication.getCredentials();
         FeedPostResponse body = feedPostService.create(
-                authorId, request.body(), request.hashtags(), request.attachmentIds());
+                authorId, request.body(), request.hashtags(), request.attachmentIds(), request.lang());
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 

@@ -212,6 +212,88 @@ class MentorshipControllerTest {
                 .andExpect(status().isOk());
     }
 
+    // ── Paginated history (#521) ────────────────────────────────────────────
+
+    @Test
+    void getMentorshipsByStatus_ALL_returnsPagedAcrossEveryState() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        MentorshipResponse active = sampleMentorship();
+        MentorshipResponse completed = sampleMentorship();
+        completed.setId(101L);
+        completed.setStatus("COMPLETED");
+        org.springframework.data.domain.Page<MentorshipResponse> page =
+                new org.springframework.data.domain.PageImpl<>(
+                        List.of(active, completed),
+                        org.springframework.data.domain.PageRequest.of(0, 20),
+                        2);
+        when(mentorshipService.getMentorshipsByStatus(
+                org.mockito.ArgumentMatchers.eq(1L),
+                org.mockito.ArgumentMatchers.eq("ALL"),
+                any())).thenReturn(page);
+
+        mockMvc.perform(get("/api/mentorships?status=ALL")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$.content[1].status").value("COMPLETED"))
+                .andExpect(jsonPath("$.totalElements").value(2));
+    }
+
+    @Test
+    void getMentorshipsByStatus_specificStatus_filtersAccordingly() throws Exception {
+        mockMenteeJwt("mentee-token", 2L);
+        MentorshipResponse completed = sampleMentorship();
+        completed.setStatus("COMPLETED");
+        org.springframework.data.domain.Page<MentorshipResponse> page =
+                new org.springframework.data.domain.PageImpl<>(
+                        List.of(completed),
+                        org.springframework.data.domain.PageRequest.of(0, 20),
+                        1);
+        when(mentorshipService.getMentorshipsByStatus(
+                org.mockito.ArgumentMatchers.eq(2L),
+                org.mockito.ArgumentMatchers.eq("COMPLETED"),
+                any())).thenReturn(page);
+
+        mockMvc.perform(get("/api/mentorships?status=COMPLETED")
+                        .header("Authorization", "Bearer mentee-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].status").value("COMPLETED"));
+    }
+
+    @Test
+    void getMentorshipsByStatus_invalidStatusString_returns400() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+        when(mentorshipService.getMentorshipsByStatus(
+                org.mockito.ArgumentMatchers.eq(1L),
+                org.mockito.ArgumentMatchers.eq("BANANA"),
+                any()))
+                .thenThrow(new IllegalArgumentException(
+                        "Invalid status filter: 'BANANA'. Expected ALL or one of [ACTIVE, COMPLETED, TERMINATED, CANCELLED]"));
+
+        mockMvc.perform(get("/api/mentorships?status=BANANA")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getMentorshipsByStatus_pageSizeOver100_returns400() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+
+        mockMvc.perform(get("/api/mentorships?status=ALL&size=200")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getMentorshipsByStatus_negativePage_returns400() throws Exception {
+        mockMentorJwt("mentor-token", 1L);
+
+        mockMvc.perform(get("/api/mentorships?status=ALL&page=-1")
+                        .header("Authorization", "Bearer mentor-token"))
+                .andExpect(status().isBadRequest());
+    }
+
     // ── Shared goal ─────────────────────────────────────────────────────────
 
     @Test
