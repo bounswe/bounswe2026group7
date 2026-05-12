@@ -78,9 +78,9 @@ class FeedPostControllerTest {
     @Test
     void create_happyPath_returns201() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        when(feedPostService.create(eq(1L), any(), any(), any())).thenReturn(stub(42L, 1L));
+        when(feedPostService.create(eq(1L), any(), any(), any(), any())).thenReturn(stub(42L, 1L));
 
-        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of("data"), null);
+        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of("data"), null, null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -95,7 +95,7 @@ class FeedPostControllerTest {
 
     @Test
     void create_unauthenticated_returns403() throws Exception {
-        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of(), null);
+        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of(), null, null);
         mockMvc.perform(post("/api/feed/posts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(body)))
@@ -105,7 +105,7 @@ class FeedPostControllerTest {
     @Test
     void create_blankBody_returns400() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        CreateFeedPostRequest body = new CreateFeedPostRequest("", List.of(), null);
+        CreateFeedPostRequest body = new CreateFeedPostRequest("", List.of(), null, null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -118,7 +118,7 @@ class FeedPostControllerTest {
     void create_oversizeBody_returns400() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
         String tooLong = "x".repeat(FeedPostLimits.MAX_BODY_LENGTH + 1);
-        CreateFeedPostRequest body = new CreateFeedPostRequest(tooLong, List.of(), null);
+        CreateFeedPostRequest body = new CreateFeedPostRequest(tooLong, List.of(), null, null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -132,7 +132,7 @@ class FeedPostControllerTest {
         mockMenteeJwt(TOKEN, 1L);
         List<String> tooMany = IntStream.range(0, FeedPostLimits.MAX_HASHTAGS + 1)
                 .mapToObj(i -> "tag" + i).collect(Collectors.toList());
-        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", tooMany, null);
+        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", tooMany, null, null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)
@@ -144,10 +144,10 @@ class FeedPostControllerTest {
     @Test
     void create_adminRequester_returns403() throws Exception {
         mockMenteeJwt(TOKEN, 1L);
-        when(feedPostService.create(eq(1L), any(), any(), any()))
+        when(feedPostService.create(eq(1L), any(), any(), any(), any()))
                 .thenThrow(new AccessDeniedException("Admins cannot create feed posts"));
 
-        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of(), null);
+        CreateFeedPostRequest body = new CreateFeedPostRequest("Hello", List.of(), null, null);
 
         mockMvc.perform(post("/api/feed/posts")
                         .header("Authorization", "Bearer " + TOKEN)

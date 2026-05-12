@@ -1,5 +1,6 @@
 package com.group7.backend.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
@@ -40,4 +41,17 @@ public class UserProfileResponse {
 
     @Schema(description = "Number of users this profile follows", example = "17")
     private long followingCount;
+
+    // Jackson strips the "is" prefix from boolean getters Lombok generates,
+    // so without the explicit @JsonProperty the wire name collapses to
+    // "following" and collides semantically with "followingCount". The
+    // acceptance criteria call out a top-level "isFollowing" key, so we pin
+    // the JSON name and keep the Java field idiomatic.
+    @JsonProperty("isFollowing")
+    @Schema(description = "True if the authenticated viewer follows this profile. "
+            + "Always false on the viewer's own profile and for anonymous reads. "
+            + "Lets clients render Follow / Unfollow deterministically without a "
+            + "separate scan of the viewer's following list.",
+            example = "false")
+    private boolean isFollowing;
 }

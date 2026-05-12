@@ -130,6 +130,15 @@ public class FeedPost {
     private OffsetDateTime deletedAt;
 
     /**
+     * Optional BCP-47 language tag set by the author at create time.
+     * NULL for posts created before the column existed and for posts
+     * that don't declare a language. The search endpoint matches on
+     * exact equality, so NULL never matches a `lang=tr` query.
+     */
+    @Column(length = 15)
+    private String lang;
+
+    /**
      * Optimistic-lock version. Hibernate auto-bumps on any persist that
      * touches this entity, including changes to the owning-side
      * {@link #hashtags} collection. Concurrent PATCHes / PATCH-vs-DELETE

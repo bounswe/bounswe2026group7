@@ -201,6 +201,9 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             WHERE p.deleted_at IS NULL
               AND (:keyword IS NULL OR LOWER(p.body) LIKE '%' || :keyword || '%' ESCAPE '\\')
               AND (:hashtag IS NULL OR h.tag = :hashtag)
+              AND (CAST(:since AS timestamptz) IS NULL OR p.created_at >= CAST(:since AS timestamptz))
+              AND (CAST(:until AS timestamptz) IS NULL OR p.created_at <  CAST(:until AS timestamptz))
+              AND (:lang IS NULL OR p.lang = :lang)
             ORDER BY p.created_at DESC, p.id DESC
             """,
             countQuery = """
@@ -209,10 +212,16 @@ public interface FeedPostRepository extends JpaRepository<FeedPost, Long> {
             WHERE p.deleted_at IS NULL
               AND (:keyword IS NULL OR LOWER(p.body) LIKE '%' || :keyword || '%' ESCAPE '\\')
               AND (:hashtag IS NULL OR h.tag = :hashtag)
+              AND (CAST(:since AS timestamptz) IS NULL OR p.created_at >= CAST(:since AS timestamptz))
+              AND (CAST(:until AS timestamptz) IS NULL OR p.created_at <  CAST(:until AS timestamptz))
+              AND (:lang IS NULL OR p.lang = :lang)
             """,
             nativeQuery = true)
     Page<FeedPost> searchPosts(@Param("keyword") String keyword,
                                 @Param("hashtag") String hashtag,
+                                @Param("since") OffsetDateTime since,
+                                @Param("until") OffsetDateTime until,
+                                @Param("lang") String lang,
                                 Pageable pageable);
 
     /**

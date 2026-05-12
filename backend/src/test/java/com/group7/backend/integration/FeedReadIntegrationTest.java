@@ -22,6 +22,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -65,6 +66,7 @@ class FeedReadIntegrationTest {
         jdbcTemplate.update("DELETE FROM feed_post_hashtags");
         jdbcTemplate.update("DELETE FROM feed_posts");
         jdbcTemplate.update("DELETE FROM follows");
+        jdbcTemplate.update("DELETE FROM user_keyword_mutes");
         verificationTokenRepository.deleteAll();
         userRepository.deleteAll();
         doNothing().when(emailService).sendVerificationEmail(any(), anyString());
@@ -799,5 +801,138 @@ class FeedReadIntegrationTest {
         Long sharedBy1 = objectMapper.readTree(page1.getResponse().getContentAsString())
                 .get("content").get(0).get("sharedById").asLong();
         assertThat(java.util.Set.of(sharedBy0, sharedBy1)).containsExactlyInAnyOrder(s1, s2);
+    // ── Search filters: date range and language ─────────────────────────────
+
+    @Test
+    void search_byLang_filtersOnLangColumn() throws Exception {
+        String token = registerAndLogin("search_lang@test.com", true);
+        long pidEn = createPostWithLang(token, "english one", List.of(), "en");
+        long pidTr = createPostWithLang(token, "turkce yazi", List.of(), "tr");
+        long pidNoLang = createPost(token, "no lang here", List.of());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/search").param("lang", "en")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        List<Long> ids = idsFromPage(body);
+        assertThat(ids).containsExactly(pidEn);
+        assertThat(ids).doesNotContain(pidTr, pidNoLang);
+    }
+
+    @Test
+    void search_byDateRange_returnsOnlyPostsInsideWindow() throws Exception {
+        String token = registerAndLogin("search_range@test.com", true);
+        long pid = createPost(token, "post inside window", List.of("range"));
+
+        OffsetDateTime since = OffsetDateTime.now().minusHours(1);
+        OffsetDateTime until = OffsetDateTime.now().plusHours(1);
+
+        MvcResult result = mockMvc.perform(get("/api/feed/search")
+                        .param("since", since.toString())
+                        .param("until", until.toString())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(idsFromPage(body)).contains(pid);
+    }
+
+    @Test
+    void search_withSinceAfterUntil_returns400() throws Exception {
+        String token = registerAndLogin("search_bad_range@test.com", true);
+        createPost(token, "irrelevant", List.of("x"));
+
+        OffsetDateTime later = OffsetDateTime.now().plusHours(1);
+        OffsetDateTime earlier = OffsetDateTime.now().minusHours(1);
+
+        mockMvc.perform(get("/api/feed/search")
+                        .param("since", later.toString())
+                        .param("until", earlier.toString())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void search_withAllFiltersMissing_returns400() throws Exception {
+        String token = registerAndLogin("search_no_filter@test.com", true);
+        mockMvc.perform(get("/api/feed/search")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void search_withInvalidLangPattern_returns400() throws Exception {
+        String token = registerAndLogin("search_bad_lang@test.com", true);
+        mockMvc.perform(get("/api/feed/search").param("lang", "ENGLISH")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ── Keyword-mute filtering on read paths ────────────────────────────────
+
+    @Test
+    void search_dropsPostsContainingMutedKeyword() throws Exception {
+        String viewerToken = registerAndLogin("mute_view@test.com", true);
+        String authorToken = registerAndLogin("mute_author@test.com", true);
+
+        long allowedPost = createPost(authorToken, "post about kittens", List.of("kw"));
+        long mutedPost = createPost(authorToken, "this contains crypto stuff", List.of("kw"));
+
+        mockMvc.perform(post("/api/users/me/keyword-mutes")
+                        .header("Authorization", "Bearer " + viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"keyword\":\"crypto\"}"))
+                .andExpect(status().isCreated());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/search").param("hashtag", "kw")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        List<Long> ids = idsFromPage(body);
+        assertThat(ids).contains(allowedPost);
+        assertThat(ids).doesNotContain(mutedPost);
+    }
+
+    @Test
+    void search_keywordMute_isCaseInsensitive() throws Exception {
+        String viewerToken = registerAndLogin("mute_case@test.com", true);
+        String authorToken = registerAndLogin("mute_case_author@test.com", true);
+
+        long mutedPost = createPost(authorToken, "buying CRYPTO right now", List.of("kw"));
+
+        mockMvc.perform(post("/api/users/me/keyword-mutes")
+                        .header("Authorization", "Bearer " + viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"keyword\":\"crypto\"}"))
+                .andExpect(status().isCreated());
+
+        MvcResult result = mockMvc.perform(get("/api/feed/search").param("hashtag", "kw")
+                        .header("Authorization", "Bearer " + viewerToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+        assertThat(idsFromPage(body)).doesNotContain(mutedPost);
+    }
+
+    private long createPostWithLang(String token, String body, List<String> hashtags, String lang) throws Exception {
+        Map<String, Object> req = new java.util.HashMap<>();
+        req.put("body", body);
+        req.put("hashtags", hashtags);
+        req.put("lang", lang);
+        MvcResult res = mockMvc.perform(post("/api/feed/posts")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(res.getResponse().getContentAsString()).get("id").asLong();
+    }
+
+    private List<Long> idsFromPage(JsonNode body) {
+        return StreamSupport.stream(body.get("content").spliterator(), false)
+                .map(n -> n.get("id").asLong())
+                .toList();
     }
 }

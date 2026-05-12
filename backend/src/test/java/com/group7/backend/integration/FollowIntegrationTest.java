@@ -224,6 +224,53 @@ class FollowIntegrationTest {
                 .andExpect(jsonPath("$.followingCount").value(1));
     }
 
+    @Test
+    void isFollowingFlag_falseBeforeFollow_trueAfter_falseAfterUnfollow() throws Exception {
+        Pair p = registerTwo("isf_a@test.com", "isf_b@test.com");
+
+        // Before any follow edge exists, the viewer's read of B's profile
+        // reports isFollowing=false.
+        assertIsFollowing(p.tokenA, p.idB, false);
+
+        // After A follows B, the same read flips to true.
+        mockMvc.perform(post("/api/users/" + p.idB + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isCreated());
+        assertIsFollowing(p.tokenA, p.idB, true);
+
+        // After unfollow, back to false.
+        mockMvc.perform(delete("/api/users/" + p.idB + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isNoContent());
+        assertIsFollowing(p.tokenA, p.idB, false);
+    }
+
+    @Test
+    void isFollowingFlag_isAlwaysFalseOnOwnProfile_evenWithLargeFollowingList() throws Exception {
+        Pair p = registerTwo("isfself_a@test.com", "isfself_b@test.com");
+
+        // Establish a follow edge in the OTHER direction so the viewer is in
+        // somebody's "followers" set — this would trip a naive implementation
+        // that consults the wrong column.
+        mockMvc.perform(post("/api/users/" + p.idA + "/follow")
+                        .header("Authorization", "Bearer " + p.tokenB))
+                .andExpect(status().isCreated());
+
+        // Self-read via numeric id and via /me both report isFollowing=false.
+        assertIsFollowing(p.tokenA, p.idA, false);
+        mockMvc.perform(get("/api/users/me")
+                        .header("Authorization", "Bearer " + p.tokenA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isFollowing").value(false));
+    }
+
+    private void assertIsFollowing(String token, Long targetId, boolean expected) throws Exception {
+        mockMvc.perform(get("/api/users/" + targetId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isFollowing").value(expected));
+    }
+
     // ── DB-level cascade via raw JDBC delete (not userRepository.delete) ───
 
     @Test

@@ -83,7 +83,8 @@ class FeedInteractionControllerTest {
                 101L, 42L, 1L, "Carol", "Great post!",
                 OffsetDateTime.parse("2026-05-09T12:00:00Z"),
                 OffsetDateTime.parse("2026-05-09T12:00:00Z"),
-                false, true, false);
+                false, true, false,
+                0L, false);
         when(interactionService.getComment(101L, 1L)).thenReturn(stub);
 
         mockMvc.perform(get("/api/feed/comments/101")
