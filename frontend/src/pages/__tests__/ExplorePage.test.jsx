@@ -182,7 +182,11 @@ describe('ExplorePage Component', () => {
     // diverse-pick rendered as a labelled pill (not as a chip)
     expect(screen.getByText('Diverse pick')).toBeInTheDocument()
 
-    // human-readable factor chips
+    // #286: Click "Why this match?" to expand factors
+    const whyBtn = screen.getByText('Why this match?')
+    fireEvent.click(whyBtn)
+
+    // human-readable factor chips in the list
     expect(screen.getByText('Same major')).toBeInTheDocument()
     expect(screen.getByText('6h overlap')).toBeInTheDocument()
     expect(screen.getByText('23km away')).toBeInTheDocument()
@@ -205,6 +209,6 @@ describe('ExplorePage Component', () => {
       expect(screen.getByText(/your top 1 match/i)).toBeInTheDocument()
     })
     expect(screen.queryByText('Diverse pick')).not.toBeInTheDocument()
-    expect(document.querySelector('.match-factors')).toBeNull()
+    expect(document.querySelector('.match-factors-list')).toBeNull()
   })
 })
