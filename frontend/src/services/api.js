@@ -300,6 +300,17 @@ export async function endMentorship(id, reason) {
   return handleResponse(res)
 }
 
+// Mentor-only extend (#276 / 1.1.1.2.13). additionalMonths must be 1, 3, or 6
+// per backend ExtendMentorshipRequest validator. Returns the updated mentorship.
+export async function extendMentorship(id, additionalMonths) {
+  const res = await fetch(`${BASE_URL}/mentorships/${id}/extend`, {
+    method: 'PATCH',
+    headers: authJsonHeaders(),
+    body: JSON.stringify({ additionalMonths }),
+  })
+  return handleResponse(res)
+}
+
 // ── Mentorship tasks (#125) ───────────────────────────────────────────────
 // Backend: TaskController. Status enum: PENDING, SUBMITTED, REVISION_REQUESTED, COMPLETED.
 
