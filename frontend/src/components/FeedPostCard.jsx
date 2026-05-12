@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MoreHorizontal, Pencil, Trash2, History, Share2, Bookmark, Heart, MessageCircle } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, History, Share2, Repeat2, Bookmark, Heart, MessageCircle } from 'lucide-react'
 import Avatar from './Avatar'
 import FeedAttachmentGrid from './FeedAttachmentGrid'
 import EditHistoryModal from './EditHistoryModal'
+import RepostModal from './RepostModal'
 import { linkify } from '../utils/linkify'
 import {
   toggleBookmarkOnPost,
@@ -13,6 +14,7 @@ import {
   getPostComments,
   addCommentToPost,
   toggleLikeOnComment,
+  repostPost,
 } from '../services/api'
 
 /**
@@ -58,6 +60,8 @@ export default function FeedPostCard({
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [repostOpen, setRepostOpen] = useState(false)
+  const [repostBusy, setRepostBusy] = useState(false)
   const menuRef = useRef(null)
 
   // Local state mirrors viewer-relative interaction toggles + counts; backend
@@ -281,6 +285,29 @@ export default function FeedPostCard({
     }
   }
 
+  async function handleRepostConfirm(body) {
+    if (repostBusy) return
+    setRepostBusy(true)
+    try {
+      const state = await repostPost(post.id, body)
+      // Backend returns the original post's updated interaction state; bump
+      // the share count locally so the count next to the Share button matches.
+      if (state?.shareCount != null) setShareCount(state.shareCount)
+      onShared?.(state)
+      setRepostOpen(false)
+    } catch (err) {
+      window.alert(err?.message || 'Failed to repost')
+    } finally {
+      setRepostBusy(false)
+    }
+  }
+
+  function openRepost(e) {
+    e.stopPropagation()
+    e.preventDefault()
+    setRepostOpen(true)
+  }
+
   async function handleShare(e) {
     e.stopPropagation()
     e.preventDefault()
@@ -310,11 +337,31 @@ export default function FeedPostCard({
     }
   }
 
+  // #542: when the Following-feed surfaces a repost, the FeedPostListItem
+  // carries sharedById / sharedByFirstName / commentary / sharedAt. Render
+  // a small "Reposted by X" attribution above the original-post body and,
+  // for quote-shares, a commentary block between the attribution and body.
+  const isRepostSurface = post?.sharedById != null
+
   return (
     <article
       className={`feed-card${clickable ? ' feed-card--clickable' : ''}`}
       onClick={openDetail}
     >
+      {isRepostSurface && (
+        <div className="feed-card-repost-banner">
+          <Repeat2 size={13} strokeWidth={2} />
+          <span>
+            Reposted by <strong>{post.sharedByFirstName || 'someone'}</strong>
+            {post.sharedAt && <span className="feed-card-repost-time"> · {formatPostTime(post.sharedAt)}</span>}
+          </span>
+        </div>
+      )}
+
+      {isRepostSurface && post.commentary && (
+        <div className="feed-card-repost-commentary">{post.commentary}</div>
+      )}
+
       <div className="feed-card-header">
         <button
           type="button"
@@ -414,6 +461,16 @@ export default function FeedPostCard({
           <span>{commentCount}</span>
         </button>
         <span className="feed-card-action-spacer" aria-hidden="true" />
+        <button
+          type="button"
+          className="feed-card-action-btn"
+          onClick={openRepost}
+          disabled={repostBusy}
+          aria-label="Repost or quote-share"
+          title="Repost"
+        >
+          <Repeat2 size={16} strokeWidth={1.75} />
+        </button>
         <button
           type="button"
           className="feed-card-action-btn"
@@ -527,6 +584,14 @@ export default function FeedPostCard({
         open={historyOpen}
         postId={post.id}
         onClose={() => setHistoryOpen(false)}
+      />
+
+      <RepostModal
+        open={repostOpen}
+        post={post}
+        onClose={() => !repostBusy && setRepostOpen(false)}
+        onConfirm={handleRepostConfirm}
+        loading={repostBusy}
       />
     </article>
   )

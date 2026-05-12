@@ -814,6 +814,21 @@ export async function getFeedUnreadCount() {
   return handleResponse(res)
 }
 
+// #542 / backend #484: repost or quote-share a feed post. body is optional —
+// null/blank produces a bare repost, non-blank (up to 2000 chars) attaches
+// commentary. Backend dedupes repeated payloads within ~60s. Returns the
+// updated FeedPostInteractionState for the original post so the share count
+// can refresh in place.
+export async function repostPost(postId, body) {
+  const payload = body && body.trim() ? { body: body.trim() } : {}
+  const res = await fetch(`${BASE_URL}/feed/posts/${postId}/reposts`, {
+    method: 'POST',
+    headers: authJsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+  return handleResponse(res)
+}
+
 // #544 / backend #487: restore a soft-deleted post within the 30-day window.
 // 410 means the window expired; surfaced as a regular Error from handleResponse.
 export async function restoreFeedPost(id) {
