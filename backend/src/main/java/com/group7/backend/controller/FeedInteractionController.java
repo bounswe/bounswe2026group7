@@ -2,6 +2,7 @@ package com.group7.backend.controller;
 
 import com.group7.backend.controller.support.PageableSupport;
 import com.group7.backend.docs.feed.FeedApiExamples;
+import com.group7.backend.dto.request.CreateRepostRequest;
 import com.group7.backend.dto.request.FeedCommentRequest;
 import com.group7.backend.dto.response.FeedCommentResponse;
 import com.group7.backend.dto.response.FeedPostInteractionState;
@@ -142,6 +143,38 @@ public class FeedInteractionController {
         return ResponseEntity.ok(interactionService.recordShare(id, sharerId));
     }
 
+    @PostMapping("/posts/{id:\\d+}/reposts")
+    @Operation(summary = "Repost or quote-share a feed post",
+            description = "Empty body or null = bare repost; non-blank body = quote-share. "
+                    + "Both fan out via STOMP to the sharer's followers and notify the original "
+                    + "author (unless the sharer is the author). Repeating the same payload "
+                    + "within the configured idempotency window (default 60s) collapses to the "
+                    + "existing row without re-firing fanout. Distinct from POST /share, which "
+                    + "is a silent analytics event and does not fan out.",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(examples = {
+                            @ExampleObject(name = "bare-repost",
+                                    summary = "Bare repost with no commentary",
+                                    value = "{}"),
+                            @ExampleObject(name = "quote-share",
+                                    summary = "Quote-share with commentary",
+                                    value = "{\"body\": \"Great take on this — fully agree.\"}")
+                    })))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Repost recorded; current interaction state returned"),
+            @ApiResponse(responseCode = "400", description = "Body exceeds 2000 chars", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Post not found or soft-deleted", content = @Content)
+    })
+    public ResponseEntity<FeedPostInteractionState> repost(
+            @Parameter(description = "Feed post id") @PathVariable Long id,
+            @Valid @RequestBody(required = false) CreateRepostRequest request,
+            Authentication authentication) {
+        Long sharerId = (Long) authentication.getCredentials();
+        CreateRepostRequest effective = request != null ? request : CreateRepostRequest.empty();
+        return ResponseEntity.ok(interactionService.recordRepost(id, sharerId, effective));
+    }
+
     // ── Comments ───────────────────────────────────────────────────────────
 
     @PostMapping("/posts/{id:\\d+}/comments")
@@ -235,5 +268,24 @@ public class FeedInteractionController {
         Long requesterId = (Long) authentication.getCredentials();
         interactionService.deleteComment(id, requesterId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/comments/{id:\\d+}/like")
+    @Operation(summary = "Toggle like on a comment",
+            description = "Idempotent toggle (#483). Returns the updated comment with "
+                    + "likeCount and viewerHasLiked reflecting the new state. Liking a "
+                    + "soft-deleted comment returns 404; self-like is allowed (matches "
+                    + "post-like semantics).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Toggle applied; updated comment returned"),
+            @ApiResponse(responseCode = "401", description = "Unauthenticated", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Comment not found, soft-deleted, or its parent post is gone",
+                         content = @Content)
+    })
+    public ResponseEntity<FeedCommentResponse> toggleCommentLike(
+            @Parameter(description = "Comment id") @PathVariable Long id,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getCredentials();
+        return ResponseEntity.ok(interactionService.toggleCommentLike(id, userId));
     }
 }

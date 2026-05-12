@@ -54,6 +54,27 @@ public record FeedPostListItem(
 
         @Schema(description = "Image attachments on the post, in author-specified order. Empty when "
                 + "the post has no media (#485).")
-        List<AttachmentSummary> attachments
+        List<AttachmentSummary> attachments,
+
+        @Schema(description = "User id of the follower who reposted this post into the viewer's "
+                + "Following feed. Null when the row originates from the post's own author "
+                + "(i.e., not a repost surface).",
+                nullable = true, example = "42")
+        Long sharedById,
+
+        @Schema(description = "First name of the reposting follower, denormalised for the UI. "
+                + "Null on non-repost rows.",
+                nullable = true, example = "Ada")
+        String sharedByFirstName,
+
+        @Schema(description = "Quote-share commentary; null on bare reposts and on non-repost rows.",
+                nullable = true, example = "Great take — fully agree.")
+        String shareCommentary,
+
+        @Schema(description = "Server-side timestamp of the repost (feed_post_shares.created_at). "
+                + "Used by the UI to render \"reposted N minutes ago\" alongside the post's own "
+                + "createdAt. Null on non-repost rows.",
+                nullable = true)
+        OffsetDateTime sharedAt
 ) {
 }

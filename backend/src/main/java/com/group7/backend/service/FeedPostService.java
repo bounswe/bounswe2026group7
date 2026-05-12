@@ -160,7 +160,7 @@ public class FeedPostService {
      */
     @Transactional
     public FeedPostResponse create(Long authorId, String body, List<String> rawHashtags,
-                                    List<UUID> attachmentIds) {
+                                    List<UUID> attachmentIds, String lang) {
         User author = userRepository.findById(authorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + authorId));
         if (author instanceof Admin) {
@@ -175,6 +175,7 @@ public class FeedPostService {
         List<Attachment> resolvedAttachments = resolveAttachments(attachmentIds, authorId);
 
         FeedPost post = new FeedPost(authorId, body);
+        post.setLang(lang);
         OffsetDateTime now = OffsetDateTime.now();
         post.setCreatedAt(now);
         post.setUpdatedAt(now);

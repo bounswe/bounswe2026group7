@@ -183,7 +183,11 @@ public class FeedPostMapper {
                 c.likeCount(),
                 c.commentCount(),
                 factors.getOrDefault(post.getId(), List.of()),
-                toSummaries(post.getAttachments())
+                toSummaries(post.getAttachments()),
+                null,   // sharedById — not a repost surface for this mapper
+                null,   // sharedByFirstName
+                null,   // shareCommentary
+                null    // sharedAt
         );
     }
 
@@ -192,7 +196,7 @@ public class FeedPostMapper {
      * feed-media DTO shape. Returns an immutable empty list for the no-media
      * case so JSON consumers always see a stable type.
      */
-    private List<AttachmentSummary> toSummaries(List<Attachment> attachments) {
+    public List<AttachmentSummary> toSummaries(List<Attachment> attachments) {
         if (attachments == null || attachments.isEmpty()) {
             return List.of();
         }

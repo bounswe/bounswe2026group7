@@ -72,7 +72,7 @@ class FeedPostServiceTest {
         Admin admin = admin(99L);
         when(userRepository.findById(99L)).thenReturn(Optional.of(admin));
 
-        assertThatThrownBy(() -> feedPostService.create(99L, "Hello", List.of(), null))
+        assertThatThrownBy(() -> feedPostService.create(99L, "Hello", List.of(), null, null))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("Admins cannot create");
 
@@ -84,7 +84,7 @@ class FeedPostServiceTest {
         Mentor author = mentor(1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(author));
 
-        assertThatThrownBy(() -> feedPostService.create(1L, "   ", List.of(), null))
+        assertThatThrownBy(() -> feedPostService.create(1L, "   ", List.of(), null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("body must not be blank");
 
@@ -96,7 +96,7 @@ class FeedPostServiceTest {
         Mentor author = mentor(1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(author));
 
-        assertThatThrownBy(() -> feedPostService.create(1L, null, List.of(), null))
+        assertThatThrownBy(() -> feedPostService.create(1L, null, List.of(), null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -104,7 +104,7 @@ class FeedPostServiceTest {
     void create_rejectsMissingAuthor_with404() {
         when(userRepository.findById(404L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> feedPostService.create(404L, "ok", List.of(), null))
+        assertThatThrownBy(() -> feedPostService.create(404L, "ok", List.of(), null, null))
                 .isInstanceOf(ResourceNotFoundException.class);
 
         verify(feedPostRepository, never()).save(any(FeedPost.class));
@@ -123,7 +123,7 @@ class FeedPostServiceTest {
         FeedPostResponse expected = stubResponse(42L, 1L);
         when(feedPostMapper.toResponse(any(FeedPost.class), any())).thenReturn(expected);
 
-        FeedPostResponse result = feedPostService.create(1L, "Hello", List.of("DATA", "ai"), null);
+        FeedPostResponse result = feedPostService.create(1L, "Hello", List.of("DATA", "ai"), null, null);
 
         assertThat(result).isSameAs(expected);
         verify(feedPostRepository).save(any(FeedPost.class));
@@ -141,7 +141,7 @@ class FeedPostServiceTest {
         });
         when(feedPostMapper.toResponse(any(FeedPost.class), any())).thenReturn(stubResponse(42L, 1L));
 
-        feedPostService.create(1L, "Hello", List.of(), null);
+        feedPostService.create(1L, "Hello", List.of(), null, null);
 
         // Verify the facade is invoked with the saved post + author. The
         // FeedPostEventPublisherTest pins the event-shape contract; here
@@ -160,7 +160,7 @@ class FeedPostServiceTest {
         when(feedPostRepository.save(any(FeedPost.class)))
                 .thenThrow(new RuntimeException("DB down"));
 
-        assertThatThrownBy(() -> feedPostService.create(1L, "Hello", List.of(), null))
+        assertThatThrownBy(() -> feedPostService.create(1L, "Hello", List.of(), null, null))
                 .isInstanceOf(RuntimeException.class);
 
         verify(feedPostEventPublisher, never()).publishCreated(any(), any());
