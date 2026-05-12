@@ -477,6 +477,9 @@ public class UserService {
         if (request.getBackgroundInfo() != null) {
             mentee.setBackgroundInfo(request.getBackgroundInfo());
         }
+        if (request.getAffiliation() != null) {
+            mentee.setAffiliation(request.getAffiliation());
+        }
     }
 
 }
