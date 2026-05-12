@@ -44,6 +44,10 @@ function mapResponseToForm(data) {
     latitude: data.latitude ?? null,
     longitude: data.longitude ?? null,
   }
+  // #359 / backend #579: profileVisibility now exists on both Mentor and
+  // Mentee. Lifted onto the shared base so both branches save/load it the
+  // same way. Default true on a missing value (matches backend default).
+  base.profileVisible = data.profileVisibility !== false
   if (isMentor) {
     return {
       ...base,
@@ -69,7 +73,6 @@ function mapResponseToForm(data) {
     careerInterest: data.careerInterest || '',
     careerInterestUri: data.careerInterestUri || '',
     meetingFreqPref: data.meetingFreqPref || '',
-    profileVisible: data.profileVisibility !== false,
   }
 }
 
@@ -215,8 +218,11 @@ export default function ProfilePage() {
         latitude: form.latitude ?? null,
         longitude: form.longitude ?? null,
         // Shared between both roles (backend MentorProfileRequest and
-        // MenteeProfileRequest both expose it via the shared EditProfileRequest).
+        // MenteeProfileRequest both expose them via the shared EditProfileRequest).
         affiliation: form.affiliation || null,
+        // #359 / backend #579: profileVisibility lives on both Mentor and
+        // Mentee request DTOs now; send it from the shared base.
+        profileVisibility: form.profileVisible,
         ...(isMentor ? {
           bio: form.bio || null,
           field: form.field || null,
@@ -238,7 +244,6 @@ export default function ProfilePage() {
           meetingFreqPref: form.meetingFreqPref || null,
           skills: skillsSplit.labels,
           skillUris: skillsSplit.uris,
-          profileVisibility: form.profileVisible,
         }),
       }
 
@@ -646,25 +651,31 @@ export default function ProfilePage() {
                   </select>
                 </div>
 
-                <div className="divider" />
-
-                <div className="section-label">Privacy Settings</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0' }}>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 500 }}>Profile Visibility</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {form.profileVisible ? 'Your profile is visible to matched users' : 'Your profile is hidden'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={`toggle${form.profileVisible ? '' : ' off'}`}
-                    onClick={() => handleChange('profileVisible', !form.profileVisible)}
-                    aria-label="Toggle profile visibility"
-                  />
-                </div>
               </>
             )}
+
+            {/* #359 / backend #579: shared by both roles now. Private profiles
+                return 403 to non-owner non-admin viewers and the masking matrix
+                redacts mentee surname + photo when a mentor views them. */}
+            <div className="divider" />
+
+            <div className="section-label">Privacy Settings</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 500 }}>Profile Visibility</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {form.profileVisible
+                    ? 'Public — other authenticated users can see your profile.'
+                    : 'Private — your profile is hidden from non-admin viewers.'}
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`toggle${form.profileVisible ? '' : ' off'}`}
+                onClick={() => handleChange('profileVisible', !form.profileVisible)}
+                aria-label="Toggle profile visibility"
+              />
+            </div>
 
             {saveSuccess && (
               <div data-testid="profile-save-success" style={{ color: 'var(--green-dark)', fontSize: '13px', marginBottom: '8px' }}>
