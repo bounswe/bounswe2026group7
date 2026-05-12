@@ -16,6 +16,7 @@ import MentorshipDetailPage from './pages/MentorshipDetailPage'
 import MessagesPage from './pages/MessagesPage'
 import TasksPage from './pages/TasksPage'
 import SchedulePage from './pages/SchedulePage'
+import CalendarPage from './pages/CalendarPage'
 import NotificationsPage from './pages/NotificationsPage'
 import FeedPage from './pages/FeedPage'
 import FeedPostDetailPage from './pages/FeedPostDetailPage'
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/feed" element={<FeedPage />} />
           <Route path="/feed/bookmarks" element={<FeedBookmarksPage />} />
