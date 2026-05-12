@@ -12,7 +12,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 
 import java.util.List;
 
@@ -52,16 +51,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DataNeo4jTest
 class PersonalizedPageRankIntegrationTest {
 
+    // Uses the shared neo4j+GDS image (see Neo4jGdsTestImage). The image is
+    // built from backend/docker/neo4j-gds/Dockerfile, baking the GDS jar
+    // into a layer at build time so the runtime NEO4J_PLUGINS download race
+    // that made CI flaky is gone.
     @Container
-    static final Neo4jContainer<?> NEO4J = new Neo4jContainer<>(
-            DockerImageName.parse("neo4j:5-community"))
+    static final Neo4jContainer<?> NEO4J = new Neo4jContainer<>(Neo4jGdsTestImage.IMAGE)
             .withoutAuthentication()
-            // The newer Testcontainers Neo4j module dropped Neo4jLabsPlugin
-            // enum in favour of plain env vars — match what docker-compose
-            // does for the prod image.
-            .withEnv("NEO4J_PLUGINS", "[\"graph-data-science\"]")
-            .withEnv("NEO4J_dbms_security_procedures_unrestricted", "gds.*")
-            .withEnv("NEO4J_dbms_security_procedures_allowlist", "gds.*")
             .withReuse(false);
 
     @DynamicPropertySource
