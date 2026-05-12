@@ -13,6 +13,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import UserProfilePage from './pages/UserProfilePage'
 import UserFollowListPage from './pages/UserFollowListPage'
 import MentorshipDetailPage from './pages/MentorshipDetailPage'
+import MentorshipsListPage from './pages/MentorshipsListPage'
 import MessagesPage from './pages/MessagesPage'
 import TasksPage from './pages/TasksPage'
 import SchedulePage from './pages/SchedulePage'
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/users/:id" element={<UserProfilePage />} />
           <Route path="/users/:id/followers" element={<UserFollowListPage mode="followers" />} />
           <Route path="/users/:id/following" element={<UserFollowListPage mode="following" />} />
+          <Route path="/mentorships" element={<MentorshipsListPage />} />
           <Route path="/mentorships/:id" element={<MentorshipDetailPage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/tasks" element={<TasksPage />} />
