@@ -13,6 +13,7 @@ import {
   deleteFeedPost,
   getFollowRecommendations,
   followUser,
+  getTrendingHashtags,
 } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import '../styles/main.css'
@@ -66,6 +67,11 @@ export default function FeedPage() {
   const [recLoading, setRecLoading] = useState(false)
   const [recError, setRecError] = useState(null)
 
+  // Trending hashtags (#545). Backend refreshes hourly so a single fetch on
+  // mount is enough; per-tab refetch would just thrash the cache without new
+  // data. Hidden during active search to avoid double-filtering the view.
+  const [trending, setTrending] = useState([])
+
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearch, setActiveSearch] = useState(null) // { q?, hashtag? } or null
 
@@ -107,6 +113,14 @@ export default function FeedPage() {
   }, [tab, activeSearch])
 
   useEffect(() => { reload() }, [reload])
+
+  useEffect(() => {
+    let cancelled = false
+    getTrendingHashtags(10)
+      .then(list => { if (!cancelled && Array.isArray(list)) setTrending(list) })
+      .catch(() => { /* silent — empty rail is the no-data state */ })
+    return () => { cancelled = true }
+  }, [])
 
   const loadRecommendations = useCallback(async () => {
     setRecLoading(true)
@@ -331,6 +345,31 @@ export default function FeedPage() {
             <button type="button" className="action-btn" onClick={clearSearch}>Clear</button>
           )}
         </form>
+
+        {!activeSearch && trending.length > 0 && (
+          <div className="feed-trending" aria-label="Trending hashtags">
+            <span className="feed-trending-label">Trending</span>
+            <div className="feed-trending-rail">
+              {trending.map(h => (
+                <button
+                  key={h.tag}
+                  type="button"
+                  className="feed-trending-chip"
+                  onClick={() => {
+                    setSearchQuery(`#${h.tag}`)
+                    setActiveSearch({ hashtag: h.tag })
+                  }}
+                  title={`${h.postCount ?? 0} post${h.postCount === 1 ? '' : 's'} in the last 24h`}
+                >
+                  <span className="feed-trending-tag">#{h.tag}</span>
+                  {h.postCount != null && (
+                    <span className="feed-trending-count">{h.postCount}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="md-loading">Loading feed…</div>
