@@ -1,0 +1,656 @@
+id,post_id,author_id,parent_comment_id,body,created_at,updated_at,deleted_at,version
+1148,515,1246,,Do you toggle the pause via a feature flag in the connection pool or just an env var?,2026-05-05 11:28:34.078514+00,2026-05-05 11:28:34.078514+00,,0
+1149,515,1197,,Would you share the migration runbook? We have a 14→16 coming up.,2026-05-03 03:28:14.078514+00,2026-05-03 03:28:14.078514+00,,0
+1150,515,1248,,For replica lag monitoring would you go Datadog or something like pgwatch2?,2026-05-03 15:48:45.078514+00,2026-05-03 15:48:45.078514+00,,0
+1151,516,1246,,Did you find a workaround for the ThreadLocal bugs or did you replace the libraries outright?,2026-04-12 20:49:16.570067+00,2026-04-12 20:49:16.570067+00,,0
+1152,516,1202,,Our load test came out similar. The only catch was tuning the GC profile a bit differently.,2026-04-12 00:53:08.570067+00,2026-04-12 00:53:08.570067+00,,0
+1153,516,1204,,Virtual threads + reactive stack is dangerous territory — did you try mixing them?,2026-04-11 15:58:17.570067+00,2026-04-11 15:58:17.570067+00,,0
+1154,517,1246,,"Concrete and useful, thanks. I bombed an interview last month because I sized the caching layer to a uniform load.",2026-05-06 23:59:39.449522+00,2026-05-06 23:59:39.449522+00,,0
+1155,517,1243,,Any framework you'd recommend for estimating that traffic distribution upfront?,2026-05-06 15:02:10.449522+00,2026-05-06 15:02:10.449522+00,,0
+1156,517,1248,,Do you apply the same rule when configuring API rate limits?,2026-05-07 10:56:50.449522+00,2026-05-07 10:56:50.449522+00,,0
+1157,518,1197,,"Which model, Melis? I've been window-shopping.",2026-04-30 16:01:48.538957+00,2026-04-30 16:01:48.538957+00,,0
+1158,518,1202,,Vespa + Istanbul + morning traffic — respect.,2026-05-01 23:28:54.538957+00,2026-05-01 23:28:54.538957+00,,0
+1159,518,1246,,I tell my team to make this a calendar rule. Nobody listens.,2026-04-30 00:12:10.538957+00,2026-04-30 00:12:10.538957+00,,0
+1160,519,1204,,Selling this trade-off to non-technical stakeholders is the hardest part — what's your move there?,2026-04-15 10:47:13.58202+00,2026-04-15 10:47:13.58202+00,,0
+1161,519,1246,,I always frame it as 'what does the user expect to see' but engineers push back with 'that's a race condition.',2026-04-17 01:38:41.58202+00,2026-04-17 01:38:41.58202+00,,0
+1162,519,1201,,"For the cart specifically, what's your cache invalidation strategy?",2026-04-17 03:44:07.58202+00,2026-04-17 03:44:07.58202+00,,0
+1163,520,1246,,"Saving this. When I have my first incident, remind me of it.",2026-04-27 07:00:24.01207+00,2026-04-27 07:00:24.01207+00,,0
+1164,520,1202,,True — managing panic matters more than the technical skill in those moments.,2026-04-27 11:06:32.01207+00,2026-04-27 11:06:32.01207+00,,0
+1165,521,1197,,We tested both for game-side relevance tuning — Elastic felt a step ahead on the new vector search features.,2026-05-05 03:18:56.199138+00,2026-05-05 03:18:56.199138+00,,0
+1166,521,1246,,We're migrating a project tomorrow. Any pain you hit with index template incompatibilities?,2026-05-02 22:23:19.199138+00,2026-05-02 22:23:19.199138+00,,0
+1167,522,1202,,We piloted this at Trendyol and the hiring committee killed it for being 'too subjective.' Are you still running it?,2026-05-06 04:44:23.835665+00,2026-05-06 04:44:23.835665+00,,0
+1168,522,1204,,Could you share a structured rubric for this? I have four senior interviews queued up.,2026-05-06 03:51:00.835665+00,2026-05-06 03:51:00.835665+00,,0
+1169,522,1246,,"From a candidate's perspective, this is a relief. I'm tired of whiteboard puzzles.",2026-05-05 15:26:25.835665+00,2026-05-05 15:26:25.835665+00,,0
+1170,523,1245,,This is exactly the conversation we keep avoiding at work. Going to print this and put it above my desk.,2026-05-02 09:43:06.633738+00,2026-05-02 09:43:06.633738+00,,0
+1171,523,1249,,"Do you have a hypothesis template you use, or is it more freeform per campaign?",2026-05-02 04:41:24.633738+00,2026-05-02 04:41:24.633738+00,,0
+1172,523,1216,,What if the hypothesis is wrong though — do you call that a failed test or a learning?,2026-05-02 06:50:46.633738+00,2026-05-02 06:50:46.633738+00,,0
+1173,524,1245,,Just bought it on your recommendation last quarter and it changed how I write landing pages. Worth every page.,2026-05-01 08:20:43.367658+00,2026-05-01 08:20:43.367658+00,,0
+1174,524,1249,,Adding to the queue. Any companion read you'd pair it with?,2026-04-30 22:01:37.367658+00,2026-04-30 22:01:37.367658+00,,0
+1175,525,1195,,This applies one-to-one to engineering management too. Saving.,2026-04-15 11:34:56.691115+00,2026-04-15 11:34:56.691115+00,,0
+1176,525,1214,,Curious — how do you keep the respect though? I've watched producers lose teams over similar conversations.,2026-04-15 19:45:16.691115+00,2026-04-15 19:45:16.691115+00,,0
+1177,525,1204,,The 'and still keeping their respect' clause is what separates the good ones from the rest.,2026-04-16 02:33:50.691115+00,2026-04-16 02:33:50.691115+00,,0
+1178,526,1219,,How do you defend the 'quiet weeks' to a PM who's pushing for retention bumps every week?,2026-04-14 00:52:23.701946+00,2026-04-14 00:52:23.701946+00,,0
+1179,526,1204,,Quiet weeks are also when you catch your breath enough to plan the next strong event. People forget this.,2026-04-15 11:19:03.701946+00,2026-04-15 11:19:03.701946+00,,0
+1180,527,1195,,The Bosphorus has its perks but I get the appeal. Vespa wouldn't make it through your winter though.,2026-05-01 22:16:07.283837+00,2026-05-01 22:16:07.283837+00,,0
+1181,527,1202,,We considered the same move. Did you keep your studio role remote or change companies?,2026-04-30 15:58:53.283837+00,2026-04-30 15:58:53.283837+00,,0
+1182,528,1214,,Agreed. We call them 'craft skills' on our team for exactly this reason.,2026-05-08 18:50:43.376303+00,2026-05-08 18:50:43.376303+00,,0
+1183,528,1204,,The cost of a manager who can't do conflict resolution is enormous. Visible only when it's missing.,2026-05-09 11:11:36.376303+00,2026-05-09 11:11:36.376303+00,,0
+1184,529,1211,,This is exactly the part I keep rewriting. Can you share one that worked?,2026-05-01 00:46:22.798715+00,2026-05-01 00:46:22.798715+00,,0
+1185,529,1215,,How long should the opening paragraph be? Mine keeps ballooning to half a page.,2026-05-01 14:36:12.798715+00,2026-05-01 14:36:12.798715+00,,0
+1186,529,1201,,"I review applicants for our security program — this matches what we look for, just from a different field.",2026-04-30 04:02:32.798715+00,2026-04-30 04:02:32.798715+00,,0
+1187,530,1230,,Do you have a recommended onboarding paper for interpretability? I've been reading randomly and feeling lost.,2026-04-17 12:14:10.244192+00,2026-04-17 12:14:10.244192+00,,0
+1188,530,1215,,The 'intro + conclusion only' move is something I've never tried. Will steal.,2026-04-15 06:03:32.244192+00,2026-04-15 06:03:32.244192+00,,0
+1189,531,1251,,Recording myself last week was painful but I caught three filler words I had no idea I was saying. Endorse this.,2026-05-03 01:01:30.173862+00,2026-05-03 01:01:30.173862+00,,0
+1190,531,1215,,I'm preparing a 10-minute thesis pitch. Will try this tomorrow.,2026-05-02 17:43:39.173862+00,2026-05-02 17:43:39.173862+00,,0
+1191,532,1201,,These are the days that compound. Glad you had one.,2026-05-03 12:46:13.779296+00,2026-05-03 12:46:13.779296+00,,0
+1192,532,1215,,Saving this for the next time I have a 'why am I doing this' afternoon.,2026-05-02 20:47:06.779296+00,2026-05-02 20:47:06.779296+00,,0
+1193,533,1211,,How do you decide which questions to take seriously vs. let go?,2026-04-14 11:22:58.149036+00,2026-04-14 11:22:58.149036+00,,0
+1194,533,1215,,Do you revisit it on a schedule or only when stuck?,2026-04-13 08:04:29.149036+00,2026-04-13 08:04:29.149036+00,,0
+1195,534,1211,,Needed to hear this today. Got my first rejection yesterday.,2026-05-04 05:58:33.173253+00,2026-05-04 05:58:33.173253+00,,0
+1196,534,1215,,How many programs is 'broadly' in your experience — 6? 10?,2026-05-03 21:00:33.173253+00,2026-05-03 21:00:33.173253+00,,0
+1197,534,1201,,Same in faculty hiring. Goes the other way too.,2026-05-02 21:35:45.173253+00,2026-05-02 21:35:45.173253+00,,0
+1198,535,1222,,This stings but it's the right framing. I've been in 'daydream' mode for a year.,2026-05-04 20:44:03.114869+00,2026-05-04 20:44:03.114869+00,,0
+1199,535,1240,,What if you have the problem but not the cofounder yet? Is that 'not ready' or 'still searching'?,2026-05-04 23:22:07.114869+00,2026-05-04 23:22:07.114869+00,,0
+1200,535,1203,,Endorse every word. The cofounder question is the one nobody wants to sit with.,2026-05-05 11:41:50.114869+00,2026-05-05 11:41:50.114869+00,,0
+1201,536,1229,,We just instituted monthly tabletops last quarter. Already paid for itself once.,2026-04-07 11:39:13.94251+00,2026-04-07 11:39:13.94251+00,,0
+1202,536,1195,,The 'false comfort' framing is exactly right. So many teams hide behind unread runbooks.,2026-04-08 08:31:18.94251+00,2026-04-08 08:31:18.94251+00,,0
+1203,536,1202,,Do you keep them in the repo with the service or in a wiki?,2026-04-07 05:34:56.94251+00,2026-04-07 05:34:56.94251+00,,0
+1204,537,1229,,Was this the change that affected the dynamo backend specifically or all backends?,2026-04-24 19:33:48.757008+00,2026-04-24 19:33:48.757008+00,,0
+1205,537,1195,,Quiet wins are the best wins. Tools that just work better month over month.,2026-04-25 07:17:34.757008+00,2026-04-25 07:17:34.757008+00,,0
+1206,538,1229,,"This is the conversation I've been trying to have with leadership for a year. They want the metric, not the underlying thing.",2026-04-17 16:31:42.426797+00,2026-04-17 16:31:42.426797+00,,0
+1207,538,1206,,Speed-as-a-side-effect-of-trust is a banger framing.,2026-04-15 00:52:13.426797+00,2026-04-15 00:52:13.426797+00,,0
+1208,539,1195,,Hard agree. Burnout is more expensive than a Saturday alert.,2026-04-28 06:27:52.008893+00,2026-04-28 06:27:52.008893+00,,0
+1209,539,1229,,Stealing this for my own team.,2026-04-28 05:11:42.008893+00,2026-04-28 05:11:42.008893+00,,0
+1210,540,1229,,Any tool you'd start with for someone coming in cold?,2026-04-27 05:47:37.459249+00,2026-04-27 05:47:37.459249+00,,0
+1211,540,1201,,Agree completely. The security observability use case is also underrated.,2026-04-25 22:27:59.459249+00,2026-04-25 22:27:59.459249+00,,0
+1212,541,1217,,This is exactly how my interview at a security firm went sideways — I gave the vague answer. Won't make that mistake again.,2026-05-05 09:38:04.128243+00,2026-05-05 09:38:04.128243+00,,0
+1213,541,1200,,The 'next 90 days' time horizon is what most people miss. Security is always bounded.,2026-05-05 18:33:33.128243+00,2026-05-05 18:33:33.128243+00,,0
+1214,541,1195,,Same principle in reliability: 'is this reliable' is the wrong question without 'against what failure modes.',2026-05-06 11:22:04.128243+00,2026-05-06 11:22:04.128243+00,,0
+1215,542,1217,,Is there a particular detection engineering resource you'd recommend for OT specifically?,2026-04-12 09:46:52.198406+00,2026-04-12 09:46:52.198406+00,,0
+1216,542,1200,,Same trend in IT. We're updating our SIEM rules to weight recon-stage indicators much higher.,2026-04-13 06:17:50.198406+00,2026-04-13 06:17:50.198406+00,,0
+1217,543,1217,,The vendor pitches in this space are particularly bad. They make CEOs think it's a product they can buy.,2026-04-27 08:25:55.910922+00,2026-04-27 08:25:55.910922+00,,0
+1218,543,1207,,Saving — preparing for an architecture review next month and was going to use the loaded phrase.,2026-04-27 11:39:18.910922+00,2026-04-27 11:39:18.910922+00,,0
+1219,544,1198,,This is the kind of perspective you only get outside Istanbul. Glad you have it nearby.,2026-04-30 17:47:35.843749+00,2026-04-30 17:47:35.843749+00,,0
+1220,544,1217,,Saving this framing. The threat changes faster than the architecture — that's all of security.,2026-04-29 14:07:24.843749+00,2026-04-29 14:07:24.843749+00,,0
+1221,545,1246,,This is exactly the conversation I've been avoiding having with myself for six months.,2026-04-05 00:15:43.053228+00,2026-04-05 00:15:43.053228+00,,0
+1222,545,1195,,The dopamine framing is correct. The first year of my management was a low-grade craving.,2026-04-04 05:51:30.053228+00,2026-04-04 05:51:30.053228+00,,0
+1223,545,1200,,"Endorsed. Best advice I got was 'find new sources of satisfaction, not just substitute the old.'",2026-04-04 14:53:51.053228+00,2026-04-04 14:53:51.053228+00,,0
+1224,546,1195,,Zero cancellations in a week is the management equivalent of a green build.,2026-04-20 18:03:22.278936+00,2026-04-20 18:03:22.278936+00,,0
+1225,546,1200,,Hard agree. The 1:1s being kept is the lagging indicator of a healthy team.,2026-04-20 12:14:33.278936+00,2026-04-20 12:14:33.278936+00,,0
+1226,547,1222,,We tried to tell three stories in our first meetings and bombed. Pivoted to one and it worked. Painful lesson.,2026-04-19 17:21:08.880674+00,2026-04-19 17:21:08.880674+00,,0
+1227,547,1199,,The 'before the first meeting' part is what people miss. They iterate inside meetings and burn relationships.,2026-04-18 22:27:39.880674+00,2026-04-18 22:27:39.880674+00,,0
+1228,547,1240,,Any framework for picking which story? Or is it just gut?,2026-04-18 13:00:52.880674+00,2026-04-18 13:00:52.880674+00,,0
+1229,548,1222,,"Same — the technology dates instantly, the founder loneliness never does.",2026-04-11 08:09:20.977815+00,2026-04-11 08:09:20.977815+00,,0
+1230,548,1199,,I re-read Jessica's interviews from that book every year. They hit differently as you grow.,2026-04-12 08:17:22.977815+00,2026-04-12 08:17:22.977815+00,,0
+1231,549,1229,,Watching this fail in real-time at the company I just left. They keep hiring AEs to fix a self-serve problem.,2026-04-23 11:18:22.005181+00,2026-04-23 11:18:22.005181+00,,0
+1232,549,1199,,"Bottom-up first is right. Even if your buyer is the CTO, the dev has to like it first.",2026-04-23 23:59:51.005181+00,2026-04-23 23:59:51.005181+00,,0
+1233,550,1199,,This is the most honest thing on this feed. Thank you.,2026-04-08 02:57:15.422529+00,2026-04-08 02:57:15.422529+00,,0
+1234,550,1240,,Saving this. The bathroom-ten-minutes is undocumented founder canon.,2026-04-07 23:00:34.422529+00,2026-04-07 23:00:34.422529+00,,0
+1235,550,1222,,The 'two hours later' part is the founder skill. Not the not-crying.,2026-04-09 04:31:50.422529+00,2026-04-09 04:31:50.422529+00,,0
+1236,551,1246,,This reframes the conversation in a really useful way. Going to use this in code review tomorrow.,2026-05-04 09:05:52.356075+00,2026-05-04 09:05:52.356075+00,,0
+1237,551,1195,,Behaviour location is the underrated lens. Most architecture pain is misplaced behaviour.,2026-05-04 18:33:51.356075+00,2026-05-04 18:33:51.356075+00,,0
+1238,551,1202,,Endorse. The maintenance cost lens makes the abstract pattern arguments productive.,2026-05-04 00:16:35.356075+00,2026-05-04 00:16:35.356075+00,,0
+1239,552,1195,,Saving for next time we hit one. The auto-config debugging story has been a pain point for years.,2026-05-09 04:54:13.535587+00,2026-05-09 04:54:13.535587+00,,0
+1240,552,1246,,Is this configurable per-profile or always-on?,2026-05-08 09:39:40.535587+00,2026-05-08 09:39:40.535587+00,,0
+1241,553,1202,,"Üsküdar agrees. Quiet neighbourhoods make better engineers, I'm convinced.",2026-05-01 10:30:26.276597+00,2026-05-01 10:30:26.276597+00,,0
+1242,553,1195,,Maltepe nods to Pendik. Solidarity from the Asian side.,2026-05-01 19:46:32.276597+00,2026-05-01 19:46:32.276597+00,,0
+1243,554,1220,,This is a much more useful frame than the academic one I learned in school. Going to use this.,2026-05-03 15:06:06.974025+00,2026-05-03 15:06:06.974025+00,,0
+1244,554,1198,,Defensibility-as-the-real-goal is exactly right. The explainability literature often misses this.,2026-05-03 02:34:40.974025+00,2026-05-03 02:34:40.974025+00,,0
+1245,554,1195,,The override process is the part most papers ignore. Where the real risk lives.,2026-05-04 11:45:28.974025+00,2026-05-04 11:45:28.974025+00,,0
+1246,555,1220,,Our inventory exercise has been going on for three months. Painful but illuminating.,2026-05-06 05:09:23.636871+00,2026-05-06 05:09:23.636871+00,,0
+1247,555,1198,,The 'start with GenAI use cases' advice is non-obvious but correct — that's where most institutions are weakest.,2026-05-06 07:38:33.636871+00,2026-05-06 07:38:33.636871+00,,0
+1248,556,1220,,Watching this fail at my org in real-time. The pre-deployment forcing function is the lesson.,2026-04-17 05:27:06.276694+00,2026-04-17 05:27:06.276694+00,,0
+1249,556,1198,,"True in academia too — write the methods section before the experiments, not after.",2026-04-18 15:31:26.276694+00,2026-04-18 15:31:26.276694+00,,0
+1250,557,1198,,The fishermen are the meditation.,2026-05-04 00:35:31.704704+00,2026-05-04 00:35:31.704704+00,,0
+1251,557,1220,,"I needed this image today, thank you.",2026-05-03 14:49:07.704704+00,2026-05-03 14:49:07.704704+00,,0
+1252,558,1243,,This rubric is exactly what I've been missing in self-assessment. Going to rewrite my recent case study tonight.,2026-05-02 12:50:48.555653+00,2026-05-02 12:50:48.555653+00,,0
+1253,558,1197,,Translates one-to-one to engineering portfolios. The context-sensitive metric is the senior move.,2026-05-01 10:29:09.555653+00,2026-05-01 10:29:09.555653+00,,0
+1254,558,1199,,Founders read these too. The third type is the only one that lands with us.,2026-05-02 13:37:12.555653+00,2026-05-02 13:37:12.555653+00,,0
+1255,559,1243,,Started using it last month. The brand-flex use case is the killer. Wish I'd known sooner.,2026-04-25 13:15:30.281392+00,2026-04-25 13:15:30.281392+00,,0
+1256,559,1219,,Any teaching resources you recommend? I keep getting confused on the modes.,2026-04-25 09:58:55.281392+00,2026-04-25 09:58:55.281392+00,,0
+1257,560,1243,,"Endorse. I work somewhere where design systems are treated as the deliverable, not the means. Everyone is busy and nothing ships.",2026-04-30 16:33:42.156888+00,2026-04-30 16:33:42.156888+00,,0
+1258,560,1197,,"Production has the same trap with project management methodologies. Tool, not strategy.",2026-04-30 15:12:49.156888+00,2026-04-30 15:12:49.156888+00,,0
+1259,560,1199,,"Same with sales playbooks. Tool, not strategy. The pattern repeats.",2026-05-01 08:23:02.156888+00,2026-05-01 08:23:02.156888+00,,0
+1260,561,1197,,Slowness is the point. This is the move.,2026-04-11 02:47:31.047662+00,2026-04-11 02:47:31.047662+00,,0
+1261,561,1198,,I haven't made manti in years. Reminded now.,2026-04-11 14:31:23.047662+00,2026-04-11 14:31:23.047662+00,,0
+1262,562,1243,,This is the conversation our design team avoids. Our critiques are validation theater.,2026-05-09 08:13:38.738309+00,2026-05-09 08:13:38.738309+00,,0
+1263,562,1202,,Same trap in engineering review. The structured conversation is the skill.,2026-05-10 01:37:53.738309+00,2026-05-10 01:37:53.738309+00,,0
+1264,563,1243,,On my list. Did you read the revised edition?,2026-04-21 05:41:02.708569+00,2026-04-21 05:41:02.708569+00,,0
+1265,563,1198,,The 'fundamentals haven't changed' line lands. Every field has this.,2026-04-19 15:37:40.708569+00,2026-04-19 15:37:40.708569+00,,0
+1266,564,1197,,Erzurum's mountains are different than yours but the principle is identical.,2026-05-05 06:48:29.813579+00,2026-05-05 06:48:29.813579+00,,0
+1267,564,1198,,Tuesdays — the most Istanbul day of the week. Hard to articulate why.,2026-05-05 02:19:04.813579+00,2026-05-05 02:19:04.813579+00,,0
+1268,564,1199,,"Izmir doesn't miss it ever, but I respect the honesty.",2026-05-06 02:03:06.813579+00,2026-05-06 02:03:06.813579+00,,0
+1269,565,1200,,I say it once a session for the first month and then never again. We'll get there.,2026-05-06 22:34:55.748364+00,2026-05-06 22:34:55.748364+00,,0
+1270,565,1216,,"Same trap with me, different label. Took me half a year to drop it.",2026-05-05 20:01:57.748364+00,2026-05-05 20:01:57.748364+00,,0
+1271,566,1229,,180MB is a great result for a first try. The layer caching docs are honestly bad — most of us learn it by breaking it.,2026-05-01 21:02:23.892754+00,2026-05-01 21:02:23.892754+00,,0
+1272,566,1200,,You'll have an even better moment when you discover BuildKit cache mounts. Save that for next week.,2026-05-03 02:18:14.892754+00,2026-05-03 02:18:14.892754+00,,0
+1273,567,1205,,It's true. The hardest hires for responsible AI teams are people who can read philosophy carefully and explain it to engineers.,2026-04-23 01:34:44.07981+00,2026-04-23 01:34:44.07981+00,,0
+1274,567,1220,,Going to use this reframe for myself too. The 'not technical' worry is universal.,2026-04-21 03:17:31.07981+00,2026-04-21 03:17:31.07981+00,,0
+1275,567,1198,,"Philosophers do close reading the way engineers do debugging. Same skill, different artifact.",2026-04-21 06:56:00.07981+00,2026-04-21 06:56:00.07981+00,,0
+1276,568,1200,,Service works > model is good is the right order to learn this. Now make it observable.,2026-05-05 18:48:57.639813+00,2026-05-05 18:48:57.639813+00,,0
+1277,568,1230,,"Same path I took. The bad model gets better, the deployment skill compounds.",2026-05-06 22:14:00.639813+00,2026-05-06 22:14:00.639813+00,,0
+1278,569,1200,,"Right order: failure modes first, features second. Stick with that mentor.",2026-04-15 23:46:28.619079+00,2026-04-15 23:46:28.619079+00,,0
+1279,569,1230,,I learned this lesson by getting paged. Cheaper to learn it from a mentor.,2026-04-14 10:02:49.619079+00,2026-04-14 10:02:49.619079+00,,0
+1280,570,1197,,The tutorials lie because they were written by people who already knew. Your write-up will help more people than you think.,2026-04-30 08:06:18.728295+00,2026-04-30 08:06:18.728295+00,,0
+1281,570,1248,,Will read. Flutter side has the same problem. Tutorials skip the boring fixes.,2026-05-01 04:27:56.728295+00,2026-05-01 04:27:56.728295+00,,0
+1282,571,1197,,These tiny moments are the actual progress. The big ones are usually breakthroughs that depend on a hundred of these.,2026-05-09 01:12:02.870751+00,2026-05-09 01:12:02.870751+00,,0
+1283,571,1219,,Flutter equivalent for me was StatelessWidget vs StatefulWidget. Same feeling.,2026-05-08 08:22:25.870751+00,2026-05-08 08:22:25.870751+00,,0
+1284,572,1197,,Erzurum kid solidarity. The cold makes the focus better.,2026-05-07 06:19:02.371677+00,2026-05-07 06:19:02.371677+00,,0
+1285,572,1198,,Cozy work setups are an underrated career advantage.,2026-05-06 10:19:10.371677+00,2026-05-06 10:19:10.371677+00,,0
+1286,573,1197,,Yep. Mixed UIKit/SwiftUI codebases are the median you'll join. Better to know both.,2026-04-25 01:06:24.146076+00,2026-04-25 01:06:24.146076+00,,0
+1287,573,1219,,Saving — Flutter side has the same dual-knowledge problem.,2026-04-25 00:31:05.146076+00,2026-04-25 00:31:05.146076+00,,0
+1288,574,1198,,Iteration four will already be unrecognizable from draft one. That's the point of the process.,2026-05-10 12:12:11.53914+00,2026-05-10 12:12:11.53914+00,,0
+1289,574,1215,,Reading your journey with mine. The 'describing not arguing' note hits home.,2026-05-08 12:10:57.53914+00,2026-05-08 12:10:57.53914+00,,0
+1290,574,1222,,"How many drafts does it usually take, in your experience?",2026-05-09 00:05:21.53914+00,2026-05-09 00:05:21.53914+00,,0
+1291,575,1198,,Your mom's belief is worth more than any letter of recommendation. Never forget that.,2026-04-30 22:09:41.193925+00,2026-04-30 22:09:41.193925+00,,0
+1292,575,1215,,Going through this exact thing with my dad.,2026-04-30 05:03:34.193925+00,2026-04-30 05:03:34.193925+00,,0
+1293,575,1226,,First-gen solidarity. The translation never gets easier but the support is real.,2026-05-01 19:44:34.193925+00,2026-05-01 19:44:34.193925+00,,0
+1294,576,1198,,Methodology > implementation in writing time is the universal law of research. Welcome to the club.,2026-04-28 00:05:07.973016+00,2026-04-28 00:05:07.973016+00,,0
+1295,576,1215,,Saving for when I hit the same wall on my thesis.,2026-04-29 10:05:55.973016+00,2026-04-29 10:05:55.973016+00,,0
+1296,577,1235,,Small multiples are underused in fintech. The candlestick default is laziness most of the time.,2026-04-12 00:49:51.124013+00,2026-04-12 00:49:51.124013+00,,0
+1297,577,1224,,Curious which library — Plotly or pure matplotlib?,2026-04-11 19:49:12.124013+00,2026-04-11 19:49:12.124013+00,,0
+1298,577,1218,,The visualization is the analysis is the whole point. Saving.,2026-04-13 16:43:05.124013+00,2026-04-13 16:43:05.124013+00,,0
+1299,578,1235,,This is the discipline. Most analysts ship charts that have no claim.,2026-04-25 10:17:04.275838+00,2026-04-25 10:17:04.275838+00,,0
+1300,578,1196,,"Same in marketing dashboards. The narrative is the deliverable, the chart is the receipt.",2026-04-27 12:33:50.275838+00,2026-04-27 12:33:50.275838+00,,0
+1301,579,1235,,Şişli lunch is a personality test you can fail.,2026-05-08 19:52:38.968134+00,2026-05-08 19:52:38.968134+00,,0
+1302,579,1242,,Solidarity from another Şişli walker. Try the place behind Cevahir.,2026-05-10 23:05:12.968134+00,2026-05-10 23:05:12.968134+00,,0
+1303,580,1205,,This is the work. The guardrails-take-longer-than-the-product law applies to every responsible AI deployment.,2026-04-21 19:52:57.330336+00,2026-04-21 19:52:57.330336+00,,0
+1304,580,1220,,Are you going to write up the seven prompts? Would be useful for the chatbot people who haven't done this exercise.,2026-04-21 01:14:31.330336+00,2026-04-21 01:14:31.330336+00,,0
+1305,580,1208,,Same trajectory as my thesis. The naivety in 'just deploy it' is dangerous.,2026-04-19 05:56:25.330336+00,2026-04-19 05:56:25.330336+00,,0
+1306,581,1205,,That question is the whole career. Glad we started there.,2026-03-11 07:11:10.125276+00,2026-03-11 07:11:10.125276+00,,0
+1307,581,1220,,Saving the framing for my own first sessions.,2026-03-09 04:39:10.125276+00,2026-03-09 04:39:10.125276+00,,0
+1308,582,1219,,Kartal sunsets are underrated. Marina solidarity.,2026-04-23 00:07:04.99853+00,2026-04-23 00:07:04.99853+00,,0
+1309,582,1221,,I do the same walk after my QA classes. Distance helps.,2026-04-24 12:07:11.99853+00,2026-04-24 12:07:11.99853+00,,0
+1310,583,1197,,Both can be true. Personal narrative games are the best demonstration of design literacy.,2026-04-11 04:40:20.290276+00,2026-04-11 04:40:20.290276+00,,0
+1311,583,1219,,Sending the link to my partner. Twenty minutes of crying-game material is the rate niche.,2026-04-12 05:29:58.290276+00,2026-04-12 05:29:58.290276+00,,0
+1312,583,1206,,The personal Bitsy is harder than it looks. Most people don't get past the editor.,2026-04-11 15:46:53.290276+00,2026-04-11 15:46:53.290276+00,,0
+1313,584,1197,,Small games ship. Big games crunch. Bias toward smallness early.,2026-04-26 16:04:07.417605+00,2026-04-26 16:04:07.417605+00,,0
+1314,584,1206,,Saving. Same principle in design portfolios — small artifacts compound.,2026-04-24 19:19:46.417605+00,2026-04-24 19:19:46.417605+00,,0
+1315,585,1211,,162Q is a strong start. Verbal compounds slowly but it compounds — daily reading is correct.,2026-05-07 16:08:46.314347+00,2026-05-07 16:08:46.314347+00,,0
+1316,585,1198,,Verbal is the slow burn. Don't expect a jump for six weeks.,2026-05-09 09:31:43.314347+00,2026-05-09 09:31:43.314347+00,,0
+1317,585,1222,,On the same prep journey. Solidarity from a different field.,2026-05-07 23:15:49.314347+00,2026-05-07 23:15:49.314347+00,,0
+1318,586,1211,,Saving this perspective for application-stress days.,2026-04-29 17:49:13.11928+00,2026-04-29 17:49:13.11928+00,,0
+1319,586,1198,,The geography reminds you the clock is shorter than you think.,2026-04-29 23:26:33.11928+00,2026-04-29 23:26:33.11928+00,,0
+1320,587,1198,,"Right priority order. The GRE is a filter, the statement is the choice.",2026-04-15 02:52:54.811352+00,2026-04-15 02:52:54.811352+00,,0
+1321,587,1211,,Same conversation in my session. The mentor was very firm about it.,2026-04-16 18:28:38.811352+00,2026-04-16 18:28:38.811352+00,,0
+1322,588,1211,,Anki is the friend. SRS works.,2026-04-24 20:36:14.720019+00,2026-04-24 20:36:14.720019+00,,0
+1323,588,1198,,Targeted vocabulary > general reading is the right diagnostic.,2026-04-24 03:10:17.720019+00,2026-04-24 03:10:17.720019+00,,0
+1324,589,1196,,Yes — and the second framing is more accurate. Teaching is a communication craft.,2026-04-04 21:29:56.349674+00,2026-04-04 21:29:56.349674+00,,0
+1325,589,1207,,Going to use the same reframe for my own switch. Thank you.,2026-04-04 17:38:13.349674+00,2026-04-04 17:38:13.349674+00,,0
+1326,589,1226,,The framing matters more than the courses. Career switchers underestimate this.,2026-04-04 00:00:41.349674+00,2026-04-04 00:00:41.349674+00,,0
+1327,590,1207,,This shift is the whole career change. Going from 'doing the tutorial' to 'asking your own question' is everything.,2026-03-26 18:46:03.155619+00,2026-03-26 18:46:03.155619+00,,0
+1328,590,1247,,Same path. The first 'my own query' feels like cheating until you realize it isn't.,2026-03-25 20:18:51.155619+00,2026-03-25 20:18:51.155619+00,,0
+1329,591,1207,,The no-commute morning is the underrated benefit of the switch. Reclaiming the hour.,2026-04-25 20:18:03.892402+00,2026-04-25 20:18:03.892402+00,,0
+1330,591,1224,,Same situation. Coffee at home > coffee in transit.,2026-04-25 17:22:54.892402+00,2026-04-25 17:22:54.892402+00,,0
+1331,592,1196,,"Real projects > Kaggle, every time. Saving the food-cost example.",2026-05-03 08:15:16.109779+00,2026-05-03 08:15:16.109779+00,,0
+1332,592,1207,,Inspired to find a similar friend-project.,2026-05-04 09:16:37.109779+00,2026-05-04 09:16:37.109779+00,,0
+1333,593,1201,,Reinvesting the bounty into HTB is the move. Compound the practice. Good work.,2026-04-24 15:07:18.909925+00,2026-04-24 15:07:18.909925+00,,0
+1334,593,1237,,Stored XSS payouts are rare and underrated. Congrats.,2026-04-24 17:33:41.909925+00,2026-04-24 17:33:41.909925+00,,0
+1335,593,1231,,Did the company patch within their SLA? Curious about disclosure timeline.,2026-04-23 20:22:13.909925+00,2026-04-23 20:22:13.909925+00,,0
+1336,594,1201,,The favourite-vulnerability question is the diagnostic. Says everything about how you think.,2026-04-28 16:37:37.684947+00,2026-04-28 16:37:37.684947+00,,0
+1337,594,1237,,Saving for my own first sessions. The real question is rarely the one in the script.,2026-04-29 11:58:09.684947+00,2026-04-29 11:58:09.684947+00,,0
+1338,595,1201,,The build > the find is the actual signal. People who chase finds burn out. Builders stay.,2026-05-03 03:17:05.961862+00,2026-05-03 03:17:05.961862+00,,0
+1339,595,1237,,"Same energy. The tool you write is yours forever, the find is a moment.",2026-05-04 07:13:47.961862+00,2026-05-04 07:13:47.961862+00,,0
+1340,596,1237,,Metrobus writeup tradition. Respect.,2026-05-04 12:50:28.764013+00,2026-05-04 12:50:28.764013+00,,0
+1341,596,1249,,The commute can be the best study block if you let it be. Esenyurt solidarity.,2026-05-06 13:01:22.764013+00,2026-05-06 13:01:22.764013+00,,0
+1342,597,1201,,This insight separates the senior from the loud. Configuration > novelty. Keep that lens.,2026-04-26 14:14:55.043225+00,2026-04-26 14:14:55.043225+00,,0
+1343,597,1200,,"Same in SRE. Most outages are configuration, not novel failures.",2026-04-26 22:41:43.043225+00,2026-04-26 22:41:43.043225+00,,0
+1344,598,1201,,The prep teaches you more than the cert proves. The cert opens doors; the prep makes you useful.,2026-04-17 12:12:07.194815+00,2026-04-17 12:12:07.194815+00,,0
+1345,598,1237,,Reframing my OSCP year with this. Thanks.,2026-04-19 04:17:35.194815+00,2026-04-19 04:17:35.194815+00,,0
+1346,599,1201,,Best one-line definition of the profession I've ever heard.,2026-03-17 07:41:12.700883+00,2026-03-17 07:41:12.700883+00,,0
+1347,599,1237,,My grandfather calls me 'the boy who plays with computers.' Same energy.,2026-03-14 18:11:44.700883+00,2026-03-14 18:11:44.700883+00,,0
+1348,600,1197,,Local streets translate beautifully to low-poly. Keep posting the WIP.,2026-05-04 17:12:45.903837+00,2026-05-04 17:12:45.903837+00,,0
+1349,600,1214,,Saving for inspiration. The light is great.,2026-05-04 16:23:08.903837+00,2026-05-04 16:23:08.903837+00,,0
+1350,601,1197,,Range is for after depth. The painful one-pick is the right move at junior level.,2026-05-04 07:40:36.286176+00,2026-05-04 07:40:36.286176+00,,0
+1351,601,1214,,"Same lesson, opposite direction. I chose narrative; haven't regretted it.",2026-05-04 12:25:26.286176+00,2026-05-04 12:25:26.286176+00,,0
+1352,602,1210,,Ten users is more than zero users. Celebrating with you.,2026-04-27 18:06:27.632227+00,2026-04-27 18:06:27.632227+00,,0
+1353,602,1248,,What state management? Riverpod or Bloc?,2026-04-26 05:50:26.632227+00,2026-04-26 05:50:26.632227+00,,0
+1354,602,1206,,Pride in a small thing is the right energy for shipping.,2026-04-28 08:18:15.632227+00,2026-04-28 08:18:15.632227+00,,0
+1355,603,1206,,Three pages to one paragraph is the product skill. Compression is taste.,2026-05-07 07:41:35.085463+00,2026-05-07 07:41:35.085463+00,,0
+1356,603,1203,,Founders learn this the hard way. Glad you're learning it as a junior.,2026-05-06 20:34:03.085463+00,2026-05-06 20:34:03.085463+00,,0
+1357,604,1206,,Calm-as-a-feature is exactly right. Most apps are too loud and don't know why they fail to retain.,2026-05-01 12:27:05.425546+00,2026-05-01 12:27:05.425546+00,,0
+1358,604,1210,,Saving this. Will revisit my SwiftUI colors with this lens.,2026-04-30 17:55:07.425546+00,2026-04-30 17:55:07.425546+00,,0
+1359,605,1213,,Kartal sunset solidarity.,2026-04-27 06:29:21.737109+00,2026-04-27 06:29:21.737109+00,,0
+1360,605,1206,,Quiet brains ship more. Confirmed in my fifteenth year of this.,2026-04-28 14:47:15.737109+00,2026-04-28 14:47:15.737109+00,,0
+1361,606,1210,,Less code > more code. Always.,2026-05-08 08:04:21.062175+00,2026-05-08 08:04:21.062175+00,,0
+1362,606,1248,,Saving for my own refactor week.,2026-05-08 14:41:43.062175+00,2026-05-08 14:41:43.062175+00,,0
+1363,607,1206,,The Socratic code review is the right teaching method. You'll never forget that pattern now.,2026-05-06 14:44:46.579717+00,2026-05-06 14:44:46.579717+00,,0
+1364,607,1210,,Saving the technique. Mentors who don't give answers force you to grow.,2026-05-07 06:25:59.579717+00,2026-05-07 06:25:59.579717+00,,0
+1365,608,1210,,The cycle continues. Saving this for the next time someone asks me.,2026-05-10 02:50:07.353833+00,2026-05-10 02:50:07.353833+00,,0
+1366,608,1206,,You sounded like your mentor because that lesson stuck. That's the whole thing.,2026-05-09 17:50:17.353833+00,2026-05-09 17:50:17.353833+00,,0
+1367,609,1205,,Reading out loud is the test. Saving for my own mentees.,2026-04-07 18:52:48.67212+00,2026-04-07 18:52:48.67212+00,,0
+1368,609,1226,,"Same exercise on my side. Painful, useful.",2026-04-08 07:26:06.67212+00,2026-04-08 07:26:06.67212+00,,0
+1369,609,1224,,I'm going to do this tonight too. Thanks for the nudge.,2026-04-08 07:34:58.67212+00,2026-04-08 07:34:58.67212+00,,0
+1370,610,1200,,Welcome to the universal QA lesson. Explicit waits are the answer to 80% of flakes.,2026-04-05 18:32:05.342023+00,2026-04-05 18:32:05.342023+00,,0
+1371,610,1204,,Three weeks of pain is the only way to internalize it. You won't make this mistake again.,2026-04-06 00:20:59.342023+00,2026-04-06 00:20:59.342023+00,,0
+1372,611,1199,,Two honest out of six is actually a good ratio for cold-walking warehouses. Keep going.,2026-05-02 17:41:42.213535+00,2026-05-02 17:41:42.213535+00,,0
+1373,611,1203,,In-person customer discovery is the underrated startup skill. You're already ahead.,2026-05-02 16:43:33.213535+00,2026-05-02 16:43:33.213535+00,,0
+1374,611,1240,,Saving the warehouse-visit approach. Anatolian SMBs are not on LinkedIn.,2026-05-03 04:01:55.213535+00,2026-05-03 04:01:55.213535+00,,0
+1375,612,1199,,"The pre-mortem is the most useful pitch-prep exercise. Painful, illuminating.",2026-05-01 11:04:32.062644+00,2026-05-01 11:04:32.062644+00,,0
+1376,612,1203,,Going to make all my mentees do this.,2026-05-02 16:00:15.062644+00,2026-05-02 16:00:15.062644+00,,0
+1377,613,1199,,Notebook-less walks are when the real insights surface. Keep doing them.,2026-04-29 13:55:18.760229+00,2026-04-29 13:55:18.760229+00,,0
+1378,613,1240,,Solidarity from another small-town founder. The slower walks are an advantage.,2026-04-30 22:43:08.760229+00,2026-04-30 22:43:08.760229+00,,0
+1379,614,1232,,Reading comprehension is the right frame. Finding nothing on a battle-tested contract is normal.,2026-04-28 12:14:21.373256+00,2026-04-28 12:14:21.373256+00,,0
+1380,614,1201,,Same lesson in security audit broadly. The slow read is the skill.,2026-04-26 12:01:55.373256+00,2026-04-26 12:01:55.373256+00,,0
+1381,614,1217,,Audits are 90% reading. Saving the framing.,2026-04-27 11:04:14.373256+00,2026-04-27 11:04:14.373256+00,,0
+1382,615,1200,,Right priority order. Async writing > technical skill for remote effectiveness.,2026-04-20 21:55:59.151179+00,2026-04-20 21:55:59.151179+00,,0
+1383,615,1195,,Saving — same conversation I have with every remote-bound mentee.,2026-04-19 06:06:58.151179+00,2026-04-19 06:06:58.151179+00,,0
+1384,616,1232,,The 'without hindsight' clause is the senior skill. Studying old exploits with the answer hidden first is the right exercise.,2026-04-21 01:24:42.411217+00,2026-04-21 01:24:42.411217+00,,0
+1385,616,1201,,"Endorse the methodology. Hide the answer, then read.",2026-04-21 06:30:51.411217+00,2026-04-21 06:30:51.411217+00,,0
+1386,617,1201,,The kahvehane work session is an underrated work setup.,2026-03-24 19:57:49.705594+00,2026-03-24 19:57:49.705594+00,,0
+1387,617,1226,,Anatolian remote work has its own rhythm. Different is the value.,2026-03-27 03:00:28.705594+00,2026-03-27 03:00:28.705594+00,,0
+1388,618,1232,,First deployed contract is a feeling that doesn't repeat. Bottle it.,2026-04-26 18:16:16.599577+00,2026-04-26 18:16:16.599577+00,,0
+1389,618,1205,,Watching transactions you authored is its own reward. Welcome to the club.,2026-04-26 20:58:33.599577+00,2026-04-26 20:58:33.599577+00,,0
+1390,619,1201,,The 'read before you apply' move is what gets you taken seriously in this space.,2026-04-24 23:17:21.281325+00,2026-04-24 23:17:21.281325+00,,0
+1391,619,1232,,Same advice my mentor gave me. The list of 30 is a real research project.,2026-04-27 10:24:24.281325+00,2026-04-27 10:24:24.281325+00,,0
+1392,620,1232,,Struct packing is a gateway optimization. Welcome down the rabbit hole.,2026-05-08 03:26:19.938312+00,2026-05-08 03:26:19.938312+00,,0
+1393,620,1237,,The 'real engineers love small wins' line is a keeper.,2026-05-08 20:22:05.938312+00,2026-05-08 20:22:05.938312+00,,0
+1394,621,1226,,Family meals reset something in the brain. Underrated.,2026-04-27 09:34:57.26428+00,2026-04-27 09:34:57.26428+00,,0
+1395,621,1232,,Sunday no-laptop is a rule I should adopt.,2026-04-25 23:13:19.26428+00,2026-04-25 23:13:19.26428+00,,0
+1396,622,1201,,Writing > exploit-finding for impact. Reports persuade; bugs just exist.,2026-04-28 18:38:52.384518+00,2026-04-28 18:38:52.384518+00,,0
+1397,622,1232,,The career-shift moment for me was when I realized this.,2026-04-26 14:43:29.384518+00,2026-04-26 14:43:29.384518+00,,0
+1398,623,1220,,Same exercise. The 'want to work at' list is shorter and more honest.,2026-04-02 09:15:40.86688+00,2026-04-02 09:15:40.86688+00,,0
+1399,623,1216,,Career-switcher solidarity. The honest list takes courage to write.,2026-04-03 07:27:16.86688+00,2026-04-03 07:27:16.86688+00,,0
+1400,624,1226,,First deploy is the conversion moment from 'studying' to 'building.',2026-04-27 20:45:15.179164+00,2026-04-27 20:45:15.179164+00,,0
+1401,624,1220,,Same week — I just deployed mine. Solidarity.,2026-04-25 06:30:44.179164+00,2026-04-25 06:30:44.179164+00,,0
+1402,625,1216,,Çay-fueled productivity. Adana solidarity.,2026-04-11 06:06:27.732201+00,2026-04-11 06:06:27.732201+00,,0
+1403,625,1234,,The grandmother coffee-shop is unmatched.,2026-04-09 20:13:53.732201+00,2026-04-09 20:13:53.732201+00,,0
+1404,626,1207,,Same problem with me last month. The recording is the cure.,2026-03-25 06:47:22.656908+00,2026-03-25 06:47:22.656908+00,,0
+1405,626,1216,,We're going to be career-switcher hype-women for each other from now on.,2026-03-25 15:43:58.656908+00,2026-03-25 15:43:58.656908+00,,0
+1406,627,1226,,RSC docs are a moving target. Write the post — current ones are gold.,2026-04-18 20:22:42.468556+00,2026-04-18 20:22:42.468556+00,,0
+1407,627,1246,,Will read. The current state of RSC tutorials is genuinely confusing.,2026-04-21 12:51:58.468556+00,2026-04-21 12:51:58.468556+00,,0
+1408,628,1220,,Cutting model fields a day after writing them is the right rhythm. Saving.,2026-05-02 04:50:57.673336+00,2026-05-02 04:50:57.673336+00,,0
+1409,628,1224,,Same trap with React component props. Iterative cutting is the skill.,2026-05-03 07:27:25.673336+00,2026-05-03 07:27:25.673336+00,,0
+1410,629,1220,,"Saving too. Bootcamp got me the credential, the self-study habits get me through review.",2026-05-04 02:37:17.322418+00,2026-05-04 02:37:17.322418+00,,0
+1411,629,1216,,True. The depth lasts.,2026-05-05 07:11:48.322418+00,2026-05-05 07:11:48.322418+00,,0
+1412,630,1216,,Done > impressive. Repeating this to myself.,2026-04-30 10:35:28.081992+00,2026-04-30 10:35:28.081992+00,,0
+1413,630,1247,,Personal finance ETL is the universal first real project. Add it to the canon.,2026-04-29 20:16:16.081992+00,2026-04-29 20:16:16.081992+00,,0
+1414,631,1222,,Sakarya solidarity. The library walks are foundational.,2026-04-18 11:21:23.611185+00,2026-04-18 11:21:23.611185+00,,0
+1415,631,1226,,Walking is the most underrated dev skill.,2026-04-17 11:24:47.611185+00,2026-04-17 11:24:47.611185+00,,0
+1416,632,1204,,Re-reading the same code with a week's distance is the skill. You'll see new things every time.,2026-05-01 11:20:59.015244+00,2026-05-01 11:20:59.015244+00,,0
+1417,632,1220,,Saving the methodology.,2026-05-03 01:33:50.015244+00,2026-05-03 01:33:50.015244+00,,0
+1418,633,1220,,Going to do this tonight. Excellent.,2026-04-22 14:06:38.599101+00,2026-04-22 14:06:38.599101+00,,0
+1419,633,1216,,Career planning via 'what would I learn' is the right lens. Stealing.,2026-04-23 12:06:31.599101+00,2026-04-23 12:06:31.599101+00,,0
+1420,634,1200,,Coverage as 'proof you thought about failure modes' is exactly right. Don't let purists tell you otherwise.,2026-04-27 11:47:15.57464+00,2026-04-27 11:47:15.57464+00,,0
+1421,634,1221,,Saving the line about proof-of-thought.,2026-04-30 06:20:01.57464+00,2026-04-30 06:20:01.57464+00,,0
+1422,635,1211,,The hour-after questions are the real signal. Glad you ran this.,2026-04-24 15:39:40.10513+00,2026-04-24 15:39:40.10513+00,,0
+1423,635,1215,,Stealing the session format. Going to run a GRE prep one in Çanakkale.,2026-04-24 15:58:36.10513+00,2026-04-24 15:58:36.10513+00,,0
+1424,635,1222,,Community-work-compounds is exactly right. Most don't see it for two years.,2026-04-23 21:20:32.10513+00,2026-04-23 21:20:32.10513+00,,0
+1425,636,1198,,The written charter is what separates a club from a Whatsapp group.,2026-05-09 21:22:42.682563+00,2026-05-09 21:22:42.682563+00,,0
+1426,636,1211,,Saving the framing for the campus group I'm starting at Bogazici.,2026-05-11 12:12:23.682563+00,2026-05-11 12:12:23.682563+00,,0
+1427,637,1228,,Same coast. Different end of the city. We should meet up.,2026-04-20 19:42:20.561124+00,2026-04-20 19:42:20.561124+00,,0
+1428,637,1211,,Saving the 'content fisherman' image.,2026-04-22 03:17:58.561124+00,2026-04-22 03:17:58.561124+00,,0
+1429,638,1215,,Spreadsheet view is the move. The dates side-by-side calm the application anxiety.,2026-04-23 08:49:31.796066+00,2026-04-23 08:49:31.796066+00,,0
+1430,638,1211,,Doing this tomorrow. Side-by-side is the lens.,2026-04-24 03:11:27.796066+00,2026-04-24 03:11:27.796066+00,,0
+1431,639,1199,,The 'useless' answers are the gift. The politeness is the noise.,2026-04-26 13:20:27.470952+00,2026-04-26 13:20:27.470952+00,,0
+1432,639,1203,,Same lesson on every founder journey. Bias toward harsh interviews.,2026-04-26 17:03:20.470952+00,2026-04-26 17:03:20.470952+00,,0
+1433,639,1219,,Doing my first interviews this week. Need this reminder.,2026-04-24 09:28:31.470952+00,2026-04-24 09:28:31.470952+00,,0
+1434,640,1199,,Continuously-deciding-what-not-to-ship is the best one-sentence definition I've heard.,2026-04-22 23:18:55.31401+00,2026-04-22 23:18:55.31401+00,,0
+1435,640,1203,,Saving for the next time someone asks me.,2026-04-22 17:31:37.31401+00,2026-04-22 17:31:37.31401+00,,0
+1436,641,1206,,The 5-paragraph feature request is a gift. Reply with care.,2026-04-30 00:47:53.428189+00,2026-04-30 00:47:53.428189+00,,0
+1437,641,1219,,Same energy. Tiny apps with strong opinions > generic apps.,2026-05-01 14:42:37.428189+00,2026-05-01 14:42:37.428189+00,,0
+1438,642,1220,,Ankara solidarity. The boulevards are the underrated feature.,2026-05-02 09:00:12.672708+00,2026-05-02 09:00:12.672708+00,,0
+1439,642,1228,,Same walks. Glad someone else notices.,2026-04-30 11:35:36.672708+00,2026-04-30 11:35:36.672708+00,,0
+1440,643,1220,,The real-vs-wishlist filter is the time-saving move. Stealing.,2026-05-08 03:11:31.265128+00,2026-05-08 03:11:31.265128+00,,0
+1441,643,1216,,Doing this tonight.,2026-05-10 14:55:19.265128+00,2026-05-10 14:55:19.265128+00,,0
+1442,644,1227,,That question separates juniors from seniors. The answer is: pre-commit to the cut list.,2026-04-22 20:12:28.667262+00,2026-04-22 20:12:28.667262+00,,0
+1443,644,1203,,Pre-commit-to-cuts is the answer. Save the diagram you make for next time.,2026-04-25 02:32:49.667262+00,2026-04-25 02:32:49.667262+00,,0
+1444,645,1227,,"Yes — the bar is structure, not polish. Saving.",2026-04-18 08:17:06.009681+00,2026-04-18 08:17:06.009681+00,,0
+1445,645,1203,,True. Working specs > pretty specs.,2026-04-19 05:26:03.009681+00,2026-04-19 05:26:03.009681+00,,0
+1446,646,1200,,VPC networking is the universal bottleneck. Two focused weeks will get you there.,2026-05-10 00:31:00.558684+00,2026-05-10 00:31:00.558684+00,,0
+1447,646,1207,,Same stuck point. Going to follow your lead.,2026-05-08 19:09:35.558684+00,2026-05-08 19:09:35.558684+00,,0
+1448,647,1200,,The homelab > the cert. Lock down those instances before you regret further.,2026-04-29 04:17:25.685097+00,2026-04-29 04:17:25.685097+00,,0
+1449,647,1217,,Saving for my own cloud-prep era.,2026-04-30 12:37:05.685097+00,2026-04-30 12:37:05.685097+00,,0
+1450,648,1200,,Sea-view Terraform is the move. Endorsed.,2026-04-15 21:28:54.547662+00,2026-04-15 21:28:54.547662+00,,0
+1451,648,1207,,Karşıyaka is jealous.,2026-04-17 07:20:03.547662+00,2026-04-17 07:20:03.547662+00,,0
+1452,649,1198,,CV > public LB is rule one. Internalize it.,2026-04-28 14:32:17.749571+00,2026-04-28 14:32:17.749571+00,,0
+1453,649,1209,,Same lesson last week. Got too excited about a public score and overfitted my way to a worse private.,2026-04-29 20:01:34.749571+00,2026-04-29 20:01:34.749571+00,,0
+1454,650,1209,,Same conversation. Half-and-half time split is what I'm trying now.,2026-04-10 13:38:56.068832+00,2026-04-10 13:38:56.068832+00,,0
+1455,650,1198,,Saving the framing. The half-and-half mix is right.,2026-04-10 21:13:12.068832+00,2026-04-10 21:13:12.068832+00,,0
+1456,651,1209,,Saving brain capacity for the work that matters. Right call.,2026-05-07 10:51:28.321481+00,2026-05-07 10:51:28.321481+00,,0
+1457,651,1207,,Solidarity from Karşıyaka.,2026-05-07 10:04:10.321481+00,2026-05-07 10:04:10.321481+00,,0
+1458,652,1219,,Three users + one crash = a real product. Welcome.,2026-04-26 12:32:29.432155+00,2026-04-26 12:32:29.432155+00,,0
+1459,652,1248,,Android 14 has subtle changes that broke a lot of stuff. Let me know what bit you.,2026-04-26 03:25:37.432155+00,2026-04-26 03:25:37.432155+00,,0
+1460,653,1219,,Bloc → Riverpod is the silent migration of 2024-25. Joining you.,2026-05-02 10:13:43.988041+00,2026-05-02 10:13:43.988041+00,,0
+1461,653,1210,,"Curious — for a small app, was the migration cost real?",2026-04-30 15:02:10.988041+00,2026-04-30 15:02:10.988041+00,,0
+1462,654,1197,,Writing a company README backward is a senior career-planning move. Saving.,2026-04-29 13:40:00.307869+00,2026-04-29 13:40:00.307869+00,,0
+1463,654,1219,,Stealing the exercise.,2026-04-29 00:57:59.307869+00,2026-04-29 00:57:59.307869+00,,0
+1464,655,1214,,Tekirdağ solidarity. We're both writing from the right coast.,2026-05-03 19:36:49.958644+00,2026-05-03 19:36:49.958644+00,,0
+1465,655,1197,,Returning home is a senior move you don't get credit for until you've done it.,2026-05-02 00:57:47.958644+00,2026-05-02 00:57:47.958644+00,,0
+1466,656,1219,,100 commits / month is the right cadence at our stage.,2026-05-10 15:22:55.043368+00,2026-05-10 15:22:55.043368+00,,0
+1467,656,1248,,Quantity-as-quality-gateway is the lesson. Saving.,2026-05-09 13:01:10.043368+00,2026-05-09 13:01:10.043368+00,,0
+1468,657,1219,,Speed-as-compliment is rare and valuable. Don't lose it on the dark-mode iteration.,2026-04-20 19:33:48.512787+00,2026-04-20 19:33:48.512787+00,,0
+1469,657,1206,,Saving for the calm-is-a-feature conversation we keep having.,2026-04-20 20:13:25.512787+00,2026-04-20 20:13:25.512787+00,,0
+1470,658,1200,,Don't release on Friday is the universal SRE rule. Carry it your whole career.,2026-05-01 23:20:17.915032+00,2026-05-01 23:20:17.915032+00,,0
+1471,658,1204,,Saving for my own next mentee.,2026-05-01 10:49:35.915032+00,2026-05-01 10:49:35.915032+00,,0
+1472,659,1221,,Mom-as-QA is the gold standard. Saving.,2026-04-30 12:34:14.133421+00,2026-04-30 12:34:14.133421+00,,0
+1473,659,1219,,Family installs are the harshest test.,2026-04-30 20:32:03.133421+00,2026-04-30 20:32:03.133421+00,,0
+1474,660,1223,,Trust-model > math. Welcome to the right side of this discipline.,2026-05-03 21:06:34.444198+00,2026-05-03 21:06:34.444198+00,,0
+1475,660,1201,,Same in security overall. The model is the work.,2026-05-02 06:05:43.444198+00,2026-05-02 06:05:43.444198+00,,0
+1476,661,1223,,Three lines in an hour is the right pace for senior-tier review.,2026-05-03 05:15:21.170752+00,2026-05-03 05:15:21.170752+00,,0
+1477,661,1201,,Saving the lesson.,2026-05-01 21:44:45.170752+00,2026-05-01 21:44:45.170752+00,,0
+1478,662,1207,,Ferry-as-study-room. Karşıyaka solidarity.,2026-04-20 06:31:31.574116+00,2026-04-20 06:31:31.574116+00,,0
+1479,662,1230,,Bornova co-signs. The Izmir water commute is underrated focus time.,2026-04-19 13:30:20.574116+00,2026-04-19 13:30:20.574116+00,,0
+1480,663,1216,,Reframing is the work. The systems-thinking lens is bankable.,2026-04-28 21:43:58.778926+00,2026-04-28 21:43:58.778926+00,,0
+1481,663,1234,,Same trick worked for me. Mech-eng → BA is a real pipeline.,2026-04-29 02:45:22.778926+00,2026-04-29 02:45:22.778926+00,,0
+1482,664,1216,,Restaurant costs is a classic first-real-BA project. Endorse.,2026-04-25 04:03:53.137785+00,2026-04-25 04:03:53.137785+00,,0
+1483,664,1212,,Excel models for friends are how everyone in finance starts. Keep going.,2026-04-25 02:18:04.137785+00,2026-04-25 02:18:04.137785+00,,0
+1484,665,1246,,Data shape > UI is the hidden lesson. Cloning teaches it; tutorials hide it.,2026-05-12 00:59:21.418627+00,2026-05-12 00:59:21.418627+00,,0
+1485,665,1224,,Saving the framing. Going to clone something this weekend.,2026-05-12 03:39:21.418627+00,2026-05-12 03:39:21.418627+00,,0
+1486,666,1224,,Same advice. The decision-narrative is what gets you hired.,2026-04-26 07:48:31.1035+00,2026-04-26 07:48:31.1035+00,,0
+1487,666,1216,,Decision > artifact. Saving for my interviews.,2026-04-25 14:23:41.1035+00,2026-04-25 14:23:41.1035+00,,0
+1488,667,1212,,Welcome to quant finance. The textbook hides the disagreement. Real practitioners argue about it.,2026-04-20 13:36:48.593619+00,2026-04-20 13:36:48.593619+00,,0
+1489,667,1242,,Saving — same project I'm starting this weekend.,2026-04-20 13:32:05.593619+00,2026-04-20 13:32:05.593619+00,,0
+1490,668,1212,,Explain-ability is the senior bar. Save the line.,2026-05-05 05:28:59.428906+00,2026-05-05 05:28:59.428906+00,,0
+1491,668,1242,,Stealing for my own report.,2026-05-04 20:58:53.428906+00,2026-05-04 20:58:53.428906+00,,0
+1492,669,1227,,The sunny window apartment is a foundational study setup. Çankaya nods.,2026-04-28 02:52:03.239604+00,2026-04-28 02:52:03.239604+00,,0
+1493,669,1220,,Mamak agrees. Sun + a desk is all you need.,2026-04-27 09:28:26.239604+00,2026-04-27 09:28:26.239604+00,,0
+1494,670,1210,,Closures are the gateway. Four reads is correct. Don't skip.,2026-04-21 22:17:03.407644+00,2026-04-21 22:17:03.407644+00,,0
+1495,670,1197,,Same advice my mentor in games gave me about coroutines. The gateway concept is the one to slow down on.,2026-04-21 18:07:34.407644+00,2026-04-21 18:07:34.407644+00,,0
+1496,671,1210,,Reading-docs-efficiently is its own skill. Saving the technique.,2026-05-05 21:58:50.328206+00,2026-05-05 21:58:50.328206+00,,0
+1497,671,1219,,Going to apply this to Flutter docs tomorrow.,2026-05-05 04:07:48.328206+00,2026-05-05 04:07:48.328206+00,,0
+1498,672,1223,,Writing > solving for retention. Saving the lesson.,2026-05-05 20:27:51.584405+00,2026-05-05 20:27:51.584405+00,,0
+1499,672,1217,,Same problem. Writeups force the deep understanding.,2026-05-06 16:21:05.584405+00,2026-05-06 16:21:05.584405+00,,0
+1500,672,1215,,Going to start writing solutions instead of just AC-ing.,2026-05-06 06:14:08.584405+00,2026-05-06 06:14:08.584405+00,,0
+1501,673,1204,,Templates-as-landmines is exactly right. Understand the invariants or live with bugs forever.,2026-04-18 04:44:05.907566+00,2026-04-18 04:44:05.907566+00,,0
+1502,673,1223,,Saving for the next time I copy-paste a template.,2026-04-17 11:50:09.907566+00,2026-04-17 11:50:09.907566+00,,0
+1503,674,1204,,"Both/and, not either/or. The distributed cache is the right project.",2026-04-09 22:28:34.177518+00,2026-04-09 22:28:34.177518+00,,0
+1504,674,1195,,CP + systems is the rare combo. Worth the reluctance.,2026-04-08 15:46:37.177518+00,2026-04-08 15:46:37.177518+00,,0
+1505,675,1223,,Slow compounding is the only compounding. Endorse.,2026-04-22 04:31:38.789317+00,2026-04-22 04:31:38.789317+00,,0
+1506,675,1215,,Saving the metric. 25 minutes is the bar I'm aiming for.,2026-04-22 10:11:20.789317+00,2026-04-22 10:11:20.789317+00,,0
+1507,676,1227,,METU squirrels are a national treasure.,2026-04-30 14:44:53.262691+00,2026-04-30 14:44:53.262691+00,,0
+1508,676,1220,,Mamak co-signs. Spring evenings on campus are restorative.,2026-05-02 05:22:30.262691+00,2026-05-02 05:22:30.262691+00,,0
+1509,677,1223,,Endurance > cleverness. The senior bar.,2026-05-04 03:19:02.131742+00,2026-05-04 03:19:02.131742+00,,0
+1510,677,1217,,Same in security. Sit with the problem longer.,2026-05-05 02:18:47.131742+00,2026-05-05 02:18:47.131742+00,,0
+1511,678,1204,,Welcome to design questions. The gap is fixable; takes about three months of focused reps.,2026-04-30 10:18:02.481251+00,2026-04-30 10:18:02.481251+00,,0
+1512,678,1195,,Glad you found the gap before the real interview. Now we work on it.,2026-05-02 04:27:37.481251+00,2026-05-02 04:27:37.481251+00,,0
+1513,679,1219,,Welcome. The counter-app compile is the moment for many of us.,2026-05-07 19:33:45.709637+00,2026-05-07 19:33:45.709637+00,,0
+1514,679,1231,,First widget energy is the best energy. Bottle it.,2026-05-06 09:40:33.709637+00,2026-05-06 09:40:33.709637+00,,0
+1515,679,1210,,Day one feeling. Hold onto it through the bad days.,2026-05-05 07:34:03.709637+00,2026-05-05 07:34:03.709637+00,,0
+1516,680,1223,,V2 is the right one to start with. Three reads is the right pace.,2026-04-12 16:59:56.035329+00,2026-04-12 16:59:56.035329+00,,0
+1517,680,1232,,Saving the rhythm. Going to apply to my own reading.,2026-04-13 10:36:19.035329+00,2026-04-13 10:36:19.035329+00,,0
+1518,681,1222,,Walking into kebab places with a notebook is the move. Anatolian SMB founder solidarity.,2026-04-18 01:54:24.090411+00,2026-04-18 01:54:24.090411+00,,0
+1519,681,1199,,The 'three problems you hadn't considered' is exactly what discovery gives you. Keep walking in.,2026-04-20 00:10:53.090411+00,2026-04-20 00:10:53.090411+00,,0
+1520,682,1222,,Same reframe my mentor gave me. Saving.,2026-05-05 18:11:48.282097+00,2026-05-05 18:11:48.282097+00,,0
+1521,682,1199,,Geography-as-moat is real. Sakarya founders nod from across the country.,2026-05-03 16:47:52.282097+00,2026-05-03 16:47:52.282097+00,,0
+1522,683,1222,,Sakarya solidarity. The distance from Istanbul is the gift.,2026-05-04 13:27:22.517468+00,2026-05-04 13:27:22.517468+00,,0
+1523,683,1199,,Izmir co-signs. Choose your geography.,2026-05-05 13:36:01.517468+00,2026-05-05 13:36:01.517468+00,,0
+1524,684,1226,,Sleep first is the right priority order. Saving.,2026-04-27 15:29:05.47025+00,2026-04-27 15:29:05.47025+00,,0
+1525,684,1225,,Same realization three weeks ago. Sleep is the lever.,2026-04-29 10:59:24.47025+00,2026-04-29 10:59:24.47025+00,,0
+1526,684,1228,,Going to ask the same question to myself. Probably won't like the answer.,2026-04-27 00:52:40.47025+00,2026-04-27 00:52:40.47025+00,,0
+1527,685,1230,,Cleaning > modeling for hours spent. Welcome to the actual job.,2026-04-22 20:37:22.885479+00,2026-04-22 20:37:22.885479+00,,0
+1528,685,1212,,Same week. The 'missing value philosophy' is the underrated decision.,2026-04-22 05:41:33.885479+00,2026-04-22 05:41:33.885479+00,,0
+1529,686,1230,,Questions > models. Saving.,2026-05-07 17:35:16.708227+00,2026-05-07 17:35:16.708227+00,,0
+1530,686,1198,,The same lesson in research. The question is the work.,2026-05-06 07:51:35.708227+00,2026-05-06 07:51:35.708227+00,,0
+1531,687,1212,,Şişli solidarity. The 'which is harder' debate is the apartment ritual.,2026-04-27 14:28:30.739929+00,2026-04-27 14:28:30.739929+00,,0
+1532,687,1230,,Bornova nods. Cooking together is the negotiation tool.,2026-04-26 23:46:56.739929+00,2026-04-26 23:46:56.739929+00,,0
+1533,688,1206,,Role-play is undervalued in PM training. Three reps is the bar.,2026-05-06 19:47:51.051424+00,2026-05-06 19:47:51.051424+00,,0
+1534,688,1228,,Going to ask for this exercise. Stealing.,2026-05-05 21:01:31.051424+00,2026-05-05 21:01:31.051424+00,,0
+1535,688,1227,,Same lesson. Practice in low-stakes rooms before high-stakes ones.,2026-05-06 20:05:13.051424+00,2026-05-06 20:05:13.051424+00,,0
+1536,689,1206,,One-pagers are the senior PM skill. Saving the line about compression-as-taste.,2026-04-22 23:55:34.678453+00,2026-04-22 23:55:34.678453+00,,0
+1537,689,1227,,Going to compress my own. Three to one is the right ratio.,2026-04-23 19:31:09.678453+00,2026-04-23 19:31:09.678453+00,,0
+1538,690,1228,,Bursa solidarity. The university gardens are foundational.,2026-04-30 01:32:43.387482+00,2026-04-30 01:32:43.387482+00,,0
+1539,690,1227,,Saving the image. Tea + sun + notebook is the formula.,2026-04-30 19:16:39.387482+00,2026-04-30 19:16:39.387482+00,,0
+1540,691,1206,,The 'metrics we will not move' clause is what separates senior product spec writing. Save it.,2026-05-02 16:08:48.809345+00,2026-05-02 16:08:48.809345+00,,0
+1541,691,1203,,Founders love this clause. Saves the painful 'why did this regress' meeting later.,2026-05-01 07:40:22.809345+00,2026-05-01 07:40:22.809345+00,,0
+1542,692,1243,,The apology-as-insight is exactly right. People know what's broken; they don't think they're allowed to say.,2026-05-06 21:12:33.926584+00,2026-05-06 21:12:33.926584+00,,0
+1543,692,1227,,Saving for my own interviews.,2026-05-07 01:07:30.926584+00,2026-05-07 01:07:30.926584+00,,0
+1544,693,1196,,The ten-posts-zero-customers anti-pattern. Universal.,2026-04-19 12:07:00.210891+00,2026-04-19 12:07:00.210891+00,,0
+1545,693,1249,,Same pattern at my friend's site. Saving the framing.,2026-04-18 14:37:20.210891+00,2026-04-18 14:37:20.210891+00,,0
+1546,693,1224,,Going to do the same audit for my bootcamp's site.,2026-04-18 13:29:47.210891+00,2026-04-18 13:29:47.210891+00,,0
+1547,694,1196,,GA4 + great writing is the rare combo. Two hours a day is the right investment.,2026-04-29 17:16:42.315801+00,2026-04-29 17:16:42.315801+00,,0
+1548,694,1212,,Same advice from my mentor — visualization + writing. Compound.,2026-05-01 11:10:43.315801+00,2026-05-01 11:10:43.315801+00,,0
+1549,695,1196,,Cuts > details. The fundamental writing law. Saving.,2026-05-04 06:34:21.709375+00,2026-05-04 06:34:21.709375+00,,0
+1550,695,1243,,Saving for my one-pagers.,2026-05-03 01:10:19.709375+00,2026-05-03 01:10:19.709375+00,,0
+1551,696,1216,,Bakırköy solidarity. The marina walk is the writer's office.,2026-05-03 18:44:12.680549+00,2026-05-03 18:44:12.680549+00,,0
+1552,696,1244,,Same neighbourhood. We should meet.,2026-05-03 13:08:27.680549+00,2026-05-03 13:08:27.680549+00,,0
+1553,697,1196,,"Intent > volume since at least 2023, but it takes time to internalize. Old playbook is indeed dead.",2026-04-29 00:26:00.340194+00,2026-04-29 00:26:00.340194+00,,0
+1554,697,1249,,Same observation. The volume-chasers haven't caught up.,2026-04-30 09:08:22.340194+00,2026-04-30 09:08:22.340194+00,,0
+1555,698,1195,,10x is the universal stress test. The cache-strategy shift is the real lesson.,2026-04-20 13:45:09.088389+00,2026-04-20 13:45:09.088389+00,,0
+1556,698,1204,,Going to make all my mentees do the 10x question.,2026-04-21 01:46:10.088389+00,2026-04-21 01:46:10.088389+00,,0
+1557,698,1202,,Same exercise saved me in my first senior interview.,2026-04-21 01:11:21.088389+00,2026-04-21 01:11:21.088389+00,,0
+1613,724,1210,,Socratic code review is the way. Will use this on my future juniors.,2026-05-08 11:38:18.34826+00,2026-05-08 11:38:18.34826+00,,0
+1558,699,1195,,Delivery guarantees are the work. Glad you found that out before production found it for you.,2026-04-20 08:56:39.812474+00,2026-04-20 08:56:39.812474+00,,0
+1559,699,1204,,Saving the framing. Most queue tutorials skip the guarantees discussion.,2026-04-18 06:56:42.812474+00,2026-04-18 06:56:42.812474+00,,0
+1560,700,1225,,Graph mental model > scripts. Saving.,2026-05-07 00:16:19.783115+00,2026-05-07 00:16:19.783115+00,,0
+1561,700,1212,,Same realization. dbt makes the dependencies visible.,2026-05-05 09:42:16.783115+00,2026-05-05 09:42:16.783115+00,,0
+1562,701,1225,,Great-SQL > enough-SQL. Saving.,2026-04-18 06:53:30.811916+00,2026-04-18 06:53:30.811916+00,,0
+1563,701,1212,,Clarity-as-skill is the senior bar.,2026-04-16 11:51:43.811916+00,2026-04-16 11:51:43.811916+00,,0
+1564,702,1220,,Mamak grandmother solidarity.,2026-04-13 06:11:11.802593+00,2026-04-13 06:11:11.802593+00,,0
+1565,702,1224,,Adana grandma is jealous.,2026-04-13 12:02:52.802593+00,2026-04-13 12:02:52.802593+00,,0
+1566,703,1197,,GPS noise is the universal first lesson. Kalman filters or simpler? Start simpler.,2026-04-25 10:28:29.197092+00,2026-04-25 10:28:29.197092+00,,0
+1567,703,1219,,Same problem I hit. The noise is the data engineer's problem masquerading as a mobile problem.,2026-04-24 13:48:52.197092+00,2026-04-24 13:48:52.197092+00,,0
+1568,704,1197,,The one-paragraph 'why' is the production person's filter. Use it forever.,2026-04-20 10:42:36.015312+00,2026-04-20 10:42:36.015312+00,,0
+1569,704,1219,,Saving the rewrite-five-times rhythm.,2026-04-22 13:27:28.015312+00,2026-04-22 13:27:28.015312+00,,0
+1570,704,1206,,Same advice but in design clothing. Compression is taste.,2026-04-20 07:08:10.015312+00,2026-04-20 07:08:10.015312+00,,0
+1571,705,1231,,Architecture-as-optimization is exactly right. The naive 'smaller images' move loses every time.,2026-04-09 06:50:57.678935+00,2026-04-09 06:50:57.678935+00,,0
+1572,705,1219,,Saving the framing for my own profiling work.,2026-04-08 17:05:35.678935+00,2026-04-08 17:05:35.678935+00,,0
+1573,706,1197,,Forest-morning + code-afternoon is a senior career configuration.,2026-04-30 01:22:43.211704+00,2026-04-30 01:22:43.211704+00,,0
+1574,706,1231,,Cousin is wrong. Tekirdağ co-signs Sarıyer.,2026-04-30 21:18:48.211704+00,2026-04-30 21:18:48.211704+00,,0
+1575,707,1196,,First paid SEO gig from an audit is the entry point. Congrats.,2026-05-04 23:12:41.420356+00,2026-05-04 23:12:41.420356+00,,0
+1576,707,1245,,Same path. The one-page summary > the 30-page deck.,2026-05-05 04:06:55.420356+00,2026-05-05 04:06:55.420356+00,,0
+1577,707,1216,,Saving for my own portfolio strategy.,2026-05-03 14:32:39.420356+00,2026-05-03 14:32:39.420356+00,,0
+1578,708,1196,,Empathy-at-scale is the best SEO definition I've heard. Stealing.,2026-04-21 05:38:06.424316+00,2026-04-21 05:38:06.424316+00,,0
+1579,708,1245,,Saving.,2026-04-23 14:36:04.424316+00,2026-04-23 14:36:04.424316+00,,0
+1580,709,1217,,Esenyurt solidarity. The 'neighbourhood I resented' arc is universal.,2026-04-28 21:16:28.795842+00,2026-04-28 21:16:28.795842+00,,0
+1581,709,1245,,Hometown reframing is a senior skill.,2026-04-26 08:01:40.795842+00,2026-04-26 08:01:40.795842+00,,0
+1582,710,1214,,Paper > grayboxing for level design. Saving.,2026-04-21 03:05:17.160441+00,2026-04-21 03:05:17.160441+00,,0
+1583,710,1197,,Paper-first is what separates the designers who ship from the ones who don't. Glad you found it early.,2026-04-18 22:17:15.160441+00,2026-04-18 22:17:15.160441+00,,0
+1584,710,1206,,Same principle in product design. Paper > Figma for v1.,2026-04-20 17:50:37.160441+00,2026-04-20 17:50:37.160441+00,,0
+1585,711,1214,,Readability > pretty. Saving for my narrative levels too.,2026-03-19 08:29:53.551509+00,2026-03-19 08:29:53.551509+00,,0
+1586,711,1206,,Same in UX. Readable > pretty.,2026-03-17 09:03:28.551509+00,2026-03-17 09:03:28.551509+00,,0
+1587,712,1214,,The designer-brain that never turns off is the gift. Save the observation.,2026-04-12 07:59:32.18687+00,2026-04-12 07:59:32.18687+00,,0
+1588,712,1216,,Bakırköy market is the underrated design school.,2026-04-10 17:52:32.18687+00,2026-04-10 17:52:32.18687+00,,0
+1589,713,1198,,The forgetting-the-middle is universal. Recording is the cure. Doing it again is the discipline.,2026-04-29 10:04:25.967176+00,2026-04-29 10:04:25.967176+00,,0
+1590,713,1202,,Same first-time experience. Repetition is everything.,2026-04-29 23:22:15.967176+00,2026-04-29 23:22:15.967176+00,,0
+1591,713,1220,,Saving. Going to do this myself.,2026-04-30 18:41:04.967176+00,2026-04-30 18:41:04.967176+00,,0
+1592,714,1198,,Survival is the right first goal. The 60 seconds compound.,2026-05-02 11:34:07.517236+00,2026-05-02 11:34:07.517236+00,,0
+1593,714,1202,,Toastmasters works. Stick with it.,2026-05-03 00:10:44.517236+00,2026-05-03 00:10:44.517236+00,,0
+1594,715,1198,,Story > slides. The book is right; the cliche is earned.,2026-04-21 09:47:53.557934+00,2026-04-21 09:47:53.557934+00,,0
+1595,715,1206,,Same in design presentations. The story drives the artifact.,2026-04-21 12:00:28.557934+00,2026-04-21 12:00:28.557934+00,,0
+1596,716,1212,,Şişli study group solidarity. The 'we're all nervous' realization is the unlock.,2026-05-05 23:49:13.172308+00,2026-05-05 23:49:13.172308+00,,0
+1597,716,1242,,Joining your group if you'll have me.,2026-05-06 21:25:43.172308+00,2026-05-06 21:25:43.172308+00,,0
+1598,717,1198,,Metrics > feelings during skill-acquisition. Trust the process; the feeling catches up in month four.,2026-05-02 08:25:43.30666+00,2026-05-02 08:25:43.30666+00,,0
+1599,717,1202,,Pace is the universal next thing. Saving.,2026-05-01 00:37:12.30666+00,2026-05-01 00:37:12.30666+00,,0
+1600,718,1210,,Crash rate is the universal junior lesson. Sentry or Crashlytics — pick one tonight.,2026-05-10 05:34:30.019048+00,2026-05-10 05:34:30.019048+00,,0
+1601,718,1219,,Same path. 50 testers and a crash rate is real-world ML.,2026-05-08 03:44:19.019048+00,2026-05-08 03:44:19.019048+00,,0
+1602,718,1236,,TestFlight betas teach you more than tutorials. Save the crashes for retrospective.,2026-05-10 08:58:58.019048+00,2026-05-10 08:58:58.019048+00,,0
+1603,719,1210,,SwiftData is the right starting point now. CoreData is for when you outgrow it.,2026-05-09 18:48:59.062431+00,2026-05-09 18:48:59.062431+00,,0
+1604,719,1236,,Saving — same migration coming up for me.,2026-05-09 14:47:13.062431+00,2026-05-09 14:47:13.062431+00,,0
+1605,720,1210,,Ship-compounds is the only line that matters. Saving.,2026-05-05 20:21:15.392738+00,2026-05-05 20:21:15.392738+00,,0
+1606,720,1219,,True. Most stop shipping at year 5 and never recover.,2026-05-04 17:19:33.392738+00,2026-05-04 17:19:33.392738+00,,0
+1607,721,1210,,Widgets are an architectural commitment. The shipping rate explains itself.,2026-04-26 23:01:22.342603+00,2026-04-26 23:01:22.342603+00,,0
+1608,721,1236,,Saving — going to budget more time for my own widget work.,2026-04-26 12:05:54.342603+00,2026-04-26 12:05:54.342603+00,,0
+1609,722,1204,,Pendik ferry solidarity. The commute is the sacred work block.,2026-05-09 02:02:53.975397+00,2026-05-09 02:02:53.975397+00,,0
+1610,722,1219,,Kartal jealous of the ferry option.,2026-05-10 17:02:13.975397+00,2026-05-10 17:02:13.975397+00,,0
+1611,723,1210,,"Modifier order is the SwiftUI tax. Pay it, never forget it.",2026-04-16 12:30:12.323473+00,2026-04-16 12:30:12.323473+00,,0
+1612,723,1236,,Saving the framing. Foreign-language-with-grammar is exactly right.,2026-04-18 07:23:02.323473+00,2026-04-18 07:23:02.323473+00,,0
+1614,724,1204,,Stealing the technique. Don't name it; let them find it.,2026-05-08 19:36:30.34826+00,2026-05-08 19:36:30.34826+00,,0
+1615,725,1210,,Family-as-UX-research. The real users have always lived there.,2026-05-06 17:36:04.441444+00,2026-05-06 17:36:04.441444+00,,0
+1616,725,1244,,Saving for my own user-research practice.,2026-05-05 19:37:48.441444+00,2026-05-05 19:37:48.441444+00,,0
+1617,726,1210,,Toy implementation > documentation for understanding. Save this discipline.,2026-05-05 14:40:23.79644+00,2026-05-05 14:40:23.79644+00,,0
+1618,726,1236,,Going to do the same with SwiftData internals.,2026-05-06 04:09:00.79644+00,2026-05-06 04:09:00.79644+00,,0
+1619,727,1229,,Congratulations. The cert is the artifact; the persistence is the skill.,2026-04-28 20:05:02.16617+00,2026-04-28 20:05:02.16617+00,,0
+1620,727,1207,,Hatay solidarity from Karşıyaka. Earned every page of it.,2026-04-27 10:38:27.16617+00,2026-04-27 10:38:27.16617+00,,0
+1621,727,1226,,Saving the framing. The proof is in the continuing.,2026-04-25 21:02:59.16617+00,2026-04-25 21:02:59.16617+00,,0
+1622,728,1200,,Self-directed learners are in demand. Believe it.,2026-05-10 14:12:11.472118+00,2026-05-10 14:12:11.472118+00,,0
+1623,728,1223,,Diyarbakır co-signs Hatay. Remote-first found us both.,2026-05-09 21:43:38.472118+00,2026-05-09 21:43:38.472118+00,,0
+1624,729,1229,,IAM is the actual cloud job. Everyone learns this through pain.,2026-05-08 06:05:45.961046+00,2026-05-08 06:05:45.961046+00,,0
+1625,729,1200,,Saving — same conversation with every junior.,2026-05-09 13:45:18.961046+00,2026-05-09 13:45:18.961046+00,,0
+1626,730,1229,,Hatay rebuilding is a story the country needs to hear more often.,2026-05-03 05:10:52.739021+00,2026-05-03 05:10:52.739021+00,,0
+1627,730,1200,,Saving the image. Sending strength.,2026-05-03 00:38:14.739021+00,2026-05-03 00:38:14.739021+00,,0
+1628,731,1200,,Plan-first is the right cognitive model for all infra. Save this preference.,2026-04-28 13:40:59.487782+00,2026-04-28 13:40:59.487782+00,,0
+1629,731,1229,,Solidarity from Antalya. Terraform plan is calming.,2026-04-29 13:15:56.487782+00,2026-04-29 13:15:56.487782+00,,0
+1630,732,1200,,Letter-to-past-self is the right reflection exercise. Saving for my own mentees.,2026-05-05 00:11:48.560736+00,2026-05-05 00:11:48.560736+00,,0
+1631,732,1226,,Same exercise. Three pages was right. Going to edit mine too.,2026-05-05 02:42:13.560736+00,2026-05-05 02:42:13.560736+00,,0
+1632,733,1247,,Real-data ETL is the only way to learn. The city writing back is the proof.,2026-04-10 21:43:10.658965+00,2026-04-10 21:43:10.658965+00,,0
+1633,733,1253,,Saving the framing. Going to look at my own city's open data.,2026-04-10 19:49:35.658965+00,2026-04-10 19:49:35.658965+00,,0
+1634,733,1225,,Local impact > tutorial repeats.,2026-04-10 17:14:34.658965+00,2026-04-10 17:14:34.658965+00,,0
+1635,734,1259,,This is exactly what I've been doing — polishing a track instead of admitting the verse is weak. Going to rewrite tonight.,2026-05-03 02:34:09.555798+00,2026-05-03 02:34:09.555798+00,,0
+1636,734,1266,,Saving. Same pattern in podcasting — editing what should have been re-recorded.,2026-05-05 00:21:11.555798+00,2026-05-05 00:21:11.555798+00,,0
+1637,734,1258,,Translates one-to-one to cinematography. Lighting can't fix the blocking.,2026-05-04 07:11:09.555798+00,2026-05-04 07:11:09.555798+00,,0
+1638,735,1266,,Three-system test is the move. Borrowing for podcast masters too.,2026-05-07 04:21:57.784217+00,2026-05-07 04:21:57.784217+00,,0
+1639,735,1259,,Why is the car version always the harshest one?,2026-05-05 16:22:41.784217+00,2026-05-05 16:22:41.784217+00,,0
+1640,736,1258,,Cihangir dinner solidarity. The collaborations always start at the kitchen sink.,2026-05-05 12:30:17.429607+00,2026-05-05 12:30:17.429607+00,,0
+1641,736,1256,,Saving the visual. Drawing this for next time.,2026-05-05 03:59:12.429607+00,2026-05-05 03:59:12.429607+00,,0
+1642,737,1259,,This is the conversation my classmates avoid. Plugin GAS is real.,2026-05-04 15:25:07.69552+00,2026-05-04 15:25:07.69552+00,,0
+1643,737,1266,,Same advice for audio editing. The default tools are 90% of what you need.,2026-05-07 11:12:53.69552+00,2026-05-07 11:12:53.69552+00,,0
+1644,737,1260,,Translates to filmmaking gear. Saving.,2026-05-04 17:07:35.69552+00,2026-05-04 17:07:35.69552+00,,0
+1645,738,1261,,Caught myself asking the brushes question yesterday. Reframing tonight.,2026-05-04 19:57:27.186065+00,2026-05-04 19:57:27.186065+00,,0
+1646,738,1214,,Same trap in game design — engine vs. game. Saving.,2026-05-05 09:08:21.186065+00,2026-05-05 09:08:21.186065+00,,0
+1647,738,1258,,Lens questions vs. story questions. Universal hierarchy.,2026-05-05 00:07:03.186065+00,2026-05-05 00:07:03.186065+00,,0
+1648,739,1261,,Joining you tomorrow. One minute is the right constraint.,2026-04-24 10:15:15.934436+00,2026-04-24 10:15:15.934436+00,,0
+1649,739,1263,,Saving. Going to try with film stills — one a day.,2026-04-23 12:19:33.934436+00,2026-04-23 12:19:33.934436+00,,0
+1650,739,1197,,Production solidarity. The constraint releases the noise.,2026-04-22 01:02:44.934436+00,2026-04-22 01:02:44.934436+00,,0
+1651,740,1261,,Constraint-as-gift is the framing. Saving.,2026-04-25 08:59:44.224471+00,2026-04-25 08:59:44.224471+00,,0
+1652,740,1262,,Writers love briefs like this. The 'no people' frees the cover to be about the mood.,2026-04-25 14:42:48.224471+00,2026-04-25 14:42:48.224471+00,,0
+1653,741,1255,,Tatlı solidarity. Cihangir cats have the same union.,2026-04-21 16:34:08.906409+00,2026-04-21 16:34:08.906409+00,,0
+1654,741,1257,,"Konya stray cats are also in the union, just less famous.",2026-04-22 03:51:22.906409+00,2026-04-22 03:51:22.906409+00,,0
+1655,742,1261,,Going to delete an hour of eye-rendering from my current piece. Trust restored.,2026-05-03 03:07:10.836837+00,2026-05-03 03:07:10.836837+00,,0
+1656,742,1263,,Translates to portrait photography. The simplest portrait reads loudest.,2026-05-02 16:58:26.836837+00,2026-05-02 16:58:26.836837+00,,0
+1657,743,1263,,Writing captions before the trip is counterintuitive but brilliant. Going to try on my next field day.,2026-05-02 14:41:38.232043+00,2026-05-02 14:41:38.232043+00,,0
+1658,743,1262,,The 'caption as standalone' rule applies to writing too. Saving.,2026-05-03 01:52:24.232043+00,2026-05-03 01:52:24.232043+00,,0
+1659,743,1258,,Translates to documentary film. The voice-over should hold without the picture.,2026-05-02 18:14:07.232043+00,2026-05-02 18:14:07.232043+00,,0
+1660,744,1263,,Saving the ratio framing. I keep three times too much.,2026-05-05 05:13:13.365397+00,2026-05-05 05:13:13.365397+00,,0
+1661,744,1256,,Same in drawing. Editing is the actual craft.,2026-05-03 02:18:00.365397+00,2026-05-03 02:18:00.365397+00,,0
+1662,745,1263,,This is a clean line I needed to hear stated this directly. Saving.,2026-05-08 01:19:21.617439+00,2026-05-08 01:19:21.617439+00,,0
+1663,745,1262,,Same line in journalism — never paraphrase a quote and call it direct.,2026-05-08 19:22:47.617439+00,2026-05-08 19:22:47.617439+00,,0
+1664,746,1263,,Antalya light is different but the slowness lesson translates.,2026-05-09 07:34:53.950223+00,2026-05-09 07:34:53.950223+00,,0
+1665,746,1197,,"Erzurum solidarity. Different light, same retreat.",2026-05-08 18:31:51.950223+00,2026-05-08 18:31:51.950223+00,,0
+1666,747,1260,,Spent a year obsessing over cameras before learning to block a scene. Painful lesson.,2026-05-01 02:04:37.232281+00,2026-05-01 02:04:37.232281+00,,0
+1667,747,1257,,Same in photojournalism. The body is the last 10%.,2026-05-03 16:23:07.232281+00,2026-05-03 16:23:07.232281+00,,0
+1668,747,1197,,Production solidarity. The choices are the work.,2026-05-01 23:55:20.232281+00,2026-05-01 23:55:20.232281+00,,0
+1669,748,1260,,Mirror is the textbook. Five viewings and I still see new things.,2026-05-05 13:16:28.096088+00,2026-05-05 13:16:28.096088+00,,0
+1670,748,1198,,"Same lesson in research papers — slow reading first, fast skimming later.",2026-05-04 22:59:17.096088+00,2026-05-04 22:59:17.096088+00,,0
+1671,748,1214,,Saving for narrative game inspiration.,2026-05-05 22:24:37.096088+00,2026-05-05 22:24:37.096088+00,,0
+1672,749,1260,,Going to call my sound designer tonight and apologize.,2026-04-10 19:48:33.771332+00,2026-04-10 19:48:33.771332+00,,0
+1673,749,1266,,Audio person nodding aggressively at the back.,2026-04-11 11:31:48.771332+00,2026-04-11 11:31:48.771332+00,,0
+1674,749,1255,,Music people agree. Picture without song is a clip; song without picture is a song.,2026-04-11 04:26:41.771332+00,2026-04-11 04:26:41.771332+00,,0
+1675,750,1257,,AA days solidarity. The 'everything except work' conversation is the work.,2026-05-08 19:03:20.684456+00,2026-05-08 19:03:20.684456+00,,0
+1676,750,1255,,"Same nights in Cihangir. Drink, complain, collaborate the next day.",2026-05-07 22:59:08.684456+00,2026-05-07 22:59:08.684456+00,,0
+1677,751,1262,,Same problem in fiction writing. The structure becomes the trap.,2026-05-05 15:00:58.186548+00,2026-05-05 15:00:58.186548+00,,0
+1678,751,1260,,Reading it now. The first read was useless; the third is starting to click.,2026-05-06 16:03:03.186548+00,2026-05-06 16:03:03.186548+00,,0
+1679,752,1260,,Cutting my treatment from 18 to 8 pages tonight.,2026-03-22 20:02:41.453842+00,2026-03-22 20:02:41.453842+00,,0
+1680,752,1214,,Game-design version: cut the scope to one mechanic. Saving.,2026-03-22 14:09:07.453842+00,2026-03-22 14:09:07.453842+00,,0
+1681,752,1206,,Done > abandoned. Universal craft law.,2026-03-24 06:32:00.453842+00,2026-03-24 06:32:00.453842+00,,0
+1682,753,1255,,Unevenness-as-diagnostic is exactly right. Saving the framing.,2026-05-06 22:31:33.40739+00,2026-05-06 22:31:33.40739+00,,0
+1683,753,1266,,Audio side: same lesson with takes. The bad take shows you what to fix.,2026-05-05 10:26:31.40739+00,2026-05-05 10:26:31.40739+00,,0
+1684,753,1265,,Theater warm-up principle. Each rep reveals a different gap.,2026-05-06 13:09:02.40739+00,2026-05-06 13:09:02.40739+00,,0
+1685,754,1255,,The 'why play' question is the only honest one. Three pages is the right answer length.,2026-04-30 21:52:14.430373+00,2026-04-30 21:52:14.430373+00,,0
+1686,754,1260,,"Same energy: 'why film, not why study film' — saving this for my own work.",2026-05-01 15:17:39.430373+00,2026-05-01 15:17:39.430373+00,,0
+1687,755,1255,,Cihangir solidarity. The walk is the warm-up.,2026-04-14 01:54:15.440914+00,2026-04-14 01:54:15.440914+00,,0
+1688,755,1256,,"Kadıköy nods. Different bridge, same walk.",2026-04-13 13:21:37.440914+00,2026-04-13 13:21:37.440914+00,,0
+1689,756,1258,,Crying for the unmade is a senior craft move. Save the feeling for when you're cutting someone else's 18 down to 8.,2026-04-29 15:47:15.295623+00,2026-04-29 15:47:15.295623+00,,0
+1690,756,1262,,Same energy in writing — cutting darlings.,2026-04-28 16:06:27.295623+00,2026-04-28 16:06:27.295623+00,,0
+1691,756,1214,,Game design cut grief. Solidarity.,2026-04-28 01:05:26.295623+00,2026-04-28 01:05:26.295623+00,,0
+1692,757,1258,,'Scared silences' is the most accurate beginner diagnosis I've read. Keep the line.,2026-03-29 11:35:35.40063+00,2026-03-29 11:35:35.40063+00,,0
+1693,757,1198,,Translates to academic writing — fearful gaps vs. confident pauses. Saving.,2026-03-28 17:33:11.40063+00,2026-03-28 17:33:11.40063+00,,0
+1694,758,1258,,The 240x ratio is a real metric. Don't fight it.,2026-04-24 12:37:32.708161+00,2026-04-24 12:37:32.708161+00,,0
+1695,758,1262,,Same with prose. The hour-per-paragraph rate during real edits.,2026-04-24 00:44:36.708161+00,2026-04-24 00:44:36.708161+00,,0
+1696,759,1258,,Bursa film club is the reason cinema outside Istanbul still has a heartbeat.,2026-04-27 23:43:39.698471+00,2026-04-27 23:43:39.698471+00,,0
+1697,759,1262,,Solidarity from Adana. The small-city film club is its own institution.,2026-04-26 05:50:15.698471+00,2026-04-26 05:50:15.698471+00,,0
+1698,760,1256,,"Day seven worse than day one is a feature, not a bug. You're seeing your work differently now.",2026-04-21 04:09:30.35857+00,2026-04-21 04:09:30.35857+00,,0
+1699,760,1263,,Same lesson in photography. Bad days are the diagnostic.,2026-04-22 23:10:50.35857+00,2026-04-22 23:10:50.35857+00,,0
+1700,760,1214,,Saving — same pattern in pixel art.,2026-04-23 06:12:56.35857+00,2026-04-23 06:12:56.35857+00,,0
+1701,761,1256,,The 'I don't know — good' moment is the start of voice work. Saving.,2026-05-05 14:03:30.045508+00,2026-05-05 14:03:30.045508+00,,0
+1702,761,1262,,Same with writing. The 'I don't know' is where the story lives.,2026-05-05 23:00:05.045508+00,2026-05-05 23:00:05.045508+00,,0
+1703,762,1263,,Eskişehir is criminally good for studies. Saving the location for my next field day.,2026-04-09 11:21:00.395904+00,2026-04-09 11:21:00.395904+00,,0
+1704,762,1226,,Anadolu solidarity. The old town is the best classroom.,2026-04-07 23:09:40.395904+00,2026-04-07 23:09:40.395904+00,,0
+1705,763,1256,,Cool > world is the trap. Saving.,2026-05-09 11:40:56.407471+00,2026-05-09 11:40:56.407471+00,,0
+1706,763,1214,,Same in game design — flashy mechanic vs. world-building mechanic.,2026-05-09 11:47:26.407471+00,2026-05-09 11:47:26.407471+00,,0
+1707,764,1263,,Wish I had this with another photographer in Antalya. The breakfast critique is the institution.,2026-05-04 09:18:35.923737+00,2026-05-04 09:18:35.923737+00,,0
+1708,764,1262,,Same energy in writers' households. Brutal and kind.,2026-05-02 20:54:04.923737+00,2026-05-02 20:54:04.923737+00,,0
+1709,765,1258,,Same in cinematography. The shot that looks effortless took the longest.,2026-05-04 20:35:31.120893+00,2026-05-04 20:35:31.120893+00,,0
+1710,765,1256,,Illustration cousins of this principle. Saving.,2026-05-03 00:42:29.120893+00,2026-05-03 00:42:29.120893+00,,0
+1711,765,1261,,Adding to my reading list. The 'easy sentence' lesson is universal.,2026-05-04 00:01:05.120893+00,2026-05-04 00:01:05.120893+00,,0
+1712,766,1258,,Cut > rewrite is the universal craft law. Saving forever.,2026-04-30 14:02:11.828616+00,2026-04-30 14:02:11.828616+00,,0
+1713,766,1260,,Cinema version of the same lesson. Cut what the cut tells us.,2026-04-28 22:30:42.828616+00,2026-04-28 22:30:42.828616+00,,0
+1714,767,1234,,Adana morning solidarity. The deleted words are also the work.,2026-05-11 01:26:59.285861+00,2026-05-11 01:26:59.285861+00,,0
+1715,767,1261,,Stealing the morning sanctity. Going to try tomorrow.,2026-05-10 16:28:33.285861+00,2026-05-10 16:28:33.285861+00,,0
+1716,768,1257,,Trust > technique is the lesson. Eleven frames is fast for a portrait worth keeping.,2026-05-09 08:45:34.314542+00,2026-05-09 08:45:34.314542+00,,0
+1717,768,1258,,Same in documentary film. The camera disappears when the relationship is built.,2026-05-08 10:37:31.314542+00,2026-05-08 10:37:31.314542+00,,0
+1718,768,1262,,Translates to nonfiction writing. Saving.,2026-05-08 20:38:49.314542+00,2026-05-08 20:38:49.314542+00,,0
+1719,769,1257,,Not joking. Best exercise I know for documentary work. Saves you from the wrong photos.,2026-04-29 00:57:29.533346+00,2026-04-29 00:57:29.533346+00,,0
+1720,769,1262,,Same exercise translates to fiction — outline before writing. Saving.,2026-04-29 12:26:45.533346+00,2026-04-29 12:26:45.533346+00,,0
+1721,770,1257,,Konya is the same — three cities a day. The graduation from tourist is the craft moment.,2026-04-06 14:16:45.853118+00,2026-04-06 14:16:45.853118+00,,0
+1722,770,1229,,Antalya solidarity. 6am at the marina is unmatched.,2026-04-06 18:17:00.853118+00,2026-04-06 18:17:00.853118+00,,0
+1723,771,1257,,Two frames after twenty minutes is a senior ratio. Glad you saw it that way.,2026-05-07 12:56:57.238738+00,2026-05-07 12:56:57.238738+00,,0
+1724,771,1262,,Time-as-budget. Saving for nonfiction writing.,2026-05-07 13:40:37.238738+00,2026-05-07 13:40:37.238738+00,,0
+1725,772,1255,,Repetition-without-contempt is the music studio mantra too. Saving.,2026-04-20 09:07:55.004276+00,2026-04-20 09:07:55.004276+00,,0
+1726,772,1258,,"Same in lighting practice. Take, fail, take again.",2026-04-22 19:13:33.004276+00,2026-04-22 19:13:33.004276+00,,0
+1727,773,1258,,Beyoğlu midnight walks are restorative. Different tired is the right tired.,2026-04-28 09:11:15.890811+00,2026-04-28 09:11:15.890811+00,,0
+1728,773,1256,,Same energy in the studio. Tired-from-doing > tired-from-deciding.,2026-04-28 19:41:05.890811+00,2026-04-28 19:41:05.890811+00,,0
+1729,774,1258,,Twenty-three to disappear is exact and beautiful. Saving.,2026-04-29 23:08:09.584441+00,2026-04-29 23:08:09.584441+00,,0
+1730,774,1259,,Same with a phrase in piano. The number is real.,2026-04-30 03:37:14.584441+00,2026-04-30 03:37:14.584441+00,,0
+1731,774,1255,,Music studio version: same trail to selflessness. Saving.,2026-04-28 07:47:11.584441+00,2026-04-28 07:47:11.584441+00,,0
+1732,775,1258,,Yes-and is also a directing skill. Saving the diagnostic.,2026-05-04 01:08:35.678906+00,2026-05-04 01:08:35.678906+00,,0
+1733,775,1251,,Going to take an improv class for my public speaking. Saving.,2026-05-03 22:16:38.678906+00,2026-05-03 22:16:38.678906+00,,0
+1734,776,1259,,Vapur as rehearsal space. Cihangir is jealous.,2026-04-13 09:10:40.817061+00,2026-04-13 09:10:40.817061+00,,0
+1735,776,1257,,Konya solidarity from a fellow city-outside-Istanbul. The bay light is unmatched.,2026-04-11 13:18:52.817061+00,2026-04-11 13:18:52.817061+00,,0
+1736,777,1255,,Three takes is often enough; the next thirteen are the calibration. Save the cold-open take three energy.,2026-04-24 15:49:11.911114+00,2026-04-24 15:49:11.911114+00,,0
+1737,777,1258,,Same in shooting. The early take has something the polished ones lose.,2026-04-25 17:44:15.911114+00,2026-04-25 17:44:15.911114+00,,0
+1738,777,1260,,Saving for my voice-over recording next week.,2026-04-26 05:13:54.911114+00,2026-04-26 05:13:54.911114+00,,0
+1739,778,1255,,200ms is the right knob. Glad you tried it.,2026-05-05 07:38:53.554288+00,2026-05-05 07:38:53.554288+00,,0
+1740,778,1258,,"Cinema version: the cut is the meaning, not the shot.",2026-05-07 04:37:15.554288+00,2026-05-07 04:37:15.554288+00,,0
+1741,778,1259,,Same in music phrasing. The rest is the music.,2026-05-04 14:45:41.554288+00,2026-05-04 14:45:41.554288+00,,0
+1742,779,1268,,The 'small number who write defensively' filter is exactly how I survey the literature too. Save the names you keep coming back to.,2026-04-27 14:34:39.975027+00,2026-04-27 14:34:39.975027+00,,0
+1743,779,1198,,The defensive writers are the ones who'll review your work charitably later. Worth knowing them early.,2026-04-27 00:52:28.975027+00,2026-04-27 00:52:28.975027+00,,0
+1744,779,1211,,"Same energy. The non-falsifiable papers are great for vocabulary, terrible for direction.",2026-04-25 15:01:57.975027+00,2026-04-25 15:01:57.975027+00,,0
+1745,780,1198,,The six-month commitment requirement is the right filter. Honest of you to surface it openly.,2026-04-30 17:15:08.805559+00,2026-04-30 17:15:08.805559+00,,0
+1746,780,1215,,Same realization on my side. Short engagements are useful but they don't compound.,2026-04-28 18:09:15.805559+00,2026-04-28 18:09:15.805559+00,,0
+1747,781,1227,,Çankaya kitchen-table study setup is the underrated grad-prep environment.,2026-05-05 20:08:38.350278+00,2026-05-05 20:08:38.350278+00,,0
+1748,781,1215,,Same in my apartment but with fewer people. Saving the image energy.,2026-05-04 20:10:35.350278+00,2026-05-04 20:10:35.350278+00,,0
+1749,782,1268,,Toy-implementation is the senior research move. The intuition you build is permanent.,2026-04-28 21:43:11.932592+00,2026-04-28 21:43:11.932592+00,,0
+1750,782,1270,,Same approach for understanding evals. Build the harness yourself once.,2026-04-30 01:03:36.932592+00,2026-04-30 01:03:36.932592+00,,0
+1751,782,1223,,Saving — Solidity audits have the same lesson.,2026-04-28 03:49:20.932592+00,2026-04-28 03:49:20.932592+00,,0
+1752,783,1215,,Sunday cards solidarity. The non-work hours are where the work gets metabolized.,2026-05-05 07:03:15.858086+00,2026-05-05 07:03:15.858086+00,,0
+1753,783,1211,,İskambil > productivity podcasts.,2026-05-04 10:29:42.858086+00,2026-05-04 10:29:42.858086+00,,0
+1754,784,1267,,This is exactly the choice I keep avoiding. Going to commit to one for my next draft.,2026-04-20 22:21:08.666079+00,2026-04-20 22:21:08.666079+00,,0
+1755,784,1205,,Same lesson in responsible AI work. Auditors and engineers want different artifacts.,2026-04-20 03:35:50.666079+00,2026-04-20 03:35:50.666079+00,,0
+1756,784,1270,,AI safety has the same fork: technical alignment work vs policy communication. Authors who try both rarely do either well.,2026-04-21 17:46:23.666079+00,2026-04-21 17:46:23.666079+00,,0
+1757,785,1198,,Frankfurt should be required reading in any research methodology course. Saving the framing.,2026-05-04 14:02:17.976286+00,2026-05-04 14:02:17.976286+00,,0
+1758,785,1267,,Buying tonight. The careless/careful distinction maps perfectly to what I've been struggling to articulate.,2026-05-01 19:33:43.976286+00,2026-05-01 19:33:43.976286+00,,0
+1759,786,1267,,This reframe makes the decision feel actionable instead of existential. Thank you.,2026-05-02 01:26:29.264009+00,2026-05-02 01:26:29.264009+00,,0
+1760,786,1269,,The 'constraints that shape your taste' line is exact. Saving.,2026-05-02 09:09:24.264009+00,2026-05-02 09:09:24.264009+00,,0
+1761,786,1198,,Endorse completely. The choice is about who you want to become.,2026-04-30 06:42:00.264009+00,2026-04-30 06:42:00.264009+00,,0
+1762,787,1248,,Sarıyer forest solidarity. The trail-as-reset is real.,2026-04-08 02:21:44.581449+00,2026-04-08 02:21:44.581449+00,,0
+1763,787,1198,,Üsküdar runs aren't quite the same but the principle holds.,2026-04-09 18:21:04.581449+00,2026-04-09 18:21:04.581449+00,,0
+1764,788,1198,,When-to-stop is the entire senior research skill. Saving.,2026-05-10 22:14:09.225935+00,2026-05-10 22:14:09.225935+00,,0
+1765,788,1267,,I am the 'never stop' kind. Need this advice tattooed.,2026-05-12 03:34:27.225935+00,2026-05-12 03:34:27.225935+00,,0
+1766,788,1211,,Same — going to print the line.,2026-05-10 05:23:17.225935+00,2026-05-10 05:23:17.225935+00,,0
+1767,789,1267,,Saving — re-reading my draft tonight with this question in mind.,2026-05-03 03:49:00.077743+00,2026-05-03 03:49:00.077743+00,,0
+1768,789,1211,,"Same realization on my fourth draft. The CV is the floor, the question is the bar.",2026-05-01 07:03:31.077743+00,2026-05-01 07:03:31.077743+00,,0
+1769,789,1215,,Going to print this above my desk for the next 3 months.,2026-05-03 08:34:34.077743+00,2026-05-03 08:34:34.077743+00,,0
+1770,790,1205,,Same conviction on the responsible-AI side. The combination is the underserved gap.,2026-05-05 00:04:39.912141+00,2026-05-05 00:04:39.912141+00,,0
+1771,790,1267,,Adding to my reading list. This is the dimension I've been ignoring.,2026-05-06 12:06:25.912141+00,2026-05-06 12:06:25.912141+00,,0
+1772,791,1267,,Needed to hear this. Bilkent isn't top-30 globally and I'd internalized that as a hard ceiling.,2026-05-05 04:18:55.644942+00,2026-05-05 04:18:55.644942+00,,0
+1773,791,1211,,"Same school, same fear. Saving.",2026-05-05 22:14:32.644942+00,2026-05-05 22:14:32.644942+00,,0
+1774,791,1226,,Going to amplify this in my campus club's session this week.,2026-05-05 05:50:15.644942+00,2026-05-05 05:50:15.644942+00,,0
+1775,792,1198,,Slow days for slow decisions. Saving the principle.,2026-04-23 21:33:05.086026+00,2026-04-23 21:33:05.086026+00,,0
+1776,792,1268,,PhD admissions committees deserve more credit for the time they spend reading. Thank you for the slow read.,2026-04-24 04:20:06.086026+00,2026-04-24 04:20:06.086026+00,,0
+1777,793,1267,,This is the conversation my Twitter feed avoids. Saving and going to do the homework.,2026-04-27 03:34:44.673654+00,2026-04-27 03:34:44.673654+00,,0
+1778,793,1205,,Same line in responsible-AI policy work. Most pundits couldn't articulate the technical disagreements they're moralizing about.,2026-04-26 10:46:41.673654+00,2026-04-26 10:46:41.673654+00,,0
+1779,793,1268,,Endorse completely. The 'follower' tax is real and expensive.,2026-04-24 18:49:52.673654+00,2026-04-24 18:49:52.673654+00,,0
+1780,794,1268,,The summary-as-deliverable / methodology-as-proof split is the publishing pattern that actually works. Saving.,2026-04-30 22:30:48.395065+00,2026-04-30 22:30:48.395065+00,,0
+1781,794,1269,,Send a link when it's public — I'll add to the AI policy seminar reading list.,2026-05-01 10:39:50.395065+00,2026-05-01 10:39:50.395065+00,,0
+1782,794,1267,,Following the launch. Will be reading the methodology notes whether anyone else does or not.,2026-05-01 05:43:25.395065+00,2026-05-01 05:43:25.395065+00,,0
+1783,795,1203,,Same lesson on the general founder side. Fundraising is leverage acquired.,2026-04-29 03:56:32.403907+00,2026-04-29 03:56:32.403907+00,,0
+1784,795,1199,,Endorse. People who avoid the money conversations end up making the worst trade-offs because they didn't have the leverage to push back.,2026-04-29 18:53:13.403907+00,2026-04-29 18:53:13.403907+00,,0
+1785,796,1203,,Founder rhythm is the underrated milestone. Took me eight months. Glad you got there in five.,2026-04-30 23:36:18.238559+00,2026-04-30 23:36:18.238559+00,,0
+1786,796,1268,,Sarıyer sunrises agree. The Bosphorus is the founder's office.,2026-05-02 08:11:29.238559+00,2026-05-02 08:11:29.238559+00,,0
+1787,797,1267,,Saving this — it's the same conversation I'm having with myself this week.,2026-05-01 19:42:34.773124+00,2026-05-01 19:42:34.773124+00,,0
+1788,797,1269,,Reframed beautifully. The mentor-as-decision-variable is the right lens.,2026-05-01 23:56:32.773124+00,2026-05-01 23:56:32.773124+00,,0
+1789,797,1268,,Endorse — the prestige reverse-optimization is what produces unhappy juniors at top labs.,2026-05-02 09:37:05.773124+00,2026-05-02 09:37:05.773124+00,,0
+1790,798,1231,,"This is exactly where I am right now. Three features in, the fourth is making me hate the code I wrote two months ago.",2026-05-12 01:33:53.431813+00,2026-05-12 01:33:53.431813+00,,0
+1791,798,1219,,Saving. Will pace my own re-architecture with this lens.,2026-05-12 11:45:23.431813+00,2026-05-12 11:45:23.431813+00,,0
+1792,798,1248,,"Same wall, smaller scale. Going to take the slow walk through it.",2026-05-10 03:53:59.431813+00,2026-05-10 03:53:59.431813+00,,0
+1793,799,1231,,Read the changelog twice yesterday. Going to follow your write-up closely.,2026-04-21 11:24:48.54341+00,2026-04-21 11:24:48.54341+00,,0
+1794,799,1219,,Already migrating one screen. The expressive theming is genuine progress.,2026-04-19 16:35:02.54341+00,2026-04-19 16:35:02.54341+00,,0
+1795,799,1236,,Going to start a similar migration on my side.,2026-04-20 05:44:42.54341+00,2026-04-20 05:44:42.54341+00,,0
+1796,800,1200,,Calm-in-your-chest is the right metric. Saving for SRE training.,2026-04-23 20:51:14.405632+00,2026-04-23 20:51:14.405632+00,,0
+1797,800,1231,,Same lesson for me at a much smaller scale. Wrote a unit test last week that saved a Friday release.,2026-04-25 05:40:06.405632+00,2026-04-25 05:40:06.405632+00,,0
+1798,800,1202,,Endorse. The exact mix depends on the team's incident history.,2026-04-22 07:36:50.405632+00,2026-04-22 07:36:50.405632+00,,0
+1799,801,1231,,Mentee here. Thanks for putting the engagement in such kind language. Won't tweet about this much.,2026-04-29 23:57:22.22617+00,2026-04-29 23:57:22.22617+00,,0
+1800,801,1219,,The 'without crushing the shipping instinct' clause is the hardest part of growing engineers.,2026-04-29 12:46:26.22617+00,2026-04-29 12:46:26.22617+00,,0
+1801,802,1204,,Kadıköy solidarity. The cargo-bike-and-daughter routine is the right kind of weekend.,2026-05-03 19:54:48.741391+00,2026-05-03 19:54:48.741391+00,,0
+1802,802,1256,,"Same neighbourhood, different routine. Moda Çay Bahçesi forever.",2026-05-03 16:23:03.741391+00,2026-05-03 16:23:03.741391+00,,0

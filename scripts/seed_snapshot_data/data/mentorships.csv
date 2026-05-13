@@ -1,0 +1,55 @@
+id,mentor_id,mentee_id,request_id,start_date,end_date,duration,status,shared_goal,created_at,terminated_at,terminated_by_user_id,cancellation_reason,updated_at
+26,1200,1207,26,2026-05-13 08:02:56.459487+00,2026-08-13 08:02:56.459487+00,3,ACTIVE,Get Zeynep AWS SAA-certified and through a structured project that proves she can operate a small platform — not just take a test.,2026-05-13 08:02:56.462111+00,,,,2026-05-13 08:02:56.462111
+27,1201,1217,27,2026-05-13 08:02:56.642427+00,2026-11-13 08:02:56.642427+00,6,ACTIVE,"Cihan ends six months as a credible junior security engineer — not just a CTF player. He earns OSCP, lands a security internship, and produces three substantive bug reports.",2026-05-13 08:02:56.645159+00,,,,2026-05-13 08:02:56.645159
+28,1271,1231,28,2026-05-13 08:02:56.829223+00,2026-11-13 08:02:56.829223+00,6,ACTIVE,Take Rıza from a fast solo Flutter shipper to someone who can lead a small mobile team — without crushing the shipping instinct that got him this far.,2026-05-13 08:02:56.831719+00,,,,2026-05-13 08:02:56.831719
+29,1196,1216,29,2025-04-10 00:00:00+00,2025-07-09 00:00:00+00,3,COMPLETED,Help Buse reframe her teaching background as a marketing asset and land a junior BA / content role at a tech company before the end of the engagement.,2025-04-10 00:00:00+00,,,,2025-04-10 00:00:00
+30,1198,1267,30,2025-04-01 00:00:00+00,2025-06-30 00:00:00+00,3,COMPLETED,"Use 3 months to help Defne discover whether ML research is actually for her — not as a daydream, as a daily practice. Outcome: she leaves with a clear next step and an honest answer.",2025-04-01 00:00:00+00,,,,2025-04-01 00:00:00
+31,1199,1222,31,2025-08-19 00:00:00+00,2025-11-17 00:00:00+00,3,COMPLETED,"Help Funda decide, honestly, whether to commit to her logistics-SaaS idea or shelve it. Both outcomes are acceptable; ambiguity is not.",2025-08-19 00:00:00+00,,,,2025-08-19 00:00:00
+32,1199,1267,32,2025-04-02 00:00:00+00,2025-05-02 00:00:00+00,1,COMPLETED,One-month spike to test whether Defne should consider founding rather than research. Outcome: decision is made within four weeks.,2025-04-02 00:00:00+00,,,,2025-04-02 00:00:00
+33,1195,1229,33,2025-02-23 00:00:00+00,2025-08-22 00:00:00+00,6,COMPLETED,(historical record — concluded successfully),2025-02-23 00:00:00+00,,,,2025-02-23 00:00:00
+34,1196,1226,34,2025-10-06 00:00:00+00,2026-01-04 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-10-06 00:00:00+00,,,,2025-10-06 00:00:00
+35,1197,1210,35,2025-02-23 00:00:00+00,2025-03-25 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-02-23 00:00:00+00,,,,2025-02-23 00:00:00
+23,1195,1246,23,2026-05-13 08:02:55.85605+00,2026-08-13 08:02:55.85605+00,3,ACTIVE,"Move Tolga from a strong backend coder to a senior-track engineer who can lead a system-design conversation. Two real design problems, fully reasoned through, by end of three months.",2026-05-13 08:02:55.916362+00,,,,2026-05-13 08:02:55.916362
+24,1197,1248,24,2026-05-13 08:02:56.102447+00,2026-11-13 08:02:56.102447+00,6,ACTIVE,"Help İsmail decide, by month 3, whether games or product mobile is the right next step — and, if games, ship a vertical slice of a hiking-themed game prototype by month 6.",2026-05-13 08:02:56.104869+00,,,,2026-05-13 08:02:56.104869
+25,1198,1211,25,2026-05-13 08:02:56.280794+00,2026-08-13 08:02:56.280794+00,3,ACTIVE,"Mina's research statement, target advisor shortlist, and writing routine, all in shape by application season opening. The exit criterion: her recommender signs the statement without a substantive edit.",2026-05-13 08:02:56.283179+00,,,,2026-05-13 08:02:56.283179
+36,1197,1216,36,2025-07-08 00:00:00+00,2025-10-06 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-07-08 00:00:00+00,,,,2025-07-08 00:00:00
+37,1197,1267,37,2025-02-10 00:00:00+00,2025-08-09 00:00:00+00,6,COMPLETED,(historical record — concluded successfully),2025-02-10 00:00:00+00,,,,2025-02-10 00:00:00
+38,1199,1210,38,2025-02-05 00:00:00+00,2025-03-07 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-02-05 00:00:00+00,,,,2025-02-05 00:00:00
+39,1200,1234,39,2026-01-25 00:00:00+00,2026-04-25 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2026-01-25 00:00:00+00,,,,2026-01-25 00:00:00
+40,1200,1216,40,2025-10-14 00:00:00+00,2026-01-12 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-10-14 00:00:00+00,,,,2025-10-14 00:00:00
+41,1201,1265,41,2025-01-08 00:00:00+00,2025-07-07 00:00:00+00,6,COMPLETED,(historical record — concluded successfully),2025-01-08 00:00:00+00,,,,2025-01-08 00:00:00
+42,1201,1262,42,2025-10-26 00:00:00+00,2025-11-25 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-10-26 00:00:00+00,,,,2025-10-26 00:00:00
+43,1202,1230,43,2025-04-21 00:00:00+00,2025-05-21 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-04-21 00:00:00+00,,,,2025-04-21 00:00:00
+44,1202,1240,44,2025-09-03 00:00:00+00,2026-03-02 00:00:00+00,6,COMPLETED,(historical record — concluded successfully),2025-09-03 00:00:00+00,,,,2025-09-03 00:00:00
+45,1202,1246,45,2025-11-28 00:00:00+00,2025-12-28 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-11-28 00:00:00+00,,,,2025-11-28 00:00:00
+46,1203,1244,46,2025-11-15 00:00:00+00,2026-02-13 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-11-15 00:00:00+00,,,,2025-11-15 00:00:00
+47,1204,1230,47,2025-09-27 00:00:00+00,2025-10-27 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-09-27 00:00:00+00,,,,2025-09-27 00:00:00
+48,1204,1214,48,2025-04-22 00:00:00+00,2025-07-21 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-04-22 00:00:00+00,,,,2025-04-22 00:00:00
+49,1204,1247,49,2025-05-01 00:00:00+00,2025-07-30 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-05-01 00:00:00+00,,,,2025-05-01 00:00:00
+50,1205,1261,50,2025-10-28 00:00:00+00,2026-04-26 00:00:00+00,6,COMPLETED,(historical record — concluded successfully),2025-10-28 00:00:00+00,,,,2025-10-28 00:00:00
+51,1206,1238,51,2025-03-06 00:00:00+00,2025-04-05 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-03-06 00:00:00+00,,,,2025-03-06 00:00:00
+52,1206,1265,52,2025-12-22 00:00:00+00,2026-01-21 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-12-22 00:00:00+00,,,,2025-12-22 00:00:00
+53,1257,1254,53,2026-02-16 00:00:00+00,2026-03-18 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2026-02-16 00:00:00+00,,,,2026-02-16 00:00:00
+54,1258,1252,54,2025-01-31 00:00:00+00,2025-03-02 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-01-31 00:00:00+00,,,,2025-01-31 00:00:00
+55,1258,1230,55,2025-05-04 00:00:00+00,2025-06-03 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-05-04 00:00:00+00,,,,2025-05-04 00:00:00
+56,1258,1211,56,2025-05-09 00:00:00+00,2025-08-07 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-05-09 00:00:00+00,,,,2025-05-09 00:00:00
+57,1270,1231,57,2026-01-20 00:00:00+00,2026-02-19 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2026-01-20 00:00:00+00,,,,2026-01-20 00:00:00
+58,1270,1227,58,2026-02-21 00:00:00+00,2026-03-23 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2026-02-21 00:00:00+00,,,,2026-02-21 00:00:00
+59,1270,1243,59,2025-09-12 00:00:00+00,2025-10-12 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-09-12 00:00:00+00,,,,2025-09-12 00:00:00
+60,1268,1236,60,2025-08-30 00:00:00+00,2025-09-29 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-08-30 00:00:00+00,,,,2025-08-30 00:00:00
+61,1268,1245,61,2025-07-25 00:00:00+00,2025-10-23 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-07-25 00:00:00+00,,,,2025-07-25 00:00:00
+62,1269,1209,62,2025-06-07 00:00:00+00,2025-09-05 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-06-07 00:00:00+00,,,,2025-06-07 00:00:00
+63,1269,1238,63,2025-04-02 00:00:00+00,2025-09-29 00:00:00+00,6,COMPLETED,(historical record — concluded successfully),2025-04-02 00:00:00+00,,,,2025-04-02 00:00:00
+64,1271,1211,64,2026-02-05 00:00:00+00,2026-03-07 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2026-02-05 00:00:00+00,,,,2026-02-05 00:00:00
+65,1271,1247,65,2025-11-18 00:00:00+00,2026-02-16 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-11-18 00:00:00+00,,,,2025-11-18 00:00:00
+66,1195,1251,66,2025-06-09 00:00:00+00,2025-12-06 00:00:00+00,6,COMPLETED,(historical record — concluded successfully),2025-06-09 00:00:00+00,,,,2025-06-09 00:00:00
+67,1196,1227,67,2025-08-20 00:00:00+00,2025-09-19 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-08-20 00:00:00+00,,,,2025-08-20 00:00:00
+68,1198,1251,68,2025-12-07 00:00:00+00,2026-01-06 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-12-07 00:00:00+00,,,,2025-12-07 00:00:00
+69,1199,1230,69,2025-05-11 00:00:00+00,2025-06-10 00:00:00+00,1,COMPLETED,(historical record — concluded successfully),2025-05-11 00:00:00+00,,,,2025-05-11 00:00:00
+70,1203,1248,70,2025-08-14 00:00:00+00,2025-11-12 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-08-14 00:00:00+00,,,,2025-08-14 00:00:00
+71,1205,1219,71,2025-04-20 00:00:00+00,2025-07-19 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-04-20 00:00:00+00,,,,2025-04-20 00:00:00
+72,1255,1225,72,2025-08-11 00:00:00+00,2025-11-09 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-08-11 00:00:00+00,,,,2025-08-11 00:00:00
+73,1255,1238,73,2025-12-13 00:00:00+00,2026-03-13 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-12-13 00:00:00+00,,,,2025-12-13 00:00:00
+74,1256,1212,74,2025-08-27 00:00:00+00,2026-02-23 00:00:00+00,6,COMPLETED,(historical record — concluded successfully),2025-08-27 00:00:00+00,,,,2025-08-27 00:00:00
+75,1256,1250,75,2025-06-24 00:00:00+00,2025-09-22 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-06-24 00:00:00+00,,,,2025-06-24 00:00:00
+76,1257,1265,76,2025-04-11 00:00:00+00,2025-07-10 00:00:00+00,3,COMPLETED,(historical record — concluded successfully),2025-04-11 00:00:00+00,,,,2025-04-11 00:00:00

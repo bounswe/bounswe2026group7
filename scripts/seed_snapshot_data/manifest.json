@@ -1,0 +1,52 @@
+{
+  "container": "bounswe2026group7-backend-1",
+  "dumped_at": "2026-05-13T08:48:47.783741+00:00",
+  "sequences": {
+    "conversations": 32,
+    "feed_post_comments": 1802,
+    "feed_posts": 802,
+    "meetings": 112,
+    "mentor_availability_slots": 322,
+    "mentor_ratings": 45,
+    "mentorship_requests": 76,
+    "mentorships": 76,
+    "messages": 235,
+    "milestones": 62,
+    "tasks": 74,
+    "users": 1271
+  },
+  "source_dsn_host": "localhost:5433/group7db",
+  "tables": {
+    "admins": 1,
+    "attachments": 78,
+    "conversation_participants": 26,
+    "conversations": 13,
+    "feed_post_attachments": 71,
+    "feed_post_comment_likes": 1639,
+    "feed_post_comments": 655,
+    "feed_post_hashtags": 561,
+    "feed_post_likes": 852,
+    "feed_posts": 288,
+    "follows": 377,
+    "meetings": 51,
+    "mentee_interests": 121,
+    "mentee_skills": 112,
+    "mentees": 57,
+    "mentor_availability_slots": 40,
+    "mentor_interests": 51,
+    "mentor_preferred_mentee_skills": 39,
+    "mentor_ratings": 45,
+    "mentors": 20,
+    "mentorship_requests": 54,
+    "mentorships": 54,
+    "messages": 100,
+    "milestones": 28,
+    "task_assignment_attachments": 7,
+    "tasks": 34,
+    "users": 78
+  },
+  "uploads": {
+    "attachments": 238,
+    "photos": 151
+  }
+}

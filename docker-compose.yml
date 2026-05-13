@@ -85,10 +85,14 @@ services:
       # CI / local Playwright runs flip them on via .env.
       APP_TEST_ENDPOINTS_ENABLED: ${APP_TEST_ENDPOINTS_ENABLED:-false}
       APP_SPAM_ENABLED: ${APP_SPAM_ENABLED:-true}
+      APP_RATELIMIT_ENABLED: ${APP_RATELIMIT_ENABLED:-true}
       # Verification-email send swaps to NoOpEmailService when off — used by
       # Playwright so /api/test/users registrations don't fail with Resend
       # 401 when the API key is the placeholder.
       APP_EMAIL_ENABLED: ${APP_EMAIL_ENABLED:-true}
+      # Follow-graph Neo4j mirror (#437) + follow recommendation ranker.
+      FOLLOW_GRAPH_SYNC_ENABLED: ${FOLLOW_GRAPH_SYNC_ENABLED:-false}
+      FOLLOW_RANKER: ${FOLLOW_RANKER:-legacy}
     volumes:
       - uploads_data:/app/uploads
     depends_on:

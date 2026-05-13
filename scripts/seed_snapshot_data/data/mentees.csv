@@ -1,0 +1,58 @@
+id,profile_visibility,goals,major,career_interest,meeting_freq_pref,background_info,cancel_count,active_mentor_id,career_interest_uri,major_uri,affiliation
+1247,t,Junior data engineer in 4 months.,"",SQL,Weekly,Hacettepe CS junior. SQL + ETL focused.,0,,,,""
+1212,t,"First role at a fintech or quant team. Build a portfolio that shows analytical decisions, not just pretty plots.","",Data Visualization,Weekly,"IE senior at ITU. Quant-curious, visualization-obsessed. Looking for a fintech first role.",0,,,,""
+1209,t,Ship one real ML service end-to-end this summer — training to inference to monitoring. Get hired as a junior MLOps person.,"",Model Deployment,Weekly,"Final-year CS at OMU. Strong in ML coursework, weak in deployment. Want to close that gap.",0,,,,""
+1221,t,Junior QA engineer role within four months. Open-source contributions to make my portfolio real.,"",QA Automation,Weekly,"CS senior, QA-curious, learning Selenium and test design.",0,,,,""
+1232,t,DeFi prototype this year. First Code4rena participation by winter.,"",Smart Contracts,Weekly,"CS junior, Ege. Solidity learner. Protocol design over token marketing.",0,,,,""
+1218,t,Ship a 3D prototype this year. Apply to studios with a real portfolio behind me.,"",3D Modeling,Weekly,CS junior. Unity + Blender hobbyist. Building toward a junior gameplay or tech-art role.,0,,,,""
+1220,t,First dev role in three months. Portfolio that gets past the screen.,"",First Job,Weekly,Industrial design grad turned bootcamp grad. Job-hunting from Mamak.,0,,,,""
+1224,t,First dev role by August. Two deployed apps in the portfolio.,"",Bootcamp Graduate,Weekly,"Bootcamp grad, ex-English teacher. Two months into job hunting from Adana.",0,,,,""
+1225,t,First dev job within 6 months. Real-data portfolio.,"",First Job,Weekly,"Math grad, self-taught Django learner. Building toward first dev role from Sakarya.",0,,,,""
+1227,t,Product internship this summer. First user-facing product shipped by year end.,"",Digital Product Thinking,Weekly,METU IE junior. Product-curious. Building consumer apps on weekends to learn-by-doing.,0,,,,""
+1228,t,Junior PM role within 6 months. Three real case studies.,"",Product Management,Weekly,"CS junior at OMU. Product-leaning, organizer of the campus product reading club.",0,,,,""
+1231,t,100 users on a real app this year. First role at a mobile-first startup.,"",Mobile Development,Weekly,"CS senior, Tekirdağ. Flutter every weekend. Building toward 100 real users on one app.",0,1271,,,""
+1208,t,A first role in responsible AI or AI policy within twelve months. Pair my philosophy training with enough technical grounding to be useful.,"",AI Ethics,Weekly,"Philosophy MA at Kocaeli, thesis on algorithmic harm. Trying to bridge into responsible-AI policy work.",0,,,,""
+1211,t,PhD admission to a top-30 European program. Research statement my advisor will endorse without edits.,"",Study Abroad,Weekly,CS senior at Bogazici. Undergraduate research in NLP. First-gen student preparing for PhD applications.,0,1198,,,""
+1214,t,Two playable prototypes by end of year. Apply to small narrative-focused studios.,"",Game Design,Weekly,Communication design student. Bitsy and Twine narrative games on itch.io. Trying to bridge into Unity for a junior studio role.,0,,,,""
+1215,t,GRE by August. Five applications by December. Funded admission for fall.,"",GRE Prep,Weekly,EEE senior. Self-studying GRE. Targeting US master's programs in signal processing.,0,,,,""
+1216,t,"Land a BA role at a tech company within six months. Build three portfolio projects with real data, not Kaggle.","",Career Switch,Weekly,"Career switcher. Three years teaching English, now self-studying SQL and Tableau to move into business analysis.",0,,,,""
+1222,t,Validate or kill the idea by winter. Either is a win.,"",Startup Ideas,Weekly,Business senior at Sakarya. Working on a logistics-SaaS idea for Anatolian SMBs.,0,,,,""
+1229,t,AWS SAA by August. Junior cloud role within 6 months.,"",Cloud,Weekly,CS senior in Antalya. AWS Associate prep in motion.,0,,,,""
+1233,t,BA role within 4 months. Use the rigor from MEng for something that doesn't smell of machine oil.,"",Business Analysis,Weekly,Mechanical engineer turned BA in training. Three years of manufacturing rigor I want to use differently.,0,,,,""
+1250,t,Three playable levels by autumn.,"",Level Design,Weekly,MEF visual design senior. Level design portfolio in progress.,0,,,,""
+1238,t,"First Flutter app shipped, internship in Ankara.","",Mobile Development,Weekly,Gazi CS sophomore. Mamak local. Just-started Flutter learner.,0,,,,""
+1241,t,"Sustainable study habits, no all-nighters before thesis season.","",Study Habits,Weekly,"IE junior. Tried twice to ""fix my productivity."" Trying once more with a mentor.",0,,,,""
+1243,t,Junior PM role in 6 months. One feature launch I owned.,"",Stakeholder Communication,Weekly,"Uludağ CS senior, Bursa. PM in training. Working on the harder conversations.",0,,,,""
+1249,t,SEO specialist in 5 months.,"",SEO,Weekly,Marketing senior. SEO-focused. Audit + improvement loops.,0,,,,""
+1251,t,Comfortable speaking in front of 20+ people within a year. Senior IC track or management within three.,"",Public Speaking,Weekly,Bahçeşehir CS senior. Engineer working on the soft-skill ceiling.,0,,,,""
+1253,t,AWS CP + SAA. Remote cloud role.,"",Cloud Fundamentals,Weekly,MKU CS senior in Hatay. Remote-first by necessity and design.,0,,,,""
+1254,t,Remote data-engineer role within 6 months.,"",ETL,Weekly,Gaziantep CS senior. ETL on local open-data.,0,,,,""
+1259,t,Two master's applications with a recital recording I'd defend at the dinner table.,Piano Performance,Music Performance,Weekly,"Mimar Sinan piano performance, third year. Targeting European master's programs in autumn.",0,,,,Mimar Sinan State Conservatory
+1261,t,First paid commission. Bologna illustrators' wall submission.,Graphic Design,Illustration,Weekly,Anadolu fine arts senior. Illustrator working toward book commissions.,0,,,,Anadolu University Fine Arts
+1265,t,One indie company cast. One international workshop.,Performing Arts,Theatre Acting,Weekly,Dokuz Eylül performing arts senior. Theater actor in training.,0,,,,Dokuz Eylul Fine Arts
+1267,t,"By autumn: a clear yes/no on whether I apply to PhDs or pursue a research role in industry. Either with someone I've worked with for 6 months, not three weeks.",Computer Science,Machine Learning Research,Weekly,CS senior at Bilkent. Researching ML interpretability with a faculty supervisor. Decisive about wanting a long-term mentor this time around.,0,,,,Bilkent University
+1236,t,Ship one iOS app this summer. Internship in fall.,"",Swift,Weekly,TOBB ETU CS sophomore. Just started iOS this month.,0,,,,""
+1237,t,"Candidate Master by year-end. Strong engineering role with depth, not breadth.","",Algorithms,Weekly,METU CS junior. Codeforces specialist. Strong in algorithms; learning to translate that into product work.,0,,,,""
+1240,t,MVP by autumn. Validate or move on by year-end.,"",Startup Ideas,Weekly,Business senior in Denizli. Building a food-tech idea for Anatolian SMBs.,0,,,,""
+1242,t,Junior DS role in 6 months. One Kaggle top-10% finish.,"",Data Science,Weekly,IU CS senior. Data-science-curious. Pandas every day.,0,,,,""
+1246,t,First job in a team where I can grow into senior in 3 years.,"",Full Stack Development,Weekly,"Bogazici CS senior, full-stack-leaning. Working with Melis Sezen on systems depth.",0,1195,,,""
+1260,t,"One festival-submission short, picture-locked and sound-mixed, by year end.",Cinema & TV,Filmmaking,Weekly,"Cinema & TV senior in Bursa. Two student shorts behind me, one in progress with Tarık's mentorship.",0,,,,Bursa Uludag University
+1262,t,One story placed; one collection draft finished.,Comparative Literature,Creative Writing,Weekly,ComparLit senior in Adana. Short-fiction writer. Mornings only.,0,,,,Cukurova University
+1264,t,French patisserie stage. 12 desserts in the portfolio book.,Gastronomy & Culinary Arts,Pastry,Weekly,Özyeğin gastronomy senior. Part-time pastry station at a Beyoğlu bistro.,0,,,,Ozyegin University
+1207,t,Pass AWS SAA-C03 by August. Land a junior platform engineering role by graduation.,"",Cloud Fundamentals,Weekly,Industrial engineering senior pivoting toward cloud and DevOps. Self-studying AWS and Docker on weekends.,0,1200,,,""
+1219,t,Ship a Flutter app to Play Store by August. Apply to mobile-first startups in fall.,"",Flutter,Weekly,"CS junior at Sabanci, Flutter hobbyist, aspiring product-builder.",0,,,,""
+1226,t,Formal club by next semester. Five classmates applying with me.,"",Campus Networking,Weekly,"IE junior, OMU. Running an informal study-abroad support group on campus.",0,,,,""
+1230,t,First ML role in 8 months. Silver medal on Kaggle as a milestone.,"",Machine Learning,Weekly,Stats senior in Bornova. ML-focused. Kaggle every weekend.,0,,,,""
+1235,t,First fintech role in 6 months. One real risk model live in my GitHub.,"",FinTech,Weekly,"Financial engineering senior at Hacettepe. Python-fluent, engineering-curious.",0,,,,""
+1244,t,PM internship this summer.,"",Product Management,Weekly,YTU CS senior. PM-curious. Working on the public speaking gap.,0,,,,""
+1252,t,Two Swift apps live this year. iOS-focused first role.,"",Swift,Weekly,"Sabancı CS junior. Pendik local. iOS-leaning, prolific.",0,,,,""
+1263,t,One documentary essay finished. 6x6 application submitted.,Photography,Documentary Photography,Weekly,Akdeniz Photography senior in Antalya. Documentary-focused. Mentored by Aslı.,0,,,,Akdeniz University Fine Arts
+1210,t,Ship to TestFlight by August. Apply to junior mobile roles in September with a real app in hand.,"",iOS Development,Weekly,CS junior in Erzurum. Learning Swift on a hand-me-down MacBook. Closer to my first app every week.,0,,,,""
+1213,t,"First role in an AI product team that values responsible-AI work as part of the engineering, not bolted on.","",Prompting,Weekly,CS senior at Marmara. Spent last semester building a student-services chatbot and discovering how much I didn't know about edge cases. Now I take responsible-AI questions seriously.,0,,,,""
+1217,t,Security internship by July. OSCP by next May. Get my first real bug bounty hall-of-fame credit.,"",Ethical Hacking,Weekly,"CS junior, Esenyurt-based, CTF regular. Targeting a security internship for summer and OSCP within a year.",0,1201,,,""
+1223,t,Remote smart-contract role within a year. Five contract audits as portfolio.,"",Smart Contracts,Weekly,"CS senior in Diyarbakır. Solidity learner, audit-curious. Remote-only by necessity and choice.",0,,,,""
+1234,t,Junior frontend role in 4 months. Three deployed personal apps.,"",Portfolio Review,Weekly,CS junior in Adana. React-focused. Clone-as-learning.,0,,,,""
+1239,t,"Contribute to one DeFi protocol this year. Real PR, not just docs.","",Blockchain,Weekly,"Bahcesehir CS junior. Slow, deliberate Web3 learner. Whitepapers > Twitter.",0,,,,""
+1245,t,Junior content strategist in 4 months. Three real audits in portfolio.,"",Content Strategy,Weekly,Communications senior. Content writer learning data.,0,,,,""
+1248,t,Hiking-trail app shipped. Mobile-first first job.,"",Flutter,Weekly,ITU CS senior in Sarıyer. Flutter + outdoors.,0,1197,,,""
+1266,t,Twelve-episode podcast live by year-end.,Communications Design,Podcasting,Weekly,Bilgi comms senior. Podcaster building a 12-episode history series. Audio mentorship with Selen.,0,,,,Bilgi University
