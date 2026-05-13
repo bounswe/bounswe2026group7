@@ -29,7 +29,13 @@ This starts four services:
 | Database | `localhost:5433`                      | PostgreSQL (managed via Flyway migrations) |
 
 Defaults in `.env.example` are good enough for local development — no editing
-required.
+required. The seed-friendly safety flags (`APP_RATELIMIT_ENABLED=false`,
+`APP_EMAIL_ENABLED=false`, `APP_SPAM_ENABLED=false`) and the three advanced
+ranker toggles (`MENTOR_ADVANCED_RANKER`, `MENTOR_EXPLANATION_ENABLED`,
+`FEED_ADVANCED_RANKER`, `FOLLOW_RANKER=advanced`) are all pre-set so the
+demo dataset surfaces the full UI. The only value worth editing for a
+real local-with-LLM run is `OPENAI_API_KEY` — see the [env reference](#environment-variable-reference)
+below.
 
 Stop the stack with `docker compose down`. Add `-v` to also drop the Postgres
 and Neo4j volumes if you want a fully clean reset on the next boot.
@@ -111,6 +117,45 @@ If you ran `scripts/seed_local.py` instead, accounts use the
 `@seed.local` domain with role-specific passwords (`Admin1234!`,
 `Mentor1234!`, `Mentee1234!`); the full list is written to
 `scripts/seed_local_credentials.txt`.
+
+### Environment variable reference
+
+All knobs below live in `.env.example` with full inline comments. The
+table here is a quick map of what each one controls and what state the
+demo expects.
+
+#### Seed-friendliness (`.env.example` defaults to demo-safe values)
+
+| Variable                  | Demo (`.env.example`) | Prod          | What it does                                                                |
+|---------------------------|-----------------------|---------------|-----------------------------------------------------------------------------|
+| `APP_RATELIMIT_ENABLED`   | `false`               | `true`        | Per-IP/per-user login throttling. 78-account demo needs it off for E2E.     |
+| `APP_EMAIL_ENABLED`       | `false`               | `true`        | If on, registration sends through Resend; placeholder API key returns 401.  |
+| `APP_SPAM_ENABLED`        | `false`               | `true`        | Form-token + honeypot defences on the register form.                        |
+
+#### Advanced ranker stack (`.env.example` defaults all on)
+
+| Variable                       | Demo  | Default in compose | What it controls                                                          |
+|--------------------------------|-------|--------------------|---------------------------------------------------------------------------|
+| `MENTOR_ADVANCED_RANKER`       | `true`| `false`            | Swaps the rule-based mentor matcher for the weighted-signal pipeline.     |
+| `MENTOR_EXPLANATION_ENABLED`   | `true`| `false`            | LLM-authored "why recommended" sentence on each mentor card.              |
+| `MENTOR_EXPLANATION_TIMEOUT_MS`| `15000`| `3000`            | Upper bound on the gpt-4o-mini call. 3000 is too tight under load.        |
+| `FEED_ADVANCED_RANKER`         | `true`| `false`            | Advanced For-You pipeline (candidate generation + scoring + MMR).         |
+| `FEED_BANDIT_ENABLED`          | `false`| `false`           | Contextual bandit — gated behind impression tracking; stays off.          |
+| `FOLLOW_RANKER`                | `advanced`| `legacy`       | Multi-signal follow ranker (PPR + second-hop + …). Needs Neo4j.           |
+| `FOLLOW_GRAPH_SYNC_ENABLED`    | `true`| `false`            | Mirrors every PG follow/unfollow into Neo4j after-commit.                 |
+
+#### Keys you (might) need to set manually
+
+| Variable          | When to set                                                                                                |
+|-------------------|------------------------------------------------------------------------------------------------------------|
+| `OPENAI_API_KEY`  | If you want LLM mentor explanations and the semantic-affinity follow signal. Empty = graceful fallback.    |
+| `RESEND_API_KEY`  | Only when `APP_EMAIL_ENABLED=true`. The demo stack doesn't need it.                                        |
+| `JWT_SECRET`      | Already set to a base64 dev secret; rotate in `.env.production` for any deploy.                            |
+| `NEO4J_PASSWORD`  | `group7pass` locally; **must** be rotated in `.env.production`.                                            |
+
+The OpenAI key flows into both embeddings (`text-embedding-3-small`) and
+chat (`gpt-4o-mini`) by default. Override with `OPENAI_CHAT_MODEL` /
+`OPENAI_EMBEDDING_MODEL` if needed.
 
 ### Quick start (development, without Docker)
 
