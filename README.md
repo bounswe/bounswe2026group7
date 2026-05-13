@@ -15,10 +15,22 @@ Compose installed.
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose --profile demo up --build -d
 ```
 
-This starts four services:
+That single command does three things:
+
+1. Builds the backend, frontend, and custom Neo4j-GDS images on first run.
+2. Starts PostgreSQL, Neo4j, the backend, and the frontend.
+3. Once the backend reports healthy, runs the one-shot **`seed`** service —
+   it loads the hand-crafted demo dataset (78 users, 288 posts, ~50 mentor
+   ratings, 6 active + 48 past mentorships, profile photos, post images,
+   task-attached PDFs) into Postgres and into the shared uploads volume.
+
+The seed step is opt-in: omit `--profile demo` if you want a clean DB.
+
+Once everything settles you have four long-running services plus a one-shot
+seed container that exits cleanly:
 
 | Service  | URL                                   | Description                                |
 |----------|---------------------------------------|--------------------------------------------|
@@ -30,57 +42,67 @@ This starts four services:
 
 Defaults in `.env.example` are good enough for local development — no editing
 required. The seed-friendly safety flags (`APP_RATELIMIT_ENABLED=false`,
-`APP_EMAIL_ENABLED=false`, `APP_SPAM_ENABLED=false`) and the three advanced
+`APP_EMAIL_ENABLED=false`, `APP_SPAM_ENABLED=false`) and the four advanced
 ranker toggles (`MENTOR_ADVANCED_RANKER`, `MENTOR_EXPLANATION_ENABLED`,
 `FEED_ADVANCED_RANKER`, `FOLLOW_RANKER=advanced`) are all pre-set so the
 demo dataset surfaces the full UI. The only value worth editing for a
 real local-with-LLM run is `OPENAI_API_KEY` — see the [env reference](#environment-variable-reference)
 below.
 
-Stop the stack with `docker compose down`. Add `-v` to also drop the Postgres
-and Neo4j volumes if you want a fully clean reset on the next boot.
+Stop the stack:
 
-### Seed local data
+```bash
+docker compose --profile demo down
+```
 
-Right after a fresh `docker compose up`, the app is empty. Two seeders are
-available depending on what you need.
+Include `--profile demo` here too — without it the seed container is left
+orphaned with a stale network reference and the next `up` will fail. Add
+`-v` to also drop the Postgres and Neo4j volumes for a fully clean reset.
+
+Re-seed after manual mutation (stack already running):
+
+```bash
+docker compose --profile demo run --rm seed
+```
+
+`run --rm` runs the loader as a one-shot and removes the container on exit,
+so it never goes stale.
+
+### Seeding options
+
+Two seeders are available depending on what you need.
 
 #### Demo dataset (recommended — automatic, hand-crafted content)
 
-The richer demo dataset (78 users, 288 posts with images, 6 active +
-48 past mentorships with tasks/meetings/messages, 45 ratings, 100
-mentor-mentee + mentor-pair messages, AI-generated profile photos,
-Unsplash-fetched post images) ships pre-built as a snapshot under
-`scripts/seed_snapshot_data/` and loads automatically through a
-docker-compose profile:
+The hand-crafted demo dataset (78 users, 288 posts with images,
+6 active + 48 past mentorships with tasks/meetings/messages, 45 ratings,
+100 mentor-mentee + mentor-pair messages, AI-generated profile photos,
+Unsplash-fetched post images, task-attached PDFs) ships pre-built as a
+snapshot under `scripts/seed_snapshot_data/` and loads automatically
+through the `demo` compose profile shown in the [Quick start](#quick-start-development-docker)
+above:
 
 ```bash
-docker compose --profile demo up -d
+docker compose --profile demo up --build -d   # first run on a fresh checkout
+docker compose --profile demo down            # tear down (don't drop the profile flag)
+docker compose --profile demo run --rm seed   # re-seed against a running stack
 ```
 
-Adding the `--profile demo` flag enables a one-shot `seed` service that
-waits for the backend to be healthy, COPYs the snapshot into Postgres,
-and restores the upload binaries into the shared volume. The service
-exits when it's done; the rest of the stack keeps running. Re-running
-with `--profile demo` is idempotent (DELETE-then-COPY).
+Each load is idempotent (DELETE-then-COPY against seed-owned rows; the
+`admin@group7.com` bootstrap is never touched).
 
-If you've already started the stack without the profile, you can load
-the demo dataset after the fact:
+The same snapshot is reachable from the host without involving the
+compose service, which is useful when iterating on the snapshot itself:
 
 ```bash
-docker compose --profile demo up seed
+./scripts/seed.sh load        # uses scripts/seed_snapshot_data/ by default
+./scripts/seed.sh dump        # re-captures current DB state into the same dir
+./scripts/seed.sh status      # prints seed-owned counts
+./scripts/seed.sh help
 ```
 
-You can also run the loader from the host (useful when iterating on the
-snapshot itself):
-
-```bash
-./scripts/seed.sh load
-```
-
-The host-side wrapper bootstraps `.venv/` on first run and pre-flights
-docker. Other subcommands: `./scripts/seed.sh dump` to re-capture the
-current DB state, `./scripts/seed.sh status` to inspect counts.
+The first call bootstraps `.venv/` and installs `scripts/requirements-seed.txt`;
+subsequent calls reuse it.
 
 #### Lightweight roster (`scripts/seed_local.py`)
 
