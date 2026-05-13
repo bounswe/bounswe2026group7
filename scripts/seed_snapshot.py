@@ -56,7 +56,7 @@ import tarfile
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 try:
     import psycopg
@@ -70,8 +70,22 @@ except ImportError as exc:  # pragma: no cover
 
 SEED_DOMAINS = ("seed.test", "seed.local")
 
-# Default DB connection (matches docker-compose.yml port mapping).
-DEFAULT_DSN = "postgresql://group7:group7pass@localhost:5433/group7db"
+# DSN default: prefer env-driven (so the same script works on the host AND
+# inside the compose `seed` service which sets POSTGRES_HOST=db), fall back
+# to docker-compose's host-side port mapping.
+def _default_dsn() -> str:
+    if "DATABASE_URL" in os.environ:
+        return os.environ["DATABASE_URL"]
+    user = os.environ.get("POSTGRES_USER", "group7")
+    password = os.environ.get("POSTGRES_PASSWORD", "group7pass")
+    db = os.environ.get("POSTGRES_DB", "group7db")
+    host = os.environ.get("POSTGRES_HOST", "localhost")
+    port = os.environ.get("POSTGRES_PORT") or os.environ.get("DB_PORT") or (
+        "5432" if host != "localhost" else "5433"
+    )
+    return f"postgresql://{user}:{password}@{host}:{port}/{db}"
+
+
 DEFAULT_BACKEND_CONTAINER = "bounswe2026group7-backend-1"
 BACKEND_UPLOADS_PATH = "/app/uploads"
 
@@ -315,7 +329,19 @@ def dump(snapshot_dir: Path, dsn: str, container: str) -> None:
 
 # ── load ──────────────────────────────────────────────────────────────────
 
-def load(snapshot_dir: Path, dsn: str, container: str) -> None:
+def load(snapshot_dir: Path, dsn: str, container: str,
+         uploads_mode: str = "docker",
+         uploads_dest: Optional[str] = None) -> None:
+    """Replay a snapshot into the target DB and restore the uploads tree.
+
+    uploads_mode:
+        "docker" — call `docker cp <snapshot/uploads>` into the backend
+                   container at /app/uploads. The default when the
+                   tool runs from a developer's host.
+        "local"  — copy directly into uploads_dest on the local
+                   filesystem. Used by the docker-compose `seed` service,
+                   which has the backend's uploads volume bind-mounted.
+    """
     data_dir = snapshot_dir / "data"
     uploads_dir = snapshot_dir / "uploads"
     manifest_path = snapshot_dir / "manifest.json"
@@ -374,24 +400,43 @@ def load(snapshot_dir: Path, dsn: str, container: str) -> None:
                 )
         conn.commit()
 
-    print(f"==> Restoring backend uploads into {container}:{BACKEND_UPLOADS_PATH} …")
-    if uploads_dir.is_dir():
-        # docker cp doesn't merge — replace each subdir wholesale.
-        for sub in ("photos", "attachments"):
-            host_sub = uploads_dir / sub
-            if not host_sub.is_dir():
-                continue
-            target = f"{BACKEND_UPLOADS_PATH}/{sub}"
-            # ensure target dir exists; orphan files from prior runs are
-            # left in place because the backend may run as a non-root user
-            # that can't delete files owned by another uid. Orphans are
-            # harmless — nothing in the DB references them.
-            _docker_exec(container, "mkdir", "-p", target)
-            _docker_cp_into(container, host_sub, BACKEND_UPLOADS_PATH)
-            n = len(list(host_sub.iterdir()))
-            print(f"    {sub:<32} {n:>6} files restored")
+    if uploads_mode == "local":
+        dest_root = Path(uploads_dest or BACKEND_UPLOADS_PATH)
+        print(f"==> Restoring backend uploads into {dest_root} (local copy) …")
+        if uploads_dir.is_dir():
+            for sub in ("photos", "attachments"):
+                host_sub = uploads_dir / sub
+                if not host_sub.is_dir():
+                    continue
+                target = dest_root / sub
+                target.mkdir(parents=True, exist_ok=True)
+                n = 0
+                for src in host_sub.iterdir():
+                    if src.is_file():
+                        shutil.copy2(src, target / src.name)
+                        n += 1
+                print(f"    {sub:<32} {n:>6} files restored")
+        else:
+            print("    (no uploads/ dir in snapshot — skipping)")
     else:
-        print("    (no uploads/ dir in snapshot — skipping)")
+        print(f"==> Restoring backend uploads into {container}:{BACKEND_UPLOADS_PATH} …")
+        if uploads_dir.is_dir():
+            # docker cp doesn't merge — replace each subdir wholesale.
+            for sub in ("photos", "attachments"):
+                host_sub = uploads_dir / sub
+                if not host_sub.is_dir():
+                    continue
+                target = f"{BACKEND_UPLOADS_PATH}/{sub}"
+                # ensure target dir exists; orphan files from prior runs are
+                # left in place because the backend may run as a non-root user
+                # that can't delete files owned by another uid. Orphans are
+                # harmless — nothing in the DB references them.
+                _docker_exec(container, "mkdir", "-p", target)
+                _docker_cp_into(container, host_sub, BACKEND_UPLOADS_PATH)
+                n = len(list(host_sub.iterdir()))
+                print(f"    {sub:<32} {n:>6} files restored")
+        else:
+            print("    (no uploads/ dir in snapshot — skipping)")
 
     print("==> Load complete.")
 
@@ -405,19 +450,29 @@ def main() -> int:
 
     pdump = sub.add_parser("dump", help="Capture current state into a snapshot dir")
     pdump.add_argument("snapshot_dir", help="Output directory")
-    pdump.add_argument("--dsn", default=DEFAULT_DSN)
+    pdump.add_argument("--dsn", default=_default_dsn())
     pdump.add_argument("--container", default=DEFAULT_BACKEND_CONTAINER)
 
     pload = sub.add_parser("load", help="Replay a snapshot dir into the local DB")
     pload.add_argument("snapshot_dir", help="Input directory (created by --dump)")
-    pload.add_argument("--dsn", default=DEFAULT_DSN)
+    pload.add_argument("--dsn", default=_default_dsn())
     pload.add_argument("--container", default=DEFAULT_BACKEND_CONTAINER)
+    pload.add_argument("--uploads-mode", choices=("docker", "local"),
+                       default="docker",
+                       help="docker: docker cp into the backend container; "
+                            "local: shutil.copy into --uploads-dest (used "
+                            "by the docker-compose `seed` profile which has "
+                            "the uploads volume bind-mounted).")
+    pload.add_argument("--uploads-dest", default=BACKEND_UPLOADS_PATH,
+                       help="Destination dir for --uploads-mode=local")
 
     args = parser.parse_args()
     if args.mode == "dump":
         dump(Path(args.snapshot_dir), args.dsn, args.container)
     elif args.mode == "load":
-        load(Path(args.snapshot_dir), args.dsn, args.container)
+        load(Path(args.snapshot_dir), args.dsn, args.container,
+             uploads_mode=args.uploads_mode,
+             uploads_dest=args.uploads_dest)
     return 0
 
 

@@ -36,36 +36,81 @@ and Neo4j volumes if you want a fully clean reset on the next boot.
 
 ### Seed local data
 
-Right after a fresh `docker compose up`, the app is empty. The seed script
-populates Postgres directly (bypassing email verification, Resend, and the
-spam-bot defences) with **1 admin + 40 mentors + 60 mentees**, each with
-realistic interests, bios, and goals.
+Right after a fresh `docker compose up`, the app is empty. Two seeders are
+available depending on what you need.
+
+#### Demo dataset (recommended — automatic, hand-crafted content)
+
+The richer demo dataset (78 users, 288 posts with images, 6 active +
+48 past mentorships with tasks/meetings/messages, 45 ratings, 100
+mentor-mentee + mentor-pair messages, AI-generated profile photos,
+Unsplash-fetched post images) ships pre-built as a snapshot under
+`scripts/seed_snapshot_data/` and loads automatically through a
+docker-compose profile:
+
+```bash
+docker compose --profile demo up -d
+```
+
+Adding the `--profile demo` flag enables a one-shot `seed` service that
+waits for the backend to be healthy, COPYs the snapshot into Postgres,
+and restores the upload binaries into the shared volume. The service
+exits when it's done; the rest of the stack keeps running. Re-running
+with `--profile demo` is idempotent (DELETE-then-COPY).
+
+If you've already started the stack without the profile, you can load
+the demo dataset after the fact:
+
+```bash
+docker compose --profile demo up seed
+```
+
+You can also run the loader from the host (useful when iterating on the
+snapshot itself):
+
+```bash
+./scripts/seed.sh load
+```
+
+The host-side wrapper bootstraps `.venv/` on first run and pre-flights
+docker. Other subcommands: `./scripts/seed.sh dump` to re-capture the
+current DB state, `./scripts/seed.sh status` to inspect counts.
+
+#### Lightweight roster (`scripts/seed_local.py`)
+
+If you only need a clean list of accounts (1 admin + 40 mentors + 60
+mentees, no posts/mentorships/photos), use the older direct-Postgres
+seeder. It's destructive-but-scoped — it wipes every prior
+`@seed.local` user first and re-inserts the roster.
 
 ```bash
 pip install -r scripts/requirements-seed.txt
 python3 scripts/seed_local.py
 ```
 
-Every run is destructive-but-scoped: it deletes all prior `@seed.local` users
-first, then re-inserts the roster. Real users you registered through the web
-UI are never touched. Run it again whenever you want a clean demo dataset.
-
-The script prints a credentials block to stdout (sample users per role) and
-writes the full list — including each mentor's field and each mentee's major —
-to `scripts/seed_local_credentials.txt`.
+The script prints a credentials block to stdout and writes the full
+roster to `scripts/seed_local_credentials.txt`.
 
 ### Default credentials (after seeding)
 
-All seeded passwords are deterministic. Sample accounts:
+Sample accounts from the demo dataset (`--profile demo`, `@seed.test`,
+all passwords `Seed1234!`):
 
-| Role   | Email                                            | Password      |
-|--------|--------------------------------------------------|---------------|
-| Admin  | `admin@seed.local`                               | `Admin1234!`  |
-| Mentor | `mentor.<first>.<last>.<n>@seed.local` (40 total) | `Mentor1234!` |
-| Mentee | `mentee.<first>.<last>.<n>@seed.local` (60 total) | `Mentee1234!` |
+| Role             | Email                          | Notes                                                   |
+|------------------|--------------------------------|---------------------------------------------------------|
+| Demo mentee      | `defne.korkmaz.74@seed.test`   | CS senior, 3 past mentorships, no active mentor — ready for AI-match flow |
+| Demo mentor      | `yildiz.demir.78@seed.test`    | Active mentorship with Rıza Yavuz; full task + meeting timeline |
+| Senior mentor    | `melis.sezen.2@seed.test`      | Cloud Architecture, active mentee Tolga                 |
+| Research mentor  | `dilara.oz.5@seed.test`        | Completed engagement with Defne, 5-star review attached |
 
-The first 5 mentors and 5 mentees are echoed when the script finishes; the
-remaining accounts live in `scripts/seed_local_credentials.txt`.
+The full 78-user roster (20 mentors + 57 mentees + 1 admin) is in
+`scripts/seed_snapshot_data/data/users.csv`. Every user has the same
+password `Seed1234!`.
+
+If you ran `scripts/seed_local.py` instead, accounts use the
+`@seed.local` domain with role-specific passwords (`Admin1234!`,
+`Mentor1234!`, `Mentee1234!`); the full list is written to
+`scripts/seed_local_credentials.txt`.
 
 ### Quick start (development, without Docker)
 
