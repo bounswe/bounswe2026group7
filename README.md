@@ -214,8 +214,40 @@ used by Playwright, are documented in [frontend/README.md](frontend/README.md).
 
 ### Production deployment
 
-Production uses a separate compose file (`docker-compose.prod.yml`) that
-expects a managed Postgres and reads secrets from `.env.production`.
+The live demo at [mymentornet.org](https://mymentornet.org) is deployed by
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) on every
+push to `main`. The workflow SSHes into the DigitalOcean droplet and runs:
+
+```bash
+git pull origin main
+docker compose --profile demo up --build -d
+```
+
+The droplet uses the same `docker-compose.yml` as local dev (bundled
+Postgres + Neo4j) with its own `.env` carrying real secrets (`JWT_SECRET`,
+`OPENAI_API_KEY`, `RESEND_API_KEY`, `NEO4J_PASSWORD`, …). The `--profile demo`
+flag activates the one-shot seed service so every deploy re-syncs the
+hand-crafted demo dataset; the seed is scoped to `%@seed.test` users only
+and never touches real accounts registered through the UI.
+
+For the demo profile to surface the full UI, the droplet's `.env` should
+include the same advanced flags shipped in [`.env.example`](.env.example):
+
+```sh
+MENTOR_ADVANCED_RANKER=true
+MENTOR_EXPLANATION_ENABLED=true
+MENTOR_EXPLANATION_TIMEOUT_MS=15000
+FEED_ADVANCED_RANKER=true
+FOLLOW_RANKER=advanced
+FOLLOW_GRAPH_SYNC_ENABLED=true
+```
+
+`APP_RATELIMIT_ENABLED`, `APP_EMAIL_ENABLED`, and `APP_SPAM_ENABLED` can
+stay at their prod defaults (`true`) — the seed itself uses direct
+Postgres connections, so rate limits and spam defences don't affect it.
+
+For a hardened install that doesn't bundle Postgres in-stack (e.g. against
+managed PG), use the separate `docker-compose.prod.yml`:
 
 ```bash
 cp .env.production.example .env.production
@@ -225,10 +257,11 @@ cp .env.production.example .env.production
 docker compose --env-file .env.production -f docker-compose.prod.yml up --build -d
 ```
 
-The prod compose runs the backend, frontend, and Neo4j in-stack and binds the
-frontend to host port 80 by default (override with `FRONTEND_PORT`). It does
-not bring up a Postgres service — point `SPRING_DATASOURCE_URL` at your
-managed database.
+That compose targets a managed PostgreSQL via `SPRING_DATASOURCE_URL`,
+runs Neo4j and the backend in-stack, and binds the frontend to host
+port 80 by default (override with `FRONTEND_PORT`). The `seed` service
+isn't wired into the prod compose by design — production datasets
+shouldn't be reset on every boot.
 
 See [PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md) for the broader
 deployment checklist (TLS, backups, secret rotation).
