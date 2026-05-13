@@ -19,6 +19,9 @@ jobs:
           # 30m: cold Maven rebuild (~7m) + Neo4j boot (~3m) + backend
           # health wait. The new seed service adds ~10s on top, well
           # within budget.
+          # Default is 10m; cold Maven rebuild (~7m) + Neo4j + backend
+          # health wait (~3m) exceeds it. Cf. run 25790084160 which hit
+          # the cap and left the frontend container in `Created` state.
           command_timeout: 30m
           script: |
             set -e
