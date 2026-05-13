@@ -85,10 +85,14 @@ services:
       # CI / local Playwright runs flip them on via .env.
       APP_TEST_ENDPOINTS_ENABLED: ${APP_TEST_ENDPOINTS_ENABLED:-false}
       APP_SPAM_ENABLED: ${APP_SPAM_ENABLED:-true}
+      APP_RATELIMIT_ENABLED: ${APP_RATELIMIT_ENABLED:-true}
       # Verification-email send swaps to NoOpEmailService when off — used by
       # Playwright so /api/test/users registrations don't fail with Resend
       # 401 when the API key is the placeholder.
       APP_EMAIL_ENABLED: ${APP_EMAIL_ENABLED:-true}
+      # Follow-graph Neo4j mirror (#437) + follow recommendation ranker.
+      FOLLOW_GRAPH_SYNC_ENABLED: ${FOLLOW_GRAPH_SYNC_ENABLED:-false}
+      FOLLOW_RANKER: ${FOLLOW_RANKER:-legacy}
     volumes:
       - uploads_data:/app/uploads
     depends_on:
@@ -113,6 +117,38 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    networks:
+      - group7_net
+
+  # One-shot demo data loader. Only runs when explicitly invoked via
+  # the `demo` profile (otherwise compose ignores it):
+  #   docker compose --profile demo up -d
+  # It waits for backend health, COPYs the snapshot CSVs into Postgres,
+  # and copies the binary uploads into the shared `uploads_data` volume.
+  # The seed is idempotent (DELETE-then-COPY); re-running with the
+  # profile gives the same final state.
+  seed:
+    profiles: ["demo"]
+    image: python:3.12-slim
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-group7}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-group7pass}
+      POSTGRES_DB: ${POSTGRES_DB:-group7db}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    volumes:
+      - ./scripts:/seed/scripts:ro
+      - uploads_data:/uploads
+    working_dir: /seed
+    depends_on:
+      backend:
+        condition: service_healthy
+    command:
+      - "sh"
+      - "-c"
+      - "set -e && pip install --no-cache-dir --quiet 'psycopg[binary]>=3.1' && python /seed/scripts/seed_snapshot.py load /seed/scripts/seed_snapshot_data --uploads-mode local --uploads-dest /uploads"
+    restart: "no"
     networks:
       - group7_net
 

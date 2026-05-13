@@ -1,0 +1,55 @@
+id,mentee_id,mentor_id,message,status,created_at,updated_at
+23,1246,1195,I've been following your posts for a while. I'm a final-year CS student trying to step beyond 'just writes code' and would like to spend three months working with you on system design specifically. I'm prepared to put the time in.,ACCEPTED,2026-05-13 08:02:55.774545+00,2026-05-13 08:02:55.891248+00
+24,1248,1197,"I'm a CS senior who loves hiking and Flutter equally. I'm not sure if I want to be a mobile dev or a game dev, and I think six months with someone who's lived both sides would help me decide honestly.",ACCEPTED,2026-05-13 08:02:56.093511+00,2026-05-13 08:02:56.102973+00
+25,1211,1198,"Hocam, I'm a first-gen CS senior at Bogazici applying for PhDs this cycle. I would value your time on the research statement specifically — three months feels like exactly the right scope.",ACCEPTED,2026-05-13 08:02:56.272383+00,2026-05-13 08:02:56.281265+00
+26,1207,1200,"I'm pivoting from industrial engineering into platform/SRE. I want to do it right, not just collect certs. Three months of structured work would mean a lot.",ACCEPTED,2026-05-13 08:02:56.450705+00,2026-05-13 08:02:56.459974+00
+27,1217,1201,"I'm a CS junior obsessed with security, CTFs, and HTB. I know I need to grow into a real engineer, not just a CTF player. Six months with someone who's done that transition would mean the world.",ACCEPTED,2026-05-13 08:02:56.633538+00,2026-05-13 08:02:56.642902+00
+28,1231,1271,I'm a senior CS student who ships Flutter aggressively but I keep hitting the architecture wall on my fourth feature. I want six months with someone who's led mobile teams to teach me what I'm missing — without making me precious about the work.,ACCEPTED,2026-05-13 08:02:56.819207+00,2026-05-13 08:02:56.829725+00
+29,1216,1196,I'm an English teacher pivoting to tech and I keep undermining myself in cover letters. I want three months with a marketing lead to fix the way I describe what I bring.,ACCEPTED,2025-04-08 00:00:00+00,2025-04-08 00:00:00+00
+30,1267,1198,"Hocam, I'm a Bilkent CS junior researching ML interpretability. Three months is short, but I think I need a short, honest engagement first — to find out whether this path actually fits before I commit to anything longer.",ACCEPTED,2025-03-30 00:00:00+00,2025-03-30 00:00:00+00
+31,1222,1199,I'm a business senior with a logistics-SaaS idea for Anatolian SMBs. I've been daydreaming about it for a year. I need someone to help me decide whether it's real or not — three months of structured work.,ACCEPTED,2025-08-17 00:00:00+00,2025-08-17 00:00:00+00
+32,1267,1199,I'm a CS senior fence-sitting between research and founding. Could we do a deliberately short engagement — one month — to test whether founding fits before I commit a longer block to either path?,ACCEPTED,2025-03-31 00:00:00+00,2025-03-31 00:00:00+00
+33,1229,1195,(historical record),ACCEPTED,2025-02-21 00:00:00+00,2025-02-21 00:00:00+00
+34,1226,1196,(historical record),ACCEPTED,2025-10-04 00:00:00+00,2025-10-04 00:00:00+00
+35,1210,1197,(historical record),ACCEPTED,2025-02-21 00:00:00+00,2025-02-21 00:00:00+00
+36,1216,1197,(historical record),ACCEPTED,2025-07-06 00:00:00+00,2025-07-06 00:00:00+00
+37,1267,1197,(historical record),ACCEPTED,2025-02-08 00:00:00+00,2025-02-08 00:00:00+00
+38,1210,1199,(historical record),ACCEPTED,2025-02-03 00:00:00+00,2025-02-03 00:00:00+00
+39,1234,1200,(historical record),ACCEPTED,2026-01-23 00:00:00+00,2026-01-23 00:00:00+00
+40,1216,1200,(historical record),ACCEPTED,2025-10-12 00:00:00+00,2025-10-12 00:00:00+00
+41,1265,1201,(historical record),ACCEPTED,2025-01-06 00:00:00+00,2025-01-06 00:00:00+00
+42,1262,1201,(historical record),ACCEPTED,2025-10-24 00:00:00+00,2025-10-24 00:00:00+00
+43,1230,1202,(historical record),ACCEPTED,2025-04-19 00:00:00+00,2025-04-19 00:00:00+00
+44,1240,1202,(historical record),ACCEPTED,2025-09-01 00:00:00+00,2025-09-01 00:00:00+00
+45,1246,1202,(historical record),ACCEPTED,2025-11-26 00:00:00+00,2025-11-26 00:00:00+00
+46,1244,1203,(historical record),ACCEPTED,2025-11-13 00:00:00+00,2025-11-13 00:00:00+00
+47,1230,1204,(historical record),ACCEPTED,2025-09-25 00:00:00+00,2025-09-25 00:00:00+00
+48,1214,1204,(historical record),ACCEPTED,2025-04-20 00:00:00+00,2025-04-20 00:00:00+00
+49,1247,1204,(historical record),ACCEPTED,2025-04-29 00:00:00+00,2025-04-29 00:00:00+00
+50,1261,1205,(historical record),ACCEPTED,2025-10-26 00:00:00+00,2025-10-26 00:00:00+00
+51,1238,1206,(historical record),ACCEPTED,2025-03-04 00:00:00+00,2025-03-04 00:00:00+00
+52,1265,1206,(historical record),ACCEPTED,2025-12-20 00:00:00+00,2025-12-20 00:00:00+00
+53,1254,1257,(historical record),ACCEPTED,2026-02-14 00:00:00+00,2026-02-14 00:00:00+00
+54,1252,1258,(historical record),ACCEPTED,2025-01-29 00:00:00+00,2025-01-29 00:00:00+00
+55,1230,1258,(historical record),ACCEPTED,2025-05-02 00:00:00+00,2025-05-02 00:00:00+00
+56,1211,1258,(historical record),ACCEPTED,2025-05-07 00:00:00+00,2025-05-07 00:00:00+00
+57,1231,1270,(historical record),ACCEPTED,2026-01-18 00:00:00+00,2026-01-18 00:00:00+00
+58,1227,1270,(historical record),ACCEPTED,2026-02-19 00:00:00+00,2026-02-19 00:00:00+00
+59,1243,1270,(historical record),ACCEPTED,2025-09-10 00:00:00+00,2025-09-10 00:00:00+00
+60,1236,1268,(historical),ACCEPTED,2025-08-28 00:00:00+00,2025-08-28 00:00:00+00
+61,1245,1268,(historical),ACCEPTED,2025-07-23 00:00:00+00,2025-07-23 00:00:00+00
+62,1209,1269,(historical),ACCEPTED,2025-06-05 00:00:00+00,2025-06-05 00:00:00+00
+63,1238,1269,(historical),ACCEPTED,2025-03-31 00:00:00+00,2025-03-31 00:00:00+00
+64,1211,1271,(historical),ACCEPTED,2026-02-03 00:00:00+00,2026-02-03 00:00:00+00
+65,1247,1271,(historical),ACCEPTED,2025-11-16 00:00:00+00,2025-11-16 00:00:00+00
+66,1251,1195,(historical),ACCEPTED,2025-06-07 00:00:00+00,2025-06-07 00:00:00+00
+67,1227,1196,(historical),ACCEPTED,2025-08-18 00:00:00+00,2025-08-18 00:00:00+00
+68,1251,1198,(historical),ACCEPTED,2025-12-05 00:00:00+00,2025-12-05 00:00:00+00
+69,1230,1199,(historical),ACCEPTED,2025-05-09 00:00:00+00,2025-05-09 00:00:00+00
+70,1248,1203,(historical),ACCEPTED,2025-08-12 00:00:00+00,2025-08-12 00:00:00+00
+71,1219,1205,(historical),ACCEPTED,2025-04-18 00:00:00+00,2025-04-18 00:00:00+00
+72,1225,1255,(historical),ACCEPTED,2025-08-09 00:00:00+00,2025-08-09 00:00:00+00
+73,1238,1255,(historical),ACCEPTED,2025-12-11 00:00:00+00,2025-12-11 00:00:00+00
+74,1212,1256,(historical),ACCEPTED,2025-08-25 00:00:00+00,2025-08-25 00:00:00+00
+75,1250,1256,(historical),ACCEPTED,2025-06-22 00:00:00+00,2025-06-22 00:00:00+00
+76,1265,1257,(historical),ACCEPTED,2025-04-09 00:00:00+00,2025-04-09 00:00:00+00
