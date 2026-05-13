@@ -56,21 +56,31 @@ public interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
 
     /**
      * Returns attachments older than {@code cutoff} that are not referenced
-     * by any persisted message <i>or</i> feed post. Used by the orphan-cleanup
-     * scheduler to reclaim disk and DB space for uploads that were never
-     * referenced.
+     * by any persisted message <i>or</i> feed post <i>or</i> task
+     * assignment / submission. Used by the orphan-cleanup scheduler to
+     * reclaim disk and DB space for uploads that were never referenced.
      *
      * <p>The 24-hour cutoff (set at the call site) is the fairness window: a
      * client may legitimately upload, then take some time to compose the
      * outgoing message or feed post before referencing the id. Sweeping
      * immediately would race the user-visible flow.
      *
-     * <p>Native query because the {@code feed_post_attachments} junction is
-     * not exposed as a JPA entity (the link is materialised through the
-     * {@code @ManyToMany} on {@link com.group7.backend.entity.FeedPost}). The
-     * column names ({@code messages.attachment_id}, V15;
-     * {@code feed_post_attachments.attachment_id}, V41) are the source of
-     * truth — keep them in sync with the migrations if the schema evolves.
+     * <p>Native query because the junction tables ({@code feed_post_attachments},
+     * {@code task_assignment_attachments}, {@code task_submission_attachments})
+     * are not exposed as JPA entities; the links are materialised through
+     * {@code @ManyToMany} relationships on the owning entities. Four FK
+     * sources reference {@code attachments(id)} — keep all four
+     * {@code NOT EXISTS} clauses in sync with the migrations:
+     * <ul>
+     *   <li>{@code messages.attachment_id} (V15, ON DELETE SET NULL)</li>
+     *   <li>{@code feed_post_attachments.attachment_id} (V41, NO ACTION)</li>
+     *   <li>{@code task_assignment_attachments.attachment_id} (V23, ON DELETE CASCADE)</li>
+     *   <li>{@code task_submission_attachments.attachment_id} (V23, ON DELETE CASCADE)</li>
+     * </ul>
+     * Missing any of these from the sweep would silently delete task PDFs /
+     * task submissions when their owning attachment row goes through the
+     * orphan path (the CASCADE on the junction would drop the link too,
+     * making the file vanish from the UI on both web and mobile).
      */
     @Query(value =
             "SELECT * FROM attachments a "
@@ -80,22 +90,30 @@ public interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
             + "  ) "
             + "  AND NOT EXISTS ("
             + "    SELECT 1 FROM feed_post_attachments fpa WHERE fpa.attachment_id = a.id"
+            + "  ) "
+            + "  AND NOT EXISTS ("
+            + "    SELECT 1 FROM task_assignment_attachments taa WHERE taa.attachment_id = a.id"
+            + "  ) "
+            + "  AND NOT EXISTS ("
+            + "    SELECT 1 FROM task_submission_attachments tsa WHERE tsa.attachment_id = a.id"
             + "  )",
             nativeQuery = true)
     List<Attachment> findOrphansOlderThan(@Param("cutoff") OffsetDateTime cutoff);
 
     /**
-     * Deletes the attachment row only if no message or feed post has come to
-     * reference it since the last orphan scan. Returns the number of rows
-     * deleted (0 or 1).
+     * Deletes the attachment row only if no message, feed post, or task
+     * attachment has come to reference it since the last orphan scan.
+     * Returns the number of rows deleted (0 or 1).
      *
      * <p>This closes the race between {@link #findOrphansOlderThan} and the
-     * scheduler's deletion: if a {@code POST /messages} or feed-post create
-     * lands in the gap and references this attachment, the {@code NOT EXISTS}
-     * clauses reject the delete and the new owner keeps its FK intact.
+     * scheduler's deletion: if a {@code POST /messages}, feed-post create,
+     * or task-assignment update lands in the gap and references this
+     * attachment, the {@code NOT EXISTS} clauses reject the delete and the
+     * new owner keeps its FK intact.
      *
-     * <p>Native for the same reason as {@link #findOrphansOlderThan} — the
-     * junction has no JPA entity.
+     * <p>The four {@code NOT EXISTS} clauses mirror
+     * {@link #findOrphansOlderThan} — see that method's javadoc for the
+     * canonical list of FK references.
      */
     @Modifying
     @Query(value =
@@ -106,6 +124,12 @@ public interface AttachmentRepository extends JpaRepository<Attachment, UUID> {
             + "  ) "
             + "  AND NOT EXISTS ("
             + "    SELECT 1 FROM feed_post_attachments fpa WHERE fpa.attachment_id = a.id"
+            + "  ) "
+            + "  AND NOT EXISTS ("
+            + "    SELECT 1 FROM task_assignment_attachments taa WHERE taa.attachment_id = a.id"
+            + "  ) "
+            + "  AND NOT EXISTS ("
+            + "    SELECT 1 FROM task_submission_attachments tsa WHERE tsa.attachment_id = a.id"
             + "  )",
             nativeQuery = true)
     int deleteIfStillOrphan(@Param("id") UUID id);

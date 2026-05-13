@@ -1,0 +1,29 @@
+id,mentorship_id,title,description,target_date,status,order_index,completed_at,created_at
+35,23,Message queue v1 with documented trade-offs,First milestone: complete reimplementation with a one-page design doc that names the trade-offs you chose against.,2026-05-03 00:00:00+00,COMPLETED,0,2026-05-03 00:00:00+00,2026-03-29 00:00:00+00
+36,23,"First end-to-end mock interview, recorded and self-reviewed",60-minute system-design interview format with Melis. Tolga records and self-reviews before we debrief.,2026-06-03 00:00:00+00,IN_PROGRESS,1,,2026-03-29 00:00:00+00
+37,23,One real design proposal at a target company,Apply for an internship that includes a design exercise. Submit work; we review together.,2026-07-12 00:00:00+00,PENDING,2,,2026-03-29 00:00:00+00
+38,24,Paths-side-by-side artifact,"A one-page comparison of the games path vs the mobile path, written by İsmail with my edits.",2026-05-03 00:00:00+00,COMPLETED,0,2026-05-03 00:00:00+00,2026-04-13 00:00:00+00
+39,24,Vertical slice or pivot decision,By month 3 İsmail decides whether to spend months 4-6 on a hiking-game vertical slice or on shipping the trail app to the Play Store. We commit either way.,2026-07-12 00:00:00+00,IN_PROGRESS,1,,2026-04-13 00:00:00+00
+40,24,Vertical slice live or app on Play Store,"Whichever path was chosen, an artifact exists at month 6.",2026-10-10 00:00:00+00,PENDING,2,,2026-04-13 00:00:00+00
+41,25,Research statement draft 3,"Three drafts done, each substantively different. Establishes the iteration habit.",2026-04-23 00:00:00+00,COMPLETED,0,2026-04-23 00:00:00+00,2026-04-15 00:00:00+00
+42,25,Target advisor shortlist (5 names),"Five advisors across three programs, each with a one-paragraph note on why this person specifically. No 'general fit' allowed.",2026-05-27 00:00:00+00,IN_PROGRESS,1,,2026-04-15 00:00:00+00
+43,25,Recommender-signed statement,Final statement that Mina's primary recommender signs off without substantive edits.,2026-07-07 00:00:00+00,PENDING,2,,2026-04-15 00:00:00+00
+44,26,Pass AWS SAA,Pass the exam. Cert is the artifact; the prep is the skill.,2026-06-12 00:00:00+00,IN_PROGRESS,0,,2026-04-18 00:00:00+00
+45,26,"Operating, not deploying","Demonstrate that you can operate a small system — runbook, metrics, one incident walk-through.",2026-07-12 00:00:00+00,PENDING,1,,2026-04-18 00:00:00+00
+46,27,Twenty-audit reading milestone,Twenty reports read with structured notes. The shift from exploiter-mindset to analyst-mindset.,2026-04-18 00:00:00+00,COMPLETED,0,2026-04-18 00:00:00+00,2026-03-24 00:00:00+00
+47,27,First substantive bug report written,A formal report Polat will sign off on as junior-credible.,2026-05-20 00:00:00+00,IN_PROGRESS,1,,2026-03-24 00:00:00+00
+48,27,OSCP earned and one internship offer accepted,"End-of-engagement artifact: a cert, a job.",2026-09-30 00:00:00+00,PENDING,2,,2026-03-24 00:00:00+00
+49,28,Two ADRs delivered,Establish the writing-before-coding rhythm. Two ADRs done.,2026-04-03 00:00:00+00,COMPLETED,0,2026-04-03 00:00:00+00,2026-03-14 00:00:00+00
+50,28,Lead one full refactor,"Rıza leads a meaningful refactor on his own app, with ADR before and write-up after.",2026-05-13 00:00:00+00,IN_PROGRESS,1,,2026-03-14 00:00:00+00
+51,28,Run a cross-team meeting cleanly,"Lead a 30-minute cross-team meeting with my team, with prep and follow-up artifacts.",2026-06-03 00:00:00+00,PENDING,2,,2026-03-14 00:00:00+00
+52,28,Pass four mock architecture interviews,End-of-engagement artifact: Rıza is interview-ready for senior mobile roles.,2026-07-12 00:00:00+00,PENDING,3,,2026-03-14 00:00:00+00
+53,29,Cover letter that doesn't apologize,"Buse's revised cover letter, no apology paragraphs, sharp positioning. Recommender-ready.",2024-11-01 00:00:00+00,COMPLETED,0,2024-11-01 00:00:00+00,2025-04-10 00:00:00+00
+54,29,First interview booked,"Any real role she actually wants, interview booked.",2024-12-01 00:00:00+00,COMPLETED,1,2024-12-01 00:00:00+00,2025-04-10 00:00:00+00
+55,29,Junior content-strategist offer accepted,End-of-engagement target. Achieved.,2025-01-05 00:00:00+00,COMPLETED,2,2025-01-05 00:00:00+00,2025-04-10 00:00:00+00
+56,30,Journal habit established,Four weeks of daily entries. Demonstrates seriousness for the rest of the engagement.,2024-12-17 00:00:00+00,COMPLETED,0,2024-12-17 00:00:00+00,2025-04-01 00:00:00+00
+57,30,Methodology literacy,Three close reads done. Defne can articulate the standards of careful work in the subfield.,2025-01-16 00:00:00+00,COMPLETED,1,2025-01-16 00:00:00+00,2025-04-01 00:00:00+00
+58,30,Honest decision on next step,Decision memo done. Defne knows what kind of mentor she wants for the next 6+ months.,2025-02-15 00:00:00+00,COMPLETED,2,2025-02-15 00:00:00+00,2025-04-01 00:00:00+00
+59,31,Six honest discovery conversations,"Real customer evidence, not vague enthusiasm.",2025-01-11 00:00:00+00,COMPLETED,0,2025-01-11 00:00:00+00,2025-08-19 00:00:00+00
+60,31,Pre-mortem written,Three-page obituary forces the killing blow to surface.,2025-01-31 00:00:00+00,COMPLETED,1,2025-01-31 00:00:00+00,2025-08-19 00:00:00+00
+61,31,Decision made,Yes / no / shelf. Funda chose shelf-for-a-year and a junior product role.,2025-03-12 00:00:00+00,COMPLETED,2,2025-03-12 00:00:00+00,2025-08-19 00:00:00+00
+62,32,Honest founder-fit answer,"Defne can articulate whether founding is her current path or not, with one sentence of reason.",2025-03-28 00:00:00+00,COMPLETED,0,2025-03-28 00:00:00+00,2025-04-02 00:00:00+00

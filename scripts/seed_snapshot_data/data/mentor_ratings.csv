@@ -1,0 +1,46 @@
+id,mentorship_id,mentor_id,mentee_id,score,comment,created_at
+1,33,1195,1229,3,Good engagement overall — a few sessions could have been longer.,2025-08-28 00:00:00+00
+2,34,1196,1226,4,Best mentor I've worked with so far in my career.,2026-01-11 00:00:00+00
+3,35,1197,1210,3,Useful for the specific question I came in with.,2025-04-01 00:00:00+00
+4,36,1197,1216,5,Brought structure and patience to a mentorship that I needed exactly when I needed it.,2025-10-09 00:00:00+00
+5,37,1197,1267,2,Met expectations; nothing transformative.,2025-08-14 00:00:00+00
+6,38,1199,1210,4,Good engagement overall — a few sessions could have been longer.,2025-03-10 00:00:00+00
+7,39,1200,1234,3,Good engagement overall — a few sessions could have been longer.,2026-04-28 00:00:00+00
+8,40,1200,1216,4,Best mentor I've worked with so far in my career.,2026-01-14 00:00:00+00
+9,41,1201,1265,2,Met expectations; nothing transformative.,2025-07-09 00:00:00+00
+10,42,1201,1262,5,"Honest feedback, never sugarcoated, always actionable.",2025-11-30 00:00:00+00
+11,43,1202,1230,5,Best mentor I've worked with so far in my career.,2025-05-28 00:00:00+00
+12,44,1202,1240,4,Saved me from a year of bad decisions in three sessions.,2026-03-03 00:00:00+00
+13,45,1202,1246,5,Demanding in the best way. Pushed me to do work I'm proud of.,2026-01-03 00:00:00+00
+14,46,1203,1244,4,Solid mentor; structured calls and good follow-up.,2026-02-17 00:00:00+00
+15,47,1204,1230,3,Useful for the specific question I came in with.,2025-10-31 00:00:00+00
+16,48,1204,1214,5,Demanding in the best way. Pushed me to do work I'm proud of.,2025-07-24 00:00:00+00
+17,49,1204,1247,5,Demanding in the best way. Pushed me to do work I'm proud of.,2025-08-03 00:00:00+00
+18,50,1205,1261,5,"Honest feedback, never sugarcoated, always actionable.",2026-05-02 00:00:00+00
+19,51,1206,1238,4,Brought structure and patience to a mentorship that I needed exactly when I needed it.,2025-04-10 00:00:00+00
+20,52,1206,1265,4,Helped me leave with more clarity than I came in with.,2026-01-26 00:00:00+00
+21,53,1257,1254,3,Practical advice. Some lessons I needed to learn the hard way myself.,2026-03-21 00:00:00+00
+22,54,1258,1252,3,Good engagement overall — a few sessions could have been longer.,2025-03-07 00:00:00+00
+23,55,1258,1230,4,Best mentor I've worked with so far in my career.,2025-06-07 00:00:00+00
+24,56,1258,1211,4,"Patient with my false starts, sharp when I needed it.",2025-08-10 00:00:00+00
+25,57,1270,1231,5,Brought structure and patience to a mentorship that I needed exactly when I needed it.,2026-02-24 00:00:00+00
+26,58,1270,1227,3,Practical advice. Some lessons I needed to learn the hard way myself.,2026-03-25 00:00:00+00
+27,59,1270,1243,3,Useful for the specific question I came in with.,2025-10-17 00:00:00+00
+28,30,1198,1267,5,"The daily-journal rule was the most important thing I did this year. Dilara was direct, patient, and willing to give me an honest answer about whether research was for me. Highly recommend.",2025-07-05 00:00:00+00
+29,60,1268,1236,4,Senior-level perspective delivered patiently. Highly recommend.,2025-09-30 00:00:00+00
+30,61,1268,1245,4,Best engagement I've had on this platform.,2025-10-24 00:00:00+00
+31,62,1269,1209,4,Honest feedback and real-world examples. Worth every session.,2025-09-10 00:00:00+00
+32,63,1269,1238,3,Honest feedback and real-world examples. Worth every session.,2025-10-02 00:00:00+00
+33,64,1271,1211,4,"Direct, focused, and exactly the kind of mentor I needed at this stage.",2026-03-11 00:00:00+00
+34,65,1271,1247,4,Best engagement I've had on this platform.,2026-02-17 00:00:00+00
+35,66,1195,1251,5,Brought clarity to a year of confusion in two sessions.,2025-12-10 00:00:00+00
+36,67,1196,1227,4,The right kind of demanding — pushed me to do work I'm proud of.,2025-09-23 00:00:00+00
+37,68,1198,1251,4,Useful for the questions I came in with.,2026-01-09 00:00:00+00
+38,69,1199,1230,3,Good engagement overall. Practical advice.,2025-06-17 00:00:00+00
+39,70,1203,1248,4,"Senior craft + accessibility. Hard combination, found it here.",2025-11-18 00:00:00+00
+40,71,1205,1219,5,The right kind of demanding — pushed me to do work I'm proud of.,2025-07-23 00:00:00+00
+41,72,1255,1225,3,Good engagement overall. Practical advice.,2025-11-14 00:00:00+00
+42,73,1255,1238,3,Solid mentor; well-structured sessions.,2026-03-17 00:00:00+00
+43,74,1256,1212,4,Senior-level perspective delivered with care.,2026-03-02 00:00:00+00
+44,75,1256,1250,4,Brought clarity to a year of confusion in two sessions.,2025-09-25 00:00:00+00
+45,76,1257,1265,3,Solid mentor; well-structured sessions.,2025-07-14 00:00:00+00

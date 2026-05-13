@@ -7,6 +7,15 @@ scripts/seed_local_credentials.txt
 __pycache__/
 *.pyc
 
+# Local Python venv for seed/snapshot scripts (bootstrapped by scripts/seed.sh)
+.venv/
+
+# Seed-pipeline runtime artifacts (token cache, intermediate image
+# downloads, exported personas.json — all regenerated on each run).
+scripts/.seed_*.json
+scripts/.seed_*_tmp/
+scripts/personas.json
+
 # Backend - Spring Boot
 backend/target/
 backend/*.class
@@ -41,5 +50,8 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 .env
+.env.*
+!.env.example
+!.env.production.example
 # Local issue/PR scaffolding (claude-generated drafts)
 claude_files/
